@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, ForbiddenException, Query, Param, Patch, Body } from '@nestjs/common';
+import { Controller, Get, UseGuards, ForbiddenException, Query, Param, Patch, Body, Post } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -7,13 +7,17 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../common/decorators/current-user.decorator';
 import { AdminStatsService } from './admin-stats.service';
+import { AdminAiAnalyticsService } from './admin-ai-analytics.service';
 
 @Controller('admin/stats')
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Roles('ADMIN')
 @Permissions('dashboard:read')
 export class AdminStatsController {
-  constructor(private readonly adminStatsService: AdminStatsService) {}
+  constructor(
+    private readonly adminStatsService: AdminStatsService,
+    private readonly adminAiAnalyticsService: AdminAiAnalyticsService,
+  ) {}
 
   @Get()
   async getStats(
@@ -108,6 +112,24 @@ export class AdminStatsController {
   ) {
     this.checkAdminRole(user);
     return this.adminStatsService.updateBookingStatus(id, status, note);
+  }
+
+  @Get('ai-analytics')
+  async getAiAnalytics(
+    @CurrentUser() user: AuthUser,
+    @Query('question') question?: string,
+  ) {
+    this.checkAdminRole(user);
+    return this.adminAiAnalyticsService.getAiAnalytics(question);
+  }
+
+  @Post('ai-analytics/ask')
+  async askAiCopilot(
+    @CurrentUser() user: AuthUser,
+    @Body('question') question: string,
+  ) {
+    this.checkAdminRole(user);
+    return this.adminAiAnalyticsService.getAiAnalytics(question);
   }
 
   private checkAdminRole(user: AuthUser) {

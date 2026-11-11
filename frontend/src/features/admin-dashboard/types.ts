@@ -117,3 +117,73 @@ export interface AdminStats {
   };
 }
 
+// ─── AI Analytics Types ───────────────────────────────────────────────────────
+
+export interface UserShopInteraction {
+  customerId: string;
+  customerName: string;
+  customerEmail: string;
+  customerAvatar?: string;
+  providerId: string;
+  providerName: string;
+  providerAvatar?: string;
+  totalBookings: number;
+  completedBookings: number;
+  totalSpent: number;
+  reviewCount: number;
+  averageRatingGiven: number;
+  recentComment?: string;
+  loyaltyTier: 'VIP' | 'REGULAR' | 'NEW';
+}
+
+export interface NegativeCommentItem {
+  rating: number;
+  comment: string;
+  customerName: string;
+  createdAt: string;
+}
+
+export interface ShopRiskProfile {
+  providerId: string;
+  businessName: string;
+  avatarUrl?: string;
+  totalReviews: number;
+  averageRating: number;
+  badReviewCount: number;
+  badReviewPercentage: number;
+  positiveReviewCount: number;
+  reportedReviewsCount: number;
+  disputeCount: number;
+  riskLevel: 'HIGH_RISK' | 'WARNING' | 'HEALTHY';
+  primaryIssues: string[];
+  recentNegativeComments: NegativeCommentItem[];
+}
+
+export interface SentimentCluster {
+  topic: string;
+  sentiment: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL';
+  count: number;
+  sampleQuotes: string[];
+}
+
+export interface AdminAiInsightsResponse {
+  summary: {
+    totalReviewsAnalyzed: number;
+    averagePlatformRating: number;
+    highRiskShopsCount: number;
+    totalUserShopInteractions: number;
+    mostActiveCustomer?: { name: string; email: string; bookingCount: number };
+    worstRatedShop?: { name: string; badReviewCount: number; avgRating: number };
+  };
+  userShopInteractions: UserShopInteraction[];
+  shopRiskProfiles: ShopRiskProfile[];
+  sentimentClusters: SentimentCluster[];
+  aiAnalysis: {
+    executiveSummary: string;
+    badShopsAnalysis: string;
+    userBehaviorAnalysis: string;
+    topRecommendations: string[];
+    copilotAnswer?: string;
+    source: string;
+  };
+}

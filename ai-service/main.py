@@ -6,6 +6,10 @@ from chatbot.chatbot_engine import ChatbotEngine
 from chatbot.normalization import extract_age_and_range, extract_gender
 from tagging.schemas import TaggingRequest, TaggingResponse
 from tagging.tagging_engine import suggest_tags
+from combo_suggester.schemas import ComboSuggestionRequest, ComboSuggestionResponse
+from combo_suggester.combo_engine import suggest_combo
+from admin_insights.schemas import AdminInsightsRequest, AdminInsightsResponse
+from admin_insights.insights_engine import generate_admin_insights
 
 app    = FastAPI(title="AI Style Matching", version="2.0")
 chatbot = ChatbotEngine()
@@ -27,6 +31,22 @@ class ImageChatRequest(BaseModel):
 @app.post("/tagging/suggest", response_model=TaggingResponse)
 async def suggest_smart_tags(request: TaggingRequest):
     return suggest_tags(request)
+
+
+@app.post("/combos/suggest", response_model=ComboSuggestionResponse)
+async def suggest_combo_endpoint(request: ComboSuggestionRequest):
+    """
+    AI hỗ trợ tạo combo từ Áo dài và Gói chụp ảnh cho Provider
+    """
+    return await suggest_combo(request)
+
+
+@app.post("/admin/analytics-insights", response_model=AdminInsightsResponse)
+async def admin_analytics_insights_endpoint(request: AdminInsightsRequest):
+    """
+    AI hỗ trợ Admin tổng hợp và phân tích dữ liệu người dùng & chất lượng shop
+    """
+    return await generate_admin_insights(request)
 
 
 async def _get_product_context(limit: int = 10) -> str:

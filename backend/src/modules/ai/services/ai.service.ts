@@ -1,5 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  ComboSuggestionRequestDto,
+  ComboSuggestionResponseDto,
+} from '../dto/combo-suggestion.dto';
 
 export interface ChatResponse {
   question: string;
@@ -34,6 +38,7 @@ export class AiService {
         headers: {
           'Content-Type': 'application/json',
         },
+        signal: AbortSignal.timeout(8000),
       });
 
       if (!response.ok) {
@@ -88,6 +93,7 @@ export class AiService {
           image_base64: imageBase64,
           mime_type: mimeType,
         }),
+        signal: AbortSignal.timeout(15000),
       });
 
       if (!response.ok) {
@@ -113,10 +119,16 @@ export class AiService {
         recommended_products: data.recommended_products || [],
       };
     } catch (error: unknown) {
-      this.logger.error(
-        `Failed to connect to FastAPI AI service for image chat: ${(error as Error).message}`,
+      this.logger.warn(
+        `Failed to connect to FastAPI AI service for image chat: ${(error as Error).message}. Using offline fallback.`,
       );
-      throw error;
+      const fallback = this.offlineFallback(message);
+      return {
+        ...fallback,
+        category: 'image_analysis',
+        matched_question: 'Multimodal Image Analysis (Offline)',
+        answer: `${fallback.answer}\n\n(Lưu ý: Tính năng phân tích hình ảnh chuyên sâu AI đang gián đoạn kết nối. Stylist AI đã ghi nhận sở thích trang phục của bạn!)`,
+      };
     }
   }
 
@@ -127,6 +139,7 @@ export class AiService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(10000),
       });
       if (!response.ok) throw new Error(`AI Damage Inspection returned ${response.status}`);
       return await response.json();
@@ -154,6 +167,7 @@ export class AiService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(10000),
       });
       if (!response.ok) throw new Error(`AI Context Recommend returned ${response.status}`);
       return await response.json();
@@ -177,6 +191,7 @@ export class AiService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(10000),
       });
       if (!response.ok) throw new Error(`Visual Match returned ${response.status}`);
       return await response.json();
@@ -193,6 +208,7 @@ export class AiService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(10000),
       });
       if (!response.ok) throw new Error(`Culling analyze returned ${response.status}`);
       return await response.json();
@@ -216,6 +232,7 @@ export class AiService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(photos),
+        signal: AbortSignal.timeout(15000),
       });
       if (!response.ok) throw new Error(`Anti fraud returned ${response.status}`);
       return await response.json();
@@ -233,8 +250,132 @@ export class AiService {
     }
   }
 
-  private offlineFallback(message: string): ChatResponse {
+  async suggestCombo(
+    dto: ComboSuggestionRequestDto,
+  ): Promise<ComboSuggestionResponseDto> {
+    try {
+      const url = `${this.aiServiceUrl}/combos/suggest`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dto),
+        signal: AbortSignal.timeout(10000),
+      });
 
+      if (!response.ok) {
+        throw new Error(`AI Combo Suggest returned ${response.status}`);
+      }
+
+      return (await response.json()) as ComboSuggestionResponseDto;
+    } catch (error: any) {
+      this.logger.warn(
+        `AI Service combo suggest failed (${error.message}). Executing backend intelligent fallback.`,
+      );
+      return this.offlineComboFallback(dto);
+    }
+  }
+
+  async analyzeAdminInsights(payload: any): Promise<any> {
+    try {
+      const url = `${this.aiServiceUrl}/admin/analytics-insights`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      if (!response.ok) {
+        throw new Error(`AI Admin Insights returned ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      this.logger.warn(
+        `AI Service admin insights failed (${error.message}). Executing backend intelligent fallback.`,
+      );
+      return null;
+    }
+  }
+
+  private offlineComboFallback(
+    dto: ComboSuggestionRequestDto,
+  ): ComboSuggestionResponseDto {
+    const prodName = dto.product?.name || 'Áo dài truyền thống';
+    const prodDesc = dto.product?.description || '';
+    const pkgName = dto.photography_package?.name || 'Gói chụp ảnh nghệ thuật';
+    const pkgDesc = dto.photography_package?.description || '';
+    const vibe = dto.vibe || 'Tự động phân tích';
+
+    const aoDaiPrice = Number(dto.product?.basePrice || 0);
+    const pkgPrice = Number(dto.photography_package?.price || 0);
+    const totalOriginal = aoDaiPrice + pkgPrice;
+    const discountPct = 15;
+    let suggestedPrice = Math.round((totalOriginal * (1 - discountPct / 100)) / 10000) * 10000;
+    if (suggestedPrice <= 0 && totalOriginal > 0) suggestedPrice = Math.round(totalOriginal * 0.85);
+
+    const corpus = `${prodName} ${prodDesc} ${pkgName} ${pkgDesc} ${vibe}`.toLowerCase();
+
+    let conceptTheme = 'Nàng Thơ Dạo Phố - Thanh Lịch Hiện Đại';
+    let name = `Combo Nàng Thơ Trọn Gói - ${prodName} & ${pkgName}`;
+    let desc = `Gói dịch vụ hoàn hảo kết hợp ${prodName} tôn dáng và ${pkgName} tận tâm. Mang đến bộ ảnh kỷ niệm nghệ thuật, vừa tôn nét duyên truyền thống vừa hiện đại.`;
+    let locations = ['Phố Cổ', 'Không gian cafe Indochine', 'Cảnh sắc thiên nhiên thơ mộng'];
+    let styling = ['Nón lá / Quạt lụa', 'Khuyên tai bạc nhẹ nhàng', 'Makeup tự nhiên tôn da'];
+    let audience = 'Khách hàng muốn có bộ ảnh kỷ niệm đẹp, nhanh chóng, trọn gói';
+
+    if (corpus.includes('tết') || corpus.includes('xuân') || corpus.includes('đào') || corpus.includes('mai')) {
+      conceptTheme = 'Sắc Xuân Hoan Hỉ - Tết Cổ Truyền';
+      name = `Combo Đón Tết An Khang - ${prodName} & ${pkgName}`;
+      desc = `Trọn gói du xuân với ${prodName} rạng ngời kết hợp cùng ${pkgName}. Lưu giữ khoảnh khắc sum vầy, tươi vui đầu năm với tone màu ấm áp và góc máy chuyên nghiệp.`;
+      locations = ['Chợ Hoa Xuân', 'Phố Cổ / Cầu Trường Tiền', 'Chùa Cổ / Đình Làng'];
+      styling = ['Cành đào / mai cầm tay', 'Bao lì xì đỏ may mắn', 'Guốc mộc truyền thống'];
+      audience = 'Gia đình, bạn trẻ muốn lưu giữ ảnh Tết trọn vẹn';
+    } else if (corpus.includes('cố đô') || corpus.includes('hoàng cung') || corpus.includes('đại nội') || corpus.includes('gấm') || corpus.includes('nhung')) {
+      conceptTheme = 'Dấu Ấn Hoàng Cung - Cổ Điển Quý Phái';
+      name = `Combo Cố Đô Nghệ Thuật - ${prodName} & ${pkgName}`;
+      desc = `Trải nghiệm hóa thân tuyệt mỹ với ${prodName} sang trọng và ${pkgName}. Bắt trọn nét thâm trầm, đài các của kinh kỳ qua từng khung hình giàu chất thơ.`;
+      locations = ['Đại Nội Huế / Hoàng Thành', 'Lăng Khải Định / Tự Đức', 'Cầu Trường Tiền lúc hoàng hôn'];
+      styling = ['Quạt trầm hương / Quạt lụa thêu tay', 'Vấn tóc cổ điển / Mấn đính ngọc', 'Trang sức ngọc trai thanh lịch'];
+      audience = 'Nữ giới yêu nét đẹp hoài cổ, du khách check-in cố đô';
+    } else if (corpus.includes('sen') || corpus.includes('hồ sen')) {
+      conceptTheme = 'Hương Sắc Hồ Sen - Dáng Ngọc Duyên Dáng';
+      name = `Combo Hương Sen Đầu Mùa - ${prodName} & ${pkgName}`;
+      desc = `Hòa mình vào thiên nhiên thanh thuần với ${prodName} thướt tha và ${pkgName}. Tôn vinh vẻ đẹp thuần khiết, dịu dàng của người phụ nữ Việt bên đóa sen ngát hương.`;
+      locations = ['Đầm sen Tịnh Tâm', 'Hồ sen ngoại ô', 'Bờ sông Hương sớm mai'];
+      styling = ['Bó sen tươi cầm tay', 'Nón lá bài thơ mộc mạc', 'Trang điểm trong trẻo tone hồng phấn'];
+      audience = 'Các nàng thơ yêu thích phong cách dịu dàng, trong trẻo';
+    } else if (corpus.includes('kỷ yếu') || corpus.includes('học sinh') || corpus.includes('thanh xuân') || corpus.includes('trắng')) {
+      conceptTheme = 'Thanh Xuân Nắng Hạ - Kỷ Niệm Tinh Khôi';
+      name = `Combo Kỷ Niệm Thanh Xuân - ${prodName} & ${pkgName}`;
+      desc = `Lưu giữ những tháng năm đẹp nhất cùng ${prodName} tinh khôi và ${pkgName}. Từng góc chụp tự nhiên, bắt trọn nụ cười rạng rỡ và sự hồn nhiên tuổi trẻ.`;
+      locations = ['Trường Quốc Học Huế', 'Con đường rợp bóng cây xanh', 'Cầu đi bộ gỗ lim'];
+      styling = ['Cặp sách da vintage', 'Bó hoa baby / cúc họa mi', 'Tóc buông tự nhiên'];
+      audience = 'Học sinh, sinh viên, hội bạn thân chụp ảnh kỷ yếu';
+    }
+
+    if (desc.length > 280) desc = desc.slice(0, 277) + '...';
+
+    return {
+      name: name.slice(0, 100),
+      description: desc,
+      suggested_discount_percent: discountPct,
+      suggested_price: suggestedPrice,
+      suggested_shoot_people_count: dto.photography_package?.maxPeople || 1,
+      suggested_aodai_quantity: 1,
+      concept_theme: conceptTheme,
+      target_audience: audience,
+      ideal_locations: locations,
+      styling_tips: styling,
+      marketing_highlights: [
+        `Tiết kiệm ngay ${discountPct}% so với thuê lẻ từng dịch vụ`,
+        'Đồng bộ trang phục và góc máy cùng một phong cách nghệ thuật',
+        'Được hỗ trợ tạo dáng và tư vấn phụ kiện chu đáo suốt buổi chụp',
+      ],
+      source: 'backend_intelligent_fallback',
+    };
+  }
+
+  private offlineFallback(message: string): ChatResponse {
     const normalized = message.toLowerCase();
     let answer =
       'Chào bạn! Mình có thể tư vấn cho bạn các thông tin chi tiết về kiểu dáng cổ áo, tay áo, tà áo và các chất liệu vải phù hợp cho tà Áo Dài truyền thống nhé. Bạn cần tư vấn chi tiết về phần nào ạ? 😊';

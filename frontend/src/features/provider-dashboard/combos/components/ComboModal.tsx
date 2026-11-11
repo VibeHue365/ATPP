@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   X,
   Shirt,
@@ -23,9 +23,17 @@ import {
   Coins,
   Percent,
   BadgePercent,
+  Wand2,
+  RefreshCw,
+  Loader2,
+  CheckCircle2,
+  MapPin,
+  Compass,
 } from 'lucide-react';
 import { Modal } from '../../../../components/common/Modal';
 import { getImageUrl } from '../../shared/mediaHelpers';
+import { httpClient } from '../../../../services/httpClient';
+import { useToast } from '../../../../components/feedback/Toast';
 
 interface ComboModalProps {
   isOpen: boolean;
@@ -172,6 +180,86 @@ export const ComboModal: React.FC<ComboModalProps> = ({
 
   const QUICK_DISCOUNTS = [10, 15, 20, 25, 30, 40, 50];
 
+  const toast = useToast();
+  const [isAiGenerating, setIsAiGenerating] = useState(false);
+  const [aiSuggestion, setAiSuggestion] = useState<any | null>(null);
+  const [selectedVibe, setSelectedVibe] = useState('Tự động phân tích');
+  const [hasAppliedAi, setHasAppliedAi] = useState(false);
+
+  const VIBE_OPTIONS = [
+    'Tự động phân tích',
+    'Nàng thơ dạo phố',
+    'Cổ điển Hoàng Thành',
+    'Sắc xuân Tết',
+    'Thanh xuân kỷ yếu',
+    'Quý phái sang trọng',
+  ];
+
+  const handleGenerateAiCombo = async () => {
+    if (!selectedProduct && !selectedPackage) {
+      toast.warning('Vui lòng chọn ít nhất Áo Dài hoặc Gói Chụp Ảnh để AI có dữ liệu phân tích!');
+      return;
+    }
+
+    setIsAiGenerating(true);
+    setHasAppliedAi(false);
+
+    try {
+      const payload = {
+        product: {
+          id: selectedProduct?._id || selectedProduct?.id || cProductId,
+          name: selectedProduct?.name || 'Áo dài truyền thống',
+          description: selectedProduct?.description || '',
+          category: selectedProduct?.category || '',
+          materials: selectedProduct?.materials || [],
+          colors: selectedProduct?.colors || [],
+          sizes: selectedProduct?.sizes || [],
+          basePrice: selectedProduct?.basePrice || 0,
+          images: selectedProduct?.images || [],
+        },
+        photography_package: {
+          id: selectedPackage?._id || selectedPackage?.id || cPackageId,
+          name: selectedPackage?.name || 'Gói chụp ảnh nghệ thuật',
+          description: selectedPackage?.description || '',
+          price: selectedPackage?.price || 0,
+          durationMinutes: selectedPackage?.durationHours ? selectedPackage.durationHours * 60 : 60,
+          maxPeople: selectedPackage?.maxPeople || 1,
+          locationType: selectedPackage?.locationType || '',
+          deliverables: selectedPackage?.deliverables || [],
+          images: selectedPackage?.images || [],
+        },
+        vibe: selectedVibe,
+      };
+
+      const res: any = await httpClient.post('/ai/combos/suggest', payload);
+      if (res) {
+        setAiSuggestion(res);
+        toast.success('AI đã tạo gợi ý combo thành công! ✨');
+      }
+    } catch (err: any) {
+      toast.error('Không thể tạo gợi ý combo bằng AI: ' + (err?.message || 'Vui lòng thử lại'));
+    } finally {
+      setIsAiGenerating(false);
+    }
+  };
+
+  const handleApplyAiSuggestion = () => {
+    if (!aiSuggestion) return;
+    if (aiSuggestion.name) setCName(aiSuggestion.name);
+    if (aiSuggestion.description) setCDesc(aiSuggestion.description);
+    if (aiSuggestion.suggested_discount_percent) {
+      handleDiscountChange(aiSuggestion.suggested_discount_percent);
+    }
+    if (aiSuggestion.suggested_shoot_people_count) {
+      setCShootPeopleCount(aiSuggestion.suggested_shoot_people_count);
+    }
+    if (aiSuggestion.suggested_aodai_quantity) {
+      setCAoDaiQuantity(aiSuggestion.suggested_aodai_quantity);
+    }
+    setHasAppliedAi(true);
+    toast.success('Đã áp dụng toàn bộ thông tin AI gợi ý vào form! 🎉');
+  };
+
   const handleDiscountChange = (val: number | '') => {
     setCDiscount(val);
     if (val === '' || totalOriginalPrice <= 0) {
@@ -285,6 +373,149 @@ export const ComboModal: React.FC<ComboModalProps> = ({
             <div className="cb-modal-body">
               {/* ==================== CỘT TRÁI (FORM NHẬP LIỆU) ==================== */}
               <div className="cb-modal-col-left">
+                {/* ==================== TRỢ LÝ AI GỢI Ý COMBO ==================== */}
+                <div className="cb-ai-section">
+                  <div className="cb-ai-header">
+                    <div className="cb-ai-header-left">
+                      <div className="cb-ai-sparkle-badge">
+                        <Sparkles size={18} />
+                      </div>
+                      <div>
+                        <h4 className="cb-ai-title">
+                          Trợ lý AI Đóng Gói Combo
+                          <span style={{ fontSize: 10, background: '#FFE4E6', color: '#BE123C', padding: '1px 6px', borderRadius: 4, fontWeight: 700, textTransform: 'uppercase' }}>
+                            2-in-1
+                          </span>
+                        </h4>
+                        <p className="cb-ai-subtitle">
+                          AI phân tích chất liệu Áo Dài & Phong cách Gói Chụp để tạo tên nghệ thuật, mô tả và tối ưu giá bán
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Vibe Selection Chips */}
+                  <div className="cb-ai-vibe-row">
+                    <span className="cb-ai-vibe-label">
+                      <Compass size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                      Định hướng concept mong muốn:
+                    </span>
+                    <div className="cb-ai-vibe-chips">
+                      {VIBE_OPTIONS.map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          className={`cb-ai-vibe-chip ${selectedVibe === v ? 'active' : ''}`}
+                          onClick={() => setSelectedVibe(v)}
+                        >
+                          {v}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* AI Generation Trigger Button */}
+                  <button
+                    type="button"
+                    className="cb-ai-action-btn"
+                    onClick={handleGenerateAiCombo}
+                    disabled={isAiGenerating || (!selectedProduct && !selectedPackage)}
+                  >
+                    {isAiGenerating ? (
+                      <>
+                        <Loader2 size={16} className="cb-spin" />
+                        <span>AI đang phân tích concept & tối ưu giá...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 size={16} />
+                        <span>
+                          {!selectedProduct && !selectedPackage
+                            ? 'Chọn Áo Dài & Gói Chụp bên dưới để tạo với AI'
+                            : '✨ AI Gợi Ý Tên, Mô Tả & Mức Giá Combo'}
+                        </span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* AI Result Card */}
+                  {aiSuggestion && (
+                    <div className="cb-ai-result-panel">
+                      <div className="cb-ai-card-highlight">
+                        <div className="cb-ai-badges-row">
+                          <span className="cb-ai-tag-pill">
+                            <Sparkles size={11} style={{ verticalAlign: 'middle', marginRight: 3 }} />
+                            Concept: {aiSuggestion.concept_theme}
+                          </span>
+                          <span className="cb-ai-price-pill">
+                            Tiết kiệm {aiSuggestion.suggested_discount_percent}% (Giá combo: {Number(aiSuggestion.suggested_price || 0).toLocaleString('vi-VN')}đ)
+                          </span>
+                          {aiSuggestion.target_audience && (
+                            <span style={{ fontSize: 11, color: '#6B7280' }}>
+                              👥 {aiSuggestion.target_audience}
+                            </span>
+                          )}
+                        </div>
+
+                        <h5 className="cb-ai-suggested-name">{aiSuggestion.name}</h5>
+                        <p className="cb-ai-suggested-desc">{aiSuggestion.description}</p>
+
+                        {/* Location and Styling advice */}
+                        <div className="cb-ai-tips-grid">
+                          {aiSuggestion.ideal_locations && aiSuggestion.ideal_locations.length > 0 && (
+                            <div className="cb-ai-tip-item">
+                              <MapPin size={13} color="#BE123C" style={{ flexShrink: 0, marginTop: 2 }} />
+                              <div>
+                                <strong>Bối cảnh lý tưởng:</strong> {aiSuggestion.ideal_locations.join(', ')}
+                              </div>
+                            </div>
+                          )}
+
+                          {aiSuggestion.styling_tips && aiSuggestion.styling_tips.length > 0 && (
+                            <div className="cb-ai-tip-item">
+                              <Shirt size={13} color="#2563EB" style={{ flexShrink: 0, marginTop: 2 }} />
+                              <div>
+                                <strong>Gợi ý phối đồ & makeup:</strong> {aiSuggestion.styling_tips.join(' • ')}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action buttons for AI suggestion */}
+                      <div className="cb-ai-button-group">
+                        <button
+                          type="button"
+                          className="cb-ai-apply-btn"
+                          onClick={handleApplyAiSuggestion}
+                        >
+                          {hasAppliedAi ? (
+                            <>
+                              <CheckCircle2 size={16} />
+                              <span>Đã điền vào Form thành công!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles size={16} />
+                              <span>Áp dụng gợi ý này vào Form</span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          className="cb-ai-retry-btn"
+                          onClick={handleGenerateAiCombo}
+                          disabled={isAiGenerating}
+                          title="Tạo lại gợi ý khác"
+                        >
+                          <RefreshCw size={13} className={isAiGenerating ? 'cb-spin' : ''} />
+                          <span>Thử gợi ý khác</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Section 1: Thông tin cơ bản */}
                 <div className="cb-form-section">
                   <h4 className="cb-section-title">

@@ -998,7 +998,7 @@ export class DisputesService {
       );
 
     if (!escrow) {
-      throw new ConflictException('The escrow is already being resolved or is unavailable.');
+      throw new ConflictException('Khoản ký quỹ (escrow) đang được xử lý hoặc không khả dụng.');
     }
 
     let transferResult = null;

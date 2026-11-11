@@ -8,6 +8,10 @@ import type { AuthUser } from '../../../common/decorators/current-user.decorator
 import { RateLimitService } from '../../auth/services/rate-limit.service';
 import { AiService } from '../services/ai.service';
 import type { ChatResponse } from '../services/ai.service';
+import {
+  ComboSuggestionRequestDto,
+  ComboSuggestionResponseDto,
+} from '../dto/combo-suggestion.dto';
 
 export class ChatRequestDto {
   @IsString()
@@ -107,6 +111,17 @@ export class AiController {
   ): Promise<any> {
     await this.rateLimitService.assertRateLimit(`ai_antifraud_${user.sub}`, 10, 60);
     return this.aiService.antiFraudInspect(body.provider_id, body.photos || []);
+  }
+
+  @Post('combos/suggest')
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN', 'PROVIDER')
+  async suggestCombo(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: ComboSuggestionRequestDto,
+  ): Promise<ComboSuggestionResponseDto> {
+    await this.rateLimitService.assertRateLimit(`ai_combo_${user.sub}`, 20, 60);
+    return this.aiService.suggestCombo(dto);
   }
 }
 
