@@ -1,5 +1,11 @@
 import { createHash } from 'node:crypto';
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  OnApplicationShutdown,
+  OnModuleDestroy,
+  Optional,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Interval } from '@nestjs/schedule';
 import { Model, Types } from 'mongoose';
@@ -32,7 +38,11 @@ export class FinalizationReviewError extends Error {
 
 /** V2 database finalizer. Every durable side effect and COMPLETED share one transaction. */
 @Injectable()
-export class V2PaymentFinalizationService {
+export class V2PaymentFinalizationService
+  implements OnModuleDestroy, OnApplicationShutdown
+{
+  private isShuttingDown = false;
+
   constructor(
     @Inject(CONTRACTS_V2_ENABLED) private readonly enabled: boolean,
     @InjectModel(Booking.name) private readonly bookings: Model<Booking>,
@@ -57,9 +67,18 @@ export class V2PaymentFinalizationService {
     private readonly contractEvidence?: ContractEvidenceService,
   ) {}
 
+  onModuleDestroy(): void {
+    this.isShuttingDown = true;
+  }
+
+  onApplicationShutdown(): void {
+    this.isShuttingDown = true;
+  }
+
   @Interval(15_000)
   async processDue(): Promise<number> {
-    if (!this.enabled) return 0;
+    if (!this.enabled || this.isShuttingDown) return 0;
+    if (this.recoveries.db && this.recoveries.db.readyState !== 1) return 0;
     const now = new Date();
     const due = await this.recoveries.find({
       $or: [

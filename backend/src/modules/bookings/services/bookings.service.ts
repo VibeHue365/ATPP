@@ -365,6 +365,25 @@ export class BookingsService implements OnApplicationBootstrap {
       },
       5 * 60 * 1000,
     );
+
+    // Self-healing: Revert any AoDai rental bookings mistakenly put into COMBO_PHOTOS_APPROVED back to RETURNED
+    try {
+      await this.bookingModel.updateMany(
+        {
+          $or: [
+            { bookingType: BookingType.AoDaiRental },
+            { type: BookingType.AoDaiRental },
+          ],
+          status: BookingStatus.ComboPhotosApproved,
+        },
+        {
+          $set: { status: BookingStatus.Returned },
+          $pull: { statusTimeline: { status: BookingStatus.ComboPhotosApproved } },
+        },
+      );
+    } catch (e) {
+      console.warn('Failed to auto-heal mismatched combo statuses in bootstrap:', e);
+    }
   }
 
   async cleanupExpiredPendingBookings(): Promise<void> {
@@ -2617,11 +2636,13 @@ export class BookingsService implements OnApplicationBootstrap {
       .lean()
       .exec();
 
+
     // 1 query lấy toàn bộ schedules bằng model đã inject sẵn
     const allSchedules = await this.bookingScheduleModel
       .find({ bookingId: { $in: bookingIds } })
       .lean()
       .exec();
+
 
     // Gom nhóm in-memory O(1)
     const itemsByBooking = new Map<string, any[]>();
@@ -2736,6 +2757,7 @@ export class BookingsService implements OnApplicationBootstrap {
       .findOne({ userId: new Types.ObjectId(userIdStr) })
       .lean()
       .exec();
+
     const provider = providerDoc as ProviderDoc | null;
     if (!provider) return [];
 
@@ -2745,6 +2767,16 @@ export class BookingsService implements OnApplicationBootstrap {
       .sort({ createdAt: -1 })
       .lean()
       .exec();
+
+    bookings.forEach((b: any) => {
+      if (
+        (b.bookingType === BookingType.AoDaiRental || b.type === BookingType.AoDaiRental) &&
+        b.status === BookingStatus.ComboPhotosApproved
+      ) {
+        b.status = BookingStatus.Returned;
+      }
+    });
+
 
     const bookingIds = bookings.map((booking) => booking._id);
     const items = bookingIds.length
@@ -2864,6 +2896,20 @@ export class BookingsService implements OnApplicationBootstrap {
     if (!booking) throw new NotFoundException('Booking not found');
 
     if (
+      (booking.bookingType === BookingType.AoDaiRental || (booking as any).type === BookingType.AoDaiRental) &&
+      booking.status === BookingStatus.ComboPhotosApproved
+    ) {
+      await this.bookingModel.updateOne(
+        { _id: bookingId },
+        {
+          $set: { status: BookingStatus.Returned },
+          $pull: { statusTimeline: { status: BookingStatus.ComboPhotosApproved } },
+        },
+      );
+      booking.status = BookingStatus.Returned;
+    }
+
+    if (
       [BookingStatus.Returned, BookingStatus.Completed].includes(
         booking.status,
       ) &&
@@ -2904,11 +2950,13 @@ export class BookingsService implements OnApplicationBootstrap {
       .populate('photographyPackageId')
       .lean()
       .exec();
+
     const schedules = await this.bookingScheduleModel
       .find({ bookingId, scheduleType: BookingScheduleType.Photoshoot })
       .sort({ startsAt: 1 })
       .lean()
       .exec();
+
 
     const updatedItems = items.map((item) => {
       const prodName = (item.productId as any)?.name;
@@ -2986,21 +3034,9 @@ export class BookingsService implements OnApplicationBootstrap {
       const isAdmin = roles?.includes('ADMIN') || roles?.includes('admin');
       const isCustomer = this.getCustomerIdStr(booking) === userId;
 
-      let isProvider = false;
-      if (roles?.includes('PROVIDER')) {
-        const provider = await this.providerModel.findOne({
-          userId: new Types.ObjectId(userId),
-        });
-        if (provider) {
-          isProvider = booking.providerIds.some(
-            (pid) => pid.toString() === provider._id.toString(),
-          );
-        }
-      }
-
-      if (!isAdmin && !isCustomer && !isProvider) {
+      if (!isAdmin && !isCustomer) {
         throw new ForbiddenException(
-          'Chỉ khách hàng, Nhà cung cấp của đơn hàng hoặc Admin mới có quyền xác nhận hoàn thành đơn hàng.',
+          'Nhà cung cấp không được phép tự ý hoàn tất đơn hàng. Chỉ khách hàng hoặc Admin mới có quyền xác nhận hoàn thành đơn hàng.',
         );
       }
     }
@@ -3074,6 +3110,7 @@ export class BookingsService implements OnApplicationBootstrap {
       })
       .lean()
       .exec();
+
     if (
       rentalLifecycleItems.length &&
       rentalLifecycleItems.some(
@@ -3153,78 +3190,80 @@ export class BookingsService implements OnApplicationBootstrap {
       throw new ForbiddenException('Bạn không có quyền xác nhận đơn hàng này.');
     }
 
-    if (booking.status === BookingStatus.Completed || booking.status === BookingStatus.ComboPhotosApproved) {
+    if (booking.status === BookingStatus.Completed) {
       return booking;
     }
 
-    if (booking.status !== BookingStatus.AwaitingReview) {
+    const canComplete = [
+      BookingStatus.AwaitingReview,
+      BookingStatus.Returned,
+      BookingStatus.ComboPhotosApproved,
+    ].includes(booking.status);
+
+    if (!canComplete) {
       throw new BadRequestException(
-        `Chỉ có thể xác nhận hoàn thành khi đơn đang chờ đánh giá (AWAITING_REVIEW). Trạng thái hiện tại: ${booking.status}`,
+        `Chỉ có thể xác nhận hoàn thành khi đơn đang ở trạng thái chờ duyệt (AWAITING_REVIEW), đã trả đồ (RETURNED) hoặc đã duyệt ảnh combo (COMBO_PHOTOS_APPROVED). Trạng thái hiện tại: ${booking.status}`,
       );
     }
 
-    // Check if there are physical rental items in this booking that are not completed yet
-    const rentalLifecycleItems = await this.bookingItemModel
-      .find({
-        bookingId: booking._id,
-        itemType: BookingItemType.Product,
-        'rentalFulfillment.status': { $exists: true },
-      })
-      .lean()
-      .exec();
+    // Check if there are physical rental items in this booking that are not completed yet.
+    // This ONLY applies to COMBO bookings currently in AWAITING_REVIEW where photos are being approved
+    // while the costume rental is still ongoing (not yet returned or completed).
+    const isCombo =
+      booking.bookingType === BookingType.Combo ||
+      (booking as any).type === BookingType.Combo;
 
-    const hasIncompleteRentals =
-      rentalLifecycleItems.length > 0 &&
-      rentalLifecycleItems.some(
-        (item) =>
-          item.rentalFulfillment?.status !== RentalFulfillmentStatus.Completed,
-      );
+    if (isCombo && booking.status === BookingStatus.AwaitingReview) {
+      const rentalLifecycleItems = await this.bookingItemModel
+        .find({
+          bookingId: booking._id,
+          itemType: BookingItemType.Product,
+          'rentalFulfillment.status': { $exists: true },
+        })
+        .lean()
+        .exec();
 
-    if (hasIncompleteRentals) {
-      // For combo bookings where Ao Dai rentals are still ongoing, approving photos marks photosApproved = true and advances status to COMBO_PHOTOS_APPROVED
-      (booking as any).photosApproved = true;
-      booking.status = BookingStatus.ComboPhotosApproved;
-      booking.statusTimeline.push({
-        status: BookingStatus.ComboPhotosApproved,
-        changedAt: new Date(),
-        note: 'Khách hàng đã xác nhận hài lòng về sản phẩm ảnh chụp. Đơn hàng tiếp tục luồng thuê áo dài.',
-      });
-      await booking.save();
-
-      try {
-        const customerIdStr = this.getCustomerIdStr(booking);
-        const providerIdStrs = (booking.providerIds || []).map((id) => id.toString());
-        const recipientIds = [...new Set([customerIdStr, ...providerIdStrs])].filter(Boolean);
-        this.notificationsService.emitBookingUpdate(
-          {
-            bookingId: booking._id.toString(),
-            bookingCode: booking.bookingCode,
-            status: BookingStatus.ComboPhotosApproved,
-            deliveredPhotos: (booking as any).deliveredPhotos ?? [],
-          },
-          recipientIds,
+      const hasOngoingRentals =
+        rentalLifecycleItems.length > 0 &&
+        rentalLifecycleItems.some(
+          (item) =>
+            item.rentalFulfillment?.status !== RentalFulfillmentStatus.Completed &&
+            item.rentalFulfillment?.status !== RentalFulfillmentStatus.Returned,
         );
-      } catch (e) {
-        console.warn('Failed to emit booking_updated in confirmCompleteByCustomer:', e);
+
+      if (hasOngoingRentals) {
+        // For combo bookings where Ao Dai rentals are still ongoing, approving photos marks photosApproved = true and advances status to COMBO_PHOTOS_APPROVED
+        (booking as any).photosApproved = true;
+        booking.status = BookingStatus.ComboPhotosApproved;
+        booking.statusTimeline.push({
+          status: BookingStatus.ComboPhotosApproved,
+          changedAt: new Date(),
+          note: 'Khách hàng đã xác nhận hài lòng về sản phẩm ảnh chụp. Đơn hàng tiếp tục luồng thuê áo dài.',
+        });
+        await booking.save();
+
+        try {
+          const customerIdStr = this.getCustomerIdStr(booking);
+          const providerIdStrs = (booking.providerIds || []).map((id) => id.toString());
+          const recipientIds = [...new Set([customerIdStr, ...providerIdStrs])].filter(Boolean);
+          this.notificationsService.emitBookingUpdate(
+            {
+              bookingId: booking._id.toString(),
+              bookingCode: booking.bookingCode,
+              status: BookingStatus.ComboPhotosApproved,
+              deliveredPhotos: (booking as any).deliveredPhotos ?? [],
+            },
+            recipientIds,
+          );
+        } catch (e) {
+          console.warn('Failed to emit booking_updated in confirmCompleteByCustomer:', e);
+        }
+
+        return booking;
       }
-
-      return booking;
     }
 
-    // Atomic lock: prevents double-processing if cron job runs simultaneously
-    const locked = await this.bookingModel.findOneAndUpdate(
-      { _id: booking._id, status: BookingStatus.AwaitingReview },
-      { $set: { status: BookingStatus.Completed, photosApproved: true } },
-      { new: false },
-    );
-
-    if (!locked) {
-      // Another process already handled it — return current state
-      const current = await this.bookingModel.findById(bookingIdStr);
-      return current!;
-    }
-
-    // Run full completion flow (settlement + wallet update + notifications)
+    // Run full completion flow (settlement + deposit refund + notifications)
     return this.completeBooking(bookingIdStr, userId, ['CUSTOMER']);
   }
 
@@ -3270,8 +3309,15 @@ export class BookingsService implements OnApplicationBootstrap {
       // Provider và Admin đều được phép cập nhật sang PICKED_UP khi bàn giao đồ tại cửa hàng
     }
 
-    // Nếu chuyển sang COMPLETED → dùng completeBooking để trigger settlement
+    // Nếu chuyển sang COMPLETED → chỉ Khách hàng hoặc Admin mới được phép
     if (newStatus === BookingStatus.Completed) {
+      const isAdmin = roles?.includes('ADMIN') || roles?.includes('admin');
+      const isCustomer = userId && this.getCustomerIdStr(booking) === userId;
+      if (!isAdmin && !isCustomer) {
+        throw new ForbiddenException(
+          'Nhà cung cấp không được phép tự ý hoàn tất đơn hàng. Chỉ khách hàng xác nhận hoặc hệ thống tự động nghiệm thu sau 24h mới có quyền hoàn tất đơn này.',
+        );
+      }
       return this.completeBooking(bookingIdStr, userId, roles);
     }
 
@@ -3545,6 +3591,9 @@ export class BookingsService implements OnApplicationBootstrap {
       if (handoverPhotos && handoverPhotos.length > 0) {
         booking.handoverPhotos = handoverPhotos;
       }
+    }
+    if (nextStatus === BookingStatus.Returned) {
+      booking.returnedAt = new Date();
     }
     booking.statusTimeline.push({
       status: newStatus as BookingStatus,
@@ -4396,11 +4445,13 @@ export class BookingsService implements OnApplicationBootstrap {
       .select('providerLocalDate startsAt endsAt bookingItemId bookingId')
       .lean()
       .exec();
+
     const legacyItemsPromise = this.bookingItemModel
       .find(providerObjId ? { providerId: providerObjId } : { providerId })
       .select('bookingId shootDate shootTimeSlot rescheduleRequest')
       .lean()
       .exec();
+
 
     // 1. Query BookingSchedule (v2 schedules)
     try {

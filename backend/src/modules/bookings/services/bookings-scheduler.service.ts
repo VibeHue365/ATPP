@@ -54,7 +54,7 @@ export class BookingsSchedulerService {
     private readonly notificationsService: NotificationsService,
     private readonly photographyHoldService: PhotographyHoldService,
     private readonly bookingStatusService: BookingStatusService,
-  ) {}
+  ) { }
 
   @Cron(CronExpression.EVERY_MINUTE)
   async expirePhotographyHolds() {
@@ -108,21 +108,6 @@ export class BookingsSchedulerService {
 
       for (const candidate of candidates) {
         try {
-          // Atomic status lock: only succeeds if status is STILL AWAITING_REVIEW.
-          // Prevents double-processing if cron overlaps with a customer confirm-complete call.
-          const locked = await this.bookingModel.findOneAndUpdate(
-            { _id: candidate._id, status: BookingStatus.AwaitingReview },
-            { $set: { status: BookingStatus.Completed, photosApproved: true } },
-            { new: false }, // return OLD doc — if null, someone else already changed it
-          );
-
-          if (!locked) {
-            this.logger.warn(
-              `Booking ${candidate.bookingCode} already processed — skipping.`,
-            );
-            continue;
-          }
-
           // Run the full completion logic (settlement, wallet update, notifications)
           await this.bookingStatusService.completeBooking(
             candidate._id.toString(),
@@ -139,6 +124,52 @@ export class BookingsSchedulerService {
       }
     } catch (err) {
       this.logger.error('Auto-complete cron job failed:', err);
+    }
+  }
+
+  /**
+   * Auto-complete rental bookings in RETURNED status after 24 hours if customer hasn't confirmed yet.
+   * Protects providers from unreleased escrow funds.
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  async autoCompleteReturnedRentals() {
+    this.logger.log('Running auto-complete for RETURNED rental bookings...');
+    const deadline = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    try {
+      const candidates = await this.bookingModel
+        .find({
+          status: BookingStatus.Returned,
+          $or: [
+            { returnedAt: { $lte: deadline } },
+            { returnedAt: null, updatedAt: { $lte: deadline } },
+          ],
+        })
+        .select('_id bookingCode')
+        .lean();
+
+      if (candidates.length === 0) return;
+      this.logger.log(
+        `Found ${candidates.length} RETURNED rental booking(s) past 24h window to auto-complete.`,
+      );
+
+      for (const candidate of candidates) {
+        try {
+          await this.bookingStatusService.completeBooking(
+            candidate._id.toString(),
+          );
+          this.logger.log(
+            `Auto-completed returned rental booking ${candidate.bookingCode} after 24h window.`,
+          );
+        } catch (err) {
+          this.logger.error(
+            `Failed to auto-complete returned rental booking ${candidate.bookingCode}:`,
+            err,
+          );
+        }
+      }
+    } catch (err) {
+      this.logger.error('Auto-complete returned rentals cron job failed:', err);
     }
   }
 

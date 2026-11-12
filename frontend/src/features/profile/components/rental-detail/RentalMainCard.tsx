@@ -28,7 +28,7 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({ rentalData }) =>
   // Compute step active/completed states
   const rawStatus = rentalData.status;
   let activeStep = rentalData.currentStepIndex || 1;
-  if (['RETURNED', 'COMPLETED'].includes(rawStatus)) {
+  if (['RETURNED', 'COMPLETED', 'COMBO_PHOTOS_APPROVED'].includes(rawStatus)) {
     activeStep = 4;
   } else if (['PICKED_UP', 'RENTING', 'IN_PROGRESS', 'RETURN_PENDING'].includes(rawStatus)) {
     activeStep = 3;
@@ -93,7 +93,7 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({ rentalData }) =>
                   ? '#FEE2E2'
                   : rentalData.statusLabel === 'CHỜ DUYỆT SỰ CỐ'
                   ? '#FFF1F2'
-                  : ['RETURNED', 'COMPLETED'].includes(rawStatus)
+                  : ['RETURNED', 'COMPLETED', 'COMBO_PHOTOS_APPROVED'].includes(rawStatus)
                   ? '#ECFDF5'
                   : '#FFEDD5',
               color:
@@ -101,7 +101,7 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({ rentalData }) =>
                   ? '#991B1B'
                   : rentalData.statusLabel === 'CHỜ DUYỆT SỰ CỐ'
                   ? '#E11D48'
-                  : ['RETURNED', 'COMPLETED'].includes(rawStatus)
+                  : ['RETURNED', 'COMPLETED', 'COMBO_PHOTOS_APPROVED'].includes(rawStatus)
                   ? '#047857'
                   : '#C2410C',
               fontSize: '11px',

@@ -153,7 +153,7 @@ export function OrderActionDropdown({
           { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: '#D97706' },
         ],
         RETURN_PENDING: [{ label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true }],
-        RETURNED: [{ label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' }],
+        RETURNED: [{ label: '⏳ Chờ khách xác nhận hoàn tất...', apiStatus: '', icon: <Clock size={14} />, color: '#059669', disabled: true }],
         DISPUTED: [{ label: '⚖️ Đang tranh chấp (Chờ Admin)', apiStatus: '', icon: <Clock size={14} />, color: '#DC2626', disabled: true }],
         REFUNDED: [{ label: 'Đã hoàn tiền', apiStatus: '', icon: <CheckCircle size={14} />, color: '#6B7280', disabled: true }],
       }
@@ -193,7 +193,7 @@ export function OrderActionDropdown({
           { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: '#D97706' },
         ],
         RETURN_PENDING: [{ label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true }],
-        RETURNED: [{ label: 'Hoàn thành đơn', apiStatus: 'COMPLETED', icon: <CheckCircle size={14} />, color: '#2e7d32' }],
+        RETURNED: [{ label: '⏳ Chờ khách xác nhận hoàn tất...', apiStatus: '', icon: <Clock size={14} />, color: '#059669', disabled: true }],
         DISPUTED: [{ label: '⚖️ Đang tranh chấp (Chờ Admin)', apiStatus: '', icon: <Clock size={14} />, color: '#DC2626', disabled: true }],
         REFUNDED: [{ label: 'Đã hoàn tiền', apiStatus: '', icon: <CheckCircle size={14} />, color: '#6B7280', disabled: true }],
       };

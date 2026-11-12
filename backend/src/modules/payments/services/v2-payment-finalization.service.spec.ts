@@ -267,7 +267,7 @@ describe('V2PaymentFinalizationService unit tests', () => {
           contractFlowVersion: 2,
           status: BookingStatus.PendingPayment,
           paymentExpiryClaim: { phase: 'FINALIZING', paymentId },
-          bookingType: BookingType.Product,
+          bookingType: BookingType.AoDaiRental,
           pricingSummary: { grandTotal: 100, depositTotal: 50 },
         }),
       }),
@@ -477,7 +477,7 @@ describe('V2PaymentFinalizationService unit tests', () => {
           paymentExpiryClaim: null,
           finalizedPaymentId: paymentId,
           finalizedContractKey: bindingKey,
-          bookingType: BookingType.Product,
+          bookingType: BookingType.AoDaiRental,
           pricingSummary: { grandTotal: 100, depositTotal: 50 },
         }),
       }),
@@ -560,7 +560,7 @@ describe('V2PaymentFinalizationService unit tests', () => {
     const customerId = oid();
     const token = 'token-diff-payment';
 
-    const binding = {
+    const binding: any = {
       bindingVersion: 1,
       flowVersion: 2,
       bookingId,
@@ -609,7 +609,7 @@ describe('V2PaymentFinalizationService unit tests', () => {
           paymentExpiryClaim: null,
           finalizedPaymentId: otherPaymentId, // MISMATCH
           finalizedContractKey: bindingKey,
-          bookingType: BookingType.Product,
+          bookingType: BookingType.AoDaiRental,
           pricingSummary: { grandTotal: 100, depositTotal: 50 },
         }),
       }),
@@ -741,7 +741,7 @@ describe('V2PaymentFinalizationService unit tests', () => {
           paymentExpiryClaim: null,
           finalizedPaymentId: paymentId,
           finalizedContractKey: bindingKey,
-          bookingType: BookingType.Product,
+          bookingType: BookingType.AoDaiRental,
           pricingSummary: { grandTotal: 100, depositTotal: 50 },
         }),
       }),
@@ -797,5 +797,70 @@ describe('V2PaymentFinalizationService unit tests', () => {
 
     // Verify evidence generation was attempted out-of-transaction
     expect(mockEvidence.generateAndStorePdf).toHaveBeenCalledWith(contractVersionId);
+  });
+
+  it('skips processDue when module is destroyed or application is shutting down', async () => {
+    mockRecoveries.find.mockClear();
+
+    service.onModuleDestroy();
+    await expect(service.processDue()).resolves.toBe(0);
+    expect(mockRecoveries.find).not.toHaveBeenCalled();
+
+    const service2 = new V2PaymentFinalizationService(
+      true,
+      mockBookings,
+      mockItems,
+      mockSchedules,
+      mockReservations,
+      mockPayments,
+      mockRecoveries,
+      mockEscrows,
+      mockNotifications,
+      mockContracts,
+      mockVersions,
+      mockConsents,
+      mockPhotoHolds,
+      mockPromotions,
+      mockRecoveryService,
+      mockContractPolicy,
+      mockPreparation,
+      mockSnapshots,
+      mockTemplates,
+    );
+    service2.onApplicationShutdown();
+    await expect(service2.processDue()).resolves.toBe(0);
+    expect(mockRecoveries.find).not.toHaveBeenCalled();
+  });
+
+  it('skips processDue when mongoose connection is not ready (readyState !== 1)', async () => {
+    mockRecoveries.find.mockClear();
+    const disconnectedRecoveries = {
+      ...mockRecoveries,
+      db: { readyState: 0 },
+    };
+    const service3 = new V2PaymentFinalizationService(
+      true,
+      mockBookings,
+      mockItems,
+      mockSchedules,
+      mockReservations,
+      mockPayments,
+      disconnectedRecoveries as any,
+      mockEscrows,
+      mockNotifications,
+      mockContracts,
+      mockVersions,
+      mockConsents,
+      mockPhotoHolds,
+      mockPromotions,
+      mockRecoveryService,
+      mockContractPolicy,
+      mockPreparation,
+      mockSnapshots,
+      mockTemplates,
+    );
+
+    await expect(service3.processDue()).resolves.toBe(0);
+    expect(mockRecoveries.find).not.toHaveBeenCalled();
   });
 });

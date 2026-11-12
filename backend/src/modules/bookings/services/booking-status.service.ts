@@ -170,21 +170,14 @@ export class BookingStatusService {
       );
       if (!booking) throw new NotFoundException('Không tìm thấy đơn hàng');
 
-      // Authorization check (Customer is allowed to complete their own booking)
+      // Authorization check (Only Customer or Admin is allowed to complete a booking)
       if (userId) {
         const isAdmin = roles?.includes('ADMIN') || roles?.includes('admin');
         const isCustomer = this.getCustomerIdStr(booking) === userId;
-        const userProviders = await this.providerModel
-          .find({ userId: new Types.ObjectId(userId) })
-          .session(session);
-        const userProviderIds = userProviders.map((p) => p._id.toString());
-        const isProvider = booking.providerIds.some((id) =>
-          userProviderIds.includes(id.toString()),
-        );
 
-        if (!isAdmin && !isCustomer && !isProvider) {
+        if (!isAdmin && !isCustomer) {
           throw new ForbiddenException(
-            'Bạn không có quyền đánh dấu hoàn thành đơn hàng này.',
+            'Nhà cung cấp không được phép tự ý hoàn tất đơn hàng. Chỉ khách hàng hoặc Admin mới có quyền xác nhận hoàn thành đơn hàng.',
           );
         }
       }
@@ -558,7 +551,8 @@ export class BookingStatusService {
 
         if (booking.providerIds && booking.providerIds.length > 0) {
           const query = this.providerModel.find({ _id: { $in: booking.providerIds } });
-          const providers = (typeof (query as any)?.select === 'function' ? await (query as any).select('userId').lean() : await query) || [];
+          const rawProviders = typeof (query as any)?.select === 'function' ? await (query as any).select('userId').lean() : await query;
+          const providers = Array.isArray(rawProviders) ? rawProviders : [];
 
           for (const prov of providers as any[]) {
             if (prov?.userId) {
@@ -710,6 +704,13 @@ export class BookingStatusService {
       }
 
       if (newStatus === BookingStatus.Completed) {
+        const isAdmin = roles?.includes('ADMIN') || roles?.includes('admin');
+        const isCustomer = userId && this.getCustomerIdStr(booking) === userId;
+        if (!isAdmin && !isCustomer) {
+          throw new ForbiddenException(
+            'Nhà cung cấp không được phép tự ý hoàn tất đơn hàng. Chỉ khách hàng xác nhận hoặc hệ thống tự động nghiệm thu sau 24h mới có quyền hoàn tất đơn này.',
+          );
+        }
         const result = await this.completeBooking(
           bookingIdStr,
           userId,
@@ -883,6 +884,10 @@ export class BookingStatusService {
         }
       }
 
+      if (nextStatus === BookingStatus.Returned) {
+        booking.returnedAt = new Date();
+      }
+
       await booking.save({ session });
 
       if (
@@ -950,7 +955,8 @@ export class BookingStatusService {
 
         if (booking.providerIds && booking.providerIds.length > 0) {
           const query = this.providerModel.find({ _id: { $in: booking.providerIds } });
-          const providers = (typeof (query as any)?.select === 'function' ? await (query as any).select('userId').lean() : await query) || [];
+          const rawProviders = typeof (query as any)?.select === 'function' ? await (query as any).select('userId').lean() : await query;
+          const providers = Array.isArray(rawProviders) ? rawProviders : [];
 
           for (const prov of providers as any[]) {
             if (prov?.userId) {

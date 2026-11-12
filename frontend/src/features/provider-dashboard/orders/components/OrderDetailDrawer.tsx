@@ -29,7 +29,6 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
-import Swal from 'sweetalert2';
 import type { Order } from '../types';
 import traditionalAoDaiImg from '../../../../assets/images/onboarding_traditional.webp';
 import { RentalEvidenceImage } from '../../../rentals/components/RentalEvidenceImage';
@@ -62,7 +61,6 @@ export function OrderDetailDrawer({
   const [activeTab, setActiveTab] = useState<'overview' | 'details' | 'schedule' | 'payment' | 'incidents'>('overview');
   const [selectedEvidenceImage, setSelectedEvidenceImage] = useState<string | null>(null);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
-  const [isCompleting, setIsCompleting] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const [internalNoteInput, setInternalNoteInput] = useState('');
   const [internalNotesList, setInternalNotesList] = useState<Array<{ author: string; time: string; text: string }>>([
@@ -197,7 +195,7 @@ export function OrderDetailDrawer({
       if (rawStatus === 'PICKUP_PENDING') return 1;
       if (rawStatus === 'PICKED_UP' || rawStatus === 'IN_PROGRESS') return 2;
       if (rawStatus === 'RETURN_PENDING') return 3;
-      if (rawStatus === 'RETURNED') return 4;
+      if (rawStatus === 'RETURNED' || rawStatus === 'COMBO_PHOTOS_APPROVED') return 4;
       return 0;
     }
 
@@ -229,9 +227,9 @@ export function OrderDetailDrawer({
   if (isOrderCompleted) aoDaiCurrentIdx = 5;
   else if (rawStatus === 'PENDING' || rawStatus === 'PENDING_PAYMENT' || rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') aoDaiCurrentIdx = 0;
   else if (rawStatus === 'PICKUP_PENDING') aoDaiCurrentIdx = 1;
-  else if (rawStatus === 'PICKED_UP' || rawStatus === 'IN_PROGRESS' || rawStatus === 'AWAITING_REVIEW' || rawStatus === 'COMBO_PHOTOS_APPROVED') aoDaiCurrentIdx = 2;
+  else if (rawStatus === 'PICKED_UP' || rawStatus === 'IN_PROGRESS' || rawStatus === 'AWAITING_REVIEW') aoDaiCurrentIdx = 2;
   else if (rawStatus === 'RETURN_PENDING') aoDaiCurrentIdx = 3;
-  else if (rawStatus === 'RETURNED') aoDaiCurrentIdx = 4;
+  else if (rawStatus === 'RETURNED' || rawStatus === 'COMBO_PHOTOS_APPROVED') aoDaiCurrentIdx = 4;
 
   const aoDaiStepsConfig = ['Chuẩn bị', 'Chờ nhận', 'Đang thuê', 'Nhận lại', 'Hoàn tất'];
   const aoDaiSubsteps = aoDaiStepsConfig.map((label, idx) => {
@@ -268,69 +266,6 @@ export function OrderDetailDrawer({
     ]);
     setInternalNoteInput('');
     toast.success('Đã lưu ghi chú nội bộ');
-  };
-
-  const handleCompleteOrder = async () => {
-    if (isCompleting || isOrderCompleted) return;
-
-    const result = await Swal.fire({
-      title: 'Xác nhận hoàn tất đơn hàng?',
-      text: 'Sau khi hoàn tất, quy trình và tiến độ của đơn hàng sẽ đạt 100%. Tiền cọc và thanh toán sẽ được đối soát tự động.',
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'Đồng ý hoàn tất',
-      cancelButtonText: 'Hủy',
-      confirmButtonColor: '#15803D',
-      cancelButtonColor: '#64748B',
-    });
-
-    if (!result.isConfirmed) return;
-
-    try {
-      setIsCompleting(true);
-      await changeOrderStatus(order._id, 'COMPLETED');
-
-      const nowStr = new Date().toISOString();
-      const updatedItems = (order.items || []).map((item: any) => {
-        if (item.rentalFulfillment) {
-          return {
-            ...item,
-            rentalFulfillment: {
-              ...item.rentalFulfillment,
-              status: 'COMPLETED',
-              completedAt: nowStr,
-              inventoryStatus: 'AVAILABLE',
-              depositSettlementStatus: 'FULLY_RELEASED',
-            },
-          };
-        }
-        return item;
-      });
-
-      const updatedOrder: Order = {
-        ...order,
-        rawStatus: 'COMPLETED',
-        status: 'HOÀN THÀNH',
-        updatedDate: 'Vừa xong',
-        items: updatedItems,
-        pricingSummary: {
-          ...order.pricingSummary,
-          depositRefundAmount: order.depositTotal || 0,
-        },
-        paymentSummary: {
-          ...order.paymentSummary,
-          paymentStatus: 'PAID',
-        },
-      };
-
-      if (onSelectOrder) {
-        onSelectOrder(updatedOrder);
-      }
-    } catch (err: any) {
-      console.error('Error completing order:', err);
-    } finally {
-      setIsCompleting(false);
-    }
   };
 
   const handleConfirmOrder = async () => {
@@ -2171,8 +2106,8 @@ export function OrderDetailDrawer({
                     {isConfirming
                       ? 'Đang xác nhận...'
                       : isPhoto
-                      ? 'Chấp nhận lịch chụp'
-                      : 'Xác nhận đơn hàng'}
+                        ? 'Chấp nhận lịch chụp'
+                        : 'Xác nhận đơn hàng'}
                   </span>
                 </button>
                 {isPhoto && (
@@ -2266,16 +2201,23 @@ export function OrderDetailDrawer({
             )}
 
             {rawStatus === 'PICKUP_PENDING' && (
-              <>
-                <button
-                  type="button"
-                  className="p-drawer-primary-btn"
-                  onClick={() => changeOrderStatus(order._id, 'PICKED_UP')}
-                >
-                  <Check size={14} />
-                  <span>Xác nhận đã giao áo cho khách</span>
-                </button>
-              </>
+              <span
+                style={{
+                  fontSize: '12.5px',
+                  fontWeight: 650,
+                  color: '#D97706',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: '#FFFBEB',
+                  padding: '7px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #FDE68A',
+                }}
+              >
+                <Clock size={14} />
+                <span>Đã chuẩn bị đồ xong — Đang chờ khách xác nhận nhận đồ</span>
+              </span>
             )}
 
             {rawStatus === 'PICKED_UP' && (
@@ -2302,7 +2244,7 @@ export function OrderDetailDrawer({
               </>
             )}
 
-            {rawStatus === 'COMBO_PHOTOS_APPROVED' && (
+            {rawStatus === 'COMBO_PHOTOS_APPROVED' && !isAoDai && (
               <span style={{ fontSize: '12.5px', fontWeight: 650, color: '#0369A1', display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#E0F2FE', padding: '7px 14px', borderRadius: '8px', border: '1px solid #BAE6FD' }}>
                 <CheckCircle size={14} />
                 <span>Khách đã duyệt ảnh</span>
@@ -2330,16 +2272,23 @@ export function OrderDetailDrawer({
             )}
 
             {(rawStatus === 'RETURNED' || rawStatus === 'COMBO_PHOTOS_APPROVED') && !isOrderCompleted && (
-              <button
-                type="button"
-                className="p-drawer-primary-btn"
-                style={{ backgroundColor: '#15803D' }}
-                onClick={handleCompleteOrder}
-                disabled={isCompleting}
+              <span
+                style={{
+                  fontSize: '12.5px',
+                  fontWeight: 650,
+                  color: '#059669',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  backgroundColor: '#ECFDF5',
+                  padding: '7px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #A7F3D0',
+                }}
               >
-                <CheckCircle size={14} />
-                <span>{isCompleting ? 'Đang hoàn tất...' : 'Hoàn tất đơn hàng'}</span>
-              </button>
+                <Clock size={14} />
+                <span>Đã nhận lại đồ — Chờ khách xác nhận hoàn tất (hoặc tự động nghiệm thu sau 24h)</span>
+              </span>
             )}
 
             {isOrderCompleted && (

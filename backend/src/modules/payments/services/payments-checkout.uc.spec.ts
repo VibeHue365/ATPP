@@ -171,7 +171,7 @@ describe('UC-49 Online Payment (HoangLVM)', () => {
     );
     expect(payment.paymentCode).toMatch(/^PAY\d{10}$/);
     expect(payment.payos.checkoutUrl).toContain(
-      `/checkout/result?paymentCode=${payment.paymentCode}`,
+      `/payments/checkout/${payment.paymentCode}`,
     );
   });
 
@@ -246,6 +246,113 @@ describe('UC-49 Online Payment (HoangLVM)', () => {
     await expect(
       service.getPaymentStatus('PAY404', customerId.toString()),
     ).rejects.toThrow(new NotFoundException('Payment not found'));
+  });
+
+  it('UT-49 UTCID18 keeps GET payment status pure read-only even for PAYOS_SIMULATOR pending payments', async () => {
+    const { service, paymentsRepository } = createService();
+    const confirmSpy = jest.spyOn(service, 'confirmPayment');
+    const bookingObjId = new Types.ObjectId();
+    paymentsRepository.findPaymentWithBooking.mockResolvedValue({
+      paymentCode: 'PAY_SIM_01',
+      status: PaymentStatus.Pending,
+      paymentMethod: 'PAYOS_SIMULATOR',
+      amount: 500000,
+      needsManualReview: false,
+      payos: { checkoutUrl: 'https://example.com/checkout' },
+      bookingId: {
+        _id: bookingObjId,
+        bookingCode: 'BK-SIM-01',
+        customerId,
+        status: BookingStatus.PendingPayment,
+        contractFlowVersion: 2,
+        paymentReviewRequired: false,
+        paymentSummary: { paymentStatus: PaymentStatus.Pending },
+      },
+    });
+
+    const res = await service.getPaymentStatus(
+      'PAY_SIM_01',
+      customerId.toString(),
+    );
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(res).toEqual({
+      paymentCode: 'PAY_SIM_01',
+      paymentStatus: PaymentStatus.Pending,
+      bookingId: bookingObjId.toString(),
+      bookingCode: 'BK-SIM-01',
+      bookingStatus: BookingStatus.PendingPayment,
+      bookingPaymentStatus: PaymentStatus.Pending,
+      confirmed: false,
+      needsManualReview: false,
+      reviewReason: null,
+      contractFlowVersion: 2,
+      paymentMethod: 'PAYOS_SIMULATOR',
+      amount: 500000,
+      checkoutUrl: 'https://example.com/checkout',
+    });
+  });
+
+  it('UT-49 UTCID19 flags needsManualReview and sets confirmed=false when review is required', async () => {
+    const { service, paymentsRepository } = createService();
+    const bookingObjId = new Types.ObjectId();
+    paymentsRepository.findPaymentWithBooking.mockResolvedValue({
+      paymentCode: 'PAY_REV_01',
+      status: PaymentStatus.Success,
+      paymentMethod: 'PAYOS_SIMULATOR',
+      amount: 500000,
+      needsManualReview: true,
+      bookingId: {
+        _id: bookingObjId,
+        bookingCode: 'BK-REV-01',
+        customerId,
+        status: BookingStatus.PendingPayment,
+        contractFlowVersion: 2,
+        paymentReviewRequired: true,
+        paymentReviewReason: 'CONTRACT_BINDING_STALE',
+        paymentSummary: { paymentStatus: PaymentStatus.Pending },
+      },
+    });
+
+    const res = await service.getPaymentStatus(
+      'PAY_REV_01',
+      customerId.toString(),
+    );
+
+    expect(res.confirmed).toBe(false);
+    expect(res.needsManualReview).toBe(true);
+    expect(res.reviewReason).toBe('CONTRACT_BINDING_STALE');
+    expect(res.checkoutUrl).toBeNull();
+  });
+
+  it('UT-49 UTCID20 returns confirmed=true when booking is Confirmed and no review is required', async () => {
+    const { service, paymentsRepository } = createService();
+    const bookingObjId = new Types.ObjectId();
+    paymentsRepository.findPaymentWithBooking.mockResolvedValue({
+      paymentCode: 'PAY_OK_01',
+      status: PaymentStatus.Success,
+      paymentMethod: 'PAYOS_SIMULATOR',
+      amount: 500000,
+      needsManualReview: false,
+      bookingId: {
+        _id: bookingObjId,
+        bookingCode: 'BK-OK-01',
+        customerId,
+        status: BookingStatus.Confirmed,
+        contractFlowVersion: null,
+        paymentReviewRequired: false,
+        paymentSummary: { paymentStatus: PaymentStatus.Success },
+      },
+    });
+
+    const res = await service.getPaymentStatus(
+      'PAY_OK_01',
+      customerId.toString(),
+    );
+
+    expect(res.confirmed).toBe(true);
+    expect(res.needsManualReview).toBe(false);
+    expect(res.reviewReason).toBeNull();
   });
 });
 

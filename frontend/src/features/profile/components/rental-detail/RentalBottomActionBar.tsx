@@ -13,6 +13,7 @@ interface RentalBottomActionBarProps {
   onConfirmPickup?: () => void;
   onAgreeIncident?: () => void;
   onDisagreeIncident?: () => void;
+  onConfirmComplete?: () => void;
 }
 
 export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
@@ -26,7 +27,8 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
   onOpenMap,
   onConfirmPickup,
   onAgreeIncident,
-  onDisagreeIncident
+  onDisagreeIncident,
+  onConfirmComplete,
 }) => {
   const currentStatus = status || 'CONFIRMED';
   const isPendingCustomerIncident =
@@ -39,7 +41,8 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
   const canExtend = !isPendingCustomerIncident && !isDisputed && ['PICKED_UP', 'IN_PROGRESS', 'RENTING'].includes(currentStatus);
   const canReturn = !isPendingCustomerIncident && !isDisputed && ['PICKED_UP', 'IN_PROGRESS', 'RENTING'].includes(currentStatus);
   const isReturnPending = currentStatus === 'RETURN_PENDING';
-  const isCompleted = ['RETURNED', 'COMPLETED'].includes(currentStatus);
+  const isReturned = currentStatus === 'RETURNED' || currentStatus === 'COMBO_PHOTOS_APPROVED';
+  const isCompleted = currentStatus === 'COMPLETED';
 
   return (
     <div
@@ -390,6 +393,60 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
           <Clock size={15} />
           <span>Đang chờ shop kiểm tra &amp; hoàn cọc</span>
         </div>
+      )}
+
+      {/* 6e. Khách hàng xác nhận hoàn tất đơn & nhận lại cọc */}
+      {isReturned && (
+        <>
+          {onConfirmComplete ? (
+            <button
+              type="button"
+              onClick={onConfirmComplete}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '10px 22px',
+                borderRadius: '10px',
+                backgroundColor: '#059669',
+                border: 'none',
+                color: '#FFFFFF',
+                fontSize: '13px',
+                fontWeight: 750,
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)',
+                transition: 'all 0.15s'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.backgroundColor = '#047857';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.backgroundColor = '#059669';
+              }}
+            >
+              <CheckCircle2 size={15} />
+              <span>Xác nhận hoàn tất đơn &amp; Nhận lại cọc</span>
+            </button>
+          ) : (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '10px 18px',
+                borderRadius: '10px',
+                backgroundColor: '#ECFDF5',
+                border: '1px solid #A7F3D0',
+                color: '#047857',
+                fontSize: '13px',
+                fontWeight: 700
+              }}
+            >
+              <CheckCircle2 size={15} />
+              <span>Đã trả đồ (Chờ hoàn tất)</span>
+            </div>
+          )}
+        </>
       )}
 
       {/* 7. Trạng thái đã hoàn tất */}

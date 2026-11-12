@@ -682,9 +682,28 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
             </div>
           </div>
 
-          <div style={{ fontSize: '12px', fontWeight: 700, color: '#B45309', backgroundColor: '#FEF3C7', padding: '8px 14px', borderRadius: '8px', border: '1px solid #FDE68A' }}>
-            ⏳ Chờ cửa hàng chốt hoàn tất
-          </div>
+          <button
+            type="button"
+            onClick={handleConfirmComplete}
+            disabled={isConfirming}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 20px',
+              borderRadius: '10px',
+              backgroundColor: '#047857',
+              color: '#FFFFFF',
+              border: 'none',
+              fontSize: '13px',
+              fontWeight: 800,
+              cursor: isConfirming ? 'not-allowed' : 'pointer',
+              boxShadow: '0 4px 14px rgba(4, 120, 87, 0.28)'
+            }}
+          >
+            <CheckCircle2 size={16} />
+            <span>{isConfirming ? 'Đang hoàn tất...' : 'Xác nhận hoàn tất đơn & Nhận cọc'}</span>
+          </button>
         </div>
       )}
 

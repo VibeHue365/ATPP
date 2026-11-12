@@ -127,6 +127,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     AWAITING_REVIEW: 'CHỜ DUYỆT ẢNH',
     RETURN_PENDING: isPendingCustomerIncident ? 'CHỜ DUYỆT SỰ CỐ' : 'CHỜ TRẢ ĐỒ',
     RETURNED: isPhoto ? 'HOÀN THÀNH' : 'ĐÃ TRẢ ĐỒ',
+    COMBO_PHOTOS_APPROVED: isPhoto ? 'ĐÃ DUYỆT ẢNH' : 'ĐÃ TRẢ ĐỒ',
     COMPLETED: 'HOÀN THÀNH',
     CANCELLED: 'ĐÃ HỦY',
     DISPUTED: 'TRANH CHẤP'
@@ -465,6 +466,48 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     }
   };
 
+  // Confirm complete rental and refund deposit
+  const handleConfirmComplete = async () => {
+    if (!booking?._id) return;
+
+    const result = await Swal.fire({
+      title: 'Xác nhận hoàn tất đơn thuê?',
+      html: `
+        <div style="text-align: left; font-size: 13.5px; color: #4A3F35; line-height: 1.6;">
+          <p style="margin-bottom: 12px;">
+            Cửa hàng đã xác nhận nhận lại trang phục nguyên vẹn. Bạn xác nhận hoàn tất đơn để hệ thống tiến hành giải ngân và hoàn trả tiền cọc <strong>${depositFee.toLocaleString('vi-VN')}đ</strong> cho bạn?
+          </p>
+        </div>
+      `,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Xác nhận hoàn tất & Nhận cọc',
+      cancelButtonText: 'Đóng',
+      confirmButtonColor: '#059669',
+      cancelButtonColor: '#7D736B'
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      await httpClient.post(`/bookings/${booking._id}/confirm-complete`, {});
+      await Swal.fire({
+        icon: 'success',
+        title: 'Hoàn tất đơn hàng thành công!',
+        text: 'Cảm ơn bạn đã sử dụng dịch vụ của LUMÉ. Tiền cọc đang được hệ thống xử lý hoàn trả.',
+        confirmButtonColor: '#8E1B2E'
+      });
+      onRefreshBooking?.();
+    } catch (err: any) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Có lỗi xảy ra',
+        text: err?.response?.data?.message || err?.message || 'Không thể xác nhận hoàn tất đơn.',
+        confirmButtonColor: '#8E1B2E'
+      });
+    }
+  };
+
   // Timeline steps
   const timelineSteps: {
     id: string;
@@ -476,24 +519,24 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     {
       id: 'step-1',
       title: 'Shop chuẩn bị áo',
-      description: ['PICKUP_PENDING', 'READY_FOR_PICKUP', 'PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+      description: ['PICKUP_PENDING', 'READY_FOR_PICKUP', 'PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(currentStatus)
         ? 'Đã chuẩn bị xong và kiểm tra chất lượng tại cửa hàng'
         : 'Cửa hàng đang kiểm tra và chuẩn bị áo dài',
       timestamp: readyTimeStr,
-      status: ['PICKUP_PENDING', 'READY_FOR_PICKUP', 'PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+      status: ['PICKUP_PENDING', 'READY_FOR_PICKUP', 'PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(currentStatus)
         ? 'COMPLETED'
         : 'ACTIVE'
     },
     {
       id: 'step-2',
-      title: ['PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+      title: ['PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(currentStatus)
         ? 'Đã nhận áo'
         : 'Chờ nhận áo tại cửa hàng',
-      description: ['PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+      description: ['PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(currentStatus)
         ? `Đã nhận áo tại ${storeName}`
         : `Vui lòng đến ${storeName} để nhận áo theo lịch hẹn`,
       timestamp: rawPickup ? new Date(rawPickup).toLocaleDateString('vi-VN') + ' • ' + pickupTimeStr : undefined,
-      status: ['PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+      status: ['PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(currentStatus)
         ? 'COMPLETED'
         : ['PICKUP_PENDING', 'READY_FOR_PICKUP'].includes(currentStatus)
         ? 'ACTIVE'
@@ -502,12 +545,12 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     {
       id: 'step-3',
       title: 'Khách đang thuê',
-      description: ['RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+      description: ['RETURN_PENDING', 'RETURNED', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(currentStatus)
         ? 'Đã hoàn tất thời gian trải nghiệm trang phục'
         : ['PICKED_UP', 'IN_PROGRESS', 'RENTING'].includes(currentStatus)
         ? 'Thời gian thuê đang diễn ra theo hợp đồng'
         : 'Chưa bắt đầu thời gian thuê',
-      status: ['RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+      status: ['RETURN_PENDING', 'RETURNED', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(currentStatus)
         ? 'COMPLETED'
         : ['PICKED_UP', 'IN_PROGRESS', 'RENTING'].includes(currentStatus)
         ? 'ACTIVE'
@@ -516,13 +559,13 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     {
       id: 'step-4',
       title: 'Trả áo & Hoàn cọc',
-      description: ['RETURNED', 'COMPLETED'].includes(currentStatus)
+      description: ['RETURNED', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(currentStatus)
         ? 'Đã hoàn tất kiểm tra và hoàn cọc'
         : currentStatus === 'RETURN_PENDING'
         ? 'Đang kiểm tra áo và đối soát hoàn cọc'
         : `Trả áo tại ${storeAddress} để nhận lại tiền cọc`,
-      timestamp: ['RETURNED', 'COMPLETED'].includes(currentStatus) && rawReturn ? new Date(rawReturn).toLocaleDateString('vi-VN') : undefined,
-      status: ['RETURNED', 'COMPLETED'].includes(currentStatus)
+      timestamp: ['RETURNED', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(currentStatus) && rawReturn ? new Date(rawReturn).toLocaleDateString('vi-VN') : undefined,
+      status: ['RETURNED', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(currentStatus)
         ? 'COMPLETED'
         : currentStatus === 'RETURN_PENDING'
         ? 'ACTIVE'
@@ -916,6 +959,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
         onReturn={handleReturn}
         onOpenMap={handleOpenMap}
         onConfirmPickup={handleConfirmPickup}
+        onConfirmComplete={handleConfirmComplete}
         onAgreeIncident={handleAgreeIncident}
         onDisagreeIncident={handleDisagreeIncident}
       />

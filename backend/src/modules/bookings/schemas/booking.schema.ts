@@ -255,6 +255,10 @@ export class Booking {
   @Prop({ type: Date, default: null, index: true })
   awaitingReviewSince?: Date | null;
 
+  /** Timestamp when rental item was marked returned by shop */
+  @Prop({ type: Date, default: null, index: true })
+  returnedAt?: Date | null;
+
   @Prop({ type: Boolean, default: false })
   photosApproved?: boolean;
 

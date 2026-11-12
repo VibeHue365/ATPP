@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
+import { SkipThrottle } from '@nestjs/throttler';
 import * as crypto from 'crypto';
 import { getPrimaryFrontendUrl } from '../../../common/config/frontend-url.util';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
@@ -39,7 +40,7 @@ export class PaymentsController {
     private readonly configService: ConfigService,
     private readonly paymentsRepository: PaymentsRepository,
     private readonly webhookEventRepository: WebhookEventRepository,
-  ) {}
+  ) { }
 
   private ensureSimulatorEnabled() {
     const nodeEnv = this.configService.get<string>('NODE_ENV') ?? process.env.NODE_ENV;
@@ -64,6 +65,7 @@ export class PaymentsController {
 
   @Get(':code/status')
   @UseGuards(JwtAuthGuard)
+  @SkipThrottle({ auth: true })
   async getStatus(@CurrentUser() user: AuthUser, @Param('code') code: string) {
     return this.paymentsService.getPaymentStatus(code, user.sub);
   }
@@ -241,12 +243,14 @@ export class PaymentsController {
   }
 
   @Post('checkout/:code/confirm')
+  @SkipThrottle({ auth: true })
   async confirmSimulation(@Param('code') code: string) {
     this.ensureSimulatorEnabled();
     return this.paymentsService.confirmPayment(code, { source: 'SIMULATOR' });
   }
 
   @Post('checkout/:code/cancel')
+  @SkipThrottle({ auth: true })
   async cancelSimulation(@Param('code') code: string) {
     this.ensureSimulatorEnabled();
     return this.paymentsService.cancelPayment(code);
@@ -254,6 +258,7 @@ export class PaymentsController {
 
   // CHECKOUT SCREEN SIMULATOR (HTML View)
   @Get('checkout/:code')
+  @SkipThrottle({ auth: true })
   async renderCheckout(@Param('code') code: string, @Res() res: Response) {
     this.ensureSimulatorEnabled();
     try {
@@ -344,12 +349,7 @@ export class PaymentsController {
             <div class="flex-1 p-8 md:p-12 flex flex-col justify-between items-center">
               
               <!-- Recipient bank details configurator -->
-              <div class="w-full mb-6">
-                <button id="toggle-config-btn" class="w-full text-left py-2 px-3 bg-stone-100 hover:bg-stone-200 rounded-lg text-xs font-bold text-stone-600 flex justify-between items-center transition">
-                  <span>⚙️ CẤU HÌNH TÀI KHOẢN NHẬN TIỀN CỦA BẠN</span>
-                  <span id="toggle-arrow">▼</span>
-                </button>
-                
+              <div class="w-full">
                 <div id="config-panel" class="hidden mt-4 p-4 bg-stone-50 rounded-xl border border-stone-200 space-y-3">
                   <div>
                     <label class="block text-[10px] font-bold text-stone-500 uppercase mb-1">Ngân hàng nhận</label>
@@ -434,21 +434,23 @@ export class PaymentsController {
             const lblHolder = document.getElementById('lbl-holder');
             const lblBank = document.getElementById('lbl-bank');
  
-            // Toggle Config panel drawer
+            // Toggle Config panel drawer (if button exists)
             const toggleBtn = document.getElementById('toggle-config-btn');
             const configPanel = document.getElementById('config-panel');
             const toggleArrow = document.getElementById('toggle-arrow');
             
-            toggleBtn.addEventListener('click', () => {
-              const isHidden = configPanel.classList.contains('hidden');
-              if (isHidden) {
-                configPanel.classList.remove('hidden');
-                toggleArrow.textContent = '▲';
-              } else {
-                configPanel.classList.add('hidden');
-                toggleArrow.textContent = '▼';
-              }
-            });
+            if (toggleBtn && configPanel) {
+              toggleBtn.addEventListener('click', () => {
+                const isHidden = configPanel.classList.contains('hidden');
+                if (isHidden) {
+                  configPanel.classList.remove('hidden');
+                  if (toggleArrow) toggleArrow.textContent = '▲';
+                } else {
+                  configPanel.classList.add('hidden');
+                  if (toggleArrow) toggleArrow.textContent = '▼';
+                }
+              });
+            }
 
             // Load saved settings from localStorage
             if (localStorage.getItem('vh_sim_bank')) {
