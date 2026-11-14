@@ -70,6 +70,9 @@ export const CartPage: React.FC = () => {
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
   const [busyDates, setBusyDates] = useState<string[]>([]);
   const [busySlots, setBusySlots] = useState<{ date: string; timeSlot: string }[]>([]);
+  const [variantBookedSlots, setVariantBookedSlots] = useState<
+    Record<string, Array<{ date: string; timeSlot: string; purpose?: 'RENTAL' | 'TURNAROUND' }>>
+  >({});
 
   const editingItem = cart.find((i) => i.id === editingItemId);
   const editingItemType = editingItem?.rentalType || 'DAILY';
@@ -135,6 +138,7 @@ export const CartPage: React.FC = () => {
     if (!editingItemId) {
       setBusyDates([]);
       setBusySlots([]);
+      setVariantBookedSlots({});
       return;
     }
     const item = cart.find((i) => i.id === editingItemId);
@@ -148,6 +152,7 @@ export const CartPage: React.FC = () => {
       .then((res) => {
         setBusyDates(res.bookedDates || []);
         setBusySlots(res.bookedSlots || []);
+        setVariantBookedSlots(res.variantBookedSlots || {});
       })
       .catch((err) => {
         console.error('Error fetching busy dates/slots:', err);
@@ -255,8 +260,15 @@ export const CartPage: React.FC = () => {
   const bookedSlotsOnSelectedDate = useMemo(() => {
     const singleDate = editingItem?.rentalFrom || editingItem?.startDate || '';
     if (!singleDate) return [];
-    return busySlots.filter((s) => s.date === singleDate).map((s) => s.timeSlot);
-  }, [editingItem, busySlots]);
+    const variantKey = editingItem?.size && editingItem?.color
+      ? `${editingItem.size.trim().toUpperCase()}_${editingItem.color.trim().toUpperCase()}`
+      : null;
+    const productSlots = busySlots.filter((s) => s.date === singleDate).map((s) => s.timeSlot);
+    const variantSlots = (variantKey && variantBookedSlots[variantKey])
+      ? variantBookedSlots[variantKey].filter((s) => s.date === singleDate).map((s) => s.timeSlot)
+      : [];
+    return Array.from(new Set([...productSlots, ...variantSlots]));
+  }, [editingItem, busySlots, variantBookedSlots]);
 
   const startSlotIndex = useMemo(() => {
     const startTime = editingItem?.startTime || '07:00';

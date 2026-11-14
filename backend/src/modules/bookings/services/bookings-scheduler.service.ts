@@ -3,10 +3,11 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/restrict-template-expressions */
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { InventorySlotLeaseService } from './inventory-slot-lease.service';
 import {
   BookingSchedule,
   BookingScheduleDocument,
@@ -54,7 +55,23 @@ export class BookingsSchedulerService {
     private readonly notificationsService: NotificationsService,
     private readonly photographyHoldService: PhotographyHoldService,
     private readonly bookingStatusService: BookingStatusService,
+    @Optional()
+    private readonly slotLeaseService?: InventorySlotLeaseService,
   ) {}
+
+  @Cron(CronExpression.EVERY_MINUTE)
+  async expireHoldLeases() {
+    try {
+      if (this.slotLeaseService) {
+        const expiredCount = await this.slotLeaseService.expireHoldLeases();
+        if (expiredCount > 0) {
+          this.logger.log(`Expired ${expiredCount} slot lease hold(s).`);
+        }
+      }
+    } catch (error) {
+      this.logger.error('Unable to expire slot lease holds.', error);
+    }
+  }
 
   @Cron(CronExpression.EVERY_MINUTE)
   async expirePhotographyHolds() {

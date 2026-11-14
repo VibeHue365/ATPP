@@ -102,6 +102,9 @@ export const ProductDetailPage: React.FC = () => {
   const [busyDates, setBusyDates] = useState<string[]>([]);
   const [busySlots, setBusySlots] = useState<{ date: string; timeSlot: string }[]>([]);
   const [variantBookedDates, setVariantBookedDates] = useState<Record<string, string[]>>({});
+  const [variantBookedSlots, setVariantBookedSlots] = useState<
+    Record<string, Array<{ date: string; timeSlot: string; purpose?: 'RENTAL' | 'TURNAROUND' }>>
+  >({});
   const [providerScheduleInfo, setProviderScheduleInfo] = useState<ProviderScheduleInfo | null>(null);
 
   // Description tab
@@ -168,6 +171,10 @@ export const ProductDetailPage: React.FC = () => {
             bookedDates: string[];
             bookedSlots: { date: string; timeSlot: string }[];
             variantBookedDates?: Record<string, string[]>;
+            variantBookedSlots?: Record<
+              string,
+              Array<{ date: string; timeSlot: string; purpose?: 'RENTAL' | 'TURNAROUND' }>
+            >;
             workingDays?: number[];
             offDays?: string[];
             hasSchedule?: boolean;
@@ -177,6 +184,9 @@ export const ProductDetailPage: React.FC = () => {
           setBusySlots(busyData.bookedSlots || []);
           if (busyData.variantBookedDates) {
             setVariantBookedDates(busyData.variantBookedDates);
+          }
+          if (busyData.variantBookedSlots) {
+            setVariantBookedSlots(busyData.variantBookedSlots);
           }
           if (busyData.hasSchedule !== undefined) {
             setProviderScheduleInfo({
@@ -467,10 +477,26 @@ export const ProductDetailPage: React.FC = () => {
 
   const bookedSlotsOnSelectedDate = useMemo(() => {
     if (!singleDate) return [];
-    return busySlots
+    const variantKey = selectedSize && selectedColor
+      ? `${selectedSize.trim().toUpperCase()}_${normalizeCol(selectedColor)}`
+      : null;
+
+    if (variantKey && variantBookedDates[variantKey]?.includes(singleDate)) {
+      return ['00:00-23:59'];
+    }
+
+    const productSlots = busySlots
       .filter((s) => s.date === singleDate)
       .map((s) => s.timeSlot);
-  }, [singleDate, busySlots]);
+
+    const variantSlots = (variantKey && variantBookedSlots[variantKey])
+      ? variantBookedSlots[variantKey]
+          .filter((s) => s.date === singleDate)
+          .map((s) => s.timeSlot)
+      : [];
+
+    return Array.from(new Set([...productSlots, ...variantSlots]));
+  }, [singleDate, busySlots, variantBookedSlots, variantBookedDates, selectedSize, selectedColor]);
 
   // Calendar Days calculation
   const calendarDays = useMemo(() => {
@@ -545,13 +571,13 @@ export const ProductDetailPage: React.FC = () => {
     return productSlots.findIndex((s) => s.end === endTime);
   }, [endTime]);
 
-  // Auto-select first available slot when date changes
+  // Auto-select first available slot when date changes or if current slot becomes busy
   useEffect(() => {
     if (rentalMode !== 'HOURLY' || !singleDate) return;
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-    const firstAvailableIndex = productSlots.findIndex((block) => {
+    const isSlotAvailable = (block: { start: string; end: string }) => {
       const isBusy = bookedSlotsOnSelectedDate.some((bookedSlot) =>
         isTimeSlotOverlap(`${block.start}-${block.end}`, bookedSlot),
       );
@@ -565,13 +591,25 @@ export const ProductDetailPage: React.FC = () => {
           );
         })();
       return !isBusy && !isPast;
-    });
+    };
 
-    if (firstAvailableIndex !== -1) {
-      setStartTime(productSlots[firstAvailableIndex].start);
-      setEndTime(productSlots[firstAvailableIndex].end);
+    const firstAvailableIndex = productSlots.findIndex(isSlotAvailable);
+
+    const isCurrentValid =
+      startTime &&
+      endTime &&
+      isSlotAvailable({ start: startTime, end: endTime });
+
+    if (!isCurrentValid) {
+      if (firstAvailableIndex !== -1) {
+        setStartTime(productSlots[firstAvailableIndex].start);
+        setEndTime(productSlots[firstAvailableIndex].end);
+      } else {
+        setStartTime('');
+        setEndTime('');
+      }
     }
-  }, [singleDate, bookedSlotsOnSelectedDate, rentalMode]);
+  }, [singleDate, bookedSlotsOnSelectedDate, rentalMode, startTime, endTime]);
 
   const handleSlotClick = (i: number) => {
     const block = productSlots[i];
@@ -714,7 +752,7 @@ export const ProductDetailPage: React.FC = () => {
     try {
       setLoadingReviews(true);
       const res: any = await httpClient.get(`/reviews/item/${id}`);
-      setRealReviews(res || []);
+      setRealReviews(Array.isArray(res) ? res : Array.isArray(res?.reviews) ? res.reviews : []);
     } catch (e) {
       console.error('Lỗi tải đánh giá sản phẩm:', e);
     } finally {

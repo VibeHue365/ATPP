@@ -86,6 +86,16 @@ export class RentalFulfillmentController {
     return this.workflow.markReturned(bookingId, itemId, user, dto);
   }
 
+  @Post(':bookingId/items/:itemId/rental/cleaning-completed')
+  markCleaningCompleted(
+    @CurrentUser() user: AuthUser,
+    @Param('bookingId') bookingId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto?: { note?: string },
+  ) {
+    return this.workflow.markCleaningCompleted(bookingId, itemId, user, dto?.note);
+  }
+
   @Post(':bookingId/items/:itemId/rental/charges')
   proposeCharge(@CurrentUser() user: AuthUser, @Param('bookingId') bookingId: string, @Param('itemId') itemId: string, @Body() dto: ProposeRentalChargeDto) {
     return this.workflow.proposeCharge(bookingId, itemId, user, dto);

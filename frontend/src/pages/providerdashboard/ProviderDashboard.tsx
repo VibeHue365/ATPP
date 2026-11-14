@@ -234,7 +234,7 @@ export const ProviderDashboard: React.FC = () => {
     cancellationRefundRules, setCancellationRefundRules, cancellationAdditionalNotes,
     setCancellationAdditionalNotes, comboDiscountPercent, setComboDiscountPercent, baseLatitude,
     setBaseLatitude, baseLongitude, setBaseLongitude, serviceRadiusKm, setServiceRadiusKm,
-    useBusinessAddressForPickup, setUseBusinessAddressForPickup, pickupAddressLine, setPickupAddressLine,
+    useBusinessAddressForPickup, setUseBusinessAddressForPickup, turnaroundSlots, setTurnaroundSlots, pickupAddressLine, setPickupAddressLine,
     pickupLatitude, setPickupLatitude, pickupLongitude, setPickupLongitude, profileSection,
     setProfileSection, isSavingProfile, setIsSavingProfile, coverUrl, setCoverUrl,
   } = useProviderProfileState();
@@ -321,6 +321,7 @@ export const ProviderDashboard: React.FC = () => {
     setBaseLongitude,
     setServiceRadiusKm,
     setUseBusinessAddressForPickup,
+    setTurnaroundSlots,
     setPickupAddressLine,
     setPickupLatitude,
     setPickupLongitude,
@@ -358,6 +359,7 @@ export const ProviderDashboard: React.FC = () => {
     baseLatitude,
     baseLongitude,
     useBusinessAddressForPickup,
+    turnaroundSlots,
     pickupAddressLine,
     pickupLatitude,
     pickupLongitude,
@@ -872,7 +874,7 @@ export const ProviderDashboard: React.FC = () => {
         )}
 
         {currentView === 'profile' && (
-          <ServiceProfilePanel {...{ profileHasUnsavedChanges, isLoadingProvider, handleUpdateProfile, profileSection, setProfileSection, businessName, setBusinessName, phone, setPhone, city, setCity, baseLatitude, baseLongitude, addressLine, setAddressLine, setBaseLatitude, setBaseLongitude, hasPhotographyCapability, serviceRadiusKm, setServiceRadiusKm, hasAodaiCapability, useBusinessAddressForPickup, setUseBusinessAddressForPickup, pickupLatitude, pickupLongitude, pickupAddressLine, setPickupAddressLine, setPickupLatitude, setPickupLongitude, setCancellationRefundRules, cancellationRefundRules, cancellationAdditionalNotes, setCancellationAdditionalNotes, cancellationPolicySummary, isSavingProfile, coverUrl, setCoverUrl }} />
+          <ServiceProfilePanel {...{ profileHasUnsavedChanges, isLoadingProvider, handleUpdateProfile, profileSection, setProfileSection, businessName, setBusinessName, phone, setPhone, city, setCity, baseLatitude, baseLongitude, addressLine, setAddressLine, setBaseLatitude, setBaseLongitude, hasPhotographyCapability, serviceRadiusKm, setServiceRadiusKm, hasAodaiCapability, useBusinessAddressForPickup, setUseBusinessAddressForPickup, turnaroundSlots, setTurnaroundSlots, pickupLatitude, pickupLongitude, pickupAddressLine, setPickupAddressLine, setPickupLatitude, setPickupLongitude, setCancellationRefundRules, cancellationRefundRules, cancellationAdditionalNotes, setCancellationAdditionalNotes, cancellationPolicySummary, isSavingProfile, coverUrl, setCoverUrl }} />
         )}
 
         {hasPhotographyCapability && currentView === 'photography-packages' && (

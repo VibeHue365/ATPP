@@ -123,6 +123,10 @@ export class BookingItem {
   @Prop({ type: Object, default: null })
   rentalFulfillment?: RentalFulfillment | null;
 
+  /** Snapshot indicating upfront slot leases were required and created at checkout */
+  @Prop({ type: Boolean, default: false })
+  slotLeaseRequired?: boolean;
+
   /** Audit marker set only by the v1 Ao Dai fulfillment migration. */
   @Prop({
     type: {

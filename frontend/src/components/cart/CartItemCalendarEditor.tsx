@@ -57,6 +57,9 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
   const [busyDates, setBusyDates] = useState<string[]>([]);
   const [busySlots, setBusySlots] = useState<{ date: string, timeSlot: string }[]>([]);
+  const [variantBookedSlots, setVariantBookedSlots] = useState<
+    Record<string, Array<{ date: string; timeSlot: string; purpose?: 'RENTAL' | 'TURNAROUND' }>>
+  >({});
 
   const editingItemType = item.rentalType || 'DAILY';
 
@@ -70,6 +73,7 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
       .then(res => {
         setBusyDates(res.bookedDates || []);
         setBusySlots(res.bookedSlots || []);
+        setVariantBookedSlots(res.variantBookedSlots || {});
       })
       .catch(err => {
         if (err.name !== 'AbortError') {
@@ -157,8 +161,15 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
   const bookedSlotsOnSelectedDate = useMemo(() => {
     const singleDate = item.rentalFrom || item.startDate || '';
     if (!singleDate) return [];
-    return busySlots.filter(s => s.date === singleDate).map(s => s.timeSlot);
-  }, [item.rentalFrom, item.startDate, busySlots]);
+    const variantKey = item.size && item.color
+      ? `${item.size.trim().toUpperCase()}_${item.color.trim().toUpperCase()}`
+      : null;
+    const productSlots = busySlots.filter(s => s.date === singleDate).map(s => s.timeSlot);
+    const variantSlots = (variantKey && variantBookedSlots[variantKey])
+      ? variantBookedSlots[variantKey].filter(s => s.date === singleDate).map(s => s.timeSlot)
+      : [];
+    return Array.from(new Set([...productSlots, ...variantSlots]));
+  }, [item.rentalFrom, item.startDate, item.size, item.color, busySlots, variantBookedSlots]);
 
   const startSlotIndex = useMemo(() => {
     const startTime = item.startTime || '07:00';

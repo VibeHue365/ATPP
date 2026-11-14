@@ -6,7 +6,7 @@ import { buildCancellationPolicySummary, normalizeCancellationRefundRules } from
 import type { useProviderProfileState } from './useProviderProfileState';
 
 type Dependencies = Pick<ReturnType<typeof useProviderProfileState>,
-  'businessName' | 'phone' | 'addressLine' | 'city' | 'cancellationRefundRules' | 'cancellationAdditionalNotes' | 'setIsSavingProfile' | 'baseLatitude' | 'baseLongitude' | 'useBusinessAddressForPickup' | 'pickupAddressLine' | 'pickupLatitude' | 'pickupLongitude' | 'serviceRadiusKm' | 'comboDiscountPercent' | 'coverUrl'
+  'businessName' | 'phone' | 'addressLine' | 'city' | 'cancellationRefundRules' | 'cancellationAdditionalNotes' | 'setIsSavingProfile' | 'baseLatitude' | 'baseLongitude' | 'useBusinessAddressForPickup' | 'turnaroundSlots' | 'pickupAddressLine' | 'pickupLatitude' | 'pickupLongitude' | 'serviceRadiusKm' | 'comboDiscountPercent' | 'coverUrl'
 > &
   Pick<ReturnType<typeof useProviderSessionState>,
     'provider'
@@ -20,7 +20,7 @@ type Dependencies = Pick<ReturnType<typeof useProviderProfileState>,
 export function createProfileActions({
   businessName, phone, addressLine, city, toast, cancellationRefundRules, cancellationAdditionalNotes,
   setIsSavingProfile, provider, baseLatitude, baseLongitude, useBusinessAddressForPickup,
-  pickupAddressLine, pickupLatitude, pickupLongitude, serviceRadiusKm, comboDiscountPercent,
+  turnaroundSlots, pickupAddressLine, pickupLatitude, pickupLongitude, serviceRadiusKm, comboDiscountPercent,
   coverUrl, fetchProviderData,
 }: Dependencies) {
   const handleUpdateProfile = async (e: React.FormEvent) => {
@@ -50,7 +50,11 @@ export function createProfileActions({
           ...provider?.media,
           coverUrl: coverUrl?.trim() || null,
         },
-        rentalSettings: { useBusinessAddressForPickup, pickupLocation: useBusinessAddressForPickup ? null : { addressLine: pickupAddressLine, geo: pickupLatitude && pickupLongitude ? { type: 'Point', coordinates: [Number(pickupLongitude), Number(pickupLatitude)] } : null } },
+        rentalSettings: {
+          useBusinessAddressForPickup,
+          pickupLocation: useBusinessAddressForPickup ? null : { addressLine: pickupAddressLine, geo: pickupLatitude && pickupLongitude ? { type: 'Point', coordinates: [Number(pickupLongitude), Number(pickupLatitude)] } : null },
+          turnaroundSlots: Number(turnaroundSlots),
+        },
         photographySettings: { serviceRadiusKm: serviceRadiusKm === '' ? null : Number(serviceRadiusKm) },
         policies: {
           ...provider?.policies,

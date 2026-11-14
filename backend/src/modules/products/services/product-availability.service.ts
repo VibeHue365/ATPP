@@ -5,6 +5,12 @@ import { ProductsRepository } from '../repositories/products.repository';
 import { InventoryItem } from '../schemas/inventory-item.schema';
 import { InventoryReservation, ReservationStatus } from '../schemas/inventory-reservation.schema';
 import { ProviderSchedule, ScheduleType, ScheduleCapability } from '../schemas/provider-schedule.schema';
+import { Provider } from '../../providers/schemas/provider.schema';
+import {
+  InventorySlotLease,
+  SlotLeaseStatus,
+} from '../../bookings/schemas/inventory-slot-lease.schema';
+import { TimeSlotEngineService } from '../../bookings/services/time-slot-engine.service';
 
 @Injectable()
 export class ProductAvailabilityService {
@@ -13,6 +19,9 @@ export class ProductAvailabilityService {
     @InjectModel(InventoryItem.name) private readonly inventory: Model<InventoryItem>,
     @InjectModel(InventoryReservation.name) private readonly reservations: Model<InventoryReservation>,
     @InjectModel(ProviderSchedule.name) private readonly providerSchedule: Model<ProviderSchedule>,
+    @InjectModel(Provider.name) private readonly providerModel: Model<Provider>,
+    @InjectModel(InventorySlotLease.name) private readonly leaseModel: Model<InventorySlotLease>,
+    private readonly timeEngine: TimeSlotEngineService,
   ) {}
 
   async check(
@@ -48,6 +57,7 @@ export class ProductAvailabilityService {
       if (!startTime || !endTime) {
         throw new BadRequestException('Start and end time are required');
       }
+      this.timeEngine.parseAndValidateTimeSlot(`${startTime}-${endTime}`);
       const [sh, sm] = startTime.split(':').map(Number);
       const [eh, em] = endTime.split(':').map(Number);
       from.setHours(sh, sm, 0, 0);
@@ -126,28 +136,86 @@ export class ProductAvailabilityService {
     const size = sizeValue.trim().toUpperCase();
     const normalizedColor = color.trim().toUpperCase();
     const requestedQuantity = Math.max(1, Math.floor(quantityValue || 1));
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const isTodayOrPast = from <= today;
 
-    const items = await this.inventory.find({
-      productId,
-      size,
-      color: normalizedColor,
-      status: isTodayOrPast ? 'AVAILABLE' : { $ne: 'MAINTENANCE' },
-      conditionStatus: { $nin: ['LOCKED', 'RETIRED'] },
-    } as any);
+    // Candidate items query:
+    // 1. Condition must not be LOCKED or RETIRED
+    // 2. Status: AVAILABLE is always a candidate.
+    // 3. Status: CLEANING is a candidate ONLY IF operationalAvailableFrom <= from (turnaround will finish before requested start)
+    // 4. MAINTENANCE, LOCKED, RETIRED are strictly excluded.
+    const items = await this.inventory
+      .find({
+        productId,
+        size,
+        color: normalizedColor,
+        conditionStatus: { $nin: ['LOCKED', 'RETIRED'] },
+        $or: [
+          { status: 'AVAILABLE' },
+          {
+            status: 'CLEANING',
+            operationalAvailableFrom: { $ne: null, $lte: from },
+          },
+        ],
+      } as any)
+      .exec();
 
-    const booked = items.length
-      ? await this.reservations.find({
+    if (!items.length) {
+      return {
+        available: false,
+        availableQuantity: 0,
+        requestedQuantity,
+        message: 'Không có trang phục sẵn sàng cho lịch thuê đã chọn.',
+      };
+    }
+
+    // Check provider's useSlotLeases feature flag
+    const providerDoc = providerId
+      ? await this.providerModel.findById(providerId).select({ useSlotLeases: 1 }).lean().exec()
+      : null;
+    const useSlotLeases = !!providerDoc?.useSlotLeases;
+
+    let bookedIds = new Set<string>();
+
+    if (useSlotLeases && rentalType === 'HOURLY' && startTime && endTime) {
+      const { startSlotIndex, rentalSlotCount } = this.timeEngine.parseAndValidateTimeSlot(
+        `${startTime}-${endTime}`,
+      );
+      const slotIndices = Array.from(
+        { length: rentalSlotCount },
+        (_, idx) => startSlotIndex + idx,
+      );
+      const dateStr = this.timeEngine.getVnParts(from).dateStr;
+      const now = new Date();
+
+      const busyLeases = await this.leaseModel
+        .find({
+          inventoryItemId: { $in: items.map((i) => i._id) },
+          dateStr,
+          slotIndex: { $in: slotIndices },
+          $or: [
+            { status: SlotLeaseStatus.Confirmed },
+            { status: SlotLeaseStatus.Temp, expiresAt: { $gt: now } },
+          ],
+        })
+        .select({ inventoryItemId: 1 })
+        .lean()
+        .exec();
+
+      bookedIds = new Set(busyLeases.map((l) => l.inventoryItemId.toString()));
+    } else {
+      const booked = await this.reservations
+        .find({
           inventoryItemId: { $in: items.map((item) => item._id) },
           status: { $in: [ReservationStatus.TempReserved, ReservationStatus.Confirmed] },
           reservedFrom: { $lte: to },
           reservedTo: { $gte: from },
         })
-      : [];
+        .select({ inventoryItemId: 1 })
+        .lean()
+        .exec();
 
-    const bookedIds = new Set(booked.map((item) => item.inventoryItemId.toString()));
+      bookedIds = new Set(booked.map((item) => item.inventoryItemId.toString()));
+    }
+
     const availableQuantity = items.filter((item) => !bookedIds.has(item._id.toString())).length;
 
     return {

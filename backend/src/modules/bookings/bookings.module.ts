@@ -44,6 +44,13 @@ import { ContractsModule } from '../contracts/contracts.module';
 import { BookingStatusService } from './services/booking-status.service';
 import { BookingCreationService } from './services/booking-creation.service';
 import { BookingsRepository } from './repositories/bookings.repository';
+import {
+  InventorySlotLease,
+  InventorySlotLeaseSchema,
+} from './schemas/inventory-slot-lease.schema';
+import { TimeSlotEngineService } from './services/time-slot-engine.service';
+import { InventorySlotLeaseService } from './services/inventory-slot-lease.service';
+import { ProductBusyCacheService } from './services/product-busy-cache.service';
 
 export const bookingModels = MongooseModule.forFeature([
   { name: Cart.name, schema: CartSchema },
@@ -53,6 +60,7 @@ export const bookingModels = MongooseModule.forFeature([
   { name: ProviderScheduleLock.name, schema: ProviderScheduleLockSchema },
   { name: RentalHandover.name, schema: RentalHandoverSchema },
   { name: RentalEvidenceUpload.name, schema: RentalEvidenceUploadSchema },
+  { name: InventorySlotLease.name, schema: InventorySlotLeaseSchema },
 ]);
 
 @Module({
@@ -85,6 +93,9 @@ export const bookingModels = MongooseModule.forFeature([
     RentalFulfillmentService,
     RentalFulfillmentWorkflowService,
     RentalDepositRefundCoordinatorService,
+    TimeSlotEngineService,
+    InventorySlotLeaseService,
+    ProductBusyCacheService,
   ],
   exports: [
     bookingModels,
@@ -95,6 +106,9 @@ export const bookingModels = MongooseModule.forFeature([
     RentalFulfillmentService,
     RentalFulfillmentWorkflowService,
     RentalDepositRefundCoordinatorService,
+    TimeSlotEngineService,
+    InventorySlotLeaseService,
+    ProductBusyCacheService,
   ],
 })
 export class BookingsModule {}

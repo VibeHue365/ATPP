@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
@@ -12,9 +12,12 @@ import {
   RentalFulfillmentStatus,
 } from '../schemas/rental-fulfillment.types';
 import { Provider } from '../../providers/schemas/provider.schema';
+import { ProviderSchedule, ScheduleType, ScheduleCapability } from '../../products/schemas/provider-schedule.schema';
 import { PaymentsService } from '../../payments/services/payments.service';
 import { RentalFulfillmentService } from './rental-fulfillment.service';
 import { RentalDepositRefundCoordinatorService } from './rental-deposit-refund-coordinator.service';
+import { InventorySlotLeaseService } from './inventory-slot-lease.service';
+import { ShopScheduleConfig, TimeSlotEngineService } from './time-slot-engine.service';
 
 interface RentalItemAccess {
   bookingId: Types.ObjectId;
@@ -35,12 +38,68 @@ export class RentalFulfillmentWorkflowService {
     private readonly rentalFulfillment: RentalFulfillmentService,
     private readonly rentalDepositRefundCoordinator: RentalDepositRefundCoordinatorService,
     private readonly paymentsService: PaymentsService,
+    @Optional()
+    private readonly slotLeaseService?: InventorySlotLeaseService,
+    @Optional()
+    private readonly timeEngineService?: TimeSlotEngineService,
+    @Optional()
+    @InjectModel(ProviderSchedule.name)
+    private readonly providerScheduleModel?: Model<ProviderSchedule>,
   ) { }
+
+  private async getProviderScheduleConfig(
+    providerId: Types.ObjectId,
+  ): Promise<ShopScheduleConfig | undefined> {
+    if (!this.providerScheduleModel) return undefined;
+    try {
+      const schedules = await this.providerScheduleModel
+        .find({
+          providerId,
+          $or: [
+            { capability: null },
+            { capability: ScheduleCapability.AodaiRental },
+          ],
+        })
+        .lean()
+        .exec();
+
+      if (!schedules || schedules.length === 0) return undefined;
+
+      const recurringSchedules = schedules.filter(
+        (s) => s.scheduleType === ScheduleType.Recurring && typeof s.dayOfWeek === 'number',
+      );
+      let weeklyOffDays: number[] | undefined = undefined;
+      if (recurringSchedules.length > 0) {
+        const workingDays = new Set(recurringSchedules.map((s) => s.dayOfWeek as number));
+        weeklyOffDays = [0, 1, 2, 3, 4, 5, 6].filter((d) => !workingDays.has(d));
+      }
+
+      const offDays: string[] = [];
+      for (const s of schedules) {
+        if (s.scheduleType === ScheduleType.SpecificDate && Array.isArray(s.offDays)) {
+          for (const d of s.offDays) {
+            const dateStr = new Date(d).toLocaleDateString('en-CA', {
+              timeZone: 'Asia/Ho_Chi_Minh',
+            });
+            offDays.push(dateStr);
+          }
+        }
+      }
+
+      return {
+        weeklyOffDays,
+        offDays: offDays.length > 0 ? offDays : undefined,
+      };
+    } catch {
+      return undefined;
+    }
+  }
 
   async markReady(bookingId: string, itemId: string, user: AuthUser, note?: string) {
     const access = await this.requireProviderOrAdmin(bookingId, itemId, user);
     this.requireOperationalBooking(access.bookingStatus, 'chuẩn bị áo dài');
     const updated = await this.rentalFulfillment.markReady({ itemId: access.itemId.toString(), actor: access.actor, note });
+    // Note: Do NOT release turnaround leases in markReady (which is only READY_FOR_PICKUP before customer pickup)
     await this.syncBookingProgress(access.bookingId, access.actor);
     return updated;
   }
@@ -81,21 +140,119 @@ export class RentalFulfillmentWorkflowService {
       note: input.note,
       conditionNote: input.conditionNote,
     });
-    // Mặc định chuyển hiện vật sang trạng thái CLEANING (Đang giặt ủi) khi trả đồ thành công
+    // Mặc định chuyển hiện vật sang trạng thái CLEANING (Đang giặt ủi) và gán operationalAvailableFrom = availableFrom
+    const item = await this.bookingItemModel.findById(access.itemId).lean().exec();
+    const actualReturnedAt = new Date();
+    const contractualRentalTo = (item as any)?.rentalTo || actualReturnedAt;
+    const turnaroundSlotsCount = Number(
+      (item as any)?.rentalFulfillment?.turnaroundSlotsSnapshot ?? 1,
+    );
+    const scheduleConfig = (item as any)?.providerId
+      ? await this.getProviderScheduleConfig((item as any).providerId)
+      : undefined;
+    const availableFrom = this.timeEngineService
+      ? this.timeEngineService.calculateReturnAvailableFrom(
+          contractualRentalTo,
+          actualReturnedAt,
+          turnaroundSlotsCount,
+          scheduleConfig,
+        )
+      : actualReturnedAt;
+
     const inventoryModel = this.bookingItemModel.db.model('InventoryItem');
     const reservationModel = this.bookingItemModel.db.model('InventoryReservation');
     const reservations = await reservationModel.find({ bookingItemId: access.itemId }).select({ inventoryItemId: 1 }).lean().exec();
     for (const res of reservations as any[]) {
       if (res.inventoryItemId) {
         await inventoryModel.updateOne(
-          { _id: res.inventoryItemId, conditionStatus: { $ne: 'RETIRED' } },
-          { $set: { status: 'CLEANING' } },
+          {
+            _id: res.inventoryItemId,
+            status: { $ne: 'MAINTENANCE' },
+            conditionStatus: { $nin: ['LOCKED', 'RETIRED', 'MINOR_DAMAGE'] },
+          },
+          {
+            $set: {
+              status: 'CLEANING',
+              operationalAvailableFrom: availableFrom,
+              activeTurnaroundBookingItemId: access.itemId,
+            },
+          },
         ).exec();
       }
+    }
+    if (this.slotLeaseService && (item as any)?.slotLeaseRequired) {
+      await this.slotLeaseService.reconcileTurnaroundLeases(access.itemId, availableFrom);
     }
     await this.syncBookingProgress(access.bookingId, access.actor);
     await this.rentalDepositRefundCoordinator.coordinate(access.bookingId.toString());
     return updated;
+  }
+
+  async markCleaningCompleted(bookingId: string, itemId: string, user: AuthUser, note?: string) {
+    const access = await this.requireProviderOrAdmin(bookingId, itemId, user);
+    if (![RentalFulfillmentStatus.Returned, RentalFulfillmentStatus.Completed].includes(access.fulfillmentStatus)) {
+      throw new ConflictException('Chỉ có thể xác nhận hoàn tất giặt ủi sau khi đã nhận lại đồ (Returned).');
+    }
+    const inventoryModel = this.bookingItemModel.db.model('InventoryItem');
+    const reservationModel = this.bookingItemModel.db.model('InventoryReservation');
+    const reservations = await reservationModel.find({ bookingItemId: access.itemId }).select({ inventoryItemId: 1 }).lean().exec();
+    const inventoryItemIds = (reservations as any[]).map((r) => r.inventoryItemId).filter(Boolean);
+
+    if (inventoryItemIds.length === 0) {
+      throw new ConflictException('Không tìm thấy hiện vật kho tương ứng với đơn thuê này.');
+    }
+
+    const items = await inventoryModel.find({ _id: { $in: inventoryItemIds } }).lean().exec();
+    const hasMaintenanceOrRetired = items.some(
+      (it: any) =>
+        it.status === 'MAINTENANCE' ||
+        ['RETIRED', 'LOCKED'].includes(it.conditionStatus),
+    );
+    if (hasMaintenanceOrRetired) {
+      throw new ConflictException(
+        'Hiện vật đang ở trạng thái bảo trì hoặc thanh lý (MAINTENANCE/RETIRED), không thể mở kho hoặc hoàn tất giặt ủi.',
+      );
+    }
+
+    const updateResult = await inventoryModel.updateMany(
+      {
+        _id: { $in: inventoryItemIds },
+        status: 'CLEANING',
+        conditionStatus: { $nin: ['RETIRED', 'LOCKED'] },
+      },
+      {
+        $set: {
+          status: 'AVAILABLE',
+          operationalAvailableFrom: null,
+          activeTurnaroundBookingItemId: null,
+        },
+      },
+    ).exec();
+
+    if (updateResult.modifiedCount === 0) {
+      throw new ConflictException(
+        'Hiện vật không ở trạng thái đang giặt ủi (CLEANING), hoặc thao tác hoàn tất giặt ủi đã được xác nhận trước đó.',
+      );
+    }
+
+    if (this.slotLeaseService) {
+      await this.slotLeaseService.reconcileTurnaroundLeases(access.itemId, new Date());
+    }
+    await this.bookingItemModel.updateOne(
+      { _id: access.itemId },
+      {
+        $push: {
+          'rentalFulfillment.history': {
+            action: 'CLEANING_COMPLETED',
+            actor: access.actor,
+            occurredAt: new Date(),
+            note: note?.trim() || 'Giặt ủi hoàn tất sớm, trang phục sẵn sàng phục vụ',
+          },
+        },
+      },
+    ).exec();
+    await this.syncBookingProgress(access.bookingId, access.actor);
+    return { message: 'Xác nhận hoàn tất giặt ủi thành công', itemId: access.itemId.toString() };
   }
 
   async proposeCharge(
@@ -148,6 +305,9 @@ export class RentalFulfillmentWorkflowService {
       { itemId: access.itemId.toString(), actor: access.actor, note },
       inventoryStatus,
     );
+    if (this.slotLeaseService && inventoryStatus === RentalInventoryStatus.Available) {
+      await this.slotLeaseService.reconcileTurnaroundLeases(access.itemId, new Date());
+    }
     await this.syncBookingProgress(access.bookingId, access.actor);
     await this.rentalDepositRefundCoordinator.coordinate(access.bookingId.toString());
     return updated;

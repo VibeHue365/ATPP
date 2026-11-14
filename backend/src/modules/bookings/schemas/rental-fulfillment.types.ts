@@ -1,3 +1,14 @@
+import { Types } from 'mongoose';
+
+export enum TurnaroundStatus {
+  None = 'NONE',
+  Scheduled = 'SCHEDULED',
+  InProgress = 'IN_PROGRESS',
+  Releasing = 'RELEASING',
+  Ready = 'READY',
+  Blocked = 'BLOCKED',
+}
+
 export enum RentalFulfillmentStatus {
   Pending = 'PENDING',
   ReadyForPickup = 'READY_FOR_PICKUP',
@@ -109,6 +120,16 @@ export interface RentalFulfillment {
     compensationAmount?: RentalCharge;
   };
   history: RentalFulfillmentHistory[];
+
+  /** Turnaround fields */
+  turnaroundStatus: TurnaroundStatus;
+  turnaroundSlotsSnapshot: number;
+  slotLeaseRequired: boolean;
+  cleaningStartedAt?: Date | null;
+  availableFrom?: Date | null;
+  cleaningExtendedUntil?: Date | null;
+  handoverRiskStatus?: 'NONE' | 'OPEN' | 'RESOLVED';
+  handoverRiskIncidentId?: Types.ObjectId | null;
 }
 
 export const createRentalFulfillment = (returnDueAt: Date, pickupDueAt: Date | null = null): RentalFulfillment => ({
@@ -131,4 +152,12 @@ export const createRentalFulfillment = (returnDueAt: Date, pickupDueAt: Date | n
   depositRefundAmount: 0,
   charges: {},
   history: [],
+  turnaroundStatus: TurnaroundStatus.None,
+  turnaroundSlotsSnapshot: 0,
+  slotLeaseRequired: false,
+  cleaningStartedAt: null,
+  availableFrom: null,
+  cleaningExtendedUntil: null,
+  handoverRiskStatus: 'NONE',
+  handoverRiskIncidentId: null,
 });

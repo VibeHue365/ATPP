@@ -12,6 +12,7 @@
 /* eslint-disable no-empty */
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
   Inject,
@@ -19,10 +20,11 @@ import {
   ForbiddenException,
   OnApplicationBootstrap,
   InternalServerErrorException,
+  ServiceUnavailableException,
   Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { ClientSession, Model, Types } from 'mongoose';
 import {
   Booking,
   BookingDocument,
@@ -43,6 +45,18 @@ import { PromotionsService } from '../../products/services/promotions.service';
 import { DiscountType } from '../../products/schemas/promotion.schema';
 import { PaymentsService } from '../../payments/services/payments.service';
 import { RefundWorkflowService } from '../../payments/services/refund-workflow.service';
+import { TimeSlotEngineService, ShopScheduleConfig } from './time-slot-engine.service';
+import { ProductBusyCacheService } from './product-busy-cache.service';
+import { InventorySlotLeaseService } from './inventory-slot-lease.service';
+import {
+  ProviderSchedule,
+  ScheduleType,
+  ScheduleCapability,
+} from '../../products/schemas/provider-schedule.schema';
+import {
+  SlotLeaseStatus,
+  SlotLeasePurpose,
+} from '../schemas/inventory-slot-lease.schema';
 import { RefundType } from '../../payments/schemas/refund-request.schema';
 import { SettlementsService } from '../../settlements/services/settlements.service';
 import { RentalDepositRefundCoordinatorService } from './rental-deposit-refund-coordinator.service';
@@ -67,6 +81,7 @@ import {
   ReservationStatus,
 } from '../../products/schemas/inventory-reservation.schema';
 import { ContractPolicyService } from '../../contracts/contract-policy.service';
+import { BookingCreationService } from './booking-creation.service';
 import {
   IsString,
   IsNotEmpty,
@@ -279,7 +294,77 @@ export class BookingsService implements OnApplicationBootstrap {
     private readonly rentalDepositRefundCoordinator: RentalDepositRefundCoordinatorService,
     @Optional()
     private readonly contractPolicyService?: ContractPolicyService,
+    @Optional()
+    private readonly bookingCreationService?: BookingCreationService,
+    @Optional()
+    private readonly productBusyCacheService?: ProductBusyCacheService,
+    @Optional()
+    private readonly slotLeaseService?: InventorySlotLeaseService,
+    @Optional()
+    private readonly timeSlotEngine?: TimeSlotEngineService,
+    @Optional()
+    @InjectModel(ProviderSchedule.name)
+    private readonly providerScheduleModel?: Model<ProviderSchedule>,
   ) {}
+
+  private async getProviderScheduleConfig(
+    providerId: Types.ObjectId,
+    session?: any,
+  ): Promise<ShopScheduleConfig | undefined> {
+    if (!this.providerScheduleModel) return undefined;
+    try {
+      const schedules = await this.providerScheduleModel
+        .find({
+          providerId,
+          $or: [
+            { capability: null },
+            { capability: ScheduleCapability.AodaiRental },
+          ],
+        })
+        .session(session || null)
+        .lean()
+        .exec();
+
+      if (!schedules || schedules.length === 0) return undefined;
+
+      const recurringSchedules = schedules.filter(
+        (s) =>
+          s.scheduleType === ScheduleType.Recurring &&
+          typeof s.dayOfWeek === 'number',
+      );
+      let weeklyOffDays: number[] | undefined = undefined;
+      if (recurringSchedules.length > 0) {
+        const workingDays = new Set(
+          recurringSchedules.map((s) => s.dayOfWeek as number),
+        );
+        weeklyOffDays = [0, 1, 2, 3, 4, 5, 6].filter(
+          (d) => !workingDays.has(d),
+        );
+      }
+
+      const offDays: string[] = [];
+      for (const s of schedules) {
+        if (
+          s.scheduleType === ScheduleType.SpecificDate &&
+          Array.isArray(s.offDays)
+        ) {
+          for (const d of s.offDays) {
+            const dateStr = new Date(d).toLocaleDateString('en-CA', {
+              timeZone: 'Asia/Ho_Chi_Minh',
+            });
+            offDays.push(dateStr);
+          }
+        }
+      }
+
+      return {
+        weeklyOffDays,
+        offDays: offDays.length > 0 ? offDays : undefined,
+      };
+    } catch {
+      return undefined;
+    }
+  }
 
   private async determineShopContractStatus(
     providerId: Types.ObjectId,
@@ -773,11 +858,35 @@ export class BookingsService implements OnApplicationBootstrap {
 
     const today = new Date().toISOString().slice(0, 10);
     if (item.itemType === BookingItemType.Product) {
-      if (!dto.newRentalFrom || !dto.newRentalTo) {
-        throw new BadRequestException('Yêu cầu ngày nhận và ngày trả mới.');
-      }
-      if (dto.newRentalFrom < today || dto.newRentalTo < dto.newRentalFrom) {
-        throw new BadRequestException('Khoảng ngày thuê mới không hợp lệ.');
+      const isHourly = (item as any).rentalType === 'HOURLY';
+      if (isHourly) {
+        const targetDate =
+          dto.newShootDate ||
+          (dto.newRentalFrom
+            ? String(dto.newRentalFrom).slice(0, 10)
+            : undefined);
+        const targetSlot =
+          dto.newShootTimeSlot ||
+          (dto.newRentalFrom && dto.newRentalTo
+            ? `${String(dto.newRentalFrom).slice(11, 16)}-${String(dto.newRentalTo).slice(11, 16)}`
+            : undefined);
+        if (!targetDate || !targetSlot) {
+          throw new BadRequestException(
+            'Thuê theo giờ yêu cầu ngày và khung giờ mới.',
+          );
+        }
+        if (targetDate < today) {
+          throw new BadRequestException(
+            'Ngày thuê mới không thể nằm trong quá khứ.',
+          );
+        }
+      } else {
+        if (!dto.newRentalFrom || !dto.newRentalTo) {
+          throw new BadRequestException('Yêu cầu ngày nhận và ngày trả mới.');
+        }
+        if (dto.newRentalFrom < today || dto.newRentalTo < dto.newRentalFrom) {
+          throw new BadRequestException('Khoảng ngày thuê mới không hợp lệ.');
+        }
       }
     } else if (
       !dto.newShootDate ||
@@ -1090,78 +1199,420 @@ export class BookingsService implements OnApplicationBootstrap {
     const todayStr = new Date().toISOString().split('T')[0];
 
     if (itemType === 'PRODUCT') {
-      if (!dto.newRentalFrom || !dto.newRentalTo) {
-        throw new BadRequestException('Yêu cầu ngày nhận và ngày trả mới');
-      }
-      if (dto.newRentalFrom < todayStr) {
-        throw new BadRequestException(
-          'Ngày nhận mới không thể nằm trong quá khứ',
-        );
-      }
-      if (dto.newRentalTo < dto.newRentalFrom) {
-        throw new BadRequestException('Ngày trả phải sau hoặc bằng ngày nhận');
-      }
+      const isHourly = (bookingItem as any).rentalType === 'HOURLY';
+      if (isHourly) {
+        const newDateStr =
+          dto.newShootDate ||
+          (dto.newRentalFrom
+            ? String(dto.newRentalFrom).slice(0, 10)
+            : undefined);
+        const newTimeSlot =
+          dto.newShootTimeSlot ||
+          (dto.newRentalFrom && dto.newRentalTo
+            ? `${String(dto.newRentalFrom).slice(11, 16)}-${String(dto.newRentalTo).slice(11, 16)}`
+            : undefined);
 
-      // Check for conflicts on the inventory reservation
-      const existingReservation = await this.inventoryReservationModel.findOne({
-        bookingId: new Types.ObjectId(bookingId),
-        bookingItemId: new Types.ObjectId(dto.itemId),
-        status: {
-          $in: [ReservationStatus.Confirmed, ReservationStatus.TempReserved],
-        },
-      });
-
-      if (existingReservation) {
-        // Check if any OTHER reservation conflicts with new dates for same inventory item
-        const newFrom = new Date(dto.newRentalFrom);
-        newFrom.setHours(0, 0, 0, 0);
-        const newTo = new Date(dto.newRentalTo);
-        newTo.setHours(23, 59, 59, 999);
-
-        const conflict = await this.inventoryReservationModel.findOne({
-          inventoryItemId: (existingReservation as any).inventoryItemId,
-          _id: { $ne: (existingReservation as any)._id },
-          status: {
-            $in: [ReservationStatus.Confirmed, ReservationStatus.TempReserved],
-          },
-          $or: [
-            { reservedFrom: { $lte: newTo }, reservedTo: { $gte: newFrom } },
-          ],
-        });
-
-        if (conflict) {
+        if (!newDateStr || !newTimeSlot) {
           throw new BadRequestException(
-            `Sản phẩm đã được đặt lịch trong khoảng thời gian này. Vui lòng chọn ngày khác.`,
+            'Thuê theo giờ yêu cầu ngày và khung giờ mới (newShootDate/newRentalFrom và newShootTimeSlot)',
+          );
+        }
+        if (newDateStr < todayStr) {
+          throw new BadRequestException(
+            'Ngày thuê mới không thể nằm trong quá khứ',
           );
         }
 
-        // Update the reservation dates
-        await this.inventoryReservationModel.updateOne(
-          { _id: (existingReservation as any)._id },
-          { reservedFrom: newFrom, reservedTo: newTo },
+        const provider = await this.providerModel
+          .findById(bookingItem.providerId)
+          .lean();
+        const useSlotLeases = !!(
+          (bookingItem as any).slotLeaseRequired || provider?.useSlotLeases
+        );
+
+        if (useSlotLeases) {
+          if (!this.timeSlotEngine) {
+            throw new BadRequestException(
+              'Hệ thống slot lease chưa sẵn sàng để xử lý đổi lịch.',
+            );
+          }
+
+          const { startSlotIndex, rentalSlotCount } =
+            this.timeSlotEngine.parseAndValidateTimeSlot(newTimeSlot);
+          const scheduleConfig = await this.getProviderScheduleConfig(
+            bookingItem.providerId,
+          );
+          const turnaroundSlots =
+            provider?.rentalSettings?.turnaroundSlots ?? 1;
+          const upfrontBlock = this.timeSlotEngine.calculateUpfrontBlock(
+            newDateStr,
+            startSlotIndex,
+            rentalSlotCount,
+            turnaroundSlots,
+            scheduleConfig,
+          );
+          if (!upfrontBlock) {
+            throw new BadRequestException(
+              'Khung giờ mới không nằm trong giờ hoạt động của cửa hàng hoặc rơi vào ngày nghỉ.',
+            );
+          }
+
+          let session: ClientSession;
+          try {
+            if (typeof this.bookingModel.db?.startSession !== 'function') {
+              throw new ServiceUnavailableException(
+                'Dịch vụ cơ sở dữ liệu không hỗ trợ giao dịch (ClientSession). Không thể đổi lịch an toàn.',
+              );
+            }
+            session = await this.bookingModel.db.startSession();
+          } catch (sessionErr: any) {
+            if (
+              sessionErr instanceof ServiceUnavailableException ||
+              sessionErr instanceof ConflictException
+            ) {
+              throw sessionErr;
+            }
+            throw new ServiceUnavailableException(
+              `Không thể khởi tạo phiên giao dịch: ${sessionErr?.message || sessionErr}`,
+            );
+          }
+
+          try {
+            session.startTransaction();
+          } catch (startTxErr: any) {
+            await session.endSession();
+            throw new ServiceUnavailableException(
+              `Không thể bắt đầu giao dịch: ${startTxErr?.message || startTxErr}`,
+            );
+          }
+
+          try {
+            const leaseColl =
+              this.bookingModel.db.collection('inventory_slot_leases');
+            const allNewSlots = [
+              ...upfrontBlock.rentalSlots.map((s: any) => ({
+                dateStr: s.dateStr,
+                slotIndex: s.slotIndex,
+              })),
+              ...upfrontBlock.turnaroundSlots.map((s: any) => ({
+                dateStr: s.dateStr,
+                slotIndex: s.slotIndex,
+              })),
+            ];
+
+            // 1. Conflict check against other bookings
+            const now = new Date();
+            const conflictingLease = await leaseColl.findOne(
+              {
+                inventoryItemId: (bookingItem as any).inventoryItemId,
+                bookingItemId: { $ne: bookingItem._id },
+                $or: allNewSlots,
+                $and: [
+                  {
+                    $or: [
+                      { status: 'CONFIRMED' },
+                      { status: 'TEMP', expiresAt: { $gt: now } },
+                    ],
+                  },
+                ],
+              },
+              { session },
+            );
+
+            if (conflictingLease) {
+              throw new ConflictException(
+                'Sản phẩm đã có lịch thuê trong khung giờ mới này. Vui lòng chọn khung giờ khác.',
+              );
+            }
+
+            // 2. Release old leases of this item with RESCHEDULED
+            await leaseColl.updateMany(
+              {
+                bookingItemId: bookingItem._id,
+                status: { $in: ['TEMP', 'CONFIRMED'] },
+              },
+              {
+                $set: {
+                  status: 'RELEASED',
+                  releasedAt: now,
+                  releaseReason: 'RESCHEDULED',
+                },
+              },
+              { session },
+            );
+
+            // 3. Acquire new leases with CONFIRMED
+            const newLeaseDocs = [
+              ...upfrontBlock.rentalSlots.map((s: any) => ({
+                inventoryItemId: (bookingItem as any).inventoryItemId,
+                providerId: bookingItem.providerId,
+                bookingId: booking._id,
+                bookingItemId: bookingItem._id,
+                dateStr: s.dateStr,
+                slotIndex: s.slotIndex,
+                purpose: 'RENTAL',
+                status: 'CONFIRMED',
+                expiresAt: null,
+                createdAt: now,
+                updatedAt: now,
+              })),
+              ...upfrontBlock.turnaroundSlots.map((s: any) => ({
+                inventoryItemId: (bookingItem as any).inventoryItemId,
+                providerId: bookingItem.providerId,
+                bookingId: booking._id,
+                bookingItemId: bookingItem._id,
+                dateStr: s.dateStr,
+                slotIndex: s.slotIndex,
+                purpose: 'TURNAROUND',
+                status: 'CONFIRMED',
+                expiresAt: null,
+                createdAt: now,
+                updatedAt: now,
+              })),
+            ];
+
+            try {
+              await leaseColl.insertMany(newLeaseDocs, { session });
+            } catch (insertErr: any) {
+              if (insertErr.code === 11000) {
+                throw new ConflictException(
+                  'Khung giờ mới vừa có người khác giữ chỗ.',
+                );
+              }
+              throw insertErr;
+            }
+
+            // 4. Update reservation & booking item
+            const firstRental = upfrontBlock.rentalSlots[0];
+            const lastRental =
+              upfrontBlock.rentalSlots[upfrontBlock.rentalSlots.length - 1];
+            const startAlloc = this.timeSlotEngine.getSlotAllocation(
+              firstRental.dateStr,
+              firstRental.slotIndex,
+            );
+            const endAlloc = this.timeSlotEngine.getSlotAllocation(
+              lastRental.dateStr,
+              lastRental.slotIndex,
+            );
+
+            await this.inventoryReservationModel.updateMany(
+              { bookingItemId: bookingItem._id },
+              {
+                $set: {
+                  reservedFrom: startAlloc.start,
+                  reservedTo: upfrontBlock.availableFrom,
+                },
+              },
+              { session },
+            );
+
+            const fulfillmentUpdate = (bookingItem as any).rentalFulfillment
+              ? {
+                  'rentalFulfillment.availableFrom': upfrontBlock.availableFrom,
+                  'rentalFulfillment.turnaroundSlotsSnapshot':
+                    upfrontBlock.turnaroundSlots.length,
+                }
+              : {
+                  rentalFulfillment: {
+                    status: 'PENDING',
+                    availableFrom: upfrontBlock.availableFrom,
+                    turnaroundSlotsSnapshot:
+                      upfrontBlock.turnaroundSlots.length,
+                    history: [],
+                  },
+                };
+
+            await this.bookingItemModel.updateOne(
+              { _id: bookingItem._id },
+              {
+                $set: {
+                  shootDate: new Date(newDateStr),
+                  shootTimeSlot: newTimeSlot,
+                  rentalFrom: startAlloc.start,
+                  rentalTo: endAlloc.end,
+                  startDate: newDateStr,
+                  endDate: newDateStr,
+                  ...fulfillmentUpdate,
+                },
+              },
+              { session },
+            );
+
+            await this.bookingScheduleModel.updateMany(
+              {
+                bookingId: new Types.ObjectId(bookingId),
+                bookingItemId: new Types.ObjectId(dto.itemId),
+                status: BookingScheduleStatus.Scheduled,
+              },
+              { status: BookingScheduleStatus.Rescheduled },
+              { session },
+            );
+
+            await session.commitTransaction();
+          } catch (err) {
+            try {
+              await session.abortTransaction();
+            } catch (_abortErr) {
+              // ignore
+            }
+            throw err;
+          } finally {
+            await session.endSession();
+          }
+        } else {
+          // Legacy hourly without slot leases
+          const [sh, sm] = newTimeSlot.split('-')[0].split(':').map(Number);
+          const [eh, em] = newTimeSlot.split('-')[1].split(':').map(Number);
+          const newFrom = new Date(newDateStr);
+          newFrom.setHours(sh || 7, sm || 0, 0, 0);
+          const newTo = new Date(newDateStr);
+          newTo.setHours(eh || 9, em || 0, 0, 0);
+
+          const existingReservation =
+            await this.inventoryReservationModel.findOne({
+              bookingId: new Types.ObjectId(bookingId),
+              bookingItemId: new Types.ObjectId(dto.itemId),
+              status: {
+                $in: [
+                  ReservationStatus.Confirmed,
+                  ReservationStatus.TempReserved,
+                ],
+              },
+            });
+
+          if (existingReservation) {
+            const conflict = await this.inventoryReservationModel.findOne({
+              inventoryItemId: (existingReservation as any).inventoryItemId,
+              _id: { $ne: (existingReservation as any)._id },
+              status: {
+                $in: [
+                  ReservationStatus.Confirmed,
+                  ReservationStatus.TempReserved,
+                ],
+              },
+              $or: [
+                {
+                  reservedFrom: { $lte: newTo },
+                  reservedTo: { $gte: newFrom },
+                },
+              ],
+            });
+
+            if (conflict) {
+              throw new BadRequestException(
+                `Sản phẩm đã được đặt lịch trong khoảng thời gian này. Vui lòng chọn ngày khác.`,
+              );
+            }
+
+            await this.inventoryReservationModel.updateOne(
+              { _id: (existingReservation as any)._id },
+              { reservedFrom: newFrom, reservedTo: newTo },
+            );
+          }
+
+          await this.bookingItemModel.updateOne(
+            { _id: new Types.ObjectId(dto.itemId) },
+            {
+              shootDate: new Date(newDateStr),
+              shootTimeSlot: newTimeSlot,
+              rentalFrom: newFrom,
+              rentalTo: newTo,
+              startDate: newDateStr,
+              endDate: newDateStr,
+            },
+          );
+
+          await this.bookingScheduleModel.updateMany(
+            {
+              bookingId: new Types.ObjectId(bookingId),
+              bookingItemId: new Types.ObjectId(dto.itemId),
+              status: BookingScheduleStatus.Scheduled,
+            },
+            { status: BookingScheduleStatus.Rescheduled },
+          );
+        }
+      } else {
+        // Daily rental
+        if (!dto.newRentalFrom || !dto.newRentalTo) {
+          throw new BadRequestException('Yêu cầu ngày nhận và ngày trả mới');
+        }
+        if (dto.newRentalFrom < todayStr) {
+          throw new BadRequestException(
+            'Ngày nhận mới không thể nằm trong quá khứ',
+          );
+        }
+        if (dto.newRentalTo < dto.newRentalFrom) {
+          throw new BadRequestException('Ngày trả phải sau hoặc bằng ngày nhận');
+        }
+
+        // Check for conflicts on the inventory reservation
+        const existingReservation =
+          await this.inventoryReservationModel.findOne({
+            bookingId: new Types.ObjectId(bookingId),
+            bookingItemId: new Types.ObjectId(dto.itemId),
+            status: {
+              $in: [
+                ReservationStatus.Confirmed,
+                ReservationStatus.TempReserved,
+              ],
+            },
+          });
+
+        if (existingReservation) {
+          // Check if any OTHER reservation conflicts with new dates for same inventory item
+          const newFrom = new Date(dto.newRentalFrom);
+          newFrom.setHours(0, 0, 0, 0);
+          const newTo = new Date(dto.newRentalTo);
+          newTo.setHours(23, 59, 59, 999);
+
+          const conflict = await this.inventoryReservationModel.findOne({
+            inventoryItemId: (existingReservation as any).inventoryItemId,
+            _id: { $ne: (existingReservation as any)._id },
+            status: {
+              $in: [
+                ReservationStatus.Confirmed,
+                ReservationStatus.TempReserved,
+              ],
+            },
+            $or: [
+              { reservedFrom: { $lte: newTo }, reservedTo: { $gte: newFrom } },
+            ],
+          });
+
+          if (conflict) {
+            throw new BadRequestException(
+              `Sản phẩm đã được đặt lịch trong khoảng thời gian này. Vui lòng chọn ngày khác.`,
+            );
+          }
+
+          // Update the reservation dates
+          await this.inventoryReservationModel.updateOne(
+            { _id: (existingReservation as any)._id },
+            { reservedFrom: newFrom, reservedTo: newTo },
+          );
+        }
+
+        // Update booking item dates
+        await this.bookingItemModel.updateOne(
+          { _id: new Types.ObjectId(dto.itemId) },
+          {
+            rentalFrom: new Date(dto.newRentalFrom),
+            rentalTo: new Date(dto.newRentalTo),
+            startDate: dto.newRentalFrom,
+            endDate: dto.newRentalTo,
+          },
+        );
+
+        // Update or create booking schedule
+        await this.bookingScheduleModel.updateMany(
+          {
+            bookingId: new Types.ObjectId(bookingId),
+            bookingItemId: new Types.ObjectId(dto.itemId),
+            status: BookingScheduleStatus.Scheduled,
+          },
+          { status: BookingScheduleStatus.Rescheduled },
         );
       }
-
-      // Update booking item dates
-      await this.bookingItemModel.updateOne(
-        { _id: new Types.ObjectId(dto.itemId) },
-        {
-          rentalFrom: new Date(dto.newRentalFrom),
-          rentalTo: new Date(dto.newRentalTo),
-          startDate: dto.newRentalFrom,
-          endDate: dto.newRentalTo,
-        },
-      );
-
-      // Update or create booking schedule
-      await this.bookingScheduleModel.updateMany(
-        {
-          bookingId: new Types.ObjectId(bookingId),
-          bookingItemId: new Types.ObjectId(dto.itemId),
-          status: BookingScheduleStatus.Scheduled,
-        },
-        { status: BookingScheduleStatus.Rescheduled },
-      );
     } else if (itemType === 'PHOTOGRAPHY_PACKAGE') {
       if (!dto.newShootDate) {
         throw new BadRequestException('Yêu cầu ngày chụp mới');
@@ -1226,6 +1677,10 @@ export class BookingsService implements OnApplicationBootstrap {
       );
     } catch (_e) {
       /* ignore notification error */
+    }
+
+    if (bookingItem?.productId) {
+      this.invalidateProductBusyCache(bookingItem.productId.toString());
     }
 
     return { message: 'Đổi lịch thành công', bookingId };
@@ -1306,6 +1761,15 @@ export class BookingsService implements OnApplicationBootstrap {
     userIdStr: string,
     dto: CreateBookingDto,
   ): Promise<BookingDocument> {
+    if (this.bookingCreationService) {
+      const result = await this.bookingCreationService.createBooking(userIdStr, dto);
+      if (dto.items) {
+        dto.items.forEach((it) => {
+          if (it.productId) this.invalidateProductBusyCache(it.productId.toString());
+        });
+      }
+      return result;
+    }
     return this.runInTransaction(async (session) => {
       const customerId = new Types.ObjectId(userIdStr);
       const bookingCode = `B${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
@@ -1922,6 +2386,9 @@ export class BookingsService implements OnApplicationBootstrap {
     customerId: string,
     dto: CreateProductBookingDto,
   ): Promise<BookingDocument> {
+    if (this.bookingCreationService) {
+      return this.bookingCreationService.createProductBooking(customerId, dto);
+    }
     const {
       productId,
       rentalType,
@@ -3587,18 +4054,72 @@ export class BookingsService implements OnApplicationBootstrap {
         },
       );
     } else if (nextStatus === BookingStatus.Returned) {
-      const reservations = await this.inventoryReservationModel
-        .find({ bookingId: booking._id })
-        .select({ inventoryItemId: 1 })
+      const items = await this.bookingItemModel
+        .find({ bookingId: booking._id, itemType: BookingItemType.Product })
+        .select('_id providerId rentalTo rentalFulfillment slotLeaseRequired')
         .lean()
         .exec();
-      const itemIds = reservations.map((r) => r.inventoryItemId).filter(Boolean);
-      if (itemIds.length > 0) {
-        const inventoryModel = this.bookingItemModel.db.model('InventoryItem');
-        await inventoryModel.updateMany(
-          { _id: { $in: itemIds }, conditionStatus: { $ne: 'RETIRED' } },
-          { $set: { status: 'CLEANING' } },
-        ).exec();
+
+      const reservations = await this.inventoryReservationModel
+        .find({ bookingId: booking._id })
+        .select({ inventoryItemId: 1, bookingItemId: 1 })
+        .lean()
+        .exec();
+
+      const inventoryModel = this.bookingItemModel.db.model('InventoryItem');
+      const actualReturnedAt = new Date();
+
+      for (const item of items) {
+        const contractualRentalTo = (item as any).rentalTo || actualReturnedAt;
+        const turnaroundSlotsCount = Number(
+          (item as any).rentalFulfillment?.turnaroundSlotsSnapshot ?? 1,
+        );
+        const scheduleConfig = (item as any).providerId
+          ? await this.getProviderScheduleConfig((item as any).providerId)
+          : undefined;
+        const availableFrom = this.timeSlotEngine
+          ? this.timeSlotEngine.calculateReturnAvailableFrom(
+              contractualRentalTo,
+              actualReturnedAt,
+              turnaroundSlotsCount,
+              scheduleConfig,
+            )
+          : actualReturnedAt;
+
+        const matchingRes = reservations.filter(
+          (r: any) =>
+            r.bookingItemId &&
+            r.bookingItemId.toString() === item._id.toString(),
+        );
+        const itemInventoryIds = matchingRes
+          .map((r: any) => r.inventoryItemId)
+          .filter(Boolean);
+
+        if (itemInventoryIds.length > 0) {
+          await inventoryModel
+            .updateMany(
+              {
+                _id: { $in: itemInventoryIds },
+                status: { $ne: 'MAINTENANCE' },
+                conditionStatus: { $nin: ['LOCKED', 'RETIRED', 'MINOR_DAMAGE'] },
+              },
+              {
+                $set: {
+                  status: 'CLEANING',
+                  operationalAvailableFrom: availableFrom,
+                  activeTurnaroundBookingItemId: item._id,
+                },
+              },
+            )
+            .exec();
+        }
+
+        if (this.slotLeaseService && (item as any).slotLeaseRequired) {
+          await this.slotLeaseService.reconcileTurnaroundLeases(
+            item._id,
+            availableFrom,
+          );
+        }
       }
     }
 
@@ -4029,6 +4550,44 @@ export class BookingsService implements OnApplicationBootstrap {
       { $set: { status: ReservationStatus.Cancelled } },
     );
 
+    // Giải phóng slot leases liên quan
+    if (this.slotLeaseService) {
+      await this.slotLeaseService.releaseBookingLeases(booking._id, 'CANCELLED');
+    } else {
+      try {
+        const leaseColl =
+          this.bookingModel?.db?.collection('inventory_slot_leases');
+        if (leaseColl) {
+          await leaseColl.updateMany(
+            {
+              bookingId: booking._id,
+              status: { $in: ['TEMP', 'CONFIRMED'] },
+            },
+            {
+              $set: {
+                status: 'RELEASED',
+                releasedAt: now,
+                releaseReason: 'CANCELLED',
+              },
+            },
+          );
+        }
+      } catch (_) {}
+    }
+
+    // Invalidate product busy cache cho các sản phẩm trong đơn
+    try {
+      const bItems = await this.bookingItemModel
+        .find({ bookingId: booking._id })
+        .select('productId')
+        .lean();
+      bItems.forEach((it) => {
+        if (it.productId) {
+          this.invalidateProductBusyCache(it.productId.toString());
+        }
+      });
+    } catch (_) {}
+
     // Kích hoạt hoàn tiền cọc / hoàn tiền dịch vụ cho khách hàng
     if (refundAmount > 0) {
       try {
@@ -4178,61 +4737,230 @@ export class BookingsService implements OnApplicationBootstrap {
     });
   }
 
+  invalidateProductBusyCache(productId?: string): void {
+    if (this.productBusyCacheService) {
+      this.productBusyCacheService.invalidate(productId);
+    }
+    if (productId) {
+      try {
+        this.productBusyCache.delete(new Types.ObjectId(productId).toString());
+      } catch {
+        this.productBusyCache.delete(productId.toString());
+      }
+    } else {
+      this.productBusyCache.clear();
+    }
+  }
+
   async getBusySchedulesForProduct(productId: string): Promise<{
     bookedDates: string[];
     bookedSlots: { date: string; timeSlot: string }[];
     variantBookedDates?: Record<string, string[]>;
+    variantBookedSlots?: Record<
+      string,
+      Array<{
+        date: string;
+        timeSlot: string;
+        purpose?: 'RENTAL' | 'TURNAROUND';
+      }>
+    >;
     workingDays?: number[];
     offDays?: string[];
     hasSchedule?: boolean;
   }> {
     const cacheKey = new Types.ObjectId(productId).toString();
-    const cached = this.productBusyCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) return cached.value;
+    const cached = this.productBusyCacheService
+      ? this.productBusyCacheService.get(cacheKey)
+      : this.productBusyCache.get(cacheKey)?.value;
+    if (cached) return cached;
 
     const inventoryItems = await this.inventoryItemModel.find({
       productId: new Types.ObjectId(productId),
       conditionStatus: { $nin: ['LOCKED', 'RETIRED'] },
-    } as any).select('_id size color').lean().exec();
+    } as any).select('_id size color status operationalAvailableFrom').lean().exec();
 
     if (inventoryItems.length === 0) {
-      const value = { bookedDates: [], bookedSlots: [] };
-      this.productBusyCache.set(cacheKey, { value, expiresAt: Date.now() + 10_000 });
+      const value = { bookedDates: [], bookedSlots: [], variantBookedDates: {}, variantBookedSlots: {} };
+      if (this.productBusyCacheService) {
+        this.productBusyCacheService.set(cacheKey, value);
+      } else {
+        this.productBusyCache.set(cacheKey, { value, expiresAt: Date.now() + 10_000 });
+      }
       return value;
     }
 
     const stockMap = new Map<string, number>();
     const sizeColors = new Set<string>();
+    const itemToVariantKey = new Map<string, string>();
 
     inventoryItems.forEach((item) => {
       const key = `${item.size.toUpperCase()}_${this.normalizeColor(item.color)}`;
       sizeColors.add(key);
       stockMap.set(key, (stockMap.get(key) || 0) + 1);
+      itemToVariantKey.set(item._id.toString(), key);
     });
 
     const itemIds = inventoryItems.map((i) => i._id);
+    const now = new Date();
+
+    // Query active reservations (CONFIRMED or unexpired TEMP_RESERVED)
     const reservations = await this.inventoryReservationModel.find({
       inventoryItemId: { $in: itemIds },
-      status: {
-        $nin: [ReservationStatus.Cancelled, ReservationStatus.Expired],
-      },
-    }).select('inventoryItemId reservedFrom reservedTo').lean().exec();
+      $or: [
+        { status: ReservationStatus.Confirmed },
+        {
+          status: ReservationStatus.TempReserved,
+          expiresAt: { $gt: now },
+        },
+      ],
+    }).select('inventoryItemId reservedFrom reservedTo status expiresAt').lean().exec();
 
-    const dailyBookings = new Map<string, Map<string, number>>();
-    const hourlyBookings = new Map<string, Map<string, number>>();
+    // Filter to strictly confirmed or active unexpired temp reservations (guards against TTL lag)
+    const activeReservations = reservations.filter((res) => {
+      if (res.status === ReservationStatus.Confirmed) return true;
+      if (res.status === ReservationStatus.TempReserved) {
+        return res.expiresAt && new Date(res.expiresAt) > now;
+      }
+      return false;
+    });
 
-    reservations.forEach((res) => {
-      const item = inventoryItems.find(
-        (i) => i._id.toString() === res.inventoryItemId.toString(),
-      );
-      if (!item) return;
-      const key = `${item.size.toUpperCase()}_${this.normalizeColor(item.color)}`;
+    // Query active slot leases (both RENTAL and TURNAROUND leases)
+    // Fail-closed: database query errors must propagate and fail closed (do NOT catch and return empty array).
+    let slotLeases: any[] = [];
+    const leaseColl = this.bookingModel?.db?.collection('inventory_slot_leases');
+    if (leaseColl) {
+      slotLeases = await leaseColl.find({
+        inventoryItemId: { $in: itemIds },
+        $or: [
+          { status: 'CONFIRMED' },
+          { status: 'TEMP', expiresAt: { $gt: now } },
+        ],
+      }).project({ inventoryItemId: 1, dateStr: 1, slotIndex: 1, purpose: 1 }).toArray();
+    }
+
+    const SLOT_INDEX_TO_TIME_SLOT: Record<number, string> = {
+      1: '07:00-09:00',
+      2: '09:00-11:00',
+      3: '11:00-13:00',
+      4: '13:00-15:00',
+      5: '15:00-17:00',
+      6: '17:00-19:00',
+      7: '19:00-21:00',
+    };
+
+    let turnaroundSlotsCount = 1;
+    let providerScheduleConfig: any = undefined;
+    let workingDays: number[] = [];
+    const offDays: string[] = [];
+    let hasSchedule = false;
+
+    try {
+      const product = await this.productModel
+        .findById(productId)
+        .select('providerId');
+      if (product && product.providerId) {
+        const provColl = this.bookingModel?.db?.collection('providers');
+        if (provColl) {
+          const prov = await provColl.findOne(
+            { _id: new Types.ObjectId(product.providerId.toString()) },
+            { projection: { 'rentalSettings.turnaroundSlots': 1 } },
+          );
+          if (prov?.rentalSettings?.turnaroundSlots !== undefined) {
+            turnaroundSlotsCount = Number(prov.rentalSettings.turnaroundSlots);
+          }
+        }
+        const schedColl = this.bookingModel?.db?.collection('provider_schedules');
+        if (schedColl) {
+          const scheds = await schedColl
+            .find({
+              providerId: new Types.ObjectId(product.providerId.toString()),
+              $or: [
+                { capability: null },
+                { capability: 'AODAI_RENTAL' },
+              ],
+            })
+            .toArray();
+
+          if (scheds && scheds.length > 0) {
+            hasSchedule = true;
+            const recurringSchedules = scheds.filter(
+              (s: any) => s.scheduleType === 'RECURRING' && typeof s.dayOfWeek === 'number',
+            );
+            let weeklyOffDays: number[] | undefined = undefined;
+            if (recurringSchedules.length > 0) {
+              const workingSet = new Set(recurringSchedules.map((s: any) => s.dayOfWeek as number));
+              workingDays = Array.from(workingSet);
+              weeklyOffDays = [0, 1, 2, 3, 4, 5, 6].filter((d) => !workingSet.has(d));
+            }
+
+            for (const s of scheds) {
+              if (s.scheduleType === 'SPECIFIC_DATE' && Array.isArray(s.offDays)) {
+                for (const d of s.offDays) {
+                  const dateStr = new Date(d).toLocaleDateString('en-CA', {
+                    timeZone: 'Asia/Ho_Chi_Minh',
+                  });
+                  offDays.push(dateStr);
+                }
+              }
+            }
+
+            providerScheduleConfig = {
+              weeklyOffDays,
+              offDays: offDays.length > 0 ? offDays : undefined,
+            };
+          }
+        }
+      }
+    } catch (_) {}
+
+    const dailyBookings = new Map<string, Map<string, Set<string>>>();
+    // variantKey -> slotKey (dateStr_timeSlot) -> Map<itemIdStr, 'RENTAL' | 'TURNAROUND' | undefined>
+    const variantHourly = new Map<string, Map<string, Map<string, 'RENTAL' | 'TURNAROUND' | undefined>>>();
+
+    const trackHourly = (
+      variantKey: string,
+      dateStr: string,
+      timeSlot: string,
+      itemIdStr: string,
+      purpose?: 'RENTAL' | 'TURNAROUND',
+    ) => {
+      if (!variantHourly.has(variantKey)) {
+        variantHourly.set(variantKey, new Map());
+      }
+      const slotKey = `${dateStr}_${timeSlot}`;
+      const vMap = variantHourly.get(variantKey)!;
+      if (!vMap.has(slotKey)) {
+        vMap.set(slotKey, new Map());
+      }
+      const itemMap = vMap.get(slotKey)!;
+      const existing = itemMap.get(itemIdStr);
+      if (!existing || existing === 'TURNAROUND') {
+        itemMap.set(itemIdStr, purpose);
+      }
+    };
+
+    // 1. Process slot leases (includes both RENTAL and TURNAROUND leases)
+    slotLeases.forEach((lease: any) => {
+      const itemIdStr = lease.inventoryItemId?.toString();
+      const variantKey = itemToVariantKey.get(itemIdStr);
+      if (!variantKey) return;
+      const timeSlot = SLOT_INDEX_TO_TIME_SLOT[lease.slotIndex];
+      if (timeSlot && lease.dateStr) {
+        trackHourly(variantKey, lease.dateStr, timeSlot, itemIdStr, lease.purpose);
+      }
+    });
+
+    // 2. Process active reservations (legacy / fallback)
+    activeReservations.forEach((res) => {
+      const itemIdStr = res.inventoryItemId.toString();
+      const variantKey = itemToVariantKey.get(itemIdStr);
+      if (!variantKey) return;
 
       const start = new Date(res.reservedFrom);
       const end = new Date(res.reservedTo);
 
       const diffMs = end.getTime() - start.getTime();
-      const isHourly = diffMs < 24 * 60 * 60 * 1000 && start.getHours() !== 0;
+      const isHourly = diffMs < 24 * 60 * 60 * 1000 && (diffMs % (24 * 60 * 60 * 1000) !== 0);
 
       if (!isHourly) {
         const current = new Date(start);
@@ -4241,25 +4969,64 @@ export class BookingsService implements OnApplicationBootstrap {
             timeZone: 'Asia/Ho_Chi_Minh',
           });
           if (!dailyBookings.has(dateStr)) {
-            dailyBookings.set(dateStr, new Map<string, number>());
+            dailyBookings.set(dateStr, new Map<string, Set<string>>());
           }
           const m = dailyBookings.get(dateStr)!;
-          m.set(key, (m.get(key) || 0) + 1);
+          if (!m.has(variantKey)) {
+            m.set(variantKey, new Set<string>());
+          }
+          m.get(variantKey)!.add(itemIdStr);
           current.setDate(current.getDate() + 1);
         }
       } else {
         const dateStr = start.toLocaleDateString('en-CA', {
           timeZone: 'Asia/Ho_Chi_Minh',
         });
-        const pad = (n: number) => n.toString().padStart(2, '0');
-        const timeSlot = `${pad(start.getHours())}:${pad(start.getMinutes())}-${pad(end.getHours())}:${pad(end.getMinutes())}`;
-        const slotKey = `${dateStr}_${timeSlot}`;
+        const startH = new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Asia/Ho_Chi_Minh',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        }).format(start);
+        const endH = new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Asia/Ho_Chi_Minh',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        }).format(end);
+        const timeSlot = `${startH}-${endH}`;
 
-        if (!hourlyBookings.has(slotKey)) {
-          hourlyBookings.set(slotKey, new Map<string, number>());
+        let parsedSuccessfully = false;
+        if (turnaroundSlotsCount >= 0) {
+          try {
+            const timeEngine = new TimeSlotEngineService();
+            const { startSlotIndex, rentalSlotCount } = timeEngine.parseAndValidateTimeSlot(timeSlot);
+            const upfront = timeEngine.calculateUpfrontBlock(
+              dateStr,
+              startSlotIndex,
+              rentalSlotCount,
+              turnaroundSlotsCount,
+              providerScheduleConfig,
+            );
+            for (const rSlot of upfront.rentalSlots) {
+              const rSlotStr = SLOT_INDEX_TO_TIME_SLOT[rSlot.slotIndex];
+              if (rSlotStr && rSlot.dateStr) {
+                trackHourly(variantKey, rSlot.dateStr, rSlotStr, itemIdStr, 'RENTAL');
+              }
+            }
+            for (const tSlot of upfront.turnaroundSlots) {
+              const tSlotStr = SLOT_INDEX_TO_TIME_SLOT[tSlot.slotIndex];
+              if (tSlotStr && tSlot.dateStr) {
+                trackHourly(variantKey, tSlot.dateStr, tSlotStr, itemIdStr, 'TURNAROUND');
+              }
+            }
+            parsedSuccessfully = true;
+          } catch (_) {}
         }
-        const m = hourlyBookings.get(slotKey)!;
-        m.set(key, (m.get(key) || 0) + 1);
+
+        if (!parsedSuccessfully) {
+          trackHourly(variantKey, dateStr, timeSlot, itemIdStr, 'RENTAL');
+        }
       }
     });
 
@@ -4269,9 +5036,9 @@ export class BookingsService implements OnApplicationBootstrap {
     dailyBookings.forEach((m, dateStr) => {
       let allKeysBooked = true;
       for (const key of sizeColors) {
-        const bookedCount = m.get(key) || 0;
+        const bookedCount = m.get(key)?.size || 0;
         const totalStock = stockMap.get(key) || 0;
-        if (bookedCount >= totalStock) {
+        if (bookedCount >= totalStock && totalStock > 0) {
           if (!variantBookedDates[key]) variantBookedDates[key] = [];
           variantBookedDates[key].push(dateStr);
         } else {
@@ -4284,10 +5051,47 @@ export class BookingsService implements OnApplicationBootstrap {
     });
 
     const bookedSlots: { date: string; timeSlot: string }[] = [];
-    hourlyBookings.forEach((m, slotKey) => {
+    const variantBookedSlots: Record<
+      string,
+      Array<{ date: string; timeSlot: string; purpose?: 'RENTAL' | 'TURNAROUND' }>
+    > = {};
+    for (const key of sizeColors) {
+      variantBookedSlots[key] = [];
+    }
+    const allHourlySlotKeys = new Set<string>();
+
+    variantHourly.forEach((slotsMap, variantKey) => {
+      const totalStock = stockMap.get(variantKey) || 0;
+      slotsMap.forEach((itemMap, slotKey) => {
+        allHourlySlotKeys.add(slotKey);
+        if (itemMap.size >= totalStock && totalStock > 0) {
+          const idx = slotKey.indexOf('_');
+          const date = slotKey.substring(0, idx);
+          const timeSlot = slotKey.substring(idx + 1);
+
+          let purpose: 'RENTAL' | 'TURNAROUND' | undefined = undefined;
+          const purposes = Array.from(itemMap.values());
+          if (purposes.every((p) => p === 'TURNAROUND')) {
+            purpose = 'TURNAROUND';
+          } else if (purposes.some((p) => p === 'RENTAL')) {
+            purpose = 'RENTAL';
+          }
+
+          variantBookedSlots[variantKey].push({
+            date,
+            timeSlot,
+            ...(purpose ? { purpose } : {}),
+          });
+        }
+      });
+    });
+
+    allHourlySlotKeys.forEach((slotKey) => {
       let allKeysBooked = true;
       for (const key of sizeColors) {
-        const bookedCount = m.get(key) || 0;
+        const vMap = variantHourly.get(key);
+        const itemMap = vMap?.get(slotKey);
+        const bookedCount = itemMap?.size || 0;
         const totalStock = stockMap.get(key) || 0;
         if (bookedCount < totalStock) {
           allKeysBooked = false;
@@ -4302,59 +5106,20 @@ export class BookingsService implements OnApplicationBootstrap {
       }
     });
 
-    let workingDays: number[] = [];
-    const offDays: string[] = [];
-    let hasSchedule = false;
-
-    try {
-      const product = await this.productModel
-        .findById(productId)
-        .select('providerId');
-      if (product && product.providerId) {
-        const providerScheduleModel =
-          this.bookingModel.db.model('ProviderSchedule');
-        const schedules = await providerScheduleModel
-          .find({ providerId: product.providerId })
-          .lean()
-          .exec();
-        if (schedules && schedules.length > 0) {
-          hasSchedule = true;
-          const recurringSchedules = schedules.filter(
-            (s: any) => s.scheduleType === 'RECURRING',
-          );
-          const specificSchedules = schedules.filter(
-            (s: any) => s.scheduleType === 'SPECIFIC_DATE',
-          );
-          workingDays = Array.from(
-            new Set(
-              recurringSchedules
-                .map((s: any) => s.dayOfWeek)
-                .filter((d: any) => d !== null && d !== undefined),
-            ),
-          );
-          specificSchedules.forEach((s: any) => {
-            if (s.offDays && s.offDays.length > 0) {
-              s.offDays.forEach((od: any) => {
-                const dStr = new Date(od).toLocaleDateString('en-CA', {
-                  timeZone: 'Asia/Ho_Chi_Minh',
-                });
-                offDays.push(dStr);
-              });
-            }
-          });
-        }
-      }
-    } catch (_) {}
-
     const value = {
       bookedDates,
       bookedSlots,
       variantBookedDates,
-      workingDays,
-      offDays,
+      variantBookedSlots,
+      workingDays: hasSchedule ? workingDays : undefined,
+      offDays: hasSchedule ? offDays : undefined,
       hasSchedule,
     };
-    this.productBusyCache.set(cacheKey, { value, expiresAt: Date.now() + 10_000 });
+    if (this.productBusyCacheService) {
+      this.productBusyCacheService.set(cacheKey, value);
+    } else {
+      this.productBusyCache.set(cacheKey, { value, expiresAt: Date.now() + 10_000 });
+    }
     return value;
   }
 

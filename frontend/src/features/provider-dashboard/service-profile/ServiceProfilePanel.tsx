@@ -1,9 +1,11 @@
 import {
   CheckCircle,
+  Clock,
   FileText,
   MapPinned,
   Plus,
   Save,
+  Shirt,
   Store,
   Trash2,
   Upload,
@@ -26,7 +28,7 @@ type ServiceProfilePanelProps = Pick<ReturnType<typeof useProviderSessionState>,
   'isLoadingProvider'
 > &
   Pick<ReturnType<typeof useProviderProfileState>,
-    'profileSection' | 'setProfileSection' | 'businessName' | 'setBusinessName' | 'phone' | 'setPhone' | 'city' | 'setCity' | 'baseLatitude' | 'baseLongitude' | 'addressLine' | 'setAddressLine' | 'setBaseLatitude' | 'setBaseLongitude' | 'serviceRadiusKm' | 'setServiceRadiusKm' | 'useBusinessAddressForPickup' | 'setUseBusinessAddressForPickup' | 'pickupLatitude' | 'pickupLongitude' | 'pickupAddressLine' | 'setPickupAddressLine' | 'setPickupLatitude' | 'setPickupLongitude' | 'setCancellationRefundRules' | 'cancellationRefundRules' | 'cancellationAdditionalNotes' | 'setCancellationAdditionalNotes' | 'isSavingProfile' | 'coverUrl' | 'setCoverUrl'
+    'profileSection' | 'setProfileSection' | 'businessName' | 'setBusinessName' | 'phone' | 'setPhone' | 'city' | 'setCity' | 'baseLatitude' | 'baseLongitude' | 'addressLine' | 'setAddressLine' | 'setBaseLatitude' | 'setBaseLongitude' | 'serviceRadiusKm' | 'setServiceRadiusKm' | 'useBusinessAddressForPickup' | 'setUseBusinessAddressForPickup' | 'turnaroundSlots' | 'setTurnaroundSlots' | 'pickupLatitude' | 'pickupLongitude' | 'pickupAddressLine' | 'setPickupAddressLine' | 'setPickupLatitude' | 'setPickupLongitude' | 'setCancellationRefundRules' | 'cancellationRefundRules' | 'cancellationAdditionalNotes' | 'setCancellationAdditionalNotes' | 'isSavingProfile' | 'coverUrl' | 'setCoverUrl'
   > &
 {
   profileHasUnsavedChanges: boolean;
@@ -41,7 +43,7 @@ export function ServiceProfilePanel({
   businessName, setBusinessName, phone, setPhone, city, setCity, baseLatitude, baseLongitude,
   addressLine, setAddressLine, setBaseLatitude, setBaseLongitude, hasPhotographyCapability,
   serviceRadiusKm, setServiceRadiusKm, hasAodaiCapability, useBusinessAddressForPickup,
-  setUseBusinessAddressForPickup, pickupLatitude, pickupLongitude, pickupAddressLine,
+  setUseBusinessAddressForPickup, turnaroundSlots, setTurnaroundSlots, pickupLatitude, pickupLongitude, pickupAddressLine,
   setPickupAddressLine, setPickupLatitude, setPickupLongitude, setCancellationRefundRules,
   cancellationRefundRules, cancellationAdditionalNotes, setCancellationAdditionalNotes,
   cancellationPolicySummary, isSavingProfile, coverUrl, setCoverUrl,
@@ -102,7 +104,10 @@ export function ServiceProfilePanel({
               <Store size={20} /><span>Cửa hàng<small>Thương hiệu & liên hệ</small></span>
             </button>
             <button type="button" role="tab" aria-selected={profileSection === 'location'} className={`provider-service-tab${profileSection === 'location' ? ' is-active' : ''}`} onClick={() => setProfileSection('location')}>
-              <MapPinned size={20} /><span>Địa điểm & phạm vi<small>Pin bản đồ, bán kính, giao nhận</small></span>
+              <MapPinned size={20} /><span>Địa điểm & phạm vi<small>Pin bản đồ, bán kính</small></span>
+            </button>
+            <button type="button" role="tab" aria-selected={profileSection === 'rental'} className={`provider-service-tab${profileSection === 'rental' ? ' is-active' : ''}`} onClick={() => setProfileSection('rental')}>
+              <Shirt size={20} /><span>Cho thuê & Giờ nghỉ<small>Thời gian chuẩn bị (turnaround), nhận/trả</small></span>
             </button>
             <button type="button" role="tab" aria-selected={profileSection === 'policy'} className={`provider-service-tab${profileSection === 'policy' ? ' is-active' : ''}`} onClick={() => setProfileSection('policy')}>
               <FileText size={20} /><span>Chính sách<small>Hủy dịch vụ & hoàn cọc</small></span>
@@ -324,7 +329,142 @@ export function ServiceProfilePanel({
                   title="Điểm nhận và trả áo dài"
                   hint="MVP hiện dùng một điểm chung cho cả nhận và trả."
                 />}
+
+                <div className="provider-service-turnaround" style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #f0e8e2' }}>
+                  <label htmlFor="turnaround-slots-select" style={{ display: 'block', fontWeight: 600, color: '#2b181c', marginBottom: 6 }}>
+                    Thời gian vệ sinh & chuẩn bị trang phục (Turnaround)
+                  </label>
+                  <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 10px 0' }}>
+                    Tổng thời gian kiểm tra, vệ sinh và chuẩn bị đón khách mới sau mỗi lượt thuê theo giờ (0h, 2h, 4h, 6h).
+                  </p>
+                  <select
+                    id="turnaround-slots-select"
+                    value={turnaroundSlots ?? 1}
+                    onChange={(e) => setTurnaroundSlots(Number(e.target.value))}
+                    style={{
+                      width: '100%',
+                      maxWidth: 340,
+                      padding: '8px 12px',
+                      borderRadius: 8,
+                      border: '1px solid #d1d5db',
+                      background: '#fff',
+                      fontSize: 14,
+                      color: '#1f2937',
+                    }}
+                  >
+                    <option value={0}>0 slot (0 giờ - sẵn sàng ngay lập tức)</option>
+                    <option value={1}>1 slot (2 giờ - mặc định tiêu chuẩn)</option>
+                    <option value={2}>2 slot (4 giờ - giặt hấp kỹ)</option>
+                    <option value={3}>3 slot (6 giờ - xử lý trang phục cao cấp)</option>
+                  </select>
+                </div>
               </div>}
+            </div>
+          </section>}
+
+          {profileSection === 'rental' && <section className="provider-service-panel" role="tabpanel">
+            <div className="provider-service-panel-heading">
+              <h3>Thiết lập cho thuê trang phục & Thời gian nghỉ (Turnaround)</h3>
+              <p>Cấu hình thời gian đệm vệ sinh, giặt hấp sau mỗi lượt thuê và địa điểm giao nhận trang phục.</p>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24, marginTop: 16 }}>
+              {/* Turnaround setting card */}
+              <div style={{
+                background: '#ffffff',
+                border: '1px solid #e5e7eb',
+                borderRadius: 12,
+                padding: '24px',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                  <Clock size={22} style={{ color: '#832738' }} />
+                  <h4 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1f2937' }}>
+                    Thời gian nghỉ & vệ sinh trang phục sau khi trả (Turnaround Time)
+                  </h4>
+                </div>
+                <p style={{ fontSize: 14, color: '#4b5563', lineHeight: 1.6, margin: '0 0 16px 0' }}>
+                  Khoảng thời gian cần thiết để cửa hàng kiểm tra, xử lý vết bẩn, giặt hấp và đưa trang phục về trạng thái sẵn sàng đón khách mới sau mỗi lượt thuê theo giờ. Trong khoảng thời gian này, hệ thống sẽ tự động khóa lịch (trạng thái CLEANING lease) và không cho phép khách hàng khác đặt trùng.
+                </p>
+
+                <div style={{ maxWidth: 460 }}>
+                  <label htmlFor="turnaround-slots-rental-tab" style={{ display: 'block', fontWeight: 600, color: '#374151', marginBottom: 8, fontSize: 14 }}>
+                    Số slot nghỉ / chuẩn bị giữa 2 ca thuê:
+                  </label>
+                  <select
+                    id="turnaround-slots-rental-tab"
+                    value={turnaroundSlots ?? 1}
+                    onChange={(e) => setTurnaroundSlots(Number(e.target.value))}
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: 8,
+                      border: '1.5px solid #d1d5db',
+                      background: '#fff',
+                      fontSize: 14,
+                      fontWeight: 500,
+                      color: '#111827',
+                    }}
+                  >
+                    <option value={0}>0 slot (0 giờ - Sẵn sàng ngay lập tức sau khi khách trả đồ)</option>
+                    <option value={1}>1 slot (2 giờ - Mặc định tiêu chuẩn, kiểm tra & ủi phẳng)</option>
+                    <option value={2}>2 slot (4 giờ - Giặt hấp, khử khuẩn kỹ lưỡng)</option>
+                    <option value={3}>3 slot (6 giờ - Xử lý đặc biệt cho cổ phục & áo dài cao cấp)</option>
+                  </select>
+                </div>
+
+                <div style={{
+                  marginTop: 18,
+                  padding: '14px 18px',
+                  background: '#fdf2f4',
+                  borderRadius: 8,
+                  border: '1px solid #f9d2d9',
+                  fontSize: 13,
+                  color: '#832738',
+                  lineHeight: 1.6,
+                }}>
+                  💡 <strong>Ví dụ hoạt động:</strong> Đơn thuê 07:00 - 11:00 với 1 slot turnaround (2 giờ) sẽ tự động khóa trang phục đến 13:00 (lịch CLEANING: 11:00 - 13:00). Khách tiếp theo chỉ có thể đặt từ 13:00 trở đi. Nếu đơn kết thúc vào cuối ngày trước ngày nghỉ của shop, thời gian chuẩn bị sẽ tự động chuyển tiếp sang đầu ngày làm việc tiếp theo lúc 07:00.
+                </div>
+              </div>
+
+              {/* Pickup location settings card */}
+              <div style={{
+                background: '#ffffff',
+                border: '1px solid #e5e7eb',
+                borderRadius: 12,
+                padding: '24px',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+              }}>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: 17, fontWeight: 700, color: '#1f2937' }}>
+                  Địa điểm nhận và trả trang phục
+                </h4>
+                <label className="provider-service-pickup-toggle" style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer', marginBottom: 16 }}>
+                  <input
+                    type="checkbox"
+                    checked={useBusinessAddressForPickup}
+                    onChange={(e) => setUseBusinessAddressForPickup(e.target.checked)}
+                    style={{ marginTop: 4 }}
+                  />
+                  <span>
+                    <strong style={{ display: 'block', color: '#111827' }}>Dùng địa chỉ kinh doanh cho nhận và trả áo dài</strong>
+                    <span style={{ fontSize: 13, color: '#6b7280' }}>Chỉ tắt lựa chọn này nếu điểm giao nhận nằm ở kho hoặc chi nhánh khác với cửa hàng chính.</span>
+                  </span>
+                </label>
+
+                {!useBusinessAddressForPickup && (
+                  <PhotographyLocationPicker
+                    compact
+                    value={pickupLatitude !== '' && pickupLongitude !== '' ? { address: pickupAddressLine, latitude: Number(pickupLatitude), longitude: Number(pickupLongitude) } : null}
+                    onSelect={(location) => {
+                      setPickupAddressLine(location.address);
+                      setPickupLatitude(location.latitude.toString());
+                      setPickupLongitude(location.longitude.toString());
+                    }}
+                    title="Điểm nhận và trả áo dài riêng"
+                    hint="Tìm địa chỉ hoặc kéo pin trên bản đồ để khách hàng biết nơi đến nhận và trả đồ."
+                  />
+                )}
+              </div>
             </div>
           </section>}
 

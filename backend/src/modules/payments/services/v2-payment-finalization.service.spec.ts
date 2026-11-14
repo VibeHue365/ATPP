@@ -34,6 +34,7 @@ describe('V2PaymentFinalizationService unit tests', () => {
   let mockPreparation: any;
   let mockSnapshots: any;
   let mockTemplates: any;
+  let mockLeases: any;
   let mockSession: any;
 
   let service: V2PaymentFinalizationService;
@@ -86,6 +87,16 @@ describe('V2PaymentFinalizationService unit tests', () => {
       getApproved: jest.fn().mockReturnValue({ templateId: 'v1', version: 1, text: 'Sample policy' }),
     };
 
+    mockLeases = {
+      find: jest.fn().mockReturnValue({
+        session: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([]),
+        }),
+      }),
+      updateMany: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+      countDocuments: jest.fn().mockReturnValue({ session: jest.fn().mockResolvedValue(0) }),
+    };
+
     service = new V2PaymentFinalizationService(
       enabled,
       mockBookings,
@@ -106,6 +117,7 @@ describe('V2PaymentFinalizationService unit tests', () => {
       mockPreparation,
       mockSnapshots,
       mockTemplates,
+      mockLeases,
     );
   });
 
@@ -116,6 +128,7 @@ describe('V2PaymentFinalizationService unit tests', () => {
       mockRecoveries, mockEscrows, mockNotifications, mockContracts, mockVersions,
       mockConsents, mockPhotoHolds, mockPromotions, mockRecoveryService,
       mockContractPolicy, mockPreparation, mockSnapshots, mockTemplates,
+      mockLeases,
     );
     expect(await disabledService.processDue()).toBe(0);
     expect(mockRecoveries.find).not.toHaveBeenCalled();
@@ -678,6 +691,7 @@ describe('V2PaymentFinalizationService unit tests', () => {
       mockPreparation,
       mockSnapshots,
       mockTemplates,
+      mockLeases,
       mockEvidence as any,
     );
 
