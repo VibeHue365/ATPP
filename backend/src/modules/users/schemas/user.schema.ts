@@ -95,6 +95,12 @@ export interface UserNotificationPreferences {
   appPush: boolean;
 }
 
+export interface UserPushToken {
+  token: string;
+  platform: 'android' | 'ios';
+  updatedAt: Date;
+}
+
 export interface UserAddress {
   label: string;
   recipientName?: string | null;
@@ -212,7 +218,11 @@ export class User {
         hip: { type: Number, min: 1, max: 300, default: null },
         shoulder: { type: Number, min: 1, max: 300, default: null },
         bicep: { type: Number, min: 1, max: 300, default: null },
-        fitPreference: { type: String, enum: ['SLIM', 'REGULAR', 'COMFORT', null], default: null },
+        fitPreference: {
+          type: String,
+          enum: ['SLIM', 'REGULAR', 'COMFORT', null],
+          default: null,
+        },
       },
       budgetRange: {
         min: { type: Number, default: null },
@@ -234,6 +244,19 @@ export class User {
     default: { marketingEmail: true, appPush: true },
   })
   notificationPreferences: UserNotificationPreferences;
+
+  @Prop({
+    type: [
+      {
+        _id: false,
+        token: { type: String, required: true },
+        platform: { type: String, enum: ['android', 'ios'], required: true },
+        updatedAt: { type: Date, default: Date.now },
+      },
+    ],
+    default: [],
+  })
+  pushTokens: UserPushToken[];
 
   @Prop({
     type: [

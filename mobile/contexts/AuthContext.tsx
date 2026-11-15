@@ -6,20 +6,21 @@ import {
   useMemo,
   useState,
   type PropsWithChildren,
-} from 'react';
-import { AxiosError } from 'axios';
-import { authApi } from '@/apis/authApi';
-import { appStorage, tokenStorage } from '@/utils/storage';
+} from "react";
+import { AxiosError } from "axios";
+import { authApi } from "@/apis/authApi";
+import { appStorage, tokenStorage } from "@/utils/storage";
 import {
   mapSessionUser,
   type LoginPayload,
   type SessionUser,
   type UserFavorite,
-} from '@/types/auth';
-import { authEvents } from '@/services/authEvents';
-import { userApi } from '@/apis/userApi';
+} from "@/types/auth";
+import { authEvents } from "@/services/authEvents";
+import { userApi } from "@/apis/userApi";
+import { unregisterCurrentDeviceFromPush } from "@/services/pushNotifications";
 
-const USER_KEY = 'vh_session_user';
+const USER_KEY = "vh_session_user";
 
 interface AuthValue {
   user: SessionUser | null;
@@ -30,8 +31,8 @@ interface AuthValue {
   loginWithOAuthCode: (code: string) => Promise<SessionUser>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
-  toggleFavorite: (type: 'PRODUCT' | 'PROVIDER', id: string) => Promise<void>;
-  isFavorite: (type: 'PRODUCT' | 'PROVIDER', id: string) => boolean;
+  toggleFavorite: (type: "PRODUCT" | "PROVIDER", id: string) => Promise<void>;
+  isFavorite: (type: "PRODUCT" | "PROVIDER", id: string) => boolean;
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -125,44 +126,54 @@ export function AuthProvider({ children }: PropsWithChildren) {
       authEvents.subscribe(() => {
         void saveUser(null);
       }),
-    [saveUser]
+    [saveUser],
   );
 
   const login = useCallback(
     async (payload: LoginPayload) => {
       const response = await authApi.login(payload);
-      await tokenStorage.replaceTokens(response.accessToken, response.refreshToken);
+      await tokenStorage.replaceTokens(
+        response.accessToken,
+        response.refreshToken,
+      );
       const next = mapSessionUser(response.user, response.roles);
       await saveUser(next);
       return next;
     },
-    [saveUser]
+    [saveUser],
   );
 
   const loginWithGoogle = useCallback(
     async (idToken: string) => {
       const response = await authApi.loginGoogleMobile(idToken);
-      await tokenStorage.replaceTokens(response.accessToken, response.refreshToken);
+      await tokenStorage.replaceTokens(
+        response.accessToken,
+        response.refreshToken,
+      );
       const next = mapSessionUser(response.user, response.roles);
       await saveUser(next);
       return next;
     },
-    [saveUser]
+    [saveUser],
   );
 
   const loginWithOAuthCode = useCallback(
     async (code: string) => {
       const response = await authApi.exchangeOAuthCode(code);
-      await tokenStorage.replaceTokens(response.accessToken, response.refreshToken);
+      await tokenStorage.replaceTokens(
+        response.accessToken,
+        response.refreshToken,
+      );
       const next = mapSessionUser(response.user, response.roles);
       await saveUser(next);
       return next;
     },
-    [saveUser]
+    [saveUser],
   );
 
   const logout = useCallback(async () => {
     try {
+      await unregisterCurrentDeviceFromPush();
       await authApi.logout();
     } catch {
       // ignore logout network errors
@@ -173,19 +184,21 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [saveUser]);
 
   const toggleFavorite = useCallback(
-    async (type: 'PRODUCT' | 'PROVIDER', id: string) => {
+    async (type: "PRODUCT" | "PROVIDER", id: string) => {
       const updated = await userApi.toggleFavorite(type, id);
       await saveUser(mapSessionUser(updated, updated.roles));
     },
-    [saveUser]
+    [saveUser],
   );
 
   const isFavorite = useCallback(
-    (type: 'PRODUCT' | 'PROVIDER', id: string) =>
+    (type: "PRODUCT" | "PROVIDER", id: string) =>
       (user?.favorites as UserFavorite[] | undefined)?.some(
-        (item) => item.targetType.toUpperCase() === type && String(item.targetId) === id
+        (item) =>
+          item.targetType.toUpperCase() === type &&
+          String(item.targetId) === id,
       ) ?? false,
-    [user]
+    [user],
   );
 
   const value = useMemo(
@@ -211,7 +224,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       refreshUser,
       toggleFavorite,
       isFavorite,
-    ]
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -219,6 +232,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
 export function useAuth() {
   const value = useContext(AuthContext);
-  if (!value) throw new Error('useAuth must be used inside AuthProvider');
+  if (!value) throw new Error("useAuth must be used inside AuthProvider");
   return value;
 }

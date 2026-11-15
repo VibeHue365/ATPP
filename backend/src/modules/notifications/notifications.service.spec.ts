@@ -14,7 +14,9 @@ describe('NotificationsService', () => {
     };
   }
 
-  function create(options: { email?: string; sockets?: string[] } = {}) {
+  function create(
+    options: { email?: string; sockets?: string[]; pushToken?: string } = {},
+  ) {
     const saved = { _id: notificationId, title: 'Booking confirmed' };
     const notificationModel = Object.assign(
       jest.fn().mockImplementation(() => ({
@@ -27,11 +29,19 @@ describe('NotificationsService', () => {
       },
     );
     const userModel = {
-      findById: jest
-        .fn()
-        .mockResolvedValue(
-          options.email ? { auth: { email: options.email } } : null,
-        ),
+      findById: jest.fn().mockResolvedValue(
+        options.email || options.pushToken
+          ? {
+              _id: userId,
+              auth: { email: options.email },
+              pushTokens: options.pushToken
+                ? [{ token: options.pushToken, platform: 'android' }]
+                : [],
+            }
+          : null,
+      ),
+      updateMany: jest.fn().mockReturnValue(executable({ modifiedCount: 1 })),
+      updateOne: jest.fn().mockReturnValue(executable({ modifiedCount: 1 })),
     };
     const mailService = { sendMail: jest.fn().mockResolvedValue(undefined) };
     const emit = jest.fn();
@@ -50,6 +60,7 @@ describe('NotificationsService', () => {
         chatGateway as never,
       ),
       notificationModel,
+      userModel,
       mailService,
       chatGateway,
       emit,
@@ -88,6 +99,56 @@ describe('NotificationsService', () => {
     await expect(service.markAllAsRead(userId.toString())).resolves.toEqual({
       modifiedCount: 3,
     });
+  });
+
+  it('moves a device token to the currently authenticated user', async () => {
+    const { service, userModel } = create();
+    await service.registerPushToken(
+      userId.toString(),
+      'ExpoPushToken[token-1]',
+      'android',
+    );
+    expect(userModel.updateMany).toHaveBeenCalledWith(
+      {},
+      { $pull: { pushTokens: { token: 'ExpoPushToken[token-1]' } } },
+    );
+    expect(userModel.updateOne).toHaveBeenCalledWith(
+      { _id: userId },
+      {
+        $push: {
+          pushTokens: expect.objectContaining({
+            token: 'ExpoPushToken[token-1]',
+            platform: 'android',
+          }),
+        },
+      },
+    );
+  });
+
+  it('sends an Expo push notification with navigation metadata', async () => {
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ data: [{ status: 'ok', id: 'ticket-1' }] }),
+          { status: 200 },
+        ),
+      );
+    const { service, saved } = create({ pushToken: 'ExpoPushToken[token-1]' });
+    await expect(
+      service.createNotification(
+        userId.toString(),
+        'Booking confirmed',
+        'Your booking is ready.',
+        NotificationType.Booking,
+        { bookingId: 'booking-1' },
+      ),
+    ).resolves.toBe(saved);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://exp.host/--/api/v2/push/send',
+      expect.objectContaining({ body: expect.stringContaining('booking-1') }),
+    );
+    fetchMock.mockRestore();
   });
 
   it('persists, emails and emits a new notification to every active socket', async () => {
