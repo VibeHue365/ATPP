@@ -20,6 +20,8 @@ import {
   resolveEntityCoords,
 } from '@/utils/geo';
 import { getMediaUrl } from '@/utils/media';
+import { BookingFlowStepper } from '@/components/booking/BookingFlowStepper';
+import { BookingContractsSection } from '@/components/contracts/BookingContractsSection';
 
 interface OrderDetailModalProps {
   visible: boolean;
@@ -159,88 +161,11 @@ export function OrderDetailModal({
             contentContainerStyle={styles.scrollBody}
           >
             {/* Status Timeline Stepper */}
-            <View style={styles.stepperBox}>
-              <Text style={styles.sectionHeading}>TIẾN TRÌNH ĐƠN HÀNG</Text>
-              <View style={styles.stepperRow}>
-                <View style={styles.stepItem}>
-                  <View style={[styles.stepDot, styles.stepDotDone]}>
-                    <Ionicons name="checkmark" size={12} color="#FFFFFF" />
-                  </View>
-                  <Text style={styles.stepLabel}>Xác nhận</Text>
-                </View>
-                <View
-                  style={[
-                    styles.stepLine,
-                    status !== 'CONFIRMED' && styles.stepLineActive,
-                  ]}
-                />
-                <View style={styles.stepItem}>
-                  <View
-                    style={[
-                      styles.stepDot,
-                      (status === 'PICKUP_PENDING' ||
-                        status === 'PICKED_UP' ||
-                        status === 'RETURN_PENDING' ||
-                        status === 'RETURNED' ||
-                        status === 'COMPLETED') &&
-                        styles.stepDotDone,
-                    ]}
-                  >
-                    <Text style={styles.stepNum}>2</Text>
-                  </View>
-                  <Text style={styles.stepLabel}>Sẵn sàng</Text>
-                </View>
-                <View
-                  style={[
-                    styles.stepLine,
-                    (status === 'PICKED_UP' ||
-                      status === 'RETURN_PENDING' ||
-                      status === 'RETURNED' ||
-                      status === 'COMPLETED') &&
-                      styles.stepLineActive,
-                  ]}
-                />
-                <View style={styles.stepItem}>
-                  <View
-                    style={[
-                      styles.stepDot,
-                      (status === 'PICKED_UP' ||
-                        status === 'RETURN_PENDING' ||
-                        status === 'RETURNED' ||
-                        status === 'COMPLETED') &&
-                        styles.stepDotDone,
-                    ]}
-                  >
-                    <Text style={styles.stepNum}>3</Text>
-                  </View>
-                  <Text style={styles.stepLabel}>Đang thuê</Text>
-                </View>
-                <View
-                  style={[
-                    styles.stepLine,
-                    (status === 'RETURN_PENDING' ||
-                      status === 'RETURNED' ||
-                      status === 'COMPLETED') &&
-                      styles.stepLineActive,
-                  ]}
-                />
-                <View style={styles.stepItem}>
-                  <View
-                    style={[
-                      styles.stepDot,
-                      status === 'COMPLETED'
-                        ? styles.stepDotDone
-                        : status === 'RETURN_PENDING'
-                        ? styles.stepDotAmber
-                        : styles.stepDotPending,
-                    ]}
-                  >
-                    <Text style={styles.stepNum}>4</Text>
-                  </View>
-                  <Text style={styles.stepLabel}>Hoàn cọc</Text>
-                </View>
-              </View>
-            </View>
+            <BookingFlowStepper
+              bookingType={order.bookingType || (isRental ? 'AODAI_RENTAL' : 'PHOTOGRAPHY')}
+              status={status}
+              variant="provider"
+            />
 
             {/* Customer Contact Box */}
             <View style={styles.cardBox}>
@@ -449,6 +374,42 @@ export function OrderDetailModal({
                 </View>
               </View>
             </View>
+
+            {/* Handover photos preview if uploaded */}
+            {Array.isArray(order.handoverPhotos) &&
+              order.handoverPhotos.filter(Boolean).length > 0 && (
+                <View style={styles.cardBox}>
+                  <Text style={styles.sectionHeading}>
+                    ẢNH BÀN GIAO HIỆN TRẠNG ({order.handoverPhotos.filter(Boolean).length})
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.handoverGalleryRow}
+                  >
+                    {order.handoverPhotos
+                      .filter(Boolean)
+                      .map((uri: string, idx: number) => (
+                        <Image
+                          key={`${uri}-${idx}`}
+                          source={getMediaUrl(uri)}
+                          style={styles.handoverPhotoThumb}
+                          contentFit="cover"
+                        />
+                      ))}
+                  </ScrollView>
+                </View>
+              )}
+
+            {/* E-Contract V2 Read-only view for Provider */}
+            {(isRental || order.contractFlowVersion === 2) && order._id && (
+              <BookingContractsSection
+                bookingId={order._id}
+                bookingStatus={status}
+                contractFlowVersion={order.contractFlowVersion}
+                viewerRole="provider"
+              />
+            )}
           </ScrollView>
 
           {/* Bottom Sticky Action Bar (100% Web-synced State Machine) */}
@@ -478,21 +439,12 @@ export function OrderDetailModal({
                     styles.primaryBtn,
                     pressed && styles.pressed,
                   ]}
-                  onPress={() => {
-                    if (isRental && status === 'DEPOSIT_PAID' && onOpenWorkflowModal) {
-                      onClose();
-                      onOpenWorkflowModal(order, 'HANDOVER');
-                    } else {
-                      onAction(order, 'CONFIRMED');
-                    }
-                  }}
+                  onPress={() => onAction(order, 'CONFIRMED')}
                   disabled={actionLoading}
                 >
                   <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
                   <Text style={styles.primaryBtnText}>
-                    {isRental && status === 'DEPOSIT_PAID'
-                      ? 'Bàn giao trang phục'
-                      : 'Xác nhận đơn'}
+                    {isRental ? 'Xác nhận & Chuẩn bị đồ' : 'Xác nhận đơn'}
                   </Text>
                 </Pressable>
               </View>
@@ -1200,5 +1152,15 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontFamily: 'Inter_700Bold',
     color: '#FFFFFF',
+  },
+  handoverGalleryRow: {
+    gap: 8,
+    paddingTop: 4,
+  },
+  handoverPhotoThumb: {
+    width: 88,
+    height: 88,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
   },
 });

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router, type Href } from 'expo-router';
+import {
+  router,
+  useFocusEffect,
+  useLocalSearchParams,
+  type Href,
+} from 'expo-router';
 import { providerApi } from '@/apis/providerApi';
 import { useToast } from '@/contexts/ToastContext';
 import { useNotifications } from '@/contexts/NotificationContext';
@@ -33,7 +38,11 @@ import {
 
 export default function ProviderOrdersScreen() {
   const { show } = useToast();
-  const { unreadCount } = useNotifications();
+  const { bookingId: routeBookingId } = useLocalSearchParams<{
+    bookingId?: string;
+  }>();
+  const { unreadCount, bookingSyncVersion, bumpBookingSync, pushLocalBanner } =
+    useNotifications();
 
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,23 +56,60 @@ export default function ProviderOrdersScreen() {
   const [refundModalVisible, setRefundModalVisible] = useState(false);
   const [workflowMode, setWorkflowMode] = useState<ProviderWorkflowMode>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const handledDeepLinkRef = useRef<string | null>(null);
 
   // Fetch orders from backend
-  const loadOrders = useCallback(async () => {
-    try {
-      const data = await providerApi.getBookings();
-      setOrders(Array.isArray(data) ? data : []);
-    } catch {
-      show('Không thể tải danh sách đơn hàng', 'error');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [show]);
+  const loadOrders = useCallback(
+    async (silent = false) => {
+      try {
+        const data = await providerApi.getBookings();
+        const nextList = Array.isArray(data) ? data : [];
+        setOrders(nextList);
+        setSelectedOrder((prev: any) =>
+          prev?._id
+            ? nextList.find((o) => o._id === prev._id) ?? prev
+            : prev,
+        );
+      } catch {
+        if (!silent) show('Không thể tải danh sách đơn hàng', 'error');
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [show],
+  );
 
   useEffect(() => {
     void loadOrders();
   }, [loadOrders]);
+
+  useEffect(() => {
+    if (bookingSyncVersion > 0) {
+      void loadOrders(true);
+    }
+  }, [bookingSyncVersion, loadOrders]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadOrders(true);
+      const timer = setInterval(() => {
+        void loadOrders(true);
+      }, 6000);
+      return () => clearInterval(timer);
+    }, [loadOrders]),
+  );
+
+  useEffect(() => {
+    if (!routeBookingId || orders.length === 0) return;
+    if (handledDeepLinkRef.current === routeBookingId) return;
+    const match = orders.find((o) => o._id === routeBookingId);
+    if (match) {
+      handledDeepLinkRef.current = routeBookingId;
+      setSelectedOrder(match);
+      setDetailModalVisible(true);
+    }
+  }, [routeBookingId, orders]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -80,10 +126,19 @@ export default function ProviderOrdersScreen() {
 
     orders.forEach((o) => {
       const s = o.status || 'CONFIRMED';
-      if (s === 'RETURN_PENDING' || s === 'RETURNED' || s === 'PICKUP_PENDING') {
+      if (
+        s === 'RETURN_PENDING' ||
+        s === 'RETURNED' ||
+        s === 'PICKUP_PENDING' ||
+        s === 'DEPOSIT_PAID'
+      ) {
         urgent++;
       }
-      if (s === 'PICKUP_PENDING' || s === 'CONFIRMED') {
+      if (
+        s === 'PICKUP_PENDING' ||
+        s === 'CONFIRMED' ||
+        s === 'DEPOSIT_PAID'
+      ) {
         pickup++;
       }
       if (s === 'PICKED_UP' || s === 'IN_PROGRESS') {
@@ -114,11 +169,20 @@ export default function ProviderOrdersScreen() {
 
       // 1. Filter Tab match
       if (activeFilter === 'urgent') {
-        if (s !== 'RETURN_PENDING' && s !== 'RETURNED' && s !== 'PICKUP_PENDING') {
+        if (
+          s !== 'RETURN_PENDING' &&
+          s !== 'RETURNED' &&
+          s !== 'PICKUP_PENDING' &&
+          s !== 'DEPOSIT_PAID'
+        ) {
           return false;
         }
       } else if (activeFilter === 'pickup') {
-        if (s !== 'PICKUP_PENDING' && s !== 'CONFIRMED') {
+        if (
+          s !== 'PICKUP_PENDING' &&
+          s !== 'CONFIRMED' &&
+          s !== 'DEPOSIT_PAID'
+        ) {
           return false;
         }
       } else if (activeFilter === 'rented') {
@@ -137,8 +201,8 @@ export default function ProviderOrdersScreen() {
 
       // 2. Search Query match
       if (searchQuery.trim()) {
-        const query = searchQuery.trim().toLowerCase();
-        const code = (o.bookingCode || o._id || '').toLowerCase();
+        const query = searchQuery.trim().toLowerCase().replace(/^#/, '');
+        const code = `${o.bookingCode || ''} ${o._id || ''} ${o._id ? o._id.slice(-6) : ''}`.toLowerCase();
         const custName = (
           o.customerId?.profile?.fullName ||
           o.contactInfo?.fullName ||
@@ -152,6 +216,7 @@ export default function ProviderOrdersScreen() {
         const firstItemName = (
           o.items?.[0]?.name ||
           o.items?.[0]?.productName ||
+          o.items?.[0]?.photographyPackageId?.name ||
           ''
         ).toLowerCase();
 
@@ -170,10 +235,11 @@ export default function ProviderOrdersScreen() {
           case 'RETURN_PENDING':
           case 'RETURNED':
             return 1; // Cần kiểm tra & hoàn cọc ngay
+          case 'DEPOSIT_PAID':
           case 'PICKUP_PENDING':
           case 'CONFIRMED':
           case 'PENDING':
-            return 2; // Chờ chuẩn bị & giao đồ
+            return 2; // Chờ duyệt / chuẩn bị & giao đồ
           case 'PICKED_UP':
           case 'IN_PROGRESS':
             return 3; // Đang thuê
@@ -207,12 +273,13 @@ export default function ProviderOrdersScreen() {
         ));
 
     if (s === 'DEPOSIT_PAID' || s === 'PENDING' || s === 'PENDING_PAYMENT') {
-      if (isPhoto) {
-        void handleStatusChange(order, 'CONFIRMED', 'Đã chấp nhận lịch chụp');
-      } else {
-        setSelectedOrder(order);
-        setWorkflowMode('HANDOVER');
-      }
+      void handleStatusChange(
+        order,
+        'CONFIRMED',
+        isPhoto
+          ? 'Đã chấp nhận lịch chụp'
+          : 'Đã xác nhận đơn và bắt đầu chuẩn bị cổ phục',
+      );
     } else if (s === 'CONFIRMED') {
       if (isPhoto) {
         void handleStatusChange(order, 'IN_PROGRESS', 'Bắt đầu buổi chụp');
@@ -293,9 +360,16 @@ export default function ProviderOrdersScreen() {
     setActionLoading(true);
     try {
       await providerApi.updateBookingStatus(order._id, nextStatus, note);
+      bumpBookingSync();
+      pushLocalBanner({
+        title: `Đã cập nhật đơn #${order.bookingCode || ''}`,
+        content: note || `Đơn hàng đã chuyển sang trạng thái ${nextStatus}.`,
+        type: 'BOOKING_UPDATED',
+        metadata: { bookingId: order._id, status: nextStatus },
+      });
       show(`Đã cập nhật trạng thái đơn #${order.bookingCode || ''}!`, 'success');
       setDetailModalVisible(false);
-      void loadOrders();
+      void loadOrders(true);
     } catch {
       show('Không thể cập nhật trạng thái đơn hàng', 'error');
     } finally {
@@ -314,9 +388,16 @@ export default function ProviderOrdersScreen() {
         'Đã kiểm tra áo nguyên vẹn & giải ngân tiền cọc',
       );
       show('Đã hoàn cọc và hoàn tất đơn hàng thành công!', 'success');
+      bumpBookingSync();
+      pushLocalBanner({
+        title: `Đã hoàn tất & giải phóng cọc #${selectedOrder.bookingCode || ''}`,
+        content: 'Giao dịch đối soát Escrow đã được hoàn thành.',
+        type: 'ESCROW_RELEASED',
+        metadata: { bookingId: selectedOrder._id, status: 'COMPLETED' },
+      });
       setRefundModalVisible(false);
       setSelectedOrder(null);
-      void loadOrders();
+      void loadOrders(true);
     } catch {
       show('Lỗi khi giải ngân tiền cọc', 'error');
     } finally {
@@ -498,7 +579,8 @@ export default function ProviderOrdersScreen() {
         onClose={() => setWorkflowMode(null)}
         onSuccess={() => {
           setWorkflowMode(null);
-          void loadOrders();
+          bumpBookingSync();
+          void loadOrders(true);
         }}
       />
     </SafeAreaView>

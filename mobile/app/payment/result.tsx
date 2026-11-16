@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { type Href, router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { checkoutApi } from '@/apis/checkoutApi';
 import { AppButton } from '@/components/ui/AppButton';
 import { Colors, FontFamily, Shadow } from '@/constants/theme';
 import { useCart } from '@/contexts/CartContext';
+import { useNotifications } from '@/contexts/NotificationContext';
 import { pendingCheckoutStorage } from '@/services/pendingCheckout';
 import type { PaymentStatusResponse } from '@/types/checkout';
 import { getApiErrorMessage } from '@/utils/apiError';
@@ -17,6 +18,8 @@ type ViewState = 'PENDING' | 'SUCCESS' | 'FAILED' | 'EXPIRED' | 'ERROR';
 export default function PaymentResultScreen() {
   const { code = '' } = useLocalSearchParams<{ code?: string }>();
   const { removeItem } = useCart();
+  const { reload: reloadNotifications, bumpBookingSync, pushLocalBanner } = useNotifications();
+  const notifiedRef = useRef(false);
   const [state, setState] = useState<ViewState>('PENDING');
   const [message, setMessage] = useState('Hệ thống đang xác minh giao dịch thanh toán của bạn.');
   const [result, setResult] = useState<PaymentStatusResponse | null>(null);
@@ -39,8 +42,19 @@ export default function PaymentResultScreen() {
         await pendingCheckoutStorage.remove(code);
         setState('SUCCESS');
         setMessage(
-          'Vé điện tử và lịch hẹn của bạn đã được kích hoạt. Bạn có thể xuất trình mã QR tại tiệm để nhận đồ.'
+          'Vé điện tử và Hợp đồng điện tử của bạn đã có hiệu lực. Bạn có thể xuất trình mã QR tại tiệm để nhận đồ.'
         );
+        if (!notifiedRef.current) {
+          notifiedRef.current = true;
+          bumpBookingSync();
+          void reloadNotifications(true);
+          pushLocalBanner({
+            title: 'Thanh toán & Hợp đồng có hiệu lực',
+            content: 'Đơn hàng đã được xác nhận, tiền cọc được bảo vệ Escrow và đang tạo bản PDF hợp đồng.',
+            type: 'PAYMENT',
+            metadata: data.bookingId ? { bookingId: data.bookingId } : { paymentCode: code },
+          });
+        }
         return true;
       }
       if (data.bookingStatus === 'CANCELLED' && data.paymentStatus === 'PENDING') {

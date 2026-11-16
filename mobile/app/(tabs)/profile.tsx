@@ -351,6 +351,12 @@ function Profile() {
             onPress={() => router.push('/chat' as Href)}
           />
           <MenuRow
+            icon="document-text-outline"
+            label="Hợp đồng điện tử của tôi"
+            subtitle="Xem hợp đồng đã ký, bản PDF & cam kết thuê đồ"
+            onPress={() => router.push('/contracts' as Href)}
+          />
+          <MenuRow
             icon="card-outline"
             label="Lịch sử giao dịch & Hoàn tiền"
             subtitle="Biên lai thanh toán PayOS và đối soát cọc Escrow"

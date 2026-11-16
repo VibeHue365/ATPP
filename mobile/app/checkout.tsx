@@ -15,7 +15,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { checkoutApi } from '@/apis/checkoutApi';
+import { contractApi } from '@/apis/contractApi';
 import { productApi } from '@/apis/productApi';
+import { ContractReviewModal } from '@/components/contracts/ContractReviewModal';
+import type { ContractEligibilityResponse } from '@/types/contract';
 import {
   promotionApi,
   type AppliedPromotion,
@@ -80,9 +83,67 @@ function CheckoutScreen() {
   const [availableVouchers, setAvailableVouchers] = useState<PublicPromotion[]>([]);
   const [agreed, setAgreed] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [eligibility, setEligibility] = useState<ContractEligibilityResponse | null>(null);
+  const [pendingContractOrder, setPendingContractOrder] = useState<{
+    bookingId: string;
+    purpose: 'FULL_PAYMENT' | 'DEPOSIT_PAYMENT';
+    holdExpiresAt: string | null;
+    signature: string;
+  } | null>(null);
+  const [contractModalOpen, setContractModalOpen] = useState(false);
 
   const rentals = selected.filter((item) => item.itemType === 'PRODUCT');
   const photos = selected.filter((item) => item.itemType === 'PHOTOGRAPHY_PACKAGE');
+
+  const cartSignature = useMemo(
+    () =>
+      `${selected
+        .map(
+          (item) =>
+            `${item.id}:${item.quantity}:${item.rentalFrom || ''}:${item.rentalTo || ''}`,
+        )
+        .join('|')}::${appliedPromo?.code || ''}::${note.trim()}`,
+    [selected, appliedPromo?.code, note],
+  );
+
+  useEffect(() => {
+    if (
+      pendingContractOrder &&
+      pendingContractOrder.signature !== cartSignature
+    ) {
+      setPendingContractOrder(null);
+    }
+  }, [cartSignature, pendingContractOrder]);
+
+  useEffect(() => {
+    const rentalCheckItems = rentals
+      .filter((item): item is CartItem & { productId: string } =>
+        Boolean(item.productId),
+      )
+      .map((item) => ({
+        productId: item.productId,
+        providerId:
+          typeof item.metadata?.providerId === 'string'
+            ? item.metadata.providerId
+            : undefined,
+      }));
+    if (rentalCheckItems.length === 0) {
+      setEligibility(null);
+      return;
+    }
+    let cancelled = false;
+    void contractApi
+      .checkEligibility(rentalCheckItems)
+      .then((res) => {
+        if (!cancelled) setEligibility(res);
+      })
+      .catch(() => {
+        if (!cancelled) setEligibility(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [rentals.length, cartSignature]);
 
   const providerIds = useMemo(
     () => [
@@ -227,25 +288,86 @@ function CheckoutScreen() {
       );
       let bookingId: string;
       let purpose: 'FULL_PAYMENT' | 'DEPOSIT_PAYMENT' = 'FULL_PAYMENT';
-      if (photos.length) {
-        const rawPhoto = photos[0];
-        const photo: CartItem = {
-          ...rawPhoto,
-          shootLocationLatitude: Number.isFinite(rawPhoto.shootLocationLatitude)
-            ? rawPhoto.shootLocationLatitude
-            : 16.4698,
-          shootLocationLongitude: Number.isFinite(rawPhoto.shootLocationLongitude)
-            ? rawPhoto.shootLocationLongitude
-            : 107.5786,
-          customRequests: note.trim() || rawPhoto.customRequests,
-        };
-        const hold = await checkoutApi.createPhotographyHold(photo, rentals, appliedPromo?.code);
-        bookingId = hold.bookingId;
-        purpose = 'DEPOSIT_PAYMENT';
+      let holdExpiresAt: string | null = null;
+
+      if (
+        pendingContractOrder &&
+        pendingContractOrder.signature === cartSignature
+      ) {
+        bookingId = pendingContractOrder.bookingId;
+        purpose = pendingContractOrder.purpose;
+        holdExpiresAt = pendingContractOrder.holdExpiresAt;
       } else {
-        const booking = await checkoutApi.createRentalBooking(rentals, appliedPromo?.code);
-        bookingId = booking._id;
+        if (rentals.length > 0) {
+          const checkItems = rentals
+            .filter((item): item is CartItem & { productId: string } =>
+              Boolean(item.productId),
+            )
+            .map((item) => ({
+              productId: item.productId,
+              providerId:
+                typeof item.metadata?.providerId === 'string'
+                  ? item.metadata.providerId
+                  : undefined,
+            }));
+          if (checkItems.length > 0) {
+            const elig = await contractApi
+              .checkEligibility(checkItems)
+              .catch(() => null);
+            if (elig && !elig.eligible && elig.ineligibleItems?.length) {
+              throw new Error(elig.ineligibleItems[0].message);
+            }
+          }
+        }
+
+        if (photos.length) {
+          const rawPhoto = photos[0];
+          const photo: CartItem = {
+            ...rawPhoto,
+            shootLocationLatitude: Number.isFinite(rawPhoto.shootLocationLatitude)
+              ? rawPhoto.shootLocationLatitude
+              : 16.4698,
+            shootLocationLongitude: Number.isFinite(rawPhoto.shootLocationLongitude)
+              ? rawPhoto.shootLocationLongitude
+              : 107.5786,
+            customRequests: note.trim() || rawPhoto.customRequests,
+          };
+          const hold = await checkoutApi.createPhotographyHold(photo, rentals, appliedPromo?.code);
+          bookingId = hold.bookingId;
+          purpose = 'DEPOSIT_PAYMENT';
+          const holdMeta = hold as unknown as { holdExpiresAt?: unknown };
+          holdExpiresAt =
+            typeof holdMeta.holdExpiresAt === 'string'
+              ? holdMeta.holdExpiresAt
+              : null;
+        } else {
+          const booking = await checkoutApi.createRentalBooking(rentals, appliedPromo?.code);
+          bookingId = booking._id;
+          const bookingMeta = booking as unknown as { holdExpiresAt?: unknown };
+          holdExpiresAt =
+            typeof bookingMeta.holdExpiresAt === 'string'
+              ? bookingMeta.holdExpiresAt
+              : null;
+        }
+
+        setPendingContractOrder({
+          bookingId,
+          purpose,
+          holdExpiresAt,
+          signature: cartSignature,
+        });
       }
+
+      if (rentals.length > 0) {
+        const readiness = await contractApi
+          .getBookingReadiness(bookingId)
+          .catch(() => null);
+        if (readiness && readiness.requirement === 'REQUIRED' && !readiness.ready) {
+          setContractModalOpen(true);
+          return;
+        }
+      }
+
       const payment = await checkoutApi.createPaymentLink(bookingId, purpose);
       if (!payment.paymentCode) throw new Error('Hệ thống chưa tạo được mã thanh toán.');
       const checkoutUrl = payment.payos?.checkoutUrl ?? null;
@@ -484,6 +606,24 @@ function CheckoutScreen() {
           />
         </Section>
 
+        {rentals.length > 0 && eligibility && !eligibility.eligible && eligibility.ineligibleItems?.length > 0 && (
+          <View style={styles.contractBlockerBox}>
+            <Ionicons name="alert-circle" size={18} color={Colors.error} />
+            <Text style={styles.contractBlockerText}>
+              {eligibility.ineligibleItems[0].message}
+            </Text>
+          </View>
+        )}
+
+        {rentals.length > 0 && eligibility?.flow === 'CONTRACT_V2' && (
+          <View style={styles.contractInfoBox}>
+            <Ionicons name="document-text-outline" size={18} color={Colors.primary} />
+            <Text style={styles.contractInfoText}>
+              Đơn thuê này áp dụng Hợp đồng điện tử V2. Khi bấm Thanh toán, hệ thống sẽ mở hợp đồng để bạn xem và xác nhận trước khi chuyển qua PayOS.
+            </Text>
+          </View>
+        )}
+
         <Pressable style={styles.agreement} onPress={() => setAgreed((value) => !value)}>
           <View style={[styles.checkbox, agreed && styles.checkboxActive]}>
             {agreed && <Ionicons name="checkmark" size={14} color={Colors.white} />}
@@ -580,6 +720,21 @@ function CheckoutScreen() {
           </View>
         </View>
       </Modal>
+
+      <ContractReviewModal
+        visible={contractModalOpen}
+        bookingId={pendingContractOrder?.bookingId ?? null}
+        holdExpiresAt={pendingContractOrder?.holdExpiresAt ?? null}
+        onClose={() => setContractModalOpen(false)}
+        onReadyToPay={() => {
+          setContractModalOpen(false);
+          void submit();
+        }}
+        onDeclinedOrCancelled={() => {
+          setContractModalOpen(false);
+          setPendingContractOrder(null);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -1067,5 +1222,39 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bodyBold,
     fontSize: 11,
     color: '#FFFFFF',
+  },
+  contractInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#FFF0F3',
+    borderWidth: 1,
+    borderColor: '#FAD1DF',
+    borderRadius: 14,
+    padding: 12,
+  },
+  contractInfoText: {
+    flex: 1,
+    fontFamily: FontFamily.body,
+    fontSize: 11.5,
+    lineHeight: 17,
+    color: '#5F5E5E',
+  },
+  contractBlockerBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 14,
+    padding: 12,
+  },
+  contractBlockerText: {
+    flex: 1,
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: 11.5,
+    lineHeight: 17,
+    color: Colors.error,
   },
 });

@@ -13,6 +13,7 @@ import { CartProvider } from '@/contexts/CartContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
 import { DestinationProvider } from '@/contexts/DestinationContext';
 import { DestinationPickerModal } from '@/components/destination/DestinationPickerModal';
+import { InAppNotificationBanner } from '@/components/ui/InAppNotificationBanner';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { SocketProvider } from '@/contexts/SocketContext';
 import { configureGoogleSignIn } from '@/services/googleAuth';
@@ -75,6 +76,7 @@ export default function RootLayout() {
               <DestinationProvider>
                 <RootNavigator fontsReady={fontsReady} />
                 <DestinationPickerModal />
+                <InAppNotificationBanner />
               </DestinationProvider>
             </NotificationProvider>
           </CartProvider>

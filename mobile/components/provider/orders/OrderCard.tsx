@@ -20,9 +20,10 @@ export function OrderCard({
   onPressSecondaryAction,
   onOpenChat,
 }: OrderCardProps) {
-  const orderCode =
-    order.bookingCode ||
-    (order._id ? `#${order._id.slice(-8).toUpperCase()}` : '#BK-000');
+  const shortWebId = order._id ? `#${order._id.slice(-6).toUpperCase()}` : '';
+  const orderCode = order.bookingCode
+    ? `${order.bookingCode}${shortWebId ? ` (${shortWebId})` : ''}`
+    : shortWebId || '#BK-000';
 
   const customerName =
     order.customerId?.profile?.fullName ||
@@ -171,7 +172,7 @@ export function OrderCard({
           >
             <Ionicons name="checkmark-circle-outline" size={16} color="#FFFFFF" />
             <Text style={styles.primaryRoseBtnText}>
-              {isPhotoshoot ? 'Chấp nhận lịch chụp' : 'Bàn giao trang phục'}
+              {isPhotoshoot ? 'Chấp nhận lịch chụp' : 'Xác nhận & Chuẩn bị'}
             </Text>
           </Pressable>
         </View>

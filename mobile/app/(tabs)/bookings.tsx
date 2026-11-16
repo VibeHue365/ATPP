@@ -67,14 +67,15 @@ function BookingsScreen() {
     () =>
       items
         .filter((item) => {
+          const shortId = item._id ? item._id.slice(-6) : '';
           const match =
             !query.trim() ||
-            `${item.bookingCode} ${bookingTitle(item)}`
+            `${item.bookingCode} #${shortId} ${shortId} ${bookingTitle(item)}`
               .toLowerCase()
               .includes(query.trim().toLowerCase());
           if (!match) return false;
-          if (filter === 'PHOTO') return item.bookingType === 'PHOTOGRAPHY';
-          if (filter === 'RENTAL') return item.bookingType === 'AODAI_RENTAL';
+          if (filter === 'PHOTO') return item.bookingType === 'PHOTOGRAPHY' || item.bookingType === 'COMBO';
+          if (filter === 'RENTAL') return item.bookingType === 'AODAI_RENTAL' || item.bookingType === 'COMBO';
           if (filter === 'ATTENTION') return attentionStatuses.has(item.status);
           return true;
         })
@@ -106,10 +107,10 @@ function BookingsScreen() {
       const pending = await checkoutApi.pending();
       const payment = pending.find((item) => item.bookingId === booking._id);
       if (!payment) {
-        show(
-          'Không tìm thấy giao dịch đang chờ. Hãy mở chi tiết đơn để kiểm tra.',
-          'error'
-        );
+        router.push({
+          pathname: '/booking/[id]',
+          params: { id: booking._id, openContract: '1' },
+        } as unknown as Href);
         return;
       }
       router.push({
@@ -117,7 +118,10 @@ function BookingsScreen() {
         params: { code: payment.paymentCode },
       } as unknown as Href);
     } catch {
-      show('Không thể tải giao dịch đang chờ', 'error');
+      router.push({
+        pathname: '/booking/[id]',
+        params: { id: booking._id, openContract: '1' },
+      } as unknown as Href);
     }
   };
 
@@ -350,7 +354,10 @@ function BookingCard({ item, onPay }: { item: Booking; onPay: () => void }) {
           </Text>
 
           <View style={styles.codeRow}>
-            <Text style={styles.codeBadge}>#{item.bookingCode}</Text>
+            <Text style={styles.codeBadge}>
+              #{item.bookingCode}
+              {item._id ? ` (#${item._id.slice(-6).toUpperCase()})` : ''}
+            </Text>
             <Text style={styles.dotSep}>·</Text>
             <Text style={styles.itemCountText}>{item.items.length} dịch vụ</Text>
           </View>
@@ -382,7 +389,9 @@ function BookingCard({ item, onPay }: { item: Booking; onPay: () => void }) {
               onPay();
             }}
           >
-            <Text style={styles.payNowText}>Thanh toán ngay</Text>
+            <Text style={styles.payNowText}>
+              {item.contractFlowVersion === 2 ? 'Ký HĐ & TT' : 'Thanh toán ngay'}
+            </Text>
             <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
           </Pressable>
         ) : (

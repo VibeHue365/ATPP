@@ -1,11 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { type Href, router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Linking,
   Modal,
+  Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,7 +17,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { bookingApi } from '@/apis/bookingApi';
 import { checkoutApi } from '@/apis/checkoutApi';
+import { contractApi } from '@/apis/contractApi';
+import { BookingContractsSection } from '@/components/contracts/BookingContractsSection';
+import { ContractReviewModal } from '@/components/contracts/ContractReviewModal';
 import { RequireAuth } from '@/components/auth/RequireAuth';
+import { BookingFlowStepper } from '@/components/booking/BookingFlowStepper';
 import { CustomerIssuePanel } from '@/components/booking/CustomerIssuePanel';
 import { CustomerRefundPanel } from '@/components/booking/CustomerRefundPanel';
 import { BookingRouteMapCard } from '@/components/booking/BookingRouteMapCard';
@@ -26,6 +32,7 @@ import { AppModal } from '@/components/ui/AppModal';
 import { ErrorState, LoadingState } from '@/components/ui/ScreenState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Colors, FontFamily, Radius, Shadow } from '@/constants/theme';
+import { useNotifications } from '@/contexts/NotificationContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useBookingDetail } from '@/hooks/useBookings';
 import type { Booking, BookingItem, BookingSchedule } from '@/types/booking';
@@ -35,6 +42,8 @@ import {
   bookingTitle,
   formatDate,
   formatDateTime,
+  formatDepositSettlementLabel,
+  getRentalEvidenceTimestamps,
   itemImage,
   itemName,
   itemProvider,
@@ -71,15 +80,17 @@ function ItemDetailWithActions({
   item,
   canReschedule,
   onReschedule,
+  timeSlotFallback,
 }: {
   item: BookingItem;
   canReschedule: boolean;
   onReschedule: () => void;
+  timeSlotFallback?: string | null;
 }) {
   const request = item.rescheduleRequest;
   return (
     <View>
-      <ItemDetail item={item} />
+      <ItemDetail item={item} timeSlotFallback={timeSlotFallback} />
       {request && ['PENDING', 'PROCESSING'].includes(request.status) ? (
         <Text style={actionStyles.pending}>⏳ Yêu cầu đổi lịch đang chờ tiệm xác nhận</Text>
       ) : canReschedule ? (
@@ -101,12 +112,32 @@ export default function Route() {
 }
 
 function BookingDetail() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const { item: booking, loading, error, reload } = useBookingDetail(id);
+  const { id, openContract } = useLocalSearchParams<{
+    id: string;
+    openContract?: string;
+  }>();
+  const { item: booking, loading, refreshing, error, reload, pullRefresh } = useBookingDetail(id);
   const { show } = useToast();
+  const { bookingSyncVersion, bumpBookingSync, pushLocalBanner } = useNotifications();
   const [actionLoading, setActionLoading] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [contractModalOpen, setContractModalOpen] = useState(false);
+  const [autoHandledContract, setAutoHandledContract] = useState(false);
+  const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (
+      openContract === '1' &&
+      !autoHandledContract &&
+      booking &&
+      booking.status === 'PENDING_PAYMENT' &&
+      booking.contractFlowVersion === 2
+    ) {
+      setAutoHandledContract(true);
+      setContractModalOpen(true);
+    }
+  }, [openContract, autoHandledContract, booking]);
   const [reason, setReason] = useState('');
   const [rescheduleItem, setRescheduleItem] = useState<BookingItem | null>(null);
   const [locationSchedule, setLocationSchedule] = useState<BookingSchedule | null>(null);
@@ -133,13 +164,55 @@ function BookingDetail() {
   const continuePayment = async () => {
     setActionLoading(true);
     try {
+      if (booking.contractFlowVersion === 2 || rentalItems.length > 0) {
+        const readiness = await contractApi
+          .getBookingReadiness(booking._id)
+          .catch(() => null);
+        if (readiness && readiness.requirement === 'REQUIRED' && !readiness.ready) {
+          setContractModalOpen(true);
+          return;
+        }
+      }
+
       const pending = (await checkoutApi.pending()).find(
         (item) => item.bookingId === booking._id
       );
-      if (!pending) throw new Error('Không tìm thấy giao dịch thanh toán đang chờ.');
+      if (pending) {
+        router.push({
+          pathname: '/payment/result',
+          params: { code: pending.paymentCode },
+        } as unknown as Href);
+        return;
+      }
+
+      const purpose =
+        booking.bookingType === 'PHOTOGRAPHY' || booking.bookingType === 'COMBO'
+          ? 'DEPOSIT_PAYMENT'
+          : 'FULL_PAYMENT';
+      const payment = await checkoutApi.createPaymentLink(booking._id, purpose);
+      if (!payment.paymentCode) {
+        throw new Error('Không tìm thấy giao dịch thanh toán đang chờ.');
+      }
+      const checkoutUrl = payment.payos?.checkoutUrl ?? null;
+      if (checkoutUrl) {
+        if (Platform.OS === 'web') {
+          await Linking.openURL(checkoutUrl);
+          router.push({
+            pathname: '/payment/result',
+            params: { code: payment.paymentCode },
+          } as unknown as Href);
+        } else {
+          router.push({
+            pathname: '/payment/webview',
+            params: { code: payment.paymentCode, url: checkoutUrl },
+          } as unknown as Href);
+        }
+        return;
+      }
+
       router.push({
         pathname: '/payment/result',
-        params: { code: pending.paymentCode },
+        params: { code: payment.paymentCode },
       } as unknown as Href);
     } catch (cause) {
       show(getApiErrorMessage(cause, 'Không thể mở giao dịch đang chờ'), 'error');
@@ -152,6 +225,13 @@ function BookingDetail() {
     setActionLoading(true);
     try {
       await bookingApi.confirmPickup(booking._id);
+      bumpBookingSync();
+      pushLocalBanner({
+        title: 'Đã xác nhận nhận cổ phục',
+        content: `Đơn #${booking.bookingCode} đã chuyển sang trạng thái Đang thuê cổ phục.`,
+        type: 'HANDOVER_CONFIRMED',
+        metadata: { bookingId: booking._id, status: 'PICKED_UP' },
+      });
       show('Đã xác nhận nhận cổ phục thành công', 'success');
       await reload();
     } catch (cause) {
@@ -165,6 +245,13 @@ function BookingDetail() {
     setActionLoading(true);
     try {
       await bookingApi.confirmComplete(booking._id);
+      bumpBookingSync();
+      pushLocalBanner({
+        title: 'Đơn hàng hoàn tất',
+        content: `Bạn đã xác nhận hài lòng cho đơn #${booking.bookingCode}.`,
+        type: 'BOOKING_COMPLETED',
+        metadata: { bookingId: booking._id, status: 'COMPLETED' },
+      });
       show('Đã xác nhận hài lòng và hoàn tất dịch vụ', 'success');
       await reload();
     } catch (cause) {
@@ -225,7 +312,17 @@ function BookingDetail() {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void pullRefresh()}
+            tintColor={Colors.primary}
+          />
+        }
+      >
         {/* Hero Card */}
         <View style={styles.hero}>
           <View style={styles.heroTop}>
@@ -240,8 +337,8 @@ function BookingDetail() {
           </View>
           <Text style={styles.heroTitle}>{bookingTitle(booking)}</Text>
           <Text style={styles.heroDate}>
-            {formatDate(booking.items[0]?.shootDate ?? booking.items[0]?.rentalFrom)}{' '}
-            {booking.items[0]?.shootTimeSlot ? `· ${booking.items[0].shootTimeSlot}` : ''}
+            {formatDate(booking.items[0]?.shootDate ?? photoshootSchedule?.scheduledDate ?? booking.items[0]?.rentalFrom)}{' '}
+            {booking.items[0]?.shootTimeSlot || photoshootSchedule?.timeSlot ? `· ${booking.items[0]?.shootTimeSlot || photoshootSchedule?.timeSlot}` : ''}
           </Text>
           <View style={styles.heroStats}>
             <HeroStat label="DỊCH VỤ" value={`${booking.items.length} mục`} />
@@ -270,6 +367,12 @@ function BookingDetail() {
           </View>
         </Pressable>
 
+        <BookingFlowStepper
+          bookingType={booking.bookingType}
+          status={booking.status}
+          variant="customer"
+        />
+
         <ActionNotice booking={booking} />
 
         <Section
@@ -280,6 +383,7 @@ function BookingDetail() {
               item={item}
               canReschedule={canReschedule}
               onReschedule={() => setRescheduleItem(item)}
+              timeSlotFallback={photoshootSchedule?.timeSlot}
             />
           ))}
         </Section>
@@ -345,26 +449,83 @@ function BookingDetail() {
           <Timeline booking={booking} />
         </Section>
 
-        {rentalItems.length > 0 && (
-          <Section title="Bằng chứng bàn giao & hoàn trả">
-            <View style={styles.evidence}>
-              <Evidence
-                label="Chuẩn bị đồ"
-                done={rentalItems.some((item) => Boolean(item.rentalFulfillment?.readyAt))}
-              />
-              <Evidence
-                label="Bàn giao áo"
-                done={rentalItems.some((item) => Boolean(item.rentalFulfillment?.pickedUpAt))}
-              />
-              <Evidence
-                label="Hoàn trả đồ"
-                done={rentalItems.some((item) => Boolean(item.rentalFulfillment?.returnedAt))}
-              />
-            </View>
-          </Section>
+        {rentalItems.length > 0 && (() => {
+          const evidenceTimes = getRentalEvidenceTimestamps(booking);
+          const handoverUrls = Array.isArray(booking.handoverPhotos)
+            ? booking.handoverPhotos.filter(Boolean)
+            : [];
+          return (
+            <Section title="Bằng chứng bàn giao & hoàn trả">
+              <View style={styles.evidence}>
+                <Evidence
+                  label="Chuẩn bị đồ"
+                  done={Boolean(evidenceTimes.readyAt)}
+                  timestamp={evidenceTimes.readyAt}
+                />
+                <Evidence
+                  label="Bàn giao áo"
+                  done={Boolean(evidenceTimes.pickedUpAt)}
+                  timestamp={evidenceTimes.pickedUpAt}
+                />
+                <Evidence
+                  label="Hoàn trả đồ"
+                  done={Boolean(evidenceTimes.returnedAt)}
+                  timestamp={evidenceTimes.returnedAt}
+                />
+              </View>
+
+              {handoverUrls.length > 0 && (
+                <View style={styles.handoverWrap}>
+                  <Text style={styles.handoverLabel}>
+                    Ảnh hiện trạng bàn giao từ cửa hàng ({handoverUrls.length} ảnh)
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.photos}
+                  >
+                    {handoverUrls.map((rawUrl, idx) => {
+                      const uri = getMediaUrl(rawUrl) || rawUrl;
+                      return (
+                        <Pressable
+                          key={`${rawUrl}-${idx}`}
+                          onPress={() => setPreviewPhotoUrl(uri)}
+                        >
+                          <Image
+                            source={{ uri }}
+                            style={styles.handoverThumb}
+                            contentFit="cover"
+                          />
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
+            </Section>
+          );
+        })()}
+
+        {(booking.contractFlowVersion === 2 || rentalItems.length > 0) && (
+          <BookingContractsSection
+            bookingId={booking._id}
+            bookingStatus={booking.status}
+            contractFlowVersion={booking.contractFlowVersion}
+            viewerRole="customer"
+            onOpenSign={() => setContractModalOpen(true)}
+            refreshTrigger={bookingSyncVersion}
+          />
         )}
 
-        {rentalItems.length > 0 && <CustomerIssuePanel booking={booking} onSuccess={reload} />}
+        {rentalItems.length > 0 && (
+          <CustomerIssuePanel
+            booking={booking}
+            onSuccess={async () => {
+              bumpBookingSync();
+              await reload();
+            }}
+          />
+        )}
 
         <Section title="Chi tiết thanh toán & Tiền cọc">
           <Price label="Chi phí dịch vụ" value={booking.pricingSummary?.subTotal} />
@@ -380,16 +541,23 @@ function BookingDetail() {
           )}
           <View style={styles.line} />
           <Price label="Tổng thanh toán" value={booking.pricingSummary?.grandTotal} strong />
-          {booking.rentalDepositRefund && (
+          {booking.rentalDepositRefund ? (
             <View style={styles.refund}>
               <Text style={styles.refundTitle}>
                 Tiền cọc hoàn lại dự kiến: {money(booking.rentalDepositRefund.amount)}
               </Text>
               <Text style={styles.refundText}>
-                Trạng thái: {booking.rentalDepositRefund.status}
+                Trạng thái Escrow: {formatDepositSettlementLabel(booking.rentalDepositRefund.status)}
               </Text>
             </View>
-          )}
+          ) : booking.depositSettlementStatus ? (
+            <View style={styles.refund}>
+              <Text style={styles.refundTitle}>Đối soát tiền cọc Escrow</Text>
+              <Text style={styles.refundText}>
+                Trạng thái: {formatDepositSettlementLabel(booking.depositSettlementStatus)}
+              </Text>
+            </View>
+          ) : null}
           {Boolean(booking.cancellation?.refundAmount) && (
             <View style={styles.refund}>
               <Text style={styles.refundTitle}>
@@ -456,7 +624,11 @@ function BookingDetail() {
       <View style={styles.bottom}>
         {booking.status === 'PENDING_PAYMENT' && (
           <AppButton
-            title="Tiếp tục thanh toán ngay"
+            title={
+              booking.contractFlowVersion === 2
+                ? 'Ký hợp đồng & Thanh toán ngay'
+                : 'Tiếp tục thanh toán ngay'
+            }
             loading={actionLoading}
             onPress={() => void continuePayment()}
           />
@@ -549,6 +721,50 @@ function BookingDetail() {
         onClose={() => setLocationSchedule(null)}
         onSuccess={reload}
       />
+
+      <ContractReviewModal
+        visible={contractModalOpen}
+        bookingId={booking._id}
+        holdExpiresAt={booking.holdExpiresAt ?? null}
+        onClose={() => setContractModalOpen(false)}
+        onReadyToPay={() => {
+          setContractModalOpen(false);
+          bumpBookingSync();
+          void reload();
+          void continuePayment();
+        }}
+        onDeclinedOrCancelled={() => {
+          setContractModalOpen(false);
+          bumpBookingSync();
+          void reload();
+        }}
+      />
+
+      <Modal
+        visible={Boolean(previewPhotoUrl)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreviewPhotoUrl(null)}
+      >
+        <View style={styles.photoPreviewOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setPreviewPhotoUrl(null)}
+          />
+          {previewPhotoUrl ? (
+            <Image
+              source={{ uri: previewPhotoUrl }}
+              style={styles.photoPreviewImg}
+              contentFit="contain"
+            />
+          ) : null}
+          <AppButton
+            title="Đóng ảnh"
+            fullWidth={false}
+            onPress={() => setPreviewPhotoUrl(null)}
+          />
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -569,8 +785,15 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     </View>
   );
 }
-function ItemDetail({ item }: { item: BookingItem }) {
+function ItemDetail({
+  item,
+  timeSlotFallback,
+}: {
+  item: BookingItem;
+  timeSlotFallback?: string | null;
+}) {
   const photo = item.itemType === 'PHOTOGRAPHY_PACKAGE';
+  const effectiveTimeSlot = item.shootTimeSlot || timeSlotFallback;
   return (
     <View style={styles.item}>
       <Image source={getMediaUrl(itemImage(item))} style={styles.itemImage} contentFit="cover" />
@@ -579,7 +802,7 @@ function ItemDetail({ item }: { item: BookingItem }) {
         <Text style={styles.itemName}>{itemName(item)}</Text>
         <Text style={styles.itemMeta}>
           {photo
-            ? `${formatDate(item.shootDate)} · ${item.shootTimeSlot ?? 'Chưa có giờ'}`
+            ? `${formatDate(item.shootDate)} · ${effectiveTimeSlot ?? 'Chưa có giờ'}`
             : `${formatDate(item.rentalFrom)} → ${formatDate(item.rentalTo)}`}
         </Text>
         <Text style={styles.itemMeta}>
@@ -596,18 +819,60 @@ function ItemDetail({ item }: { item: BookingItem }) {
 }
 function ActionNotice({ booking }: { booking: Booking }) {
   const map: Partial<
-    Record<string, { title: string; copy: string; tone: 'warning' | 'success' | 'info' }>
+    Record<
+      string,
+      { title: string; copy: string; tone: 'warning' | 'success' | 'info' | 'error' }
+    >
   > = {
     PENDING_PAYMENT: {
-      title: 'Cần hoàn tất thanh toán để giữ lịch',
+      title:
+        booking.contractFlowVersion === 2
+          ? 'Cần ký Hợp đồng điện tử & Thanh toán giữ lịch'
+          : 'Cần hoàn tất thanh toán để giữ lịch',
       copy: booking.holdExpiresAt
-        ? `Phiên giữ chỗ có hiệu lực đến ${formatDateTime(booking.holdExpiresAt)}.`
-        : 'Giao dịch đang chờ thanh toán.',
+        ? `Phiên giữ chỗ có hiệu lực đến ${formatDateTime(booking.holdExpiresAt)}.${
+            booking.contractFlowVersion === 2
+              ? ' Vui lòng xác nhận hợp đồng trước khi chuyển qua PayOS.'
+              : ''
+          }`
+        : booking.contractFlowVersion === 2
+          ? 'Vui lòng xem & xác nhận Hợp đồng điện tử, sau đó thanh toán qua PayOS.'
+          : 'Giao dịch đang chờ thanh toán.',
       tone: 'warning',
     },
+    DEPOSIT_PAID: {
+      title: 'Đã thanh toán cọc · Chờ cửa hàng xác nhận',
+      copy: 'Tiền cọc đang được TàGo Escrow bảo vệ. Cửa hàng sẽ xác nhận đơn và chuẩn bị đồ sớm.',
+      tone: 'info',
+    },
+    CONFIRMED: {
+      title: 'Cửa hàng đã xác nhận & đang chuẩn bị đồ',
+      copy: 'Lịch hẹn đã được khóa riêng cho bạn. Tiệm đang kiểm tra, là ủi và chuẩn bị cổ phục.',
+      tone: 'success',
+    },
     PICKUP_PENDING: {
-      title: 'Cổ phục đã sẵn sàng tại tiệm',
-      copy: 'Hãy ghé tiệm đúng hẹn, đưa mã QR vé điện tử để nhận trang phục.',
+      title: 'Cổ phục đã sẵn sàng tại tiệm!',
+      copy: 'Hãy ghé tiệm đúng hẹn, kiểm tra ảnh hiện trạng và bấm "Xác nhận đã nhận cổ phục" sau khi nhận áo.',
+      tone: 'info',
+    },
+    PICKED_UP: {
+      title: 'Bạn đang trong thời gian thuê cổ phục',
+      copy: 'Vui lòng bảo quản trang phục theo đúng điều khoản hợp đồng và hoàn trả đúng giờ.',
+      tone: 'success',
+    },
+    RETURN_PENDING: {
+      title: 'Phát sinh báo cáo sự cố khi trả đồ',
+      copy: 'Tiệm đã ghi nhận sự cố trên áo dài khi hoàn trả. Bạn vui lòng xem chi tiết biên bản bên dưới để xác nhận hoặc khiếu nại.',
+      tone: 'error',
+    },
+    RETURNED: {
+      title: 'Đã trả đồ · Chờ tiệm đối soát hoàn cọc',
+      copy: 'Cảm ơn bạn đã hoàn trả trang phục. Tiệm đang kiểm tra hiện trạng để giải phóng cọc Escrow về tài khoản của bạn.',
+      tone: 'info',
+    },
+    IN_PROGRESS: {
+      title: 'Dịch vụ đang được thực hiện',
+      copy: 'Ekip đang thực hiện buổi chụp hoặc bàn giao dịch vụ theo lịch hẹn.',
       tone: 'info',
     },
     AWAITING_REVIEW: {
@@ -615,16 +880,39 @@ function ActionNotice({ booking }: { booking: Booking }) {
       copy: 'Hãy kiểm tra ảnh và bấm Xác nhận hài lòng để hoàn tất đơn hàng.',
       tone: 'warning',
     },
-    CONFIRMED: {
-      title: 'Lịch hẹn đã được xác nhận',
-      copy: 'Tiệm đã khóa lịch riêng cho bạn và đang chuẩn bị trang phục / ekip.',
+    COMBO_PHOTOS_APPROVED: {
+      title: 'Đã duyệt ảnh · Hoàn tất trả đồ để đóng đơn',
+      copy: 'Album ảnh đã được duyệt. Vui lòng hoàn tất việc hoàn trả trang phục tại tiệm.',
       tone: 'success',
+    },
+    COMPLETED: {
+      title: 'Đơn hàng đã hoàn tất & Đối soát cọc xong',
+      copy: 'Cảm ơn bạn đã đồng hành cùng TàGo. Tiền cọc (nếu có) đã được xử lý giải phóng.',
+      tone: 'success',
+    },
+    DISPUTED: {
+      title: 'Đơn hàng đang được quản trị viên hỗ trợ tranh chấp',
+      copy: 'Đội ngũ TàGo Care đang xem xét bằng chứng hai bên trước khi quyết toán tiền cọc.',
+      tone: 'error',
+    },
+    CANCELLED: {
+      title: 'Đơn hàng đã được hủy',
+      copy: booking.cancellation?.reason
+        ? `Lý do: ${booking.cancellation.reason}`
+        : 'Đơn hàng không còn hiệu lực.',
+      tone: 'error',
     },
   };
   const value = map[booking.status];
   if (!value) return null;
   const color =
-    value.tone === 'success' ? Colors.success : value.tone === 'warning' ? Colors.warning : '#2563EB';
+    value.tone === 'success'
+      ? Colors.success
+      : value.tone === 'warning'
+        ? Colors.warning
+        : value.tone === 'error'
+          ? Colors.error
+          : '#2563EB';
   return (
     <View
       style={[
@@ -635,11 +923,19 @@ function ActionNotice({ booking }: { booking: Booking }) {
               ? '#EDF9F2'
               : value.tone === 'warning'
                 ? '#FFFBEB'
-                : '#EFF6FF',
+                : value.tone === 'error'
+                  ? '#FEF2F2'
+                  : '#EFF6FF',
         },
       ]}>
       <Ionicons
-        name={value.tone === 'success' ? 'checkmark-circle' : 'information-circle'}
+        name={
+          value.tone === 'success'
+            ? 'checkmark-circle'
+            : value.tone === 'error'
+              ? 'alert-circle'
+              : 'information-circle'
+        }
         size={21}
         color={color}
       />
@@ -680,7 +976,15 @@ function Timeline({ booking }: { booking: Booking }) {
     </View>
   );
 }
-function Evidence({ label, done }: { label: string; done: boolean }) {
+function Evidence({
+  label,
+  done,
+  timestamp,
+}: {
+  label: string;
+  done: boolean;
+  timestamp?: string | null;
+}) {
   return (
     <View style={[styles.evidenceBox, done && styles.evidenceDone]}>
       <Ionicons
@@ -690,6 +994,11 @@ function Evidence({ label, done }: { label: string; done: boolean }) {
       />
       <Text style={[styles.evidenceText, done && { color: Colors.success }]}>{label}</Text>
       <Text style={styles.evidenceState}>{done ? 'Đã xác nhận' : 'Chưa có'}</Text>
+      {done && timestamp ? (
+        <Text style={styles.evidenceTime} numberOfLines={2}>
+          {formatDateTime(timestamp)}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -1176,5 +1485,41 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     color: '#5F5E5E',
     textAlign: 'center',
+  },
+  handoverWrap: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F2EFED',
+    gap: 6,
+  },
+  handoverLabel: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: 11.5,
+    color: Colors.text,
+  },
+  handoverThumb: {
+    width: 96,
+    height: 96,
+    borderRadius: 12,
+    backgroundColor: '#FFF0F3',
+  },
+  evidenceTime: {
+    fontFamily: FontFamily.body,
+    fontSize: 8.5,
+    color: Colors.textMuted,
+    textAlign: 'center',
+  },
+  photoPreviewOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    gap: 16,
+  },
+  photoPreviewImg: {
+    width: '100%',
+    height: '72%',
   },
 });
