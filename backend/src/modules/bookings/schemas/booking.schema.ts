@@ -278,6 +278,14 @@ export class Booking {
   @Prop({ type: [String], default: [] })
   handoverPhotos?: string[];
 
+  /** Rental only: customer return evidence photos and note when customer requests return (moving to RETURN_PENDING) */
+  @Prop({ type: Object, default: null })
+  customerReturnEvidence?: {
+    files?: string[];
+    returnedAt?: Date | null;
+    note?: string | null;
+  } | null;
+
   /** Photography only: result photos delivered by photographer when moving to AWAITING_REVIEW */
   @Prop({ type: [String], default: [] })
   deliveredPhotos?: string[];

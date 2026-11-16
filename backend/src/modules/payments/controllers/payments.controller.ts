@@ -43,9 +43,13 @@ export class PaymentsController {
   ) { }
 
   private ensureSimulatorEnabled() {
-    const nodeEnv = this.configService.get<string>('NODE_ENV') ?? process.env.NODE_ENV;
+    const rawEnv = this.configService.get<string>('NODE_ENV') ?? process.env.NODE_ENV;
+    const nodeEnv = (rawEnv || 'development').toLowerCase();
     const isSimExplicitlyEnabled = this.configService.get<string>('ENABLE_PAYMENT_SIMULATOR') === 'true';
-    if (nodeEnv === 'production' || (!isSimExplicitlyEnabled && nodeEnv !== 'development')) {
+    if (nodeEnv === 'production' && !isSimExplicitlyEnabled) {
+      throw new NotFoundException('Cổng thanh toán giả lập không khả dụng trên môi trường này.');
+    }
+    if (nodeEnv !== 'development' && nodeEnv !== 'test' && !isSimExplicitlyEnabled) {
       throw new NotFoundException('Cổng thanh toán giả lập không khả dụng trên môi trường này.');
     }
   }

@@ -18,7 +18,7 @@ type Dependencies = Pick<ReturnType<typeof useProviderSessionState>,
   'setIsLoadingProvider' | 'setProvider'
 > &
   Pick<ReturnType<typeof useProviderProfileState>,
-    'setBusinessName' | 'setPhone' | 'setAddressLine' | 'setCity' | 'setCancellationRefundRules' | 'setCancellationAdditionalNotes' | 'setComboDiscountPercent' | 'setBaseLatitude' | 'setBaseLongitude' | 'setServiceRadiusKm' | 'setUseBusinessAddressForPickup' | 'setPickupAddressLine' | 'setPickupLatitude' | 'setPickupLongitude' | 'setCoverUrl'
+    'setBusinessName' | 'setPhone' | 'setAddressLine' | 'setCity' | 'setCancellationRefundRules' | 'setCancellationAdditionalNotes' | 'setComboDiscountPercent' | 'setBaseLatitude' | 'setBaseLongitude' | 'setServiceRadiusKm' | 'setUseBusinessAddressForPickup' | 'setTurnaroundSlots' | 'setPickupAddressLine' | 'setPickupLatitude' | 'setPickupLongitude' | 'setCoverUrl'
   > &
   Pick<ReturnType<typeof useProviderNavigationState>,
     'currentView'
@@ -54,7 +54,7 @@ type Dependencies = Pick<ReturnType<typeof useProviderSessionState>,
 export function createProviderDataActions({
   setIsLoadingProvider, setProvider, setBusinessName, setPhone, setAddressLine, setCity,
   setCancellationRefundRules, setCancellationAdditionalNotes, setComboDiscountPercent, setBaseLatitude,
-  setBaseLongitude, setServiceRadiusKm, setUseBusinessAddressForPickup, setPickupAddressLine,
+  setBaseLongitude, setServiceRadiusKm, setUseBusinessAddressForPickup, setTurnaroundSlots, setPickupAddressLine,
   setPickupLatitude, setPickupLongitude, setCoverUrl, currentView, setPortfolioItems, setPhotoPackages,
   setMyProductsList, setInventorySummary, setCombos, setVouchers, setSchedules, setReviewsData,
   setBookingsState, setAnalyticsData, toast, navigate, logout,
@@ -82,6 +82,7 @@ export function createProviderDataActions({
       setBaseLongitude(pRes.address?.geo?.coordinates?.[0]?.toString() ?? '');
       setServiceRadiusKm(pRes.photographySettings?.serviceRadiusKm?.toString() ?? '');
       setUseBusinessAddressForPickup(pRes.rentalSettings?.useBusinessAddressForPickup !== false);
+      setTurnaroundSlots(pRes.rentalSettings?.turnaroundSlots ?? 1);
       setPickupAddressLine(pRes.rentalSettings?.pickupLocation?.addressLine ?? '');
       setPickupLatitude(pRes.rentalSettings?.pickupLocation?.geo?.coordinates?.[1]?.toString() ?? '');
       setPickupLongitude(pRes.rentalSettings?.pickupLocation?.geo?.coordinates?.[0]?.toString() ?? '');

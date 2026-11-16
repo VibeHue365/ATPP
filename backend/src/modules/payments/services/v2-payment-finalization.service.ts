@@ -12,6 +12,12 @@ import { Model, Types } from 'mongoose';
 import { Booking, BookingStatus, BookingType, PaymentStatus as BookingPaymentStatus } from '../../bookings/schemas/booking.schema';
 import { BookingItem, BookingItemType } from '../../bookings/schemas/booking-item.schema';
 import { BookingSchedule, BookingScheduleStatus } from '../../bookings/schemas/booking-schedule.schema';
+import {
+  InventorySlotLease,
+  InventorySlotLeaseDocument,
+  SlotLeaseStatus,
+} from '../../bookings/schemas/inventory-slot-lease.schema';
+import { TurnaroundStatus } from '../../bookings/schemas/rental-fulfillment.types';
 import { PhotographyHoldService } from '../../bookings/services/photography-hold.service';
 import { CONTRACTS_V2_ENABLED } from '../../contracts/contracts.constants';
 import { ContractPolicyService } from '../../contracts/contract-policy.service';
@@ -63,6 +69,8 @@ export class V2PaymentFinalizationService
     private readonly preparation: ContractPreparationService,
     private readonly snapshots: ContractSnapshotService,
     private readonly templates: ContractTemplateService,
+    @InjectModel(InventorySlotLease.name)
+    private readonly slotLeases: Model<InventorySlotLeaseDocument>,
     @Optional()
     private readonly contractEvidence?: ContractEvidenceService,
   ) {}
@@ -203,6 +211,79 @@ export class V2PaymentFinalizationService
         const photo = await this.photoHolds.confirmForBooking(booking._id, session);
         if (!photo.confirmed) throw new FinalizationReviewError('PHOTOGRAPHY_HOLD_MISSING');
 
+        // Check InventorySlotLease for items requiring slot leases based on explicit slotLeaseRequired snapshot
+        const itemsRequiringSlotLease = productItems.filter((item) => {
+          return (
+            item.rentalFulfillment?.slotLeaseRequired === true ||
+            (item as any).slotLeaseRequired === true
+          );
+        });
+
+        let totalExpectedLeasesForBooking = 0;
+
+        if (itemsRequiringSlotLease.length > 0) {
+          for (const item of itemsRequiringSlotLease) {
+            let rentalSlotCount = 1;
+            if (item.rentalFrom && item.rentalTo) {
+              const diffMs =
+                new Date(item.rentalTo).getTime() - new Date(item.rentalFrom).getTime();
+              const hours = Math.round(diffMs / (1000 * 60 * 60));
+              rentalSlotCount = Math.max(1, Math.round(hours / 2));
+            }
+            const turnaroundSlots =
+              typeof item.rentalFulfillment?.turnaroundSlotsSnapshot === 'number'
+                ? item.rentalFulfillment.turnaroundSlotsSnapshot
+                : 0;
+            const expectedItemLeases =
+              (rentalSlotCount + turnaroundSlots) * (item.quantity || 1);
+            totalExpectedLeasesForBooking += expectedItemLeases;
+
+            const itemLeases: InventorySlotLeaseDocument[] = await (this.slotLeases as any)
+              .find({
+                bookingId: booking._id,
+                bookingItemId: item._id,
+              })
+              .session(session)
+              .lean();
+
+            if (!itemLeases || itemLeases.length === 0) {
+              throw new FinalizationReviewError('INVENTORY_SLOT_LEASE_MISSING');
+            }
+
+            if (
+              itemLeases.some(
+                (l: any) =>
+                  l.status === SlotLeaseStatus.Released || l.status === 'RELEASED',
+              )
+            ) {
+              throw new FinalizationReviewError('INVENTORY_SLOT_LEASE_RELEASED');
+            }
+
+            for (const lease of itemLeases) {
+              if (
+                (lease.status === SlotLeaseStatus.Temp ||
+                  (lease.status as any) === 'TEMP') &&
+                lease.expiresAt &&
+                new Date(lease.expiresAt).getTime() <= now.getTime()
+              ) {
+                throw new FinalizationReviewError('INVENTORY_SLOT_LEASE_EXPIRED');
+              }
+            }
+
+            const validLeases = itemLeases.filter(
+              (l: any) =>
+                l.status === SlotLeaseStatus.Confirmed ||
+                l.status === 'CONFIRMED' ||
+                ((l.status === SlotLeaseStatus.Temp || l.status === 'TEMP') &&
+                  (!l.expiresAt || new Date(l.expiresAt).getTime() > now.getTime())),
+            );
+
+            if (validLeases.length < expectedItemLeases) {
+              throw new FinalizationReviewError('INVENTORY_SLOT_LEASE_INSUFFICIENT');
+            }
+          }
+        }
+
         const successful = await this.payments.find({
           bookingId: booking._id,
           status: PaymentStatus.Success,
@@ -244,6 +325,25 @@ export class V2PaymentFinalizationService
         }
         await this.reservations.updateMany({ bookingId: booking._id, status: ReservationStatus.TempReserved },
           { $set: { status: ReservationStatus.Confirmed }, $unset: { expiresAt: 1 } }, { session });
+        if (itemsRequiringSlotLease.length > 0) {
+          await (this.slotLeases as any).updateMany(
+            { bookingId: booking._id, status: 'TEMP' },
+            { $set: { status: 'CONFIRMED' }, $unset: { expiresAt: 1 } },
+            { session },
+          );
+          const remainingTemp = await (this.slotLeases as any)
+            .countDocuments({ bookingId: booking._id, status: 'TEMP' })
+            .session(session);
+          if (remainingTemp > 0) {
+            throw new FinalizationReviewError('INVENTORY_SLOT_LEASE_CONFIRM_FAILED');
+          }
+          const confirmedCount = await (this.slotLeases as any)
+            .countDocuments({ bookingId: booking._id, status: 'CONFIRMED' })
+            .session(session);
+          if (confirmedCount < totalExpectedLeasesForBooking) {
+            throw new FinalizationReviewError('INVENTORY_SLOT_LEASE_CONFIRM_FAILED');
+          }
+        }
         await this.schedules.updateMany({ bookingId: booking._id, status: BookingScheduleStatus.Held },
           { $set: { status: BookingScheduleStatus.Confirmed }, $unset: { holdExpiresAt: 1 } }, { session });
         const redemption = await this.promotions.findRedemptionByBooking(booking._id, session);

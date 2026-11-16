@@ -18,6 +18,8 @@ const toMinutes = (value: string): number => {
 const toTime = (minutes: number): string =>
   `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 
+const toDateInput = (value: unknown): string => (value ? String(value).slice(0, 10) : '');
+
 const timeSlotsOverlap = (first: string, second: string): boolean => {
   const [firstStart, firstEnd] = first.split('-').map(toMinutes);
   const [secondStart, secondEnd] = second.split('-').map(toMinutes);
@@ -36,18 +38,43 @@ export const ProfileRescheduleModal: React.FC<ProfileRescheduleModalProps> = ({
 }) => {
   const toast = useToast();
   const isProduct = item?.itemType === 'PRODUCT';
+  const isHourlyProduct = isProduct && item?.rentalType === 'HOURLY';
 
-  const [rescheduleFrom, setRescheduleFrom] = useState(item?.startDate || item?.rentalFrom || '');
-  const [rescheduleTo, setRescheduleTo] = useState(item?.endDate || item?.rentalTo || '');
+  const [rescheduleFrom, setRescheduleFrom] = useState(() => toDateInput(item?.startDate || item?.rentalFrom));
+  const [rescheduleTo, setRescheduleTo] = useState(() => toDateInput(item?.endDate || item?.rentalTo));
   const [rescheduleShootDate, setRescheduleShootDate] = useState(
-    item?.shootDate ? String(item.shootDate).slice(0, 10) : ''
+    item?.shootDate
+      ? toDateInput(item.shootDate)
+      : isHourlyProduct && item?.rentalFrom
+        ? toDateInput(item.rentalFrom)
+        : ''
   );
-  const [rescheduleTimeSlot, setRescheduleTimeSlot] = useState(item?.shootTimeSlot || '');
+  const [rescheduleTimeSlot, setRescheduleTimeSlot] = useState(() => {
+    if (item?.shootTimeSlot) return item.shootTimeSlot;
+    if (!isHourlyProduct || !item?.rentalFrom || !item?.rentalTo) return '';
+    return `${String(item.rentalFrom).slice(11, 16)}-${String(item.rentalTo).slice(11, 16)}`;
+  });
   const [rescheduleReason, setRescheduleReason] = useState('');
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [slotsError, setSlotsError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const hourlyDurationMinutes = useMemo(() => {
+    if (!isHourlyProduct || !item?.rentalFrom || !item?.rentalTo) return 120;
+    const duration = new Date(item.rentalTo).getTime() - new Date(item.rentalFrom).getTime();
+    return Number.isFinite(duration) && duration > 0 ? duration / 60_000 : 120;
+  }, [isHourlyProduct, item]);
+
+  const hourlySlots = useMemo(() => {
+    const slots: string[] = [];
+    for (let startMinutes = 7 * 60; startMinutes + hourlyDurationMinutes <= 21 * 60; startMinutes += 120) {
+      const endMinutes = startMinutes + hourlyDurationMinutes;
+      const toClock = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+      slots.push(`${toClock(startMinutes)}-${toClock(endMinutes)}`);
+    }
+    return slots;
+  }, [hourlyDurationMinutes]);
 
   const durationMinutes = useMemo(() => {
     const pkgDuration = Number(
@@ -129,7 +156,11 @@ export const ProfileRescheduleModal: React.FC<ProfileRescheduleModalProps> = ({
   }, [isProduct, rescheduleShootDate, durationMinutes, item, booking]);
 
   const handleReschedule = async () => {
-    if (isProduct && (!rescheduleFrom || !rescheduleTo)) {
+    if (isHourlyProduct && (!rescheduleShootDate || !rescheduleTimeSlot)) {
+      toast.error('Vui lòng chọn ngày và khung giờ thuê mới');
+      return;
+    }
+    if (isProduct && !isHourlyProduct && (!rescheduleFrom || !rescheduleTo)) {
       toast.error('Vui lòng chọn ngày nhận và ngày trả mới');
       return;
     }
@@ -140,9 +171,11 @@ export const ProfileRescheduleModal: React.FC<ProfileRescheduleModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      const res = await httpClient.patch<any>(`/api/bookings/${booking._id}/reschedule`, {
+      await httpClient.patch<any>(`/api/bookings/${booking._id}/reschedule`, {
         itemId: item._id,
-        ...(isProduct
+        ...(isHourlyProduct
+          ? { newShootDate: rescheduleShootDate, newShootTimeSlot: rescheduleTimeSlot }
+          : isProduct
           ? { newRentalFrom: rescheduleFrom, newRentalTo: rescheduleTo }
           : {
               newShootDate: rescheduleShootDate,
@@ -151,11 +184,7 @@ export const ProfileRescheduleModal: React.FC<ProfileRescheduleModalProps> = ({
         reason: rescheduleReason || undefined
       });
 
-      if (res?.directUpdate || res?.status === 'APPROVED') {
-        toast.success('Lịch chụp mới đã được cập nhật trực tiếp thành công!');
-      } else {
-        toast.success('Đã gửi yêu cầu đổi lịch. Vui lòng chờ đối tác xác nhận.');
-      }
+      toast.success('Đã gửi yêu cầu đổi lịch. Lịch mới chỉ được cập nhật sau khi đối tác duyệt.');
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -175,10 +204,10 @@ export const ProfileRescheduleModal: React.FC<ProfileRescheduleModalProps> = ({
       <div className="lume-modal-content-box animate-fade-in">
         {/* Notice Box */}
         <div style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '10px', padding: '12px 14px', fontSize: '12.5px', color: '#1E40AF', lineHeight: 1.4 }}>
-          <strong>Lưu ý:</strong> Yêu cầu đổi lịch cần được gửi trước 24 giờ. Khung giờ mới sẽ được tạm giữ chỗ chờ phản hồi duyệt.
+          <strong>Lưu ý:</strong> Yêu cầu đổi lịch cần được gửi trước 24 giờ. Đối tác sẽ duyệt trong 12 giờ; hệ thống kiểm tra lại lịch trống ngay lúc duyệt.
         </div>
 
-        {isProduct ? (
+        {isProduct && !isHourlyProduct ? (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#574D4F', marginBottom: '6px' }}>
@@ -203,6 +232,33 @@ export const ProfileRescheduleModal: React.FC<ProfileRescheduleModalProps> = ({
                 onChange={(e) => setRescheduleTo(e.target.value)}
                 style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #DED7CB', fontSize: '13px', boxSizing: 'border-box' }}
               />
+            </div>
+          </div>
+        ) : isHourlyProduct ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#574D4F', marginBottom: '6px' }}>
+                NGÀY THUÊ MỚI
+              </label>
+              <input
+                type="date"
+                min={new Date().toISOString().split('T')[0]}
+                value={rescheduleShootDate}
+                onChange={(e) => { setRescheduleShootDate(e.target.value); setRescheduleTimeSlot(''); }}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #DED7CB', fontSize: '13px', boxSizing: 'border-box' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#574D4F', marginBottom: '6px' }}>
+                KHUNG GIỜ THUÊ MỚI
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '8px' }}>
+                {hourlySlots.map((slot) => {
+                  const selected = rescheduleTimeSlot === slot;
+                  return <button key={slot} type="button" onClick={() => setRescheduleTimeSlot(slot)} style={{ padding: '8px', borderRadius: '8px', border: selected ? '1.5px solid #8E1B2E' : '1px solid #DED7CB', background: selected ? '#8E1B2E' : '#fff', color: selected ? '#fff' : '#231F20', fontWeight: 700, cursor: 'pointer' }}>{slot.replace('-', ' - ')}</button>;
+                })}
+              </div>
+              <p style={{ margin: '8px 0 0', fontSize: '11.5px', color: '#6B7280' }}>Khung giờ được kiểm tra lại theo đúng chiếc áo bạn đã đặt khi shop duyệt.</p>
             </div>
           </div>
         ) : (

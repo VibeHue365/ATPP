@@ -5,6 +5,7 @@ import { bookingsApi } from '../api/providerDashboardApi';
 import { statusDisplayMap } from '../constants';
 import type { Order } from '../types';
 import type { useProviderOrderState } from './useProviderOrderState';
+import { httpClient } from '../../../services/httpClient';
 
 type Dependencies = Pick<ReturnType<typeof useProviderOrderState>,
   'orders' | 'setActionMenuId' | 'setOrders'
@@ -368,10 +369,12 @@ export function createBookingActions({ orders, setActionMenuId, setOrders, toast
         didOpen: () => {
           const fileInput = document.getElementById('handover-file-input') as HTMLInputElement;
           const previewContainer = document.getElementById('handover-preview-container') as HTMLDivElement;
+          (window as any).__handoverRawFiles = [];
           if (fileInput && previewContainer) {
             fileInput.addEventListener('change', async (e: any) => {
               const files = e.target.files;
               if (!files || files.length === 0) return;
+              (window as any).__handoverRawFiles = Array.from(files);
               previewContainer.innerHTML = '<span style="font-size: 12px; color: #8C827A; font-weight: 600;">⏳ Đang tải ảnh...</span>';
 
               const uploadedUrls: string[] = [];
@@ -426,11 +429,69 @@ export function createBookingActions({ orders, setActionMenuId, setOrders, toast
       });
 
       if (!result.isConfirmed || !result.value) {
+        delete (window as any).__handoverRawFiles;
         setActionMenuId(null);
         return;
       }
 
       const handoverPhotos = result.value;
+      const rawHandoverFiles: File[] = (window as any).__handoverRawFiles || [];
+      delete (window as any).__handoverRawFiles;
+
+      const targetOrder = orders.find((o) => o._id === _id || o.id === _id);
+      const isRentalOrder =
+        (targetOrder as any)?.bookingType === 'AODAI_RENTAL' ||
+        (targetOrder as any)?.bookingType === 'AoDaiRental' ||
+        (targetOrder as any)?.bookingType === 'RENTAL' ||
+        (targetOrder as any)?.category === 'rental' ||
+        (targetOrder as any)?.category === 'AODAI_RENTAL' ||
+        ((targetOrder as any)?.productName && (targetOrder as any).productName.toLowerCase().includes('áo dài')) ||
+        ((targetOrder as any)?.serviceType && (targetOrder as any).serviceType.toLowerCase().includes('áo dài')) ||
+        (targetOrder?.items || []).some((it: any) => it.itemType === 'PRODUCT' || it.productId || it.rentalFulfillment);
+
+      if (isRentalOrder) {
+        try {
+          const rentalItems = (targetOrder?.items || []).filter(
+            (it: any) => it.itemType === 'PRODUCT' || it.productId || it.rentalFulfillment
+          );
+          const targetItem = rentalItems[0] || targetOrder?.items?.[0];
+          if (!targetItem?._id) {
+            throw new Error('Không tìm thấy sản phẩm áo dài trong đơn hàng.');
+          }
+
+          // 1. Nếu item chưa READY_FOR_PICKUP (đang PENDING), mark ready trước
+          try {
+            await httpClient.post(`/bookings/${_id}/items/${targetItem._id}/rental/ready`, {});
+          } catch {
+            // Đã ready trước đó thì tiếp tục
+          }
+
+          // 2. Upload ảnh bằng chứng vào rental evidence
+          let fileIds: string[] = [];
+          if (rawHandoverFiles.length > 0) {
+            const formData = new FormData();
+            rawHandoverFiles.forEach((file) => formData.append('images', file));
+            const evRes = await httpClient.post<{ files: { fileId: string }[] }>(
+              `/bookings/${_id}/items/${targetItem._id}/rental/evidence`,
+              formData
+            );
+            fileIds = (evRes.files || []).map((f) => f.fileId);
+          }
+
+          // 3. Gọi endpoint bàn giao áo dài (picked-up)
+          await httpClient.post(`/bookings/${_id}/items/${targetItem._id}/rental/picked-up`, {
+            fileIds,
+          });
+
+          toast.success('Bàn giao áo dài thành công! Đơn hàng đã chuyển sang trạng thái Đang thuê.');
+          await fetchOrders(true, true);
+        } catch (err: any) {
+          toast.error(err?.response?.data?.message || err.message || 'Bàn giao thất bại');
+        }
+        setActionMenuId(null);
+        return;
+      }
+
       try {
         await bookingsApi.updateStatus(_id, { status: apiStatus, handoverPhotos });
         const displayStatus = statusDisplayMap[apiStatus] || apiStatus;

@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, Types, ClientSession } from 'mongoose';
 import { SecurityRequestContext, SecurityLogService } from '../../auth/services/security-log.service';
 import { AdminAuditAction } from '../../auth/schemas/admin-audit-log.schema';
 import { Booking, BookingStatus, PaymentStatus as BookingPaymentStatus } from '../../bookings/schemas/booking.schema';
@@ -65,8 +65,12 @@ export class SettlementsService {
     const validPaymentStatuses = [
       BookingPaymentStatus.Paid,
       BookingPaymentStatus.PartiallyPaid,
+      BookingPaymentStatus.Refunded,
     ];
-    if (!validPaymentStatuses.includes(booking.paymentSummary?.paymentStatus as any)) {
+    const isPaid =
+      validPaymentStatuses.includes(booking.paymentSummary?.paymentStatus as any) &&
+      (booking.paymentSummary?.totalPaid || 0) > 0;
+    if (!isPaid) {
       throw new BadRequestException(SETTLEMENT_ERROR_CODES.BookingNotPaid);
     }
 
@@ -222,7 +226,7 @@ export class SettlementsService {
     await this.notifyProvider(
       settlement,
       'Yêu cầu chi trả đang tạm giữ',
-      `Khoản chi trả ${settlement.settlementCode} trị giá ${settlement.payableAmount.toLocaleString('vi-VN')}đ đang được tạm giữ. Lý do: ${dto.reason}`,
+      `Khoản chi trả ${settlement.settlementCode} trị giá ${(settlement.payableAmount ?? 0).toLocaleString('vi-VN')}đ đang được tạm giữ. Lý do: ${dto.reason}`,
     );
 
     return settlement;
@@ -265,7 +269,7 @@ export class SettlementsService {
     await this.notifyProvider(
       settlement,
       'Yêu cầu chi trả đã được phê duyệt',
-      `Khoản chi trả ${settlement.settlementCode} trị giá ${settlement.payableAmount.toLocaleString('vi-VN')}đ đã sẵn sàng để thanh toán.`,
+      `Khoản chi trả ${settlement.settlementCode} trị giá ${(settlement.payableAmount ?? 0).toLocaleString('vi-VN')}đ đã sẵn sàng để thanh toán.`,
     );
 
     return settlement;
@@ -312,7 +316,7 @@ export class SettlementsService {
     await this.notifyProvider(
       settlement,
       'Yêu cầu chi trả đã bị từ chối',
-      `Khoản chi trả ${settlement.settlementCode} trị giá ${settlement.payableAmount.toLocaleString('vi-VN')}đ đã bị từ chối. Lý do: ${dto.reason}`,
+      `Khoản chi trả ${settlement.settlementCode} trị giá ${(settlement.payableAmount ?? 0).toLocaleString('vi-VN')}đ đã bị từ chối. Lý do: ${dto.reason}`,
     );
 
     return settlement;
@@ -399,7 +403,7 @@ export class SettlementsService {
     await this.notifyProvider(
       settlement!,
       'Chi trả thành công',
-      `Khoản chi trả ${settlement!.settlementCode} trị giá ${settlement!.payableAmount.toLocaleString('vi-VN')}đ đã được thanh toán thành công.${dto.payoutReference ? ` Mã giao dịch: ${dto.payoutReference}.` : ''}`,
+      `Khoản chi trả ${settlement!.settlementCode} trị giá ${(settlement!.payableAmount ?? 0).toLocaleString('vi-VN')}đ đã được thanh toán thành công.${dto.payoutReference ? ` Mã giao dịch: ${dto.payoutReference}.` : ''}`,
     );
 
     return settlement!;
@@ -464,6 +468,7 @@ export class SettlementsService {
     bookingId: string,
     reason: string,
     actorId?: string,
+    session?: ClientSession,
   ): Promise<void> {
     await this.settlementModel.updateMany(
       {
@@ -476,6 +481,7 @@ export class SettlementsService {
           holdReason: reason,
         },
       },
+      session ? { session } : undefined,
     );
 
     if (actorId) {

@@ -1,13 +1,12 @@
 import React, { useEffect } from 'react';
 import {
   Camera,
-  Check,
   CheckCircle,
   Clock,
   Eye,
   FileText,
   Flag,
-  Package,
+  PackageCheck,
   Play,
   X,
 } from 'lucide-react';
@@ -39,6 +38,7 @@ type OrderAction = {
   color: string;
   disabled?: boolean;
   title?: string;
+  onClick?: () => void;
 };
 
 export function OrderActionDropdown({
@@ -121,39 +121,52 @@ export function OrderActionDropdown({
     ? [{ label: 'Lịch chụp chưa được xác nhận', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true }]
     : [{ label: 'Bàn giao ảnh chụp', apiStatus: 'AWAITING_REVIEW', icon: <Camera size={14} />, color: '#1565C0' }];
 
+  const openRentalFulfillmentAction: OrderAction = {
+    label: 'Vận hành bàn giao áo dài',
+    apiStatus: '',
+    icon: <PackageCheck size={14} />,
+    color: '#8E1B2E',
+    onClick: () => {
+      setSelectedBookingId(order._id);
+      setIsDetailModalOpen(true);
+      onClose();
+    },
+  };
+
   const nextStepsMap: Record<string, OrderAction[]> = isComboOrder
     ? {
         PENDING_PAYMENT: [{ label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' }],
         DEPOSIT_PAID: [
-          { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: '#D97706' },
+          openRentalFulfillmentAction,
           { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
         ],
         CONFIRMED: [
-          { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: '#D97706' },
+          openRentalFulfillmentAction,
           { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
         ],
         PICKUP_PENDING: [
-          { label: '⏳ Chờ khách duyệt nhận đồ...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+          openRentalFulfillmentAction,
           { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
         ],
         PICKED_UP: order.photosApproved
-          ? [
-              { label: 'Xác nhận đã nhận lại đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
-              { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: '#D97706' },
-            ]
-          : [photoStartAction, { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' }],
+          ? [openRentalFulfillmentAction]
+          : [photoStartAction, openRentalFulfillmentAction, { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' }],
         IN_PROGRESS: order.photosApproved
-          ? [{ label: 'Xác nhận đã nhận lại đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' }]
-          : [...photoSessionSteps],
+          ? [openRentalFulfillmentAction]
+          : [...photoSessionSteps, openRentalFulfillmentAction],
         AWAITING_REVIEW: order.photosApproved
-          ? [{ label: '✓ Khách đã duyệt ảnh • Chờ trả áo dài', apiStatus: '', icon: <CheckCircle size={14} />, color: '#059669', disabled: true }]
-          : [{ label: '⏳ Chờ khách duyệt nhận ảnh...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true }],
+          ? [openRentalFulfillmentAction]
+          : [{ label: '⏳ Chờ khách duyệt nhận ảnh...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true }, openRentalFulfillmentAction],
         COMBO_PHOTOS_APPROVED: [
-          { label: 'Xác nhận đã nhận lại đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
-          { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: '#D97706' },
+          openRentalFulfillmentAction,
         ],
-        RETURN_PENDING: [{ label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true }],
-        RETURNED: [{ label: '⏳ Chờ khách xác nhận hoàn tất...', apiStatus: '', icon: <Clock size={14} />, color: '#059669', disabled: true }],
+        RETURN_PENDING: [
+          openRentalFulfillmentAction,
+        ],
+        RETURNED: [
+          openRentalFulfillmentAction,
+          { label: '⏳ Chờ Admin tất toán cọc...', apiStatus: '', icon: <Clock size={14} />, color: '#059669', disabled: true },
+        ],
         DISPUTED: [{ label: '⚖️ Đang tranh chấp (Chờ Admin)', apiStatus: '', icon: <Clock size={14} />, color: '#DC2626', disabled: true }],
         REFUNDED: [{ label: 'Đã hoàn tiền', apiStatus: '', icon: <CheckCircle size={14} />, color: '#6B7280', disabled: true }],
       }
@@ -172,28 +185,30 @@ export function OrderActionDropdown({
       }
     : {
         PENDING_PAYMENT: [
-          { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
           { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
         ],
         DEPOSIT_PAID: [
-          { label: 'Xác nhận đơn', apiStatus: 'CONFIRMED', icon: <CheckCircle size={14} />, color: '#1565C0' },
-          { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: '#D97706' },
+          openRentalFulfillmentAction,
           { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
         ],
         CONFIRMED: [
-          { label: 'Báo chờ nhận đồ', apiStatus: 'PICKUP_PENDING', icon: <Package size={14} />, color: '#D97706' },
+          openRentalFulfillmentAction,
           { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
         ],
         PICKUP_PENDING: [
-          { label: '⏳ Chờ khách duyệt nhận đồ...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true },
+          openRentalFulfillmentAction,
           { label: 'Hủy đơn', apiStatus: 'CANCELLED', icon: <X size={14} />, color: '#d32f2f' },
         ],
         PICKED_UP: [
-          { label: 'Xác nhận đã trả đồ', apiStatus: 'RETURNED', icon: <Check size={14} />, color: '#2e7d32' },
-          { label: 'Chờ kiểm tra đồ', apiStatus: 'RETURN_PENDING', icon: <Eye size={14} />, color: '#D97706' },
+          openRentalFulfillmentAction,
         ],
-        RETURN_PENDING: [{ label: '⏳ Chờ khách duyệt đền bù...', apiStatus: '', icon: <Clock size={14} />, color: '#D97706', disabled: true }],
-        RETURNED: [{ label: '⏳ Chờ khách xác nhận hoàn tất...', apiStatus: '', icon: <Clock size={14} />, color: '#059669', disabled: true }],
+        RETURN_PENDING: [
+          openRentalFulfillmentAction,
+        ],
+        RETURNED: [
+          openRentalFulfillmentAction,
+          { label: '⏳ Chờ Admin tất toán cọc...', apiStatus: '', icon: <Clock size={14} />, color: '#059669', disabled: true },
+        ],
         DISPUTED: [{ label: '⚖️ Đang tranh chấp (Chờ Admin)', apiStatus: '', icon: <Clock size={14} />, color: '#DC2626', disabled: true }],
         REFUNDED: [{ label: 'Đã hoàn tiền', apiStatus: '', icon: <CheckCircle size={14} />, color: '#6B7280', disabled: true }],
       };

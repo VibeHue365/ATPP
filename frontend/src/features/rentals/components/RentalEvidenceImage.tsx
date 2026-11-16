@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { API_BASE_URL } from '../../../config/env';
-import { tokenStorage } from '../../../services/tokenStorage';
+import { httpClient } from '../../../services/httpClient';
 
 interface Props {
   bookingId: string;
@@ -25,13 +24,28 @@ export const RentalEvidenceImage = ({ bookingId, itemId, fileId, alt, style, cla
     setFailed(false);
     const load = async () => {
       try {
-        const token = tokenStorage.getAccessToken();
-        const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}/items/${itemId}/rental/evidence/${fileId}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-          signal: controller.signal,
-        });
-        if (!response.ok) throw new Error('Cannot load rental evidence');
-        url = URL.createObjectURL(await response.blob());
+        let blob: Blob | null = null;
+        for (let attempt = 0; attempt < 3 && !controller.signal.aborted; attempt += 1) {
+          try {
+            blob = await httpClient.getBlob(
+              `/bookings/${bookingId}/items/${itemId}/rental/evidence/${fileId}`,
+              { signal: controller.signal },
+            );
+            break;
+          } catch (error: any) {
+            const status = error?.status || error?.response?.status;
+            if (status !== 429 || attempt === 2) throw error;
+            await new Promise<void>((resolve, reject) => {
+              const timer = window.setTimeout(resolve, 350 * (attempt + 1));
+              controller.signal.addEventListener('abort', () => {
+                window.clearTimeout(timer);
+                reject(new DOMException('Aborted', 'AbortError'));
+              }, { once: true });
+            });
+          }
+        }
+        if (!blob) throw new Error('Evidence image unavailable');
+        url = URL.createObjectURL(blob);
         setObjectUrl(url);
       } catch {
         if (!controller.signal.aborted) setFailed(true);

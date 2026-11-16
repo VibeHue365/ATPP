@@ -26,6 +26,7 @@ import {
   ReviewRentalChargeDto,
   SettleRentalDepositDto,
   MarkRentalReadyDto,
+  MarkRentalReturnedDto,
   RentalEvidenceDto,
 } from '../dto/rental-fulfillment.dto';
 import { RentalFulfillmentWorkflowService } from '../services/rental-fulfillment-workflow.service';
@@ -81,28 +82,68 @@ export class RentalFulfillmentController {
     return this.workflow.markPickedUp(bookingId, itemId, user, dto);
   }
 
+  @Post(':bookingId/items/:itemId/rental/customer-return')
+  requestCustomerReturn(
+    @CurrentUser() user: AuthUser,
+    @Param('bookingId') bookingId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: RentalEvidenceDto,
+  ) {
+    return this.workflow.requestCustomerReturn(bookingId, itemId, user, dto);
+  }
+
   @Post(':bookingId/items/:itemId/rental/returned')
-  markReturned(@CurrentUser() user: AuthUser, @Param('bookingId') bookingId: string, @Param('itemId') itemId: string, @Body() dto: RentalEvidenceDto) {
+  markReturned(@CurrentUser() user: AuthUser, @Param('bookingId') bookingId: string, @Param('itemId') itemId: string, @Body() dto: MarkRentalReturnedDto) {
     return this.workflow.markReturned(bookingId, itemId, user, dto);
+  }
+
+  @Post(':bookingId/items/:itemId/rental/confirm-no-incident')
+  confirmNoIncident(
+    @CurrentUser() user: AuthUser,
+    @Param('bookingId') bookingId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto?: { note?: string },
+  ) {
+    return this.workflow.confirmNoIncident(bookingId, itemId, user, dto?.note);
+  }
+
+  @Post(':bookingId/items/:itemId/rental/cleaning-completed')
+  markCleaningCompleted(
+    @CurrentUser() user: AuthUser,
+    @Param('bookingId') bookingId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto?: { note?: string },
+  ) {
+    return this.workflow.markCleaningCompleted(bookingId, itemId, user, dto?.note);
   }
 
   @Post(':bookingId/items/:itemId/rental/charges')
   proposeCharge(@CurrentUser() user: AuthUser, @Param('bookingId') bookingId: string, @Param('itemId') itemId: string, @Body() dto: ProposeRentalChargeDto) {
-    return this.workflow.proposeCharge(bookingId, itemId, user, dto);
+    throw new BadRequestException('Chức năng đề xuất phí cũ đã ngừng hoạt động. Vui lòng sử dụng tính năng Báo cáo sự cố (Incident) để thỏa thuận với khách hàng trước khi Admin xử lý.');
   }
 
   @Post(':bookingId/items/:itemId/rental/charges/:chargeType/review')
   reviewCharge(@CurrentUser() user: AuthUser, @Param('bookingId') bookingId: string, @Param('itemId') itemId: string, @Param('chargeType') chargeType: 'lateFee' | 'damageFee' | 'compensationAmount', @Body() dto: ReviewRentalChargeDto) {
-    return this.workflow.reviewCharge(bookingId, itemId, user, chargeType, dto.approved, dto.note);
+    throw new BadRequestException('Chức năng duyệt phí cũ đã ngừng hoạt động. Vui lòng giải quyết qua luồng Báo cáo sự cố (Incident) hoặc Tranh chấp (Dispute).');
   }
 
   @Post(':bookingId/items/:itemId/rental/deposit/settle')
   settleDeposit(@CurrentUser() user: AuthUser, @Param('bookingId') bookingId: string, @Param('itemId') itemId: string, @Body() dto: SettleRentalDepositDto) {
-    return this.workflow.settleDeposit(bookingId, itemId, user, dto);
+    throw new BadRequestException('Chức năng tất toán cọc cũ đã ngừng hoạt động. Vui lòng sử dụng tính năng Báo cáo sự cố (Incident) hoặc xác nhận Không có sự cố.');
   }
+
   @Post(':bookingId/items/:itemId/rental/complete')
   markCompleted(@CurrentUser() user: AuthUser, @Param('bookingId') bookingId: string, @Param('itemId') itemId: string, @Body() dto: CompleteRentalFulfillmentDto) {
-    return this.workflow.markCompleted(bookingId, itemId, user, dto.inventoryStatus, dto?.note);
+    throw new BadRequestException('Chức năng hoàn tất đơn trực tiếp cũ đã ngừng hoạt động. Vui lòng hoàn tất qua quy trình Xác nhận không có sự cố (Confirm No Incident) và Giặt ủi (Cleaning).');
+  }
+
+  @Get(':bookingId/items/:itemId/rental/evidence')
+  getEvidenceSummary(
+    @CurrentUser() user: AuthUser,
+    @Param('bookingId') bookingId: string,
+    @Param('itemId') itemId: string,
+  ) {
+    return this.workflow.getEvidenceSummary(bookingId, itemId, user);
   }
 
   @Get(':bookingId/items/:itemId/rental/evidence/:fileId')

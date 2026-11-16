@@ -481,6 +481,7 @@ describe('BookingRescheduleService - Notifications', () => {
     deleteManySchedules: jest.fn(),
     createSchedule: jest.fn(),
     updateManySchedules: jest.fn(),
+    updateBooking: jest.fn().mockResolvedValue({}),
   };
 
   const mockInventoryReservationModel = {

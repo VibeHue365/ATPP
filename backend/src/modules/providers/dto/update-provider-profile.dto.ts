@@ -1,6 +1,8 @@
 import {
   IsArray,
+  IsBoolean,
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsNumber,
   IsObject,
@@ -8,8 +10,48 @@ import {
   IsString,
   Max,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ProviderCapability } from '../schemas/provider.schema';
+
+export class ProviderRentalPickupLocationDto {
+  @IsString()
+  addressLine: string;
+
+  @IsOptional()
+  @IsString()
+  ward?: string | null;
+
+  @IsOptional()
+  @IsString()
+  district?: string | null;
+
+  @IsOptional()
+  @IsString()
+  city?: string | null;
+
+  @IsOptional()
+  @IsObject()
+  geo?: { type: 'Point'; coordinates: [number, number] } | null;
+}
+
+export class ProviderRentalSettingsDto {
+  @IsOptional()
+  @IsBoolean()
+  useBusinessAddressForPickup?: boolean;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ProviderRentalPickupLocationDto)
+  pickupLocation?: ProviderRentalPickupLocationDto | null;
+
+  @IsOptional()
+  @IsInt({ message: 'turnaroundSlots must be an integer' })
+  @Min(0, { message: 'turnaroundSlots minimum is 0' })
+  @Max(3, { message: 'turnaroundSlots maximum is 3' })
+  turnaroundSlots?: number;
+}
 
 export class UpdateProviderProfileDto {
   @IsString()
@@ -44,17 +86,9 @@ export class UpdateProviderProfileDto {
   };
 
   @IsOptional()
-  @IsObject()
-  rentalSettings?: {
-    useBusinessAddressForPickup?: boolean;
-    pickupLocation?: {
-      addressLine: string;
-      ward?: string | null;
-      district?: string | null;
-      city?: string | null;
-      geo?: { type: 'Point'; coordinates: [number, number] } | null;
-    } | null;
-  };
+  @ValidateNested()
+  @Type(() => ProviderRentalSettingsDto)
+  rentalSettings?: ProviderRentalSettingsDto;
 
   @IsOptional()
   @IsObject()

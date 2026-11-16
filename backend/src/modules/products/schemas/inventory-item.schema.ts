@@ -68,6 +68,16 @@ export class InventoryItem {
    */
   @Prop({ type: Date, default: null })
   variantRemovedAt?: Date | null;
+
+  /**
+   * Operational snapshot indicating when the current physical CLEANING turnaround ends.
+   * Only populated when status === 'CLEANING'. Null when AVAILABLE.
+   */
+  @Prop({ type: Date, default: null, index: true })
+  operationalAvailableFrom?: Date | null;
+
+  @Prop({ type: Types.ObjectId, ref: 'BookingItem', default: null })
+  activeTurnaroundBookingItemId?: Types.ObjectId | null;
 }
 
 export const InventoryItemSchema = SchemaFactory.createForClass(InventoryItem);

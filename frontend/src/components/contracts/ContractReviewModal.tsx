@@ -31,6 +31,7 @@ export interface ContractReviewModalProps {
   bookingId: string;
   bookingData?: {
     bookingCode?: string;
+    holdExpiresAt?: string | Date;
     items?: unknown[];
     pricingSummary?: unknown;
     [key: string]: unknown;
@@ -57,12 +58,33 @@ export const ContractReviewModal: React.FC<ContractReviewModalProps> = ({
   const [hasAgreed, setHasAgreed] = useState<boolean>(false);
   const [isRefreshingVersion, setIsRefreshingVersion] = useState<boolean>(false);
   const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
+  const [currentTime] = useState<number>(() => Date.now());
 
   const handleNavigateToCart = () => {
     if (typeof window !== 'undefined') {
       window.location.href = '/cart';
     }
   };
+
+  const currentContract = contracts[activeContractIndex] || null;
+  const currentProviderReadiness = readiness?.providers?.find(
+    (p) => p.contractId === currentContract?.contractId,
+  );
+  const isQuickMode =
+    currentContract?.presentationMode === 'QUICK' ||
+    currentProviderReadiness?.presentationMode === 'QUICK';
+
+  const holdExpiresAtRaw =
+    bookingData?.holdExpiresAt ||
+    currentContract?.snapshot?.booking?.holdExpiresAt;
+  const isHoldExpired = Boolean(
+    holdExpiresAtRaw && new Date(holdExpiresAtRaw).getTime() <= currentTime,
+  );
+  const isDeclined =
+    currentProviderReadiness?.status === 'DECLINED' ||
+    currentContract?.versionState === 'DECLINED';
+  const isStale =
+    currentProviderReadiness?.status === 'STALE_SNAPSHOT';
 
   const handleOpenPdf = async () => {
     if (!currentContract) return;
@@ -72,9 +94,10 @@ export const ContractReviewModal: React.FC<ContractReviewModalProps> = ({
       const { blob } = await contractService.downloadPdfBlob(currentContract.contractId);
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Failed to open PDF:', e);
-      toast.error('Chưa thể mở file PDF lúc này: ' + (e?.message || 'Vui lòng thử lại'));
+      const errObj = e as { message?: string };
+      toast.error('Chưa thể mở file PDF lúc này: ' + (errObj?.message || 'Vui lòng thử lại'));
     } finally {
       setPdfLoading(false);
     }
@@ -118,42 +141,23 @@ export const ContractReviewModal: React.FC<ContractReviewModalProps> = ({
     }
   }, [bookingId]);
 
+  const [prevVersionId, setPrevVersionId] = useState<string | null | undefined>(currentContract?.versionId);
+  if (currentContract?.versionId !== prevVersionId) {
+    setPrevVersionId(currentContract?.versionId);
+    setHasAgreed(false);
+    setRefreshNotice(null);
+  }
+
   useEffect(() => {
     if (!isOpen) return;
     const timer = setTimeout(() => {
-      void loadContractsData();
       setActiveContractIndex(0);
       setHasAgreed(false);
+      setRefreshNotice(null);
+      void loadContractsData();
     }, 0);
     return () => clearTimeout(timer);
-  }, [isOpen, loadContractsData]);
-
-  if (!isOpen) return null;
-
-  const currentContract = contracts[activeContractIndex] || null;
-  const currentProviderReadiness = readiness?.providers.find(
-    (p) => p.contractId === currentContract?.contractId,
-  );
-  const isQuickMode =
-    currentContract?.presentationMode === 'QUICK' ||
-    currentProviderReadiness?.presentationMode === 'QUICK';
-
-  const holdExpiresAtRaw =
-    (bookingData as any)?.holdExpiresAt ||
-    currentContract?.snapshot?.booking?.holdExpiresAt;
-  const isHoldExpired = Boolean(
-    holdExpiresAtRaw && new Date(holdExpiresAtRaw).getTime() <= Date.now(),
-  );
-  const isDeclined =
-    currentProviderReadiness?.status === 'DECLINED' ||
-    currentContract?.versionState === 'DECLINED';
-  const isStale =
-    currentProviderReadiness?.status === 'STALE_SNAPSHOT';
-
-  useEffect(() => {
-    setHasAgreed(false);
-    setRefreshNotice(null);
-  }, [currentContract?.versionId]);
+  }, [isOpen, bookingId, loadContractsData]);
 
   const handleRefreshContracts = async () => {
     setIsRefreshingVersion(true);
@@ -310,9 +314,11 @@ export const ContractReviewModal: React.FC<ContractReviewModalProps> = ({
   };
 
   const acceptedCount =
-    readiness?.providers.filter((p) => p.status === 'ACCEPTED').length || 0;
-  const totalCount = readiness?.providers.length || 0;
+    readiness?.providers?.filter((p) => p.status === 'ACCEPTED').length || 0;
+  const totalCount = readiness?.providers?.length || 0;
   const isAllAccepted = readiness?.ready === true;
+
+  if (!isOpen) return null;
 
   return (
     <div className="vh-contract-modal-overlay" data-testid="contract-review-modal">

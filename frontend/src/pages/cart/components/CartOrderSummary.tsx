@@ -18,6 +18,7 @@ interface CartOrderSummaryProps {
   checkedGroups: any[];
   hasRentalProduct: boolean;
   hasCityMismatch: boolean;
+  hasUnavailableItem?: boolean;
   isLoading: boolean;
   onCheckout: () => void;
   selectedVoucher?: ApplicableVoucherItem | null;
@@ -31,13 +32,14 @@ export const CartOrderSummary: React.FC<CartOrderSummaryProps> = ({
   checkedGroups,
   hasRentalProduct,
   hasCityMismatch,
+  hasUnavailableItem = false,
   isLoading,
   onCheckout,
   selectedVoucher,
   onOpenVoucherPicker,
   onRemoveVoucher,
 }) => {
-  const isCheckoutDisabled = selectedItemsCount === 0 || isLoading;
+  const isCheckoutDisabled = selectedItemsCount === 0 || isLoading || hasUnavailableItem;
   const payNowAmount = totals.amountDueNow ?? totals.depositToPayNow;
 
   return (
@@ -45,6 +47,11 @@ export const CartOrderSummary: React.FC<CartOrderSummaryProps> = ({
       {/* Tóm tắt đơn hàng box */}
       <div className="vh-cart-summary-box">
         <h3 className="font-header vh-cart-summary-title">Tóm tắt đơn hàng</h3>
+        {hasUnavailableItem && (
+          <div style={{ color: '#b42318', background: '#fff1f0', border: '1px solid #f3b5b0', borderRadius: 8, padding: '10px 12px', marginBottom: 14, fontSize: 13 }}>
+            Có sản phẩm không còn khả dụng trong lịch đã chọn. Vui lòng sửa lịch hoặc đổi size/màu trước khi thanh toán.
+          </div>
+        )}
 
         {/* Voucher Selection Box */}
         {selectedItemsCount > 0 && onOpenVoucherPicker && (

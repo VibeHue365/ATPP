@@ -24,6 +24,7 @@ import { ProviderOverviewQueryDto } from '../dto/provider-overview-query.dto';
 import { CreatePortfolioItemDto, UpdatePortfolioItemDto } from '../dto/portfolio-item.dto';
 import { UpdateProviderProfileDto, AddPortfolioImageDto } from '../dto/update-provider-profile.dto';
 import { PublicMediaService } from '../../storage/services/public-media.service';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   RecurringScheduleDto,
   BulkRecurringScheduleDto,
@@ -71,6 +72,7 @@ export class ProvidersController {
   }
 
   @Get('me/overview')
+  @SkipThrottle({ default: true })
   async getOverview(
     @CurrentUser() user: AuthUser,
     @Query() query: ProviderOverviewQueryDto,

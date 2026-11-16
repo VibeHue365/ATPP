@@ -63,9 +63,9 @@ export const ChatPage: React.FC<ChatPageProps> = ({ embedded = false, onUnreadCo
   const stateActiveRoomId = location.state?.activeRoomId;
 
   // Fetch rooms list
-  const fetchRooms = async (selectRoomId?: string) => {
+  const fetchRooms = async (selectRoomId?: string, silent = false) => {
     try {
-      setLoadingRooms(true);
+      if (!silent) setLoadingRooms(true);
       const data = await chatService.getRooms();
       setRooms(data);
       onUnreadCountChange?.(
@@ -75,14 +75,16 @@ export const ChatPage: React.FC<ChatPageProps> = ({ embedded = false, onUnreadCo
       // Select active room if passed or select first
       if (selectRoomId) {
         const found = data.find((r) => r.id === selectRoomId);
-        if (found) setActiveRoom(found);
+        if (found && normalizeEntityId(activeRoom?.id) !== normalizeEntityId(found.id)) {
+          setActiveRoom(found);
+        }
       } else if (data.length > 0 && !activeRoom) {
         setActiveRoom(data[0]);
       }
     } catch (err: any) {
       toast.error('Không thể tải danh sách phòng chat');
     } finally {
-      setLoadingRooms(false);
+      if (!silent) setLoadingRooms(false);
     }
   };
 
@@ -146,16 +148,21 @@ export const ChatPage: React.FC<ChatPageProps> = ({ embedded = false, onUnreadCo
         activeRoom &&
         normalizeEntityId(message.roomId) === normalizeEntityId(activeRoom.id)
       ) {
-        setMessages((prev) => [...prev, message]);
+        setMessages((prev) => {
+          if (prev.some((item) => normalizeEntityId(item._id) === normalizeEntityId(message._id))) {
+            return prev;
+          }
+          return [...prev, message];
+        });
         socket.emit('mark_read', { roomId: activeRoom.id });
       }
 
       // Refresh the rooms list to update last message preview
-      fetchRooms(activeRoom?.id);
+      void fetchRooms(activeRoom?.id, true);
     };
 
     const onRoomUpdate = () => {
-      fetchRooms(activeRoom?.id);
+      void fetchRooms(activeRoom?.id, true);
     };
 
     const onMessagesRead = (data: { roomId: string; userId: string }) => {
