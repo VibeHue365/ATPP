@@ -44,7 +44,7 @@ export const statusDisplayMap: Record<string, string> = {
   PICKUP_PENDING: 'CHỜ NHẬN ĐỒ',
   PICKED_UP: 'ĐANG THUÊ',
   COMBO_PHOTOS_APPROVED: 'ĐÃ DUYỆT ẢNH • CHỜ TRẢ ĐỒ',
-  RETURN_PENDING: 'CHỜ KHÁCH DUYỆT SỰ CỐ',
+  RETURN_PENDING: 'CHỜ KIỂM TRA ĐỒ',
   RETURNED: 'ĐÃ TRẢ ĐỒ',
   COMPLETED: 'HOÀN THÀNH',
   CANCELLED: 'ĐÃ HỦY',

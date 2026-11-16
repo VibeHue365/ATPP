@@ -42,6 +42,13 @@ const SYSTEM_POLICIES = {
   PHOTOGRAPHY_CANCEL_PENALTY_RATE: 0.2,
 };
 import { BookingsRepository } from '../repositories/bookings.repository';
+import {
+  InventorySlotLease,
+  InventorySlotLeaseDocument,
+  SlotLeaseStatus,
+} from '../schemas/inventory-slot-lease.schema';
+import { InventorySlotLeaseService } from './inventory-slot-lease.service';
+import { Optional } from '@nestjs/common';
 import { pendingBookingExpiryFilter } from './booking-expiry-filter';
 import { freePaymentClaim, newPaymentClaim } from './payment-expiry-claim';
 
@@ -58,6 +65,10 @@ export class BookingStatusService {
     private readonly paymentsService: PaymentsService,
     private readonly promotionsService: PromotionsService,
     private readonly settlementCalc: SettlementCalculationService,
+    @InjectModel(InventorySlotLease.name)
+    private readonly leaseModel: Model<InventorySlotLeaseDocument>,
+    @Optional()
+    private readonly slotLeaseService?: InventorySlotLeaseService,
   ) {}
 
   async cleanupExpiredPendingBookings(
@@ -130,6 +141,32 @@ export class BookingStatusService {
               { $set: { status: ReservationStatus.Cancelled } },
             )
             .session(session);
+
+          if (this.slotLeaseService) {
+            await this.slotLeaseService.releaseBookingLeases(
+              booking._id,
+              'EXPIRED',
+              session,
+            );
+          } else if (this.leaseModel) {
+            await this.leaseModel
+              .updateMany(
+                {
+                  bookingId: booking._id,
+                  status: {
+                    $in: [SlotLeaseStatus.Temp, SlotLeaseStatus.Confirmed],
+                  },
+                },
+                {
+                  $set: {
+                    status: SlotLeaseStatus.Released,
+                    releasedAt: now,
+                    releaseReason: 'EXPIRED',
+                  },
+                },
+              )
+              .session(session);
+          }
           await this.promotionsService.releaseVoucher(booking._id, session);
         }
       }
@@ -170,21 +207,14 @@ export class BookingStatusService {
       );
       if (!booking) throw new NotFoundException('Không tìm thấy đơn hàng');
 
-      // Authorization check (Customer is allowed to complete their own booking)
+      // Authorization check (Only Customer or Admin is allowed to complete a booking)
       if (userId) {
         const isAdmin = roles?.includes('ADMIN') || roles?.includes('admin');
         const isCustomer = this.getCustomerIdStr(booking) === userId;
-        const userProviders = await this.providerModel
-          .find({ userId: new Types.ObjectId(userId) })
-          .session(session);
-        const userProviderIds = userProviders.map((p) => p._id.toString());
-        const isProvider = booking.providerIds.some((id) =>
-          userProviderIds.includes(id.toString()),
-        );
 
-        if (!isAdmin && !isCustomer && !isProvider) {
+        if (!isAdmin && !isCustomer) {
           throw new ForbiddenException(
-            'Bạn không có quyền đánh dấu hoàn thành đơn hàng này.',
+            'Nhà cung cấp không được phép tự ý hoàn tất đơn hàng. Chỉ khách hàng hoặc Admin mới có quyền xác nhận hoàn thành đơn hàng.',
           );
         }
       }
@@ -558,7 +588,8 @@ export class BookingStatusService {
 
         if (booking.providerIds && booking.providerIds.length > 0) {
           const query = this.providerModel.find({ _id: { $in: booking.providerIds } });
-          const providers = (typeof (query as any)?.select === 'function' ? await (query as any).select('userId').lean() : await query) || [];
+          const rawProviders = typeof (query as any)?.select === 'function' ? await (query as any).select('userId').lean() : await query;
+          const providers = Array.isArray(rawProviders) ? rawProviders : [];
 
           for (const prov of providers as any[]) {
             if (prov?.userId) {
@@ -589,6 +620,30 @@ export class BookingStatusService {
           { $set: { status: ReservationStatus.Cancelled } },
         )
         .session(session);
+
+      if (this.slotLeaseService) {
+        await this.slotLeaseService.releaseBookingLeases(
+          booking._id,
+          'CANCELLED',
+          session,
+        );
+      } else if (this.leaseModel) {
+        await this.leaseModel
+          .updateMany(
+            {
+              bookingId: booking._id,
+              status: { $in: [SlotLeaseStatus.Temp, SlotLeaseStatus.Confirmed] },
+            },
+            {
+              $set: {
+                status: SlotLeaseStatus.Released,
+                releasedAt: new Date(),
+                releaseReason: 'CANCELLED',
+              },
+            },
+          )
+          .session(session);
+      }
 
       // 5. Nhả voucher có điều kiện (Diff 2): chỉ nhả nếu hủy miễn phí (fullRefund)
       await this.promotionsService.releaseVoucher(
@@ -710,6 +765,13 @@ export class BookingStatusService {
       }
 
       if (newStatus === BookingStatus.Completed) {
+        const isAdmin = roles?.includes('ADMIN') || roles?.includes('admin');
+        const isCustomer = userId && this.getCustomerIdStr(booking) === userId;
+        if (!isAdmin && !isCustomer) {
+          throw new ForbiddenException(
+            'Nhà cung cấp không được phép tự ý hoàn tất đơn hàng. Chỉ khách hàng xác nhận hoặc hệ thống tự động nghiệm thu sau 24h mới có quyền hoàn tất đơn này.',
+          );
+        }
         const result = await this.completeBooking(
           bookingIdStr,
           userId,
@@ -883,6 +945,10 @@ export class BookingStatusService {
         }
       }
 
+      if (nextStatus === BookingStatus.Returned) {
+        booking.returnedAt = new Date();
+      }
+
       await booking.save({ session });
 
       if (
@@ -950,7 +1016,8 @@ export class BookingStatusService {
 
         if (booking.providerIds && booking.providerIds.length > 0) {
           const query = this.providerModel.find({ _id: { $in: booking.providerIds } });
-          const providers = (typeof (query as any)?.select === 'function' ? await (query as any).select('userId').lean() : await query) || [];
+          const rawProviders = typeof (query as any)?.select === 'function' ? await (query as any).select('userId').lean() : await query;
+          const providers = Array.isArray(rawProviders) ? rawProviders : [];
 
           for (const prov of providers as any[]) {
             if (prov?.userId) {

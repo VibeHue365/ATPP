@@ -10,6 +10,7 @@ import { useToast } from '../../components/feedback/Toast';
 import { ConfirmModal } from '../../utils/confirmModal';
 
 import { productSlots, isTimeSlotOverlap } from '../rentals/product-detail/utils/timeSlotUtils';
+import { normalizeCol } from '../rentals/product-detail/utils/colorUtils';
 import type { EnrichedCartItem, ComboGroupEntry, CartCalendarDay, CartItemGroup } from './types';
 import {
   isMongoObjectId,
@@ -70,6 +71,9 @@ export const CartPage: React.FC = () => {
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
   const [busyDates, setBusyDates] = useState<string[]>([]);
   const [busySlots, setBusySlots] = useState<{ date: string; timeSlot: string }[]>([]);
+  const [variantBookedSlots, setVariantBookedSlots] = useState<
+    Record<string, Array<{ date: string; timeSlot: string; purpose?: 'RENTAL' | 'TURNAROUND' }>>
+  >({});
 
   const editingItem = cart.find((i) => i.id === editingItemId);
   const editingItemType = editingItem?.rentalType || 'DAILY';
@@ -82,17 +86,31 @@ export const CartPage: React.FC = () => {
       if (!productItems.length) return;
 
       try {
-        const response = await httpClient.post<Array<{ key: string; stock: number }>>(
-          '/bookings/stock/batch',
-          {
-            items: productItems.map((item) => ({
-              key: item.id,
-              productId: item.productId,
-              size: item.size || '',
-              color: item.color || '',
-            })),
-          },
-        );
+        // Use the same date/slot-aware availability check as checkout. The old
+        // stock endpoint only counted AVAILABLE inventory and ignored the
+        // selected rental period, causing the cart to show stock that checkout
+        // correctly rejected.
+        const response = await Promise.all(productItems.map(async (item) => {
+          const isHourly = item.rentalType === 'HOURLY';
+          const rentalFrom = item.rentalFrom || item.startDate || new Date(Date.now() + 24 * 3600 * 1000).toISOString().split('T')[0];
+          const rentalTo = item.rentalTo || item.endDate || rentalFrom;
+          const params = new URLSearchParams({
+            size: item.size || '',
+            color: item.color || '',
+            rentalFrom,
+            rentalTo,
+            quantity: String(item.quantity || 1),
+            rentalType: isHourly ? 'HOURLY' : 'DAILY',
+          });
+          if (isHourly) {
+            const slot = item.shootTimeSlot || (item.startTime && item.endTime ? `${item.startTime}-${item.endTime}` : '');
+            const [startTime, endTime] = slot.split('-').map((value) => value.trim());
+            if (startTime) params.set('startTime', startTime);
+            if (endTime) params.set('endTime', endTime);
+          }
+          const availability = await httpClient.get<any>(`/products/${item.productId}/availability?${params.toString()}`);
+          return { key: item.id, stock: Number(availability?.availableQuantity) || 0 };
+        }));
         if (!active) return;
         const stockByItemId = new Map(response.map((item) => [item.key, item.stock]));
         const stockMap = Object.fromEntries(
@@ -135,6 +153,7 @@ export const CartPage: React.FC = () => {
     if (!editingItemId) {
       setBusyDates([]);
       setBusySlots([]);
+      setVariantBookedSlots({});
       return;
     }
     const item = cart.find((i) => i.id === editingItemId);
@@ -148,6 +167,7 @@ export const CartPage: React.FC = () => {
       .then((res) => {
         setBusyDates(res.bookedDates || []);
         setBusySlots(res.bookedSlots || []);
+        setVariantBookedSlots(res.variantBookedSlots || {});
       })
       .catch((err) => {
         console.error('Error fetching busy dates/slots:', err);
@@ -180,6 +200,52 @@ export const CartPage: React.FC = () => {
     [cart, realProductList],
   );
 
+  // Hourly and effective busy dates for editing in cart
+  const hourlyBookedDates = useMemo(() => {
+    if (!editingItem) return new Set<string>();
+    const dates = new Set<string>();
+    const variantKey = editingItem.size && editingItem.color
+      ? `${editingItem.size.trim().toUpperCase()}_${normalizeCol(editingItem.color)}`
+      : null;
+
+    const hasVariantSlots = variantBookedSlots && Object.keys(variantBookedSlots).length > 0;
+
+    if (variantKey) {
+      if (hasVariantSlots) {
+        if (variantBookedSlots[variantKey]) {
+          variantBookedSlots[variantKey].forEach((s) => {
+            if (s.date) dates.add(s.date);
+          });
+        }
+      } else {
+        busySlots.forEach((s) => {
+          if (s.date) dates.add(s.date);
+        });
+      }
+    } else {
+      if (hasVariantSlots) {
+        Object.values(variantBookedSlots).forEach((slots) => {
+          slots.forEach((s) => {
+            if (s.date) dates.add(s.date);
+          });
+        });
+      }
+      busySlots.forEach((s) => {
+        if (s.date) dates.add(s.date);
+      });
+    }
+
+    return dates;
+  }, [editingItem, variantBookedSlots, busySlots]);
+
+  const effectiveBusyDates = useMemo(() => {
+    if (editingItemType === 'DAILY') {
+      const combined = new Set([...busyDates, ...hourlyBookedDates]);
+      return Array.from(combined);
+    }
+    return busyDates;
+  }, [editingItemType, busyDates, hourlyBookedDates]);
+
   // Calendar days calculation for inline editing
   const calendarDays = useMemo<CartCalendarDay[]>(() => {
     if (!editingItem) return [];
@@ -198,7 +264,7 @@ export const CartPage: React.FC = () => {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
       const dayOfWeek = new Date(dateStr).getDay();
 
-      let isAvailable = !busyDates.includes(dateStr) && dateStr >= todayStr;
+      let isAvailable = !effectiveBusyDates.includes(dateStr) && dateStr >= todayStr;
       if (editingItemType === 'HOURLY' && dateStr === todayStr) {
         const currentHour = today.getHours();
         const currentMinute = today.getMinutes();
@@ -218,14 +284,14 @@ export const CartPage: React.FC = () => {
       });
     }
     return days;
-  }, [calendarDate, busyDates, editingItemType, editingItem]);
+  }, [calendarDate, effectiveBusyDates, editingItemType, editingItem]);
 
   const handleCalendarDayClick = (dateStr: string) => {
     if (!editingItem) return;
     if (editingItemType === 'HOURLY') {
       updateCartItemDates(editingItem.id, dateStr, dateStr);
     } else {
-      if (busyDates.includes(dateStr)) {
+      if (effectiveBusyDates.includes(dateStr)) {
         toast.error('Ngày này đã bị đặt lịch!');
         return;
       }
@@ -255,8 +321,29 @@ export const CartPage: React.FC = () => {
   const bookedSlotsOnSelectedDate = useMemo(() => {
     const singleDate = editingItem?.rentalFrom || editingItem?.startDate || '';
     if (!singleDate) return [];
-    return busySlots.filter((s) => s.date === singleDate).map((s) => s.timeSlot);
-  }, [editingItem, busySlots]);
+    const variantKey = editingItem?.size && editingItem?.color
+      ? `${editingItem.size.trim().toUpperCase()}_${normalizeCol(editingItem.color)}`
+      : null;
+
+    const hasVariantSlots = variantBookedSlots && Object.keys(variantBookedSlots).length > 0;
+    let relevantSlots: Array<{ date: string; timeSlot: string }> = [];
+
+    if (variantKey) {
+      if (hasVariantSlots) {
+        relevantSlots = variantBookedSlots[variantKey] || [];
+      } else {
+        relevantSlots = busySlots;
+      }
+    } else {
+      relevantSlots = busySlots;
+    }
+
+    const filtered = relevantSlots
+      .filter((s) => s.date === singleDate)
+      .map((s) => s.timeSlot);
+
+    return Array.from(new Set(filtered));
+  }, [editingItem, busySlots, variantBookedSlots]);
 
   const startSlotIndex = useMemo(() => {
     const startTime = editingItem?.startTime || '07:00';
@@ -512,6 +599,12 @@ export const CartPage: React.FC = () => {
     [enrichedCart, selectedItemIds],
   );
 
+  const hasUnavailableSelectedItem = selectedItems.some(
+    (item) => item.itemType === 'PRODUCT' &&
+      itemStocks[item.id] !== undefined &&
+      itemStocks[item.id] < (item.quantity || 1),
+  );
+
   const baseTotals = useMemo(
     () => calculateCartTotals(enrichedCart, selectedItemIds),
     [enrichedCart, selectedItemIds],
@@ -714,6 +807,18 @@ export const CartPage: React.FC = () => {
             }),
         );
       } catch (error: any) {
+        // The cart is not a reservation. A competing booking may have won the
+        // race after the last availability refresh. Reflect the authoritative
+        // checkout result immediately so the button is disabled and the row
+        // no longer claims that stock is available.
+        setItemStocks((prev) => ({
+          ...prev,
+          ...Object.fromEntries(
+            selectedItems
+              .filter((item) => item.itemType === 'PRODUCT')
+              .map((item) => [item.id, 0]),
+          ),
+        }));
         setIsLoading(false);
         toast.error(translateError(error?.message) || 'Không thể kiểm tra lịch thuê.');
         return;
@@ -1175,6 +1280,7 @@ export const CartPage: React.FC = () => {
                 checkedGroups={[]}
                 hasRentalProduct={selectedItems.some((item) => item.itemType === 'PRODUCT')}
                 hasCityMismatch={false}
+                hasUnavailableItem={hasUnavailableSelectedItem}
                 isLoading={isLoading}
                 onCheckout={handleCheckout}
                 selectedVoucher={selectedVoucher}
@@ -1236,6 +1342,7 @@ export const CartPage: React.FC = () => {
           depositToPayNow={totals.amountDueNow ?? totals.depositToPayNow}
           grandTotal={totals.grandTotal}
           isLoading={isLoading}
+          hasUnavailableItem={hasUnavailableSelectedItem}
           onCheckout={handleCheckout}
         />
       )}

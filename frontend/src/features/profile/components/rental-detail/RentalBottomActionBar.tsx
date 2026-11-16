@@ -1,18 +1,23 @@
 import React from 'react';
-import { XCircle, Clock, Headphones, CheckSquare, MapPin, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { XCircle, Headphones, CheckSquare, MapPin, CheckCircle2, AlertTriangle, CreditCard, Clock } from 'lucide-react';
 
 interface RentalBottomActionBarProps {
   status?: string;
   incident?: any;
   respondingIncident?: boolean;
   onCancel: () => void;
-  onExtend: () => void;
   onSupport: () => void;
   onReturn: () => void;
   onOpenMap?: () => void;
   onConfirmPickup?: () => void;
+  onReportDamage?: () => void;
+  onRejectHandover?: () => void;
+  isSubmittingPickup?: boolean;
   onAgreeIncident?: () => void;
   onDisagreeIncident?: () => void;
+  onConfirmComplete?: () => void;
+  onContinuePayment?: () => void;
+  canCustomerConfirmCompletion?: boolean;
 }
 
 export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
@@ -20,13 +25,14 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
   incident,
   respondingIncident,
   onCancel,
-  onExtend,
   onSupport,
   onReturn,
   onOpenMap,
-  onConfirmPickup,
   onAgreeIncident,
-  onDisagreeIncident
+  onDisagreeIncident,
+  onConfirmComplete,
+  onContinuePayment,
+  canCustomerConfirmCompletion = false,
 }) => {
   const currentStatus = status || 'CONFIRMED';
   const isPendingCustomerIncident =
@@ -36,10 +42,10 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
   const isIncidentAccepted = incident?.status === 'ACCEPTED';
   const canCancel = !isPendingCustomerIncident && !isDisputed && ['PENDING_PAYMENT', 'WAITING_PAYMENT', 'CONFIRMED', 'DEPOSIT_PAID', 'PICKUP_PENDING', 'READY_FOR_PICKUP'].includes(currentStatus);
   const isPickupStage = ['PICKUP_PENDING', 'READY_FOR_PICKUP', 'CONFIRMED', 'DEPOSIT_PAID'].includes(currentStatus);
-  const canExtend = !isPendingCustomerIncident && !isDisputed && ['PICKED_UP', 'IN_PROGRESS', 'RENTING'].includes(currentStatus);
   const canReturn = !isPendingCustomerIncident && !isDisputed && ['PICKED_UP', 'IN_PROGRESS', 'RENTING'].includes(currentStatus);
   const isReturnPending = currentStatus === 'RETURN_PENDING';
-  const isCompleted = ['RETURNED', 'COMPLETED'].includes(currentStatus);
+  const isReturned = currentStatus === 'RETURNED' || currentStatus === 'COMBO_PHOTOS_APPROVED';
+  const isCompleted = currentStatus === 'COMPLETED';
 
   return (
     <div
@@ -89,6 +95,38 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
         </button>
       )}
 
+      {/* Tiếp tục thanh toán khi đơn ở trạng thái PENDING_PAYMENT / WAITING_PAYMENT */}
+      {['PENDING_PAYMENT', 'WAITING_PAYMENT'].includes(currentStatus) && onContinuePayment && (
+        <button
+          type="button"
+          onClick={onContinuePayment}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '10px 20px',
+            borderRadius: '10px',
+            backgroundColor: '#8E1B2E',
+            border: 'none',
+            color: '#FFFFFF',
+            fontSize: '13px',
+            fontWeight: 750,
+            cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(139, 30, 45, 0.25)',
+            transition: 'all 0.15s'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.backgroundColor = '#721824';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.backgroundColor = '#8E1B2E';
+          }}
+        >
+          <CreditCard size={15} />
+          <span>Tiếp tục thanh toán</span>
+        </button>
+      )}
+
       {/* 2. Đến điểm nhận áo (khi shop đã chuẩn bị đồ xong) */}
       {isPickupStage && onOpenMap && (
         <button
@@ -128,71 +166,6 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
         >
           <MapPin size={15} color={currentStatus === 'PICKUP_PENDING' || currentStatus === 'READY_FOR_PICKUP' ? '#FFFFFF' : '#8E1B2E'} />
           <span>Đến điểm nhận áo</span>
-        </button>
-      )}
-
-      {/* 2b. Xác nhận đã nhận áo (khi shop đã sẵn sàng giao hoặc đang chờ nhận đồ) */}
-      {['PICKUP_PENDING', 'READY_FOR_PICKUP'].includes(currentStatus) && onConfirmPickup && (
-        <button
-          type="button"
-          onClick={onConfirmPickup}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '10px 20px',
-            borderRadius: '10px',
-            backgroundColor: '#059669',
-            border: 'none',
-            color: '#FFFFFF',
-            fontSize: '13px',
-            fontWeight: 750,
-            cursor: 'pointer',
-            boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)',
-            transition: 'all 0.15s'
-          }}
-          onMouseOver={(e) => {
-            e.currentTarget.style.backgroundColor = '#047857';
-          }}
-          onMouseOut={(e) => {
-            e.currentTarget.style.backgroundColor = '#059669';
-          }}
-        >
-          <CheckSquare size={15} />
-          <span>Xác nhận đã nhận áo</span>
-        </button>
-      )}
-
-      {/* 3. Gia hạn thời gian (chỉ khi đang thuê) */}
-      {canExtend && (
-        <button
-          type="button"
-          onClick={onExtend}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '10px 18px',
-            borderRadius: '10px',
-            backgroundColor: '#FFFFFF',
-            border: '1px solid #DED7CB',
-            color: '#231F20',
-            fontSize: '13px',
-            fontWeight: 700,
-            cursor: 'pointer',
-            transition: 'all 0.15s'
-          }}
-          onMouseOver={(e) => {
-            e.currentTarget.style.backgroundColor = '#F8F5F1';
-            e.currentTarget.style.borderColor = '#8E1B2E';
-          }}
-          onMouseOut={(e) => {
-            e.currentTarget.style.backgroundColor = '#FFFFFF';
-            e.currentTarget.style.borderColor = '#DED7CB';
-          }}
-        >
-          <Clock size={15} color="#8E1B2E" />
-          <span>Gia hạn thời gian</span>
         </button>
       )}
 
@@ -390,6 +363,60 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
           <Clock size={15} />
           <span>Đang chờ shop kiểm tra &amp; hoàn cọc</span>
         </div>
+      )}
+
+      {/* 6e. Khách hàng xác nhận hoàn tất đơn & nhận lại cọc */}
+      {isReturned && (
+        <>
+          {canCustomerConfirmCompletion && onConfirmComplete ? (
+            <button
+              type="button"
+              onClick={onConfirmComplete}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '10px 22px',
+                borderRadius: '10px',
+                backgroundColor: '#059669',
+                border: 'none',
+                color: '#FFFFFF',
+                fontSize: '13px',
+                fontWeight: 750,
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)',
+                transition: 'all 0.15s'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.backgroundColor = '#047857';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.backgroundColor = '#059669';
+              }}
+            >
+              <CheckCircle2 size={15} />
+              <span>Xác nhận hoàn tất đơn &amp; Nhận lại cọc</span>
+            </button>
+          ) : (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '10px 18px',
+                borderRadius: '10px',
+                backgroundColor: '#FEF3C7',
+                border: '1px solid #FCD34D',
+                color: '#B45309',
+                fontSize: '13px',
+                fontWeight: 700
+              }}
+            >
+              <Clock size={15} />
+              <span>Shop đang giặt ủi / Admin đang tất toán cọc</span>
+            </div>
+          )}
+        </>
       )}
 
       {/* 7. Trạng thái đã hoàn tất */}

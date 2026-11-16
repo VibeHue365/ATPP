@@ -255,6 +255,10 @@ export class Booking {
   @Prop({ type: Date, default: null, index: true })
   awaitingReviewSince?: Date | null;
 
+  /** Timestamp when rental item was marked returned by shop */
+  @Prop({ type: Date, default: null, index: true })
+  returnedAt?: Date | null;
+
   @Prop({ type: Boolean, default: false })
   photosApproved?: boolean;
 
@@ -273,6 +277,14 @@ export class Booking {
   /** Store pickup only: photos uploaded by shop at handover time (when moving to PICKUP_PENDING) */
   @Prop({ type: [String], default: [] })
   handoverPhotos?: string[];
+
+  /** Rental only: customer return evidence photos and note when customer requests return (moving to RETURN_PENDING) */
+  @Prop({ type: Object, default: null })
+  customerReturnEvidence?: {
+    files?: string[];
+    returnedAt?: Date | null;
+    note?: string | null;
+  } | null;
 
   /** Photography only: result photos delivered by photographer when moving to AWAITING_REVIEW */
   @Prop({ type: [String], default: [] })

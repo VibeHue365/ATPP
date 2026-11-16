@@ -55,6 +55,27 @@ describe('RentalFulfillmentService', () => {
     await expect(service.markPickedUp({ itemId, actor, evidence })).rejects.toBeInstanceOf(ConflictException);
   });
 
+  it('stores provider handover evidence without marking the item picked up', async () => {
+    const { service, bookingItemModel } = createService();
+    const evidence = { files: [{ fileId: 'evidence-1', type: 'IMAGE' as const, uploadedAt: new Date(), uploadedBy: actor }] };
+
+    await service.submitPickupEvidence({ itemId, actor, evidence });
+
+    expect(bookingItemModel.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'rentalFulfillment.status': RentalFulfillmentStatus.ReadyForPickup,
+        'rentalFulfillment.pickupEvidence.files.0': { $exists: false },
+      }),
+      expect.objectContaining({
+        $set: expect.not.objectContaining({ 'rentalFulfillment.status': RentalFulfillmentStatus.PickedUp }),
+        $push: expect.objectContaining({
+          'rentalFulfillment.history': expect.objectContaining({ action: 'PICKUP_EVIDENCE_SUBMITTED' }),
+        }),
+      }),
+      { new: true },
+    );
+  });
+
   it('allows a provider proposal only after return and within the item deposit', async () => {
     const { service, bookingItemModel } = createService();
 

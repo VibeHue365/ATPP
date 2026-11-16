@@ -7,7 +7,10 @@ const ABSOLUTE_URL_PATTERN = /^(?:https?:|data:|blob:)/i;
  * API responses can contain either a full CDN URL or a relative `/uploads/...` path.
  */
 export const getMediaUrl = (value?: string | null): string | undefined => {
-  const url = value?.trim();
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const url = value.trim();
 
   if (!url) {
     return undefined;

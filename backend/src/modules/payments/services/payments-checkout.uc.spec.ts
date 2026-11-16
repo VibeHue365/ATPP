@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { BookingStatus } from '../../bookings/schemas/booking.schema';
+import { BookingStatus, BookingType } from '../../bookings/schemas/booking.schema';
 import { PaymentPurpose, PaymentStatus } from '../schemas/payment.schema';
 import { PaymentsService } from './payments.service';
 
@@ -171,7 +171,7 @@ describe('UC-49 Online Payment (HoangLVM)', () => {
     );
     expect(payment.paymentCode).toMatch(/^PAY\d{10}$/);
     expect(payment.payos.checkoutUrl).toContain(
-      `/checkout/result?paymentCode=${payment.paymentCode}`,
+      `/payments/checkout/${payment.paymentCode}`,
     );
   });
 
@@ -246,6 +246,115 @@ describe('UC-49 Online Payment (HoangLVM)', () => {
     await expect(
       service.getPaymentStatus('PAY404', customerId.toString()),
     ).rejects.toThrow(new NotFoundException('Payment not found'));
+  });
+
+  it('UT-49 UTCID18 keeps GET payment status pure read-only even for PAYOS_SIMULATOR pending payments', async () => {
+    const { service, paymentsRepository } = createService();
+    const confirmSpy = jest.spyOn(service, 'confirmPayment');
+    const bookingObjId = new Types.ObjectId();
+    paymentsRepository.findPaymentWithBooking.mockResolvedValue({
+      paymentCode: 'PAY_SIM_01',
+      status: PaymentStatus.Pending,
+      paymentMethod: 'PAYOS_SIMULATOR',
+      amount: 500000,
+      needsManualReview: false,
+      payos: { checkoutUrl: 'https://example.com/checkout' },
+      bookingId: {
+        _id: bookingObjId,
+        bookingCode: 'BK-SIM-01',
+        bookingType: BookingType.AoDaiRental,
+        customerId,
+        status: BookingStatus.PendingPayment,
+        contractFlowVersion: 2,
+        paymentReviewRequired: false,
+        paymentSummary: { paymentStatus: PaymentStatus.Pending },
+      },
+    });
+
+    const res = await service.getPaymentStatus(
+      'PAY_SIM_01',
+      customerId.toString(),
+    );
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(res).toEqual({
+      paymentCode: 'PAY_SIM_01',
+      paymentStatus: PaymentStatus.Pending,
+      bookingId: bookingObjId.toString(),
+      bookingCode: 'BK-SIM-01',
+      bookingType: BookingType.AoDaiRental,
+      bookingStatus: BookingStatus.PendingPayment,
+      bookingPaymentStatus: PaymentStatus.Pending,
+      confirmed: false,
+      needsManualReview: false,
+      reviewReason: null,
+      contractFlowVersion: 2,
+      paymentMethod: 'PAYOS_SIMULATOR',
+      amount: 500000,
+      checkoutUrl: 'https://example.com/checkout',
+    });
+  });
+
+  it('UT-49 UTCID19 flags needsManualReview and sets confirmed=false when review is required', async () => {
+    const { service, paymentsRepository } = createService();
+    const bookingObjId = new Types.ObjectId();
+    paymentsRepository.findPaymentWithBooking.mockResolvedValue({
+      paymentCode: 'PAY_REV_01',
+      status: PaymentStatus.Success,
+      paymentMethod: 'PAYOS_SIMULATOR',
+      amount: 500000,
+      needsManualReview: true,
+      bookingId: {
+        _id: bookingObjId,
+        bookingCode: 'BK-REV-01',
+        customerId,
+        status: BookingStatus.PendingPayment,
+        contractFlowVersion: 2,
+        paymentReviewRequired: true,
+        paymentReviewReason: 'CONTRACT_BINDING_STALE',
+        paymentSummary: { paymentStatus: PaymentStatus.Pending },
+      },
+    });
+
+    const res = await service.getPaymentStatus(
+      'PAY_REV_01',
+      customerId.toString(),
+    );
+
+    expect(res.confirmed).toBe(false);
+    expect(res.needsManualReview).toBe(true);
+    expect(res.reviewReason).toBe('CONTRACT_BINDING_STALE');
+    expect(res.checkoutUrl).toBeNull();
+  });
+
+  it('UT-49 UTCID20 returns confirmed=true when booking is Confirmed and no review is required', async () => {
+    const { service, paymentsRepository } = createService();
+    const bookingObjId = new Types.ObjectId();
+    paymentsRepository.findPaymentWithBooking.mockResolvedValue({
+      paymentCode: 'PAY_OK_01',
+      status: PaymentStatus.Success,
+      paymentMethod: 'PAYOS_SIMULATOR',
+      amount: 500000,
+      needsManualReview: false,
+      bookingId: {
+        _id: bookingObjId,
+        bookingCode: 'BK-OK-01',
+        customerId,
+        status: BookingStatus.Confirmed,
+        contractFlowVersion: null,
+        paymentReviewRequired: false,
+        paymentSummary: { paymentStatus: PaymentStatus.Success },
+      },
+    });
+
+    const res = await service.getPaymentStatus(
+      'PAY_OK_01',
+      customerId.toString(),
+    );
+
+    expect(res.confirmed).toBe(true);
+    expect(res.needsManualReview).toBe(false);
+    expect(res.reviewReason).toBeNull();
   });
 });
 
@@ -337,7 +446,7 @@ describe('UC-48 View Transaction (HoangLVM)', () => {
     ).not.toHaveBeenCalled();
   });
 
-  it('UT-48 UTCID07 creates the missing deposit refund of a returned booking while listing transactions', async () => {
+  it('UT-48 UTCID07 keeps getTransactions strictly read-only and does not trigger refundDeposit for returned bookings', async () => {
     const booking = {
       _id: new Types.ObjectId(),
       bookingCode: 'BK-RET',
@@ -349,11 +458,19 @@ describe('UC-48 View Transaction (HoangLVM)', () => {
         grandTotal: 700000,
       },
     };
-    const { service, refundDeposit } = createService({ bookings: [booking] });
+    const { service, paymentsRepository, refundDeposit } = createService({
+      bookings: [booking],
+    });
 
-    await service.getTransactions(customerId.toString(), ['CUSTOMER']);
+    const result = await service.getTransactions(customerId.toString(), [
+      'CUSTOMER',
+    ]);
 
-    expect(refundDeposit).toHaveBeenCalledWith(booking._id.toString(), 200000);
+    expect(paymentsRepository.findByBookingIds).toHaveBeenCalledWith([
+      booking._id,
+    ]);
+    expect(refundDeposit).not.toHaveBeenCalled();
+    expect(result).toEqual([{ bookingId: booking._id }]);
   });
 
   it('UT-48 UTCID08 rejects a malformed user id', async () => {
@@ -363,5 +480,40 @@ describe('UC-48 View Transaction (HoangLVM)', () => {
       service.getTransactions('user-1', ['CUSTOMER']),
     ).rejects.toThrow();
     expect(bookingModel.find).not.toHaveBeenCalled();
+  });
+
+  it('UT-48 UTCID09 calling getTransactions repeatedly does not create payments, does not invoke refundDeposit, and causes no booking mutations', async () => {
+    const booking = {
+      _id: new Types.ObjectId(),
+      bookingCode: 'BK-REPEAT',
+      status: 'RETURNED',
+      bookingType: 'PRODUCT',
+      pricingSummary: {
+        depositTotal: 200000,
+        subTotal: 500000,
+        grandTotal: 700000,
+      },
+    };
+    const bookingSnapshot = JSON.stringify(booking);
+    const { service, paymentsRepository, bookingModel, refundDeposit } =
+      createService({ bookings: [booking] });
+
+    // Call repeatedly 3 times
+    const res1 = await service.getTransactions(customerId.toString(), [
+      'CUSTOMER',
+    ]);
+    const res2 = await service.getTransactions(customerId.toString(), [
+      'CUSTOMER',
+    ]);
+    const res3 = await service.getTransactions(customerId.toString(), [
+      'CUSTOMER',
+    ]);
+
+    expect(res1).toEqual(res2);
+    expect(res2).toEqual(res3);
+    expect(refundDeposit).not.toHaveBeenCalled();
+    expect(paymentsRepository.createPayment).not.toHaveBeenCalled();
+    expect(bookingModel.db.model).not.toHaveBeenCalledWith('Payment');
+    expect(JSON.stringify(booking)).toBe(bookingSnapshot);
   });
 });

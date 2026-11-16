@@ -1,6 +1,20 @@
 import React from 'react';
-import { Check, Sparkles, Shirt, Palette, Gem } from 'lucide-react';
+import {
+  Check,
+  Sparkles,
+  Shirt,
+  Palette,
+  Gem,
+  ShieldCheck,
+  AlertTriangle,
+  CheckSquare,
+  XCircle,
+  Info,
+  Image as ImageIcon
+} from 'lucide-react';
 import { ImageWithFallback } from '../../../../shared/media/ImageWithFallback';
+import { getMediaUrl } from '../../../../shared/media/mediaUrl';
+import { RentalEvidenceImage } from '../../../rentals/components/RentalEvidenceImage';
 
 interface RentalMainCardProps {
   rentalData: {
@@ -20,15 +34,28 @@ interface RentalMainCardProps {
     remainingTime: string;
     currentStepIndex?: number;
   };
+  pickupInspection?: {
+    handoverPhotos?: any[];
+    bookingId?: string;
+    itemId?: string;
+    isSubmitting?: boolean;
+    onConfirm?: () => void;
+    onReportDamage?: () => void;
+    onReject?: () => void;
+    onViewPhoto?: (url: string) => void;
+  };
 }
 
-export const RentalMainCard: React.FC<RentalMainCardProps> = ({ rentalData }) => {
+export const RentalMainCard: React.FC<RentalMainCardProps> = ({
+  rentalData,
+  pickupInspection
+}) => {
   if (!rentalData) return null;
 
   // Compute step active/completed states
   const rawStatus = rentalData.status;
   let activeStep = rentalData.currentStepIndex || 1;
-  if (['RETURNED', 'COMPLETED'].includes(rawStatus)) {
+  if (['RETURNED', 'COMPLETED', 'COMBO_PHOTOS_APPROVED'].includes(rawStatus)) {
     activeStep = 4;
   } else if (['PICKED_UP', 'RENTING', 'IN_PROGRESS', 'RETURN_PENDING'].includes(rawStatus)) {
     activeStep = 3;
@@ -93,7 +120,7 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({ rentalData }) =>
                   ? '#FEE2E2'
                   : rentalData.statusLabel === 'CHỜ DUYỆT SỰ CỐ'
                   ? '#FFF1F2'
-                  : ['RETURNED', 'COMPLETED'].includes(rawStatus)
+                  : ['RETURNED', 'COMPLETED', 'COMBO_PHOTOS_APPROVED'].includes(rawStatus)
                   ? '#ECFDF5'
                   : '#FFEDD5',
               color:
@@ -101,7 +128,7 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({ rentalData }) =>
                   ? '#991B1B'
                   : rentalData.statusLabel === 'CHỜ DUYỆT SỰ CỐ'
                   ? '#E11D48'
-                  : ['RETURNED', 'COMPLETED'].includes(rawStatus)
+                  : ['RETURNED', 'COMPLETED', 'COMBO_PHOTOS_APPROVED'].includes(rawStatus)
                   ? '#047857'
                   : '#C2410C',
               fontSize: '11px',
@@ -317,6 +344,278 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({ rentalData }) =>
           </div>
         </div>
       </div>
+
+      {/* 3. Phần nổi lên về kiểm tra và bàn giao trang phục ở phần tổng quan */}
+      {pickupInspection && (
+        <div
+          style={{
+            gridColumn: '1 / -1',
+            marginTop: '8px',
+            backgroundColor: '#FFFDF9',
+            borderRadius: '14px',
+            border: '1.5px solid #FCD34D',
+            boxShadow: '0 4px 18px rgba(217, 119, 6, 0.1)',
+            padding: '20px 22px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px'
+          }}
+        >
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  backgroundColor: '#FEF3C7',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#D97706',
+                  flexShrink: 0
+                }}
+              >
+                <ShieldCheck size={20} />
+              </div>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '15.5px', fontWeight: 800, color: '#92400E' }}>
+                  Kiểm tra áo khi nhận
+                </h4>
+                <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#B45309' }}>
+                  Bắt buộc đối soát hiện trạng trang phục trước khi nhận đồ tại cửa hàng
+                </p>
+              </div>
+            </div>
+
+            <div
+              style={{
+                backgroundColor: '#FFF1F2',
+                border: '1px solid #FECDD3',
+                color: '#991B1B',
+                padding: '4px 12px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 750
+              }}
+            >
+              Chờ bạn đối soát
+            </div>
+          </div>
+
+          {/* Instruction */}
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '10px',
+              border: '1px solid #FDE68A',
+              borderLeft: '4px solid #D97706',
+              padding: '10px 14px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '10px'
+            }}
+          >
+            <Info size={16} color="#D97706" style={{ marginTop: '2px', flexShrink: 0 }} />
+            <p style={{ margin: 0, fontSize: '12.5px', color: '#78350F', lineHeight: 1.5, fontWeight: 500 }}>
+              Vui lòng so sánh ảnh shop cung cấp với tình trạng thực tế của áo và phụ kiện. Nếu phát hiện vết bẩn, rách, thiếu phụ kiện hoặc sai sản phẩm, hãy báo cáo trước khi xác nhận nhận áo.
+            </p>
+          </div>
+
+          {/* Shop Handover Photos */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <span style={{ fontSize: '12.5px', fontWeight: 750, color: '#231F20' }}>
+              Ảnh bàn giao từ Shop {Array.isArray(pickupInspection.handoverPhotos) && pickupInspection.handoverPhotos.length > 0 ? `(${pickupInspection.handoverPhotos.length} ảnh):` : ''}
+            </span>
+
+            {!Array.isArray(pickupInspection.handoverPhotos) || pickupInspection.handoverPhotos.length === 0 ? (
+              <div
+                style={{
+                  padding: '12px 14px',
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '10px',
+                  border: '1px dashed #D1D5DB',
+                  color: '#6B7280',
+                  fontSize: '12.5px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <ImageIcon size={16} color="#9CA3AF" />
+                <span>Shop chưa cung cấp ảnh bàn giao. Bạn nên tự chụp ảnh hiện trạng trước khi nhận.</span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                {pickupInspection.handoverPhotos.map((photo: any, index: number) => {
+                  const rawUrl = typeof photo === 'string' ? photo : (photo as any)?.url || '';
+                  const fileId = typeof photo === 'object' ? (photo as any)?.fileId : undefined;
+                  const resolvedUrl = getMediaUrl(rawUrl) || rawUrl;
+                  return (
+                    <div
+                      key={index}
+                      onClick={() => pickupInspection.onViewPhoto?.(resolvedUrl)}
+                      style={{
+                        width: '76px',
+                        height: '76px',
+                        borderRadius: '10px',
+                        overflow: 'hidden',
+                        border: '1.5px solid #FCD34D',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
+                        cursor: 'pointer',
+                        position: 'relative',
+                        backgroundColor: '#F8F5F1'
+                      }}
+                      title="Bấm để xem ảnh lớn"
+                    >
+                      {fileId && pickupInspection.bookingId && pickupInspection.itemId ? (
+                        <RentalEvidenceImage
+                          bookingId={pickupInspection.bookingId}
+                          itemId={pickupInspection.itemId}
+                          fileId={fileId}
+                          alt={`Ảnh shop bàn giao #${index + 1}`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <ImageWithFallback
+                          src={resolvedUrl}
+                          alt={`Ảnh shop bàn giao #${index + 1}`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          fallback={
+                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <ImageIcon size={20} color="#8C827A" />
+                            </div>
+                          }
+                        />
+                      )}
+                      <span
+                        style={{
+                          position: 'absolute',
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          backgroundColor: 'rgba(0,0,0,0.65)',
+                          color: '#FFFFFF',
+                          fontSize: '9.5px',
+                          fontWeight: 700,
+                          textAlign: 'center',
+                          padding: '2px 0'
+                        }}
+                      >
+                        Ảnh #{index + 1}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* 3 Action Buttons */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              paddingTop: '8px',
+              borderTop: '1px solid #F3EDE4',
+              flexWrap: 'wrap'
+            }}
+          >
+            {/* Action A: Xác nhận nhận */}
+            <button
+              type="button"
+              onClick={pickupInspection.onConfirm}
+              disabled={pickupInspection.isSubmitting}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '9px 18px',
+                borderRadius: '8px',
+                backgroundColor: '#059669',
+                border: 'none',
+                color: '#FFFFFF',
+                fontSize: '12.5px',
+                fontWeight: 750,
+                cursor: pickupInspection.isSubmitting ? 'not-allowed' : 'pointer',
+                boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)',
+                transition: 'all 0.15s'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.backgroundColor = '#047857';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.backgroundColor = '#059669';
+              }}
+            >
+              <CheckSquare size={14} />
+              <span>Áo đúng tình trạng – Xác nhận nhận</span>
+            </button>
+
+            {/* Action B: Báo có vấn đề */}
+            <button
+              type="button"
+              onClick={pickupInspection.onReportDamage}
+              disabled={pickupInspection.isSubmitting}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '9px 16px',
+                borderRadius: '8px',
+                backgroundColor: '#FEF3C7',
+                border: '1px solid #FCD34D',
+                color: '#92400E',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                cursor: pickupInspection.isSubmitting ? 'not-allowed' : 'pointer',
+                transition: 'all 0.15s'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.backgroundColor = '#FDE68A';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.backgroundColor = '#FEF3C7';
+              }}
+            >
+              <AlertTriangle size={14} />
+              <span>Có vấn đề nhưng vẫn nhận áo</span>
+            </button>
+
+            {/* Action C: Từ chối nhận */}
+            <button
+              type="button"
+              onClick={pickupInspection.onReject}
+              disabled={pickupInspection.isSubmitting}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '9px 16px',
+                borderRadius: '8px',
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FECACA',
+                color: '#DC2626',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                cursor: pickupInspection.isSubmitting ? 'not-allowed' : 'pointer',
+                transition: 'all 0.15s'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.backgroundColor = '#FEE2E2';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.backgroundColor = '#FEF2F2';
+              }}
+            >
+              <XCircle size={14} />
+              <span>Từ chối nhận áo</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

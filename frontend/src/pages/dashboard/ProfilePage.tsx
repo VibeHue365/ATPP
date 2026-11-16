@@ -54,6 +54,58 @@ import type {
   SpecialOfferItem
 } from '../../features/profile/types/profile.types';
 
+interface ProfileTabErrorBoundaryProps {
+  children: React.ReactNode;
+  onReset?: () => void;
+}
+
+interface ProfileTabErrorBoundaryState {
+  hasError: boolean;
+  error?: Error;
+}
+
+class ProfileTabErrorBoundary extends React.Component<ProfileTabErrorBoundaryProps, ProfileTabErrorBoundaryState> {
+  constructor(props: ProfileTabErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error): ProfileTabErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('[ProfileTabErrorBoundary] Uncaught rendering error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '36px 24px', textAlign: 'center', backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #FCD34D', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
+          <div style={{ fontSize: '36px', marginBottom: '10px' }}>⚠️</div>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: 800, color: '#92400E' }}>
+            Không thể tải thông tin chi tiết
+          </h3>
+          <p style={{ margin: '0 0 18px 0', fontSize: '13px', color: '#7D736B' }}>
+            Đã có sự cố khi kết xuất dữ liệu này. Bạn có thể quay lại danh sách để tiếp tục thao tác.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              this.setState({ hasError: false });
+              this.props.onReset?.();
+            }}
+            style={{ padding: '9px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#8E1B2E', color: '#FFFFFF', fontSize: '13px', fontWeight: 750, cursor: 'pointer' }}
+          >
+            Quay lại danh sách
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export const ProfilePage: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -91,6 +143,7 @@ export const ProfilePage: React.FC = () => {
   }, [searchParams]);
 
   const [viewingRentalBooking, setViewingRentalBooking] = useState<any | null>(null);
+  const notificationBookingId = searchParams.get('bookingId');
 
   const handleSelectTab = (tab: ProfileTab, category?: 'RENTAL' | 'PHOTOSHOOT' | 'COMBO') => {
     setActiveTab(tab);
@@ -185,6 +238,17 @@ export const ProfilePage: React.FC = () => {
       }
     }
   }, [bookings, viewingRentalBooking?._id]);
+
+  // Notifications link directly to a booking. Resolve that id after the
+  // bookings list has loaded so a pending-payment notification immediately
+  // opens the existing detail modal with its payment action.
+  useEffect(() => {
+    if (!notificationBookingId || !bookings.length) return;
+    const target = bookings.find((booking) => String(booking._id) === String(notificationBookingId));
+    if (target && activeDetailBooking?._id !== target._id) {
+      setActiveDetailBooking(target);
+    }
+  }, [notificationBookingId, bookings, activeDetailBooking?._id]);
 
   // Auto-refresh when tab becomes active (e.g. switching between Provider and Customer tabs)
   useEffect(() => {
@@ -324,6 +388,8 @@ export const ProfilePage: React.FC = () => {
   // 3. Compute Recent Orders for Column 2 (100% Dynamic)
   const recentOrders: RecentOrderItem[] = useMemo(() => {
     const statusBadges: Record<string, { label: string; bg: string; color: string }> = {
+      PENDING_PAYMENT: { label: 'Chờ thanh toán', bg: '#FEF3C7', color: '#B45309' },
+      WAITING_PAYMENT: { label: 'Chờ thanh toán', bg: '#FEF3C7', color: '#B45309' },
       CONFIRMED: { label: 'Sắp nhận', bg: '#EFF6FF', color: '#1D4ED8' },
       DEPOSIT_PAID: { label: 'Đã cọc', bg: '#EBF5FB', color: '#2980B9' },
       PICKED_UP: { label: 'Đang thuê', bg: '#ECFDF5', color: '#047857' },
@@ -529,8 +595,9 @@ export const ProfilePage: React.FC = () => {
 
           {/* Right Column: Main Content View */}
           <main className="lume-profile-main-content">
-            <React.Suspense fallback={<ProfileTabLoader />}>
-            {activeTab === 'overview' && (
+            <ProfileTabErrorBoundary onReset={() => setViewingRentalBooking(null)}>
+              <React.Suspense fallback={<ProfileTabLoader />}>
+              {activeTab === 'overview' && (
               <ProfileOverviewTab
                 fullName={user?.fullName}
                 onEditProfile={() => handleSelectTab('personal')}
@@ -543,6 +610,7 @@ export const ProfilePage: React.FC = () => {
                 onViewAllSchedule={() => handleSelectTab('schedule')}
                 onViewAllOrders={() => handleSelectTab('schedule')}
                 onViewBookingDetails={(b) => b && setActiveDetailBooking(b)}
+                onContinuePayment={handleContinuePayment}
                 onExplore={() => navigate('/rentals')}
               />
             )}
@@ -611,12 +679,13 @@ export const ProfilePage: React.FC = () => {
                   <ProfileRentalDetailPage
                     booking={viewingRentalBooking}
                     onBack={() => setViewingRentalBooking(null)}
-                    onOpenRescheduleOrExtend={(item) => {
+                    onOpenReschedule={(item) => {
                       const targetBooking = bookings.find((b) => b.items?.some((i: any) => i._id === item?._id)) || viewingRentalBooking || bookings[0];
                       setRescheduleBooking(targetBooking);
                       setRescheduleItem(item);
                     }}
                     onOpenCancel={(b) => setBookingToCancel(b)}
+                    onContinuePayment={handleContinuePayment}
                     onRefreshBooking={async () => {
                       await fetchBookings(true);
                       try {
@@ -664,7 +733,8 @@ export const ProfilePage: React.FC = () => {
             {activeTab === 'security' && <ProfileSecurityTab />}
 
             {activeTab === 'notifications' && <ProfileNotificationsTab />}
-            </React.Suspense>
+              </React.Suspense>
+            </ProfileTabErrorBoundary>
           </main>
         </div>
       </div>

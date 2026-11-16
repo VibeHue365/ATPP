@@ -128,6 +128,32 @@ export function createInventoryActions({
     }
   };
 
+  const handleQuickUpdateStatus = async (
+    itemId: string,
+    newStatus: string,
+    currentCondition?: string,
+    currentNotes?: string,
+  ) => {
+    try {
+      await inventoryApi.updateItem(itemId, {
+        status: newStatus,
+        conditionStatus: currentCondition,
+        notes: currentNotes,
+      });
+      const statusLabel =
+        newStatus === 'AVAILABLE'
+          ? 'Sẵn sàng'
+          : newStatus === 'CLEANING'
+          ? 'Đang giặt'
+          : 'Bảo trì';
+      toast.success(`Đã chuyển trạng thái sang "${statusLabel}"!`);
+      await fetchInventoryData({ silent: true });
+    } catch (err: any) {
+      toast.error(err.message || 'Lỗi khi cập nhật trạng thái');
+      throw err;
+    }
+  };
+
   const handleDeleteInventoryItem = async (itemId: string) => {
     const result = await ConfirmModal.delete(
       'Xác nhận thanh lý hiện vật?',
@@ -250,6 +276,6 @@ export function createInventoryActions({
 
   return {
     fetchInventoryData, handleRemoveVariant, handleDeleteInventoryItem, handleCreateInventoryItem,
-    handleUpdateInventoryItem, handleAdjustVariantQuantity,
+    handleUpdateInventoryItem, handleQuickUpdateStatus, handleAdjustVariantQuantity,
   };
 }

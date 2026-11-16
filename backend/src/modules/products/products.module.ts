@@ -26,6 +26,11 @@ import {
   ProviderScheduleSchema,
 } from './schemas/provider-schedule.schema';
 import { Provider, ProviderSchema } from '../providers/schemas/provider.schema';
+import {
+  InventorySlotLease,
+  InventorySlotLeaseSchema,
+} from '../bookings/schemas/inventory-slot-lease.schema';
+import { TimeSlotEngineService } from '../bookings/services/time-slot-engine.service';
 import { CategoriesModule } from '../categories/categories.module';
 import { PromotionsController } from './controllers/promotions.controller';
 import { PromotionsService } from './services/promotions.service';
@@ -67,6 +72,7 @@ export const productModels = MongooseModule.forFeature([
   { name: Provider.name, schema: ProviderSchema },
   { name: DiscountCampaign.name, schema: DiscountCampaignSchema },
   { name: ComboPromotion.name, schema: ComboPromotionSchema },
+  { name: InventorySlotLease.name, schema: InventorySlotLeaseSchema },
 ]);
 
 @Module({
@@ -93,6 +99,7 @@ export const productModels = MongooseModule.forFeature([
     DiscountCampaignService,
     ComboPromotionService,
     PersonalizedProductRecommendationService,
+    TimeSlotEngineService,
   ],
   exports: [
     productModels,
@@ -103,6 +110,7 @@ export const productModels = MongooseModule.forFeature([
     DiscountCampaignService,
     ComboPromotionService,
     PersonalizedProductRecommendationService,
+    TimeSlotEngineService,
   ],
 })
 export class ProductsModule {}

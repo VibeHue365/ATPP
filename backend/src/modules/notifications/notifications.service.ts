@@ -1,7 +1,11 @@
 import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Notification, NotificationDocument, NotificationType } from './schemas/notification.schema';
+import {
+  Notification,
+  NotificationDocument,
+  NotificationType,
+} from './schemas/notification.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { MailService } from '../auth/services/mail.service';
 import { ChatGateway } from '../chat/chat.gateway';
@@ -25,7 +29,10 @@ export class NotificationsService {
       .exec();
   }
 
-  async markAsRead(notificationId: string, userId: string): Promise<Notification | null> {
+  async markAsRead(
+    notificationId: string,
+    userId: string,
+  ): Promise<Notification | null> {
     return this.notificationModel
       .findOneAndUpdate(
         {
@@ -61,6 +68,83 @@ export class NotificationsService {
     return { modifiedCount: result.modifiedCount };
   }
 
+  async registerPushToken(
+    userId: string,
+    token: string,
+    platform: 'android' | 'ios',
+  ): Promise<void> {
+    // A physical device can only belong to the currently authenticated account.
+    await this.userModel
+      .updateMany({}, { $pull: { pushTokens: { token } } })
+      .exec();
+    await this.userModel
+      .updateOne(
+        { _id: new Types.ObjectId(userId) },
+        { $push: { pushTokens: { token, platform, updatedAt: new Date() } } },
+      )
+      .exec();
+  }
+
+  async unregisterPushToken(userId: string, token: string): Promise<void> {
+    await this.userModel
+      .updateOne(
+        { _id: new Types.ObjectId(userId) },
+        { $pull: { pushTokens: { token } } },
+      )
+      .exec();
+  }
+
+  private async sendExpoPush(
+    recipient: UserDocument,
+    title: string,
+    content: string,
+    metadata: Record<string, any>,
+  ): Promise<void> {
+    const tokens = [
+      ...new Set((recipient.pushTokens ?? []).map((item) => item.token)),
+    ];
+    if (tokens.length === 0) return;
+
+    for (let offset = 0; offset < tokens.length; offset += 100) {
+      const batch = tokens.slice(offset, offset + 100);
+      const response = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(
+          batch.map((to) => ({
+            to,
+            title,
+            body: content,
+            data: metadata,
+            sound: 'default',
+            priority: 'high',
+            channelId: 'booking-updates',
+          })),
+        ),
+      });
+      if (!response.ok)
+        throw new Error(`Expo Push responded with HTTP ${response.status}`);
+      const payload = (await response.json()) as {
+        data?: Array<{ status?: string; details?: { error?: string } }>;
+      };
+      const invalid = batch.filter(
+        (_, index) =>
+          payload.data?.[index]?.details?.error === 'DeviceNotRegistered',
+      );
+      if (invalid.length > 0) {
+        await this.userModel
+          .updateOne(
+            { _id: recipient._id },
+            { $pull: { pushTokens: { token: { $in: invalid } } } },
+          )
+          .exec();
+      }
+    }
+  }
+
   async createNotification(
     userId: string,
     title: string,
@@ -91,10 +175,7 @@ export class NotificationsService {
       const isMarketing = metadata.channel === 'MARKETING';
       const marketingEmailEnabled =
         recipient?.notificationPreferences?.marketingEmail !== false;
-      if (
-        recipient?.auth?.email &&
-        (!isMarketing || marketingEmailEnabled)
-      ) {
+      if (recipient?.auth?.email && (!isMarketing || marketingEmailEnabled)) {
         const emailHtml = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e8e2d5; border-radius: 8px;">
             <h2 style="color: #4a0e17; border-bottom: 2px solid #4a0e17; padding-bottom: 10px;">Thông báo từ VibeHue</h2>
@@ -104,7 +185,11 @@ export class NotificationsService {
             <p style="color: #7a7a7a; font-size: 11px;">Đây là thông báo tự động từ hệ thống VibeHue. Vui lòng không trả lời email này.</p>
           </div>
         `;
-        await this.mailService.sendMail(recipient.auth.email, `[VibeHue] Thông báo: ${title}`, emailHtml);
+        await this.mailService.sendMail(
+          recipient.auth.email,
+          `[VibeHue] Thông báo: ${title}`,
+          emailHtml,
+        );
       }
     } catch (mailError) {
       console.warn('Email notification delivery failed:', mailError);
@@ -115,13 +200,27 @@ export class NotificationsService {
       const appPushEnabled =
         recipient?.notificationPreferences?.appPush !== false;
       if (appPushEnabled && this.chatGateway && this.chatGateway.server) {
-        const userSockets = this.chatGateway.getActiveConnections().get(userId) || [];
+        const userSockets =
+          this.chatGateway.getActiveConnections().get(userId) || [];
         userSockets.forEach((socketId) => {
-          this.chatGateway.server.to(socketId).emit('new_notification', savedNotification);
+          this.chatGateway.server
+            .to(socketId)
+            .emit('new_notification', savedNotification);
         });
       }
     } catch (wsError) {
       console.warn('Realtime notification delivery failed:', wsError);
+    }
+
+    // 3. Deliver an OS-level push when the app is backgrounded or closed.
+    try {
+      const appPushEnabled =
+        recipient?.notificationPreferences?.appPush !== false;
+      if (recipient && appPushEnabled) {
+        await this.sendExpoPush(recipient, title, content, metadata);
+      }
+    } catch (pushError) {
+      console.warn('Push notification delivery failed:', pushError);
     }
 
     return savedNotification;
@@ -132,23 +231,29 @@ export class NotificationsService {
    * This is used by updateBookingStatus so that the Provider Dashboard and customer Profile
    * page immediately reflect status/photo changes without requiring a manual page refresh.
    */
-  emitBookingUpdate(payload: {
-    bookingId: string;
-    bookingCode?: string;
-    status: string;
-    deliveredPhotos?: string[];
-    handoverPhotos?: string[];
-    deliveryDriveUrl?: string | null;
-  }, recipientUserIds: string[]): void {
+  emitBookingUpdate(
+    payload: {
+      bookingId: string;
+      bookingCode?: string;
+      status: string;
+      deliveredPhotos?: string[];
+      handoverPhotos?: string[];
+      deliveryDriveUrl?: string | null;
+    },
+    recipientUserIds: string[],
+  ): void {
     try {
       if (!this.chatGateway?.server) return;
-      const connections = this.chatGateway.getActiveConnections();
-      for (const userId of recipientUserIds) {
-        const sockets = connections.get(userId) || [];
-        sockets.forEach((socketId) => {
-          this.chatGateway.server.to(socketId).emit('booking_updated', payload);
-        });
+
+      const uniqueUserIds = [...new Set(recipientUserIds.filter(Boolean))];
+
+      // Emit strictly to the involved customer and provider user rooms (avoid double emit to socketId)
+      for (const userId of uniqueUserIds) {
+        this.chatGateway.server.to(`user:${userId}`).emit('booking_updated', payload);
       }
+
+      // Also emit strictly to connected Admins
+      this.chatGateway.server.to('role:admin').emit('booking_updated', payload);
     } catch (e) {
       console.warn('emitBookingUpdate failed:', e);
     }

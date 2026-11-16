@@ -62,8 +62,13 @@ class HttpClient {
       return this.parseResponse<T>(response);
     } catch (error: any) {
       console.error(`API Request failed on ${path}:`, error);
+      if (error?.response || error?.status) {
+        throw error;
+      }
       const translated = translateError(error?.message || 'Lỗi kết nối máy chủ.');
-      throw new Error(translated);
+      const networkErr: any = new Error(translated);
+      networkErr.cause = error;
+      throw networkErr;
     }
   }
 
@@ -88,7 +93,10 @@ class HttpClient {
       const errorMessage =
         (data && typeof data === 'object' ? data.message : null) ||
         `Request failed with status ${response.status}`;
-      throw new Error(translateError(errorMessage));
+      const err: any = new Error(translateError(errorMessage));
+      err.status = response.status;
+      err.response = { status: response.status, data };
+      throw err;
     }
 
     return data as T;
@@ -169,6 +177,36 @@ class HttpClient {
       () => { if (this.inFlightGets.get(key) === request) this.inFlightGets.delete(key); },
     );
     return request;
+  }
+
+  /** Fetch a protected binary resource while retaining the normal token-refresh behaviour. */
+  async getBlob(path: string, options?: Omit<RequestInit, 'method'>): Promise<Blob> {
+    const headers = new Headers(options?.headers);
+    const accessToken = tokenStorage.getAccessToken();
+    if (accessToken && !headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${accessToken}`);
+    }
+    const request = () => fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      method: 'GET',
+      headers,
+      signal: options?.signal ?? AbortSignal.timeout(10_000),
+    });
+
+    let response = await request();
+    if (response.status === 401) {
+      const refreshedToken = await this.handleTokenRefresh();
+      if (refreshedToken) {
+        headers.set('Authorization', `Bearer ${refreshedToken}`);
+        response = await request();
+      }
+    }
+    if (!response.ok) {
+      const error: any = new Error(`Request failed with status ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+    return response.blob();
   }
 
   post<T>(path: string, body?: any, options?: Omit<RequestOptions, 'method' | 'body'>): Promise<T> {

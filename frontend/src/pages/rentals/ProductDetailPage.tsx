@@ -102,6 +102,11 @@ export const ProductDetailPage: React.FC = () => {
   const [busyDates, setBusyDates] = useState<string[]>([]);
   const [busySlots, setBusySlots] = useState<{ date: string; timeSlot: string }[]>([]);
   const [variantBookedDates, setVariantBookedDates] = useState<Record<string, string[]>>({});
+  const [variantUnavailableDates, setVariantUnavailableDates] = useState<Record<string, string[]>>({});
+  const [locallyUnavailableDates, setLocallyUnavailableDates] = useState<string[]>([]);
+  const [variantBookedSlots, setVariantBookedSlots] = useState<
+    Record<string, Array<{ date: string; timeSlot: string; purpose?: 'RENTAL' | 'TURNAROUND' }>>
+  >({});
   const [providerScheduleInfo, setProviderScheduleInfo] = useState<ProviderScheduleInfo | null>(null);
 
   // Description tab
@@ -163,20 +168,45 @@ export const ProductDetailPage: React.FC = () => {
 
         // Load busy dates/slots
         let loadedBookedDates: string[] = [];
+        let loadedBusyData: {
+          bookedDates: string[];
+          bookedSlots: { date: string; timeSlot: string }[];
+          variantBookedDates?: Record<string, string[]>;
+          variantUnavailableDates?: Record<string, string[]>;
+          variantBookedSlots?: Record<
+            string,
+            Array<{ date: string; timeSlot: string; purpose?: 'RENTAL' | 'TURNAROUND' }>
+          >;
+          workingDays?: number[];
+          offDays?: string[];
+          hasSchedule?: boolean;
+        } | null = null;
         try {
           const busyData = await httpClient.get<{
             bookedDates: string[];
             bookedSlots: { date: string; timeSlot: string }[];
             variantBookedDates?: Record<string, string[]>;
+            variantUnavailableDates?: Record<string, string[]>;
+            variantBookedSlots?: Record<
+              string,
+              Array<{ date: string; timeSlot: string; purpose?: 'RENTAL' | 'TURNAROUND' }>
+            >;
             workingDays?: number[];
             offDays?: string[];
             hasSchedule?: boolean;
           }>(`/api/bookings/busy-dates/product/${id}`);
+          loadedBusyData = busyData;
           loadedBookedDates = busyData.bookedDates || [];
           setBusyDates(loadedBookedDates);
           setBusySlots(busyData.bookedSlots || []);
           if (busyData.variantBookedDates) {
             setVariantBookedDates(busyData.variantBookedDates);
+          }
+          if (busyData.variantUnavailableDates) {
+            setVariantUnavailableDates(busyData.variantUnavailableDates);
+          }
+          if (busyData.variantBookedSlots) {
+            setVariantBookedSlots(busyData.variantBookedSlots);
           }
           if (busyData.hasSchedule !== undefined) {
             setProviderScheduleInfo({
@@ -216,7 +246,29 @@ export const ProductDetailPage: React.FC = () => {
           }
         }
 
-        // Search first available 3-day range
+        // Search first available 3-day range (excluding days with full-day or hourly bookings)
+        const initialBusyDates = new Set<string>(loadedBookedDates);
+        (loadedBusyData?.bookedSlots || []).forEach((s) => {
+          if (s.date) initialBusyDates.add(s.date);
+        });
+        if (loadedBusyData?.variantBookedDates) {
+          Object.values(loadedBusyData.variantBookedDates).forEach((dates) => {
+            dates.forEach((d) => initialBusyDates.add(d));
+          });
+        }
+        if (loadedBusyData?.variantUnavailableDates) {
+          Object.values(loadedBusyData.variantUnavailableDates).forEach((dates) => {
+            dates.forEach((d) => initialBusyDates.add(d));
+          });
+        }
+        if (loadedBusyData?.variantBookedSlots) {
+          Object.values(loadedBusyData.variantBookedSlots).forEach((slots) => {
+            slots.forEach((s) => {
+              if (s.date) initialBusyDates.add(s.date);
+            });
+          });
+        }
+
         let foundRange = false;
         let startDateVal = '';
         let endDateVal = '';
@@ -235,7 +287,7 @@ export const ProductDetailPage: React.FC = () => {
           const temp = new Date(checkStart);
           while (temp <= checkEnd) {
             const tempStr = temp.toISOString().split('T')[0];
-            if (loadedBookedDates.includes(tempStr)) {
+            if (initialBusyDates.has(tempStr)) {
               hasBusy = true;
               break;
             }
@@ -273,6 +325,54 @@ export const ProductDetailPage: React.FC = () => {
 
     fetchProductDetails();
   }, [id]);
+
+  // Refresh the availability snapshot whenever the active variant changes.
+  // The initial product request can finish before the preferred size/color is
+  // applied, which otherwise leaves the calendar showing stale selectable days.
+  useEffect(() => {
+    if (!id || !selectedSize || !selectedColor) return;
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const busyData = await httpClient.get<{
+          bookedDates: string[];
+          bookedSlots: { date: string; timeSlot: string }[];
+          variantBookedDates?: Record<string, string[]>;
+          variantUnavailableDates?: Record<string, string[]>;
+          variantBookedSlots?: Record<
+            string,
+            Array<{ date: string; timeSlot: string; purpose?: 'RENTAL' | 'TURNAROUND' }>
+          >;
+          workingDays?: number[];
+          offDays?: string[];
+          hasSchedule?: boolean;
+        }>(`/api/bookings/busy-dates/product/${id}`, { signal: controller.signal });
+
+        setBusyDates(busyData.bookedDates || []);
+        setBusySlots(busyData.bookedSlots || []);
+        setVariantBookedDates(busyData.variantBookedDates || {});
+        setVariantUnavailableDates(busyData.variantUnavailableDates || {});
+        setVariantBookedSlots(busyData.variantBookedSlots || {});
+        if (busyData.hasSchedule !== undefined) {
+          setProviderScheduleInfo({
+            hasSchedule: busyData.hasSchedule,
+            workingDays: busyData.workingDays || [],
+            offDays: busyData.offDays || [],
+          });
+        }
+      } catch (error: any) {
+        if (error?.cause?.name !== 'AbortError' && error?.name !== 'AbortError') {
+          console.warn('Không thể làm mới lịch bận theo biến thể:', error);
+        }
+      }
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [id, selectedSize, selectedColor]);
 
   // Load suggested photographers from DB (same city or top rated)
   useEffect(() => {
@@ -455,22 +555,104 @@ export const ProductDetailPage: React.FC = () => {
 
   // Busy Dates calculation
   const activeBusyDates = useMemo(() => {
-    let combined = [...busyDates];
+    let combined = [...busyDates, ...locallyUnavailableDates];
     if (selectedSize && selectedColor) {
       const key = `${selectedSize.trim().toUpperCase()}_${normalizeCol(selectedColor)}`;
       if (variantBookedDates[key]) {
         combined = Array.from(new Set([...combined, ...variantBookedDates[key]]));
       }
+      if (variantUnavailableDates[key]) {
+        combined = Array.from(new Set([...combined, ...variantUnavailableDates[key]]));
+      }
     }
     return combined;
-  }, [selectedSize, selectedColor, variantBookedDates, busyDates]);
+  }, [selectedSize, selectedColor, variantBookedDates, variantUnavailableDates, busyDates, locallyUnavailableDates]);
+
+  // Set of dates that have ANY hourly booking for the active variant (or product)
+  const hourlyBookedDates = useMemo(() => {
+    const dates = new Set<string>();
+    const variantKey = selectedSize && selectedColor
+      ? `${selectedSize.trim().toUpperCase()}_${normalizeCol(selectedColor)}`
+      : null;
+
+    const hasVariantSlots = variantBookedSlots && Object.keys(variantBookedSlots).length > 0;
+
+    if (variantKey) {
+      if (hasVariantSlots) {
+        if (variantBookedSlots[variantKey]) {
+          variantBookedSlots[variantKey].forEach((s) => {
+            if (s.date) dates.add(s.date);
+          });
+        }
+      } else {
+        busySlots.forEach((s) => {
+          if (s.date) dates.add(s.date);
+        });
+      }
+    } else {
+      if (hasVariantSlots) {
+        Object.values(variantBookedSlots).forEach((slots) => {
+          slots.forEach((s) => {
+            if (s.date) dates.add(s.date);
+          });
+        });
+      }
+      busySlots.forEach((s) => {
+        if (s.date) dates.add(s.date);
+      });
+    }
+
+    return dates;
+  }, [selectedSize, selectedColor, variantBookedSlots, busySlots]);
+
+  // When in DAILY mode, any date with hourly bookings is also unavailable for full-day rental
+  const effectiveBusyDates = useMemo(() => {
+    if (rentalMode === 'DAILY') {
+      const combined = new Set([...activeBusyDates, ...hourlyBookedDates]);
+      return Array.from(combined);
+    }
+    return activeBusyDates;
+  }, [rentalMode, activeBusyDates, hourlyBookedDates]);
+
+  const isVariantUnavailable = (size: string, color: string) => {
+    const key = `${size.trim().toUpperCase()}_${normalizeCol(color)}`;
+    const dates = variantUnavailableDates[key];
+    return Array.isArray(dates) && dates.length > 0;
+  };
+
+  useEffect(() => {
+    setLocallyUnavailableDates([]);
+  }, [selectedSize, selectedColor, bookingQty, rentalMode]);
 
   const bookedSlotsOnSelectedDate = useMemo(() => {
     if (!singleDate) return [];
-    return busySlots
+    const variantKey = selectedSize && selectedColor
+      ? `${selectedSize.trim().toUpperCase()}_${normalizeCol(selectedColor)}`
+      : null;
+
+    if (variantKey && variantBookedDates[variantKey]?.includes(singleDate)) {
+      return ['00:00-23:59'];
+    }
+
+    const hasVariantSlots = variantBookedSlots && Object.keys(variantBookedSlots).length > 0;
+    let relevantSlots: Array<{ date: string; timeSlot: string }> = [];
+
+    if (variantKey) {
+      if (hasVariantSlots) {
+        relevantSlots = variantBookedSlots[variantKey] || [];
+      } else {
+        relevantSlots = busySlots;
+      }
+    } else {
+      relevantSlots = busySlots;
+    }
+
+    const filtered = relevantSlots
       .filter((s) => s.date === singleDate)
       .map((s) => s.timeSlot);
-  }, [singleDate, busySlots]);
+
+    return Array.from(new Set(filtered));
+  }, [singleDate, busySlots, variantBookedSlots, variantBookedDates, selectedSize, selectedColor]);
 
   // Calendar Days calculation
   const calendarDays = useMemo(() => {
@@ -499,7 +681,7 @@ export const ProductDetailPage: React.FC = () => {
       const dateObj = new Date(yNum, mNum - 1, dNum);
       const dayOfWeek = dateObj.getDay();
 
-      let isAvailable = !activeBusyDates.includes(dateStr) && dateStr >= todayStr;
+      let isAvailable = !effectiveBusyDates.includes(dateStr) && dateStr >= todayStr;
 
       if (providerScheduleInfo) {
         if (!providerScheduleInfo.hasSchedule) {
@@ -535,7 +717,38 @@ export const ProductDetailPage: React.FC = () => {
       });
     }
     return days;
-  }, [calendarDate, activeBusyDates, rentalMode, providerScheduleInfo]);
+  }, [calendarDate, effectiveBusyDates, rentalMode, providerScheduleInfo]);
+
+  // Availability is checked against the exact variant, date range and
+  // quantity. If that authoritative check says the current selection is no
+  // longer possible (for example another booking just took the last item),
+  // clear the stale selection immediately instead of leaving actionable
+  // buttons visible with an invalid range.
+  useEffect(() => {
+    if (availability.state !== 'unavailable') return;
+    const blocked: string[] = [];
+    if (rentalMode === 'DAILY' && startDate && endDate) {
+      const cursor = new Date(`${startDate}T00:00:00`);
+      const end = new Date(`${endDate}T00:00:00`);
+      while (cursor <= end) {
+        blocked.push(cursor.toISOString().slice(0, 10));
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    } else if (rentalMode === 'HOURLY' && singleDate) {
+      blocked.push(singleDate);
+    }
+    if (blocked.length > 0) {
+      setLocallyUnavailableDates((previous) => Array.from(new Set([...previous, ...blocked])));
+    }
+    if (rentalMode === 'DAILY') {
+      setStartDate('');
+      setEndDate('');
+    } else {
+      setSingleDate('');
+      setStartDate('');
+      setEndDate('');
+    }
+  }, [availability.state, rentalMode, startDate, endDate, singleDate]);
 
   const startSlotIndex = useMemo(() => {
     return productSlots.findIndex((s) => s.start === startTime);
@@ -545,13 +758,13 @@ export const ProductDetailPage: React.FC = () => {
     return productSlots.findIndex((s) => s.end === endTime);
   }, [endTime]);
 
-  // Auto-select first available slot when date changes
+  // Auto-select first available slot when date changes or if current slot becomes busy
   useEffect(() => {
     if (rentalMode !== 'HOURLY' || !singleDate) return;
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-    const firstAvailableIndex = productSlots.findIndex((block) => {
+    const isSlotAvailable = (block: { start: string; end: string }) => {
       const isBusy = bookedSlotsOnSelectedDate.some((bookedSlot) =>
         isTimeSlotOverlap(`${block.start}-${block.end}`, bookedSlot),
       );
@@ -565,13 +778,25 @@ export const ProductDetailPage: React.FC = () => {
           );
         })();
       return !isBusy && !isPast;
-    });
+    };
 
-    if (firstAvailableIndex !== -1) {
-      setStartTime(productSlots[firstAvailableIndex].start);
-      setEndTime(productSlots[firstAvailableIndex].end);
+    const firstAvailableIndex = productSlots.findIndex(isSlotAvailable);
+
+    const isCurrentValid =
+      startTime &&
+      endTime &&
+      isSlotAvailable({ start: startTime, end: endTime });
+
+    if (!isCurrentValid) {
+      if (firstAvailableIndex !== -1) {
+        setStartTime(productSlots[firstAvailableIndex].start);
+        setEndTime(productSlots[firstAvailableIndex].end);
+      } else {
+        setStartTime('');
+        setEndTime('');
+      }
     }
-  }, [singleDate, bookedSlotsOnSelectedDate, rentalMode]);
+  }, [singleDate, bookedSlotsOnSelectedDate, rentalMode, startTime, endTime]);
 
   const handleSlotClick = (i: number) => {
     const block = productSlots[i];
@@ -643,14 +868,73 @@ export const ProductDetailPage: React.FC = () => {
     });
   }, [rentalMode, selectedTimeSlot, bookedSlotsOnSelectedDate]);
 
+  // Auto-adjust DAILY rental dates if selected range overlaps with newly effective busy dates
+  useEffect(() => {
+    if (rentalMode !== 'DAILY' || !startDate) return;
+
+    let hasConflict = false;
+    const start = new Date(startDate);
+    const end = endDate ? new Date(endDate) : new Date(startDate);
+    const cur = new Date(start);
+    while (cur <= end) {
+      const curStr = cur.toISOString().split('T')[0];
+      if (effectiveBusyDates.includes(curStr)) {
+        hasConflict = true;
+        break;
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    if (hasConflict) {
+      let found = false;
+      const today = new Date();
+      for (let offset = 0; offset < 60; offset++) {
+        const checkStart = new Date(today);
+        checkStart.setDate(today.getDate() + 1 + offset);
+        const startStr = checkStart.toISOString().split('T')[0];
+
+        const checkEnd = new Date(checkStart);
+        checkEnd.setDate(checkEnd.getDate() + 2);
+        const endStr = checkEnd.toISOString().split('T')[0];
+
+        let hasBusy = false;
+        const temp = new Date(checkStart);
+        while (temp <= checkEnd) {
+          const tempStr = temp.toISOString().split('T')[0];
+          if (effectiveBusyDates.includes(tempStr)) {
+            hasBusy = true;
+            break;
+          }
+          temp.setDate(temp.getDate() + 1);
+        }
+
+        if (!hasBusy) {
+          setStartDate(startStr);
+          setEndDate(endStr);
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        setStartDate('');
+        setEndDate('');
+      }
+    }
+  }, [rentalMode, effectiveBusyDates, startDate, endDate]);
+
   const handleCalendarDayClick = (dateStr: string) => {
+    const selectedDay = calendarDays.find((day) => day.dateStr === dateStr);
+    if (!selectedDay || !selectedDay.isAvailable) {
+      return;
+    }
     if (rentalMode === 'HOURLY') {
       setSingleDate(dateStr);
       setStartDate(dateStr);
       setEndDate(dateStr);
     } else {
-      if (busyDates.includes(dateStr)) {
-        toast.error('Ngày này đã bị đặt lịch!');
+      if (effectiveBusyDates.includes(dateStr)) {
+        toast.error('Ngày này đã có lịch thuê!');
         return;
       }
       if (!startDate || (startDate && endDate)) {
@@ -714,7 +998,7 @@ export const ProductDetailPage: React.FC = () => {
     try {
       setLoadingReviews(true);
       const res: any = await httpClient.get(`/reviews/item/${id}`);
-      setRealReviews(res || []);
+      setRealReviews(Array.isArray(res) ? res : Array.isArray(res?.reviews) ? res.reviews : []);
     } catch (e) {
       console.error('Lỗi tải đánh giá sản phẩm:', e);
     } finally {
@@ -968,6 +1252,17 @@ export const ProductDetailPage: React.FC = () => {
       if (endDate < startDate) {
         toast.error('Ngày trả đồ không thể trước ngày nhận đồ.');
         return false;
+      }
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const cur = new Date(start);
+      while (cur <= end) {
+        const curStr = cur.toISOString().split('T')[0];
+        if (effectiveBusyDates.includes(curStr)) {
+          toast.error(`Ngày ${curStr} đã có lịch thuê. Vui lòng chọn khoảng thời gian khác.`);
+          return false;
+        }
+        cur.setDate(cur.getDate() + 1);
       }
     } else {
       if (!singleDate) {
@@ -1246,6 +1541,7 @@ export const ProductDetailPage: React.FC = () => {
               selectedColor={selectedColor}
               onSelectColor={setSelectedColor}
               selectedSize={selectedSize}
+              isVariantUnavailable={isVariantUnavailable}
               onSelectSize={setSelectedSize}
               rentalMode={rentalMode}
               onChangeRentalMode={setRentalMode}

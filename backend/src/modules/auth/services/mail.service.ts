@@ -3,6 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import nodemailer, { Transporter } from 'nodemailer';
 import { getPrimaryFrontendUrl } from '../../../common/config/frontend-url.util';
 
+export interface MailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType: string;
+}
+
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
@@ -64,8 +70,20 @@ export class MailService {
     await this.send(email, subject, text, html);
   }
 
-  async sendMail(to: string, subject: string, html: string, text?: string): Promise<void> {
-    await this.send(to, subject, text || html.replace(/<[^>]*>/g, ''), html);
+  async sendMail(
+    to: string,
+    subject: string,
+    html: string,
+    text?: string,
+    attachments: MailAttachment[] = [],
+  ): Promise<boolean> {
+    return this.send(
+      to,
+      subject,
+      text || html.replace(/<[^>]*>/g, ''),
+      html,
+      attachments,
+    );
   }
 
   private async send(
@@ -73,12 +91,13 @@ export class MailService {
     subject: string,
     text: string,
     html: string,
-  ): Promise<void> {
+    attachments: MailAttachment[] = [],
+  ): Promise<boolean> {
     if (!this.transporter) {
       this.logger.warn(
         `[MAIL NOT CONFIGURED] ${subject} -> ${this.maskRecipient(to)}`,
       );
-      return;
+      return false;
     }
 
     await this.transporter.sendMail({
@@ -87,7 +106,9 @@ export class MailService {
       subject,
       text,
       html,
+      attachments,
     });
+    return true;
   }
 
   private timeout(key: string, fallback: number): number {

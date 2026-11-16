@@ -18,10 +18,12 @@ import {
   Booking,
   BookingDocument,
   BookingStatus,
+  BookingType,
 } from '../bookings/schemas/booking.schema';
 import {
   BookingItem,
   BookingItemDocument,
+  BookingItemType,
 } from '../bookings/schemas/booking-item.schema';
 import {
   Payment,
@@ -1999,7 +2001,40 @@ export class AdminStatsService {
     if (!booking) {
       throw new NotFoundException('Không tìm thấy đơn booking');
     }
+
+    const isRentalBooking =
+      booking.bookingType === BookingType.AoDaiRental ||
+      (booking as any).type === BookingType.AoDaiRental ||
+      (await this.bookingItemModel.exists({
+        bookingId: booking._id,
+        itemType: BookingItemType.Product,
+        'rentalFulfillment.status': { $exists: true },
+      }));
+
+    if (isRentalBooking) {
+      const forbiddenDirectStatuses = [
+        BookingStatus.PickupPending,
+        BookingStatus.PickedUp,
+        BookingStatus.ReturnPending,
+        BookingStatus.Returned,
+        BookingStatus.Completed,
+      ];
+      if (forbiddenDirectStatuses.includes(status as BookingStatus)) {
+        throw new BadRequestException(
+          `Không được gán trực tiếp trạng thái "${status}" cho đơn thuê áo dài. Vui lòng thao tác theo từng sản phẩm qua quy trình bàn giao (Rental Fulfillment) và duyệt cọc.`,
+        );
+      }
+    }
+
     booking.status = status as any;
+    if (!booking.statusTimeline) booking.statusTimeline = [];
+    booking.statusTimeline.push({
+      status: status as any,
+      changedAt: new Date(),
+      note: note
+        ? `Quản trị viên cập nhật trạng thái: ${status}. Ghi chú: ${note}`
+        : `Quản trị viên cập nhật trạng thái: ${status}.`,
+    });
     if (note) {
       if (!booking.notes) booking.notes = [];
       (booking.notes as any).push({

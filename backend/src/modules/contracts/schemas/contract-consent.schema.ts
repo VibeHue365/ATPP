@@ -13,6 +13,23 @@ export enum ContractConsentRole {
   Provider = 'PROVIDER',
 }
 
+export enum ContractEmailDeliveryStatus {
+  Pending = 'PENDING',
+  Sending = 'SENDING',
+  Sent = 'SENT',
+  Failed = 'FAILED',
+}
+
+export interface ContractEmailDeliveryMetadata {
+  status: ContractEmailDeliveryStatus;
+  recipient?: string | null;
+  sentAt?: Date | null;
+  lastAttemptAt?: Date | null;
+  lastError?: string | null;
+  claimToken?: string | null;
+  leaseExpiresAt?: Date | null;
+}
+
 @Schema({ collection: 'contract_consents', timestamps: true, autoIndex: false })
 export class ContractConsent {
   @Prop({
@@ -93,6 +110,24 @@ export class ContractConsent {
     immutable: true,
   })
   presentationMode: 'QUICK' | 'DETAILED';
+
+  @Prop({
+    type: {
+      status: {
+        type: String,
+        enum: Object.values(ContractEmailDeliveryStatus),
+        default: ContractEmailDeliveryStatus.Pending,
+      },
+      recipient: { type: String, default: null },
+      sentAt: { type: Date, default: null },
+      lastAttemptAt: { type: Date, default: null },
+      lastError: { type: String, default: null },
+      claimToken: { type: String, default: null },
+      leaseExpiresAt: { type: Date, default: null },
+    },
+    default: () => ({ status: ContractEmailDeliveryStatus.Pending }),
+  })
+  emailDelivery: ContractEmailDeliveryMetadata;
 }
 
 export const ContractConsentSchema =

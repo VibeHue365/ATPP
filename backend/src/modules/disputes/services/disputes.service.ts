@@ -12,6 +12,7 @@ import {
   ForbiddenException,
   Inject,
   forwardRef,
+  Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -27,7 +28,13 @@ import {
   FaultParty,
 } from '../schemas/dispute.schema';
 import { Booking, BookingStatus } from '../../bookings/schemas/booking.schema';
-import { BookingItem } from '../../bookings/schemas/booking-item.schema';
+import { BookingItem, BookingItemType } from '../../bookings/schemas/booking-item.schema';
+import {
+  RentalIssueStatus,
+  DepositSettlementStatus,
+  RentalFulfillmentStatus,
+  RentalInventoryStatus,
+} from '../../bookings/schemas/rental-fulfillment.types';
 import {
   InventoryItem,
   InventoryItemStatus,
@@ -40,6 +47,7 @@ import { EscrowStatus } from '../../payments/schemas/booking-escrow.schema';
 import { SettlementsService } from '../../settlements/services/settlements.service';
 import { PolicyResolverService } from '../../system-policies/services/policy-resolver.service';
 import { PrivateStorageService } from '../../storage/services/private-storage.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 
 @Injectable()
 export class DisputesService {
@@ -64,7 +72,59 @@ export class DisputesService {
     private readonly settlementsService: SettlementsService,
     private readonly policyResolverService: PolicyResolverService,
     private readonly privateStorage: PrivateStorageService,
+    @Optional()
+    private readonly notificationsService?: NotificationsService,
   ) {}
+
+  /**
+   * Availability deliberately excludes CLEANING inventory without this value.
+   * Use the turnaround snapshot established for the booking item and fall back
+   * to the contractual return time for older records.
+   */
+  private cleaningAvailableFrom(item: any): Date {
+    const raw =
+      item?.rentalFulfillment?.availableFrom ||
+      item?.rentalFulfillment?.returnDueAt ||
+      item?.rentalTo ||
+      new Date();
+    const value = new Date(raw);
+    return Number.isNaN(value.getTime()) ? new Date() : value;
+  }
+
+  private async emitBookingUpdateHelper(bookingId: any, status: string) {
+    if (!this.notificationsService) return;
+    try {
+      const booking = await this.bookingModel.findById(bookingId).lean().exec();
+      if (!booking) return;
+
+      const recipientUserIds: string[] = [];
+      if (booking.customerId) recipientUserIds.push(booking.customerId.toString());
+
+      const providerDocIds = (booking.providerIds || []).map((id: any) => (id?._id || id).toString());
+      if (providerDocIds.length > 0) {
+        const providerModel = this.bookingModel.db.model('Provider');
+        const providers = await providerModel
+          .find({ _id: { $in: providerDocIds.map((id) => new Types.ObjectId(id)) } })
+          .select({ userId: 1 })
+          .lean()
+          .exec();
+        providers.forEach((p: any) => {
+          if (p.userId) recipientUserIds.push(p.userId.toString());
+        });
+      }
+
+      this.notificationsService.emitBookingUpdate(
+        {
+          bookingId: booking._id.toString(),
+          bookingCode: booking.bookingCode,
+          status,
+        },
+        recipientUserIds,
+      );
+    } catch (e) {
+      console.warn('Failed to emit booking update from DisputesService:', e);
+    }
+  }
 
   async createIncidentReport(
     providerUserId: string,
@@ -208,6 +268,19 @@ export class DisputesService {
       (incident as any)._id,
     );
 
+    // Đồng bộ trạng thái sự cố và cọc trên BookingItem
+    if (typeof this.bookingItemModel?.updateOne === 'function') {
+      await this.bookingItemModel.updateOne(
+        { _id: bookingItem._id },
+        {
+          $set: {
+            'rentalFulfillment.issueStatus': RentalIssueStatus.Reported,
+            'rentalFulfillment.depositSettlementStatus': DepositSettlementStatus.Held,
+          },
+        },
+      );
+    }
+
     if (
       bookingItem.inventoryItemId &&
       (dto.actionType === 'CLEANING' || dto.actionType === 'MAINTENANCE')
@@ -297,6 +370,8 @@ export class DisputesService {
     } catch (notifErr) {
       console.error('Failed to create incident report notification for customer:', notifErr);
     }
+
+    await this.emitBookingUpdateHelper(booking._id, booking.status);
 
     return incident;
   }
@@ -587,23 +662,32 @@ export class DisputesService {
       throw new ForbiddenException('Bạn không có quyền thực hiện thao tác này');
     }
 
-    // 1. Cập nhật trạng thái Escrow sang DisputedResolved một cách atomic trước để tránh double click/double split
+    // 1. Cập nhật trạng thái Escrow sang DisputedResolved một cách atomic trước nếu có
     const escrow = await this.bookingModel.db
       .model('BookingEscrow')
-      .findOneAndUpdate(
-        {
-          bookingId: booking._id,
-          status: { $in: [EscrowStatus.Held, EscrowStatus.Settled] },
-        },
-        { $set: { status: EscrowStatus.DisputedResolved } },
-        { new: false },
-      );
+      .findOne({
+        bookingId: booking._id,
+        status: { $in: [EscrowStatus.Held, EscrowStatus.Settled] },
+      });
 
     if (!escrow) {
       throw new ConflictException(
         'Đơn hàng đã được đối soát hoặc không tìm thấy thông tin ký quỹ hợp lệ',
       );
     }
+
+    const targetItem = await this.bookingItemModel.findById(incident.bookingItemId);
+    if (!targetItem) {
+      throw new NotFoundException('Không tìm thấy sản phẩm gặp sự cố');
+    }
+
+    const targetDeposit = (targetItem.depositAmount || 0) * (targetItem.quantity || 1);
+    const deductAmount = Math.min(incident.requestedAmount, targetDeposit > 0 ? targetDeposit : incident.requestedAmount);
+    const remainingRefund = Math.max(targetDeposit - deductAmount, 0);
+    const settlementStatus =
+      remainingRefund > 0
+        ? DepositSettlementStatus.PartiallyDeducted
+        : DepositSettlementStatus.FullyDeducted;
 
     let transferResult = null;
     let refundResult = null;
@@ -636,7 +720,7 @@ export class DisputesService {
       transferResult = await this.executeCompensationTransfer({
         bookingId: booking._id,
         providerId: provider._id,
-        amount: incident.requestedAmount,
+        amount: deductAmount,
         bankName,
         accountNumber,
         accountHolder,
@@ -649,108 +733,211 @@ export class DisputesService {
         );
       }
 
-      // 3. Hoàn trả số tiền cọc giữ đồ còn lại cho Khách hàng
-      const remainingRefund =
-        booking.pricingSummary.depositTotal - incident.requestedAmount;
-      if (remainingRefund > 0) {
-        try {
-          refundResult = await this.refundWorkflowService.createFromDispute({
-            bookingId: booking._id.toString(),
-            requestedBy: this.getCustomerIdStr(booking),
-            amount: remainingRefund,
-            reason: 'Refund after customer accepted dispute resolution',
-            type: RefundType.Dispute,
-            sourceEventId: `refund:dispute:${incident._id}:customer-agree`,
-          });
-        } catch (rfErr) {
-          console.warn('createFromDispute warning in customerAgreeIncident:', rfErr);
-        }
-
-        try {
-          const existingRefundPayment = await this.bookingModel.db.model('Payment').findOne({
-            bookingId: booking._id,
-            purpose: 'DEPOSIT_REFUND',
-          });
-          if (!existingRefundPayment) {
-            const refundPaymentCode = `REF${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
-            await this.bookingModel.db.model('Payment').create({
-              bookingId: booking._id,
-              paymentCode: refundPaymentCode,
-              amount: remainingRefund,
-              purpose: 'DEPOSIT_REFUND',
-              paymentMethod: 'PAYOS_REFUND',
-              status: 'SUCCESS',
-              paidAt: new Date(),
-            });
-          } else {
-            existingRefundPayment.amount = remainingRefund;
-            existingRefundPayment.status = 'SUCCESS';
-            await existingRefundPayment.save();
-          }
-        } catch (errPayment) {
-          console.error('Error ensuring DEPOSIT_REFUND payment record:', errPayment);
-        }
-
-        (booking as any).rentalDepositRefund = {
-          status: 'REFUNDED',
-          amount: remainingRefund,
-          completedAt: new Date(),
-          rentalDepositReason: `Hoàn cọc sau khi trừ ${incident.requestedAmount.toLocaleString('vi-VN')}đ bồi thường hư hỏng`,
-          refundRequestId: refundResult?._id || null,
-        };
-        if (!booking.paymentSummary) (booking as any).paymentSummary = {};
-        booking.paymentSummary.totalRefunded = remainingRefund;
-        booking.paymentSummary.paymentStatus = 'REFUNDED' as any;
-      } else {
-        try {
-          await this.bookingModel.db.model('Payment').deleteMany({
-            bookingId: booking._id,
-            purpose: 'DEPOSIT_REFUND',
-          });
-        } catch (delErr) {
-          console.warn('Could not delete old DEPOSIT_REFUND payment records:', delErr);
-        }
-
-        (booking as any).rentalDepositRefund = {
-          status: 'NO_REFUND',
-          amount: 0,
-          completedAt: new Date(),
-          rentalDepositReason: 'Khấu trừ toàn bộ cọc để bồi thường hư hỏng trang phục',
-          refundRequestId: null,
-        };
-        if (!booking.paymentSummary) (booking as any).paymentSummary = {};
-        booking.paymentSummary.totalRefunded = 0;
-      }
-
+      // 3. Cập nhật incident
       incident.status = IncidentStatus.Accepted;
       incident.resolvedAt = new Date();
       await incident.save();
 
-      await this.bookingItemModel.updateMany(
-        { bookingId: booking._id },
+      // 4. Cập nhật DUY NHẤT áo gặp sự cố (targetItem), tuyệt đối không updateMany toàn booking
+      const targetInvStatus =
+        incident.actionType === 'MAINTENANCE'
+          ? RentalInventoryStatus.Maintenance
+          : incident.actionType === 'CLEANING'
+          ? RentalInventoryStatus.Cleaning
+          : RentalInventoryStatus.Available;
+
+      await this.bookingItemModel.updateOne(
+        { _id: targetItem._id },
         {
           $set: {
-            'rentalFulfillment.status': 'COMPLETED',
+            'rentalFulfillment.status': RentalFulfillmentStatus.Completed,
             'rentalFulfillment.completedAt': new Date(),
-            'rentalFulfillment.depositSettlementStatus':
-              remainingRefund > 0 ? 'PARTIALLY_DEDUCTED' : 'FULLY_DEDUCTED',
-            'rentalFulfillment.depositDeductedAmount': incident.requestedAmount,
-            'rentalFulfillment.depositRefundAmount': remainingRefund > 0 ? remainingRefund : 0,
+            'rentalFulfillment.depositSettlementStatus': settlementStatus,
+            'rentalFulfillment.depositDeductedAmount': deductAmount,
+            'rentalFulfillment.depositRefundAmount': remainingRefund,
+            'rentalFulfillment.issueStatus': RentalIssueStatus.Resolved,
+            'rentalFulfillment.inventoryStatus': targetInvStatus,
+          },
+          $push: {
+            'rentalFulfillment.history': {
+              action: 'INCIDENT_RESOLVED',
+              actor: { role: 'CUSTOMER', userId: new Types.ObjectId(customerUserId) },
+              occurredAt: new Date(),
+              note: `Khách hàng đồng ý bồi thường ${deductAmount.toLocaleString('vi-VN')}đ`,
+              metadata: { deductAmount, remainingRefund, settlementStatus },
+            },
           },
         },
       );
 
-      booking.status = BookingStatus.Completed;
-      booking.statusTimeline.push({
-        status: BookingStatus.Completed,
-        changedAt: new Date(),
-        note: `Khách hàng đồng ý đền bù ${incident.requestedAmount.toLocaleString()}đ. Đơn đặt lịch hoàn tất thành công.`,
-      });
-      await booking.save();
+      // 5. Cập nhật InventoryItem và Reservation của targetItem
+      const reservationModel = this.bookingModel.db.model('InventoryReservation');
+      const reservations = await reservationModel
+        .find({ bookingItemId: targetItem._id })
+        .lean()
+        .exec();
+      const invIds = (reservations as any[]).map((r) => r.inventoryItemId).filter(Boolean);
+      if (invIds.length === 0 && (targetItem as any).inventoryItemId) {
+        invIds.push((targetItem as any).inventoryItemId);
+      }
+      if (invIds.length > 0) {
+        const invStatus =
+          incident.actionType === 'MAINTENANCE'
+            ? InventoryItemStatus.Maintenance
+            : incident.actionType === 'CLEANING'
+            ? InventoryItemStatus.Cleaning
+            : InventoryItemStatus.Available;
 
-      // Chia doanh thu thuê và cộng ví cho Provider chuẩn xác
-      await this.paymentsService.executeProfitSplit(booking);
-      await this.paymentsService.creditWalletsForBooking(booking._id);
+        const inventoryUpdate =
+          invStatus === InventoryItemStatus.Cleaning
+            ? {
+                status: invStatus,
+                operationalAvailableFrom: this.cleaningAvailableFrom(targetItem),
+                activeTurnaroundBookingItemId: targetItem._id,
+              }
+            : {
+                status: invStatus,
+                operationalAvailableFrom: null,
+                activeTurnaroundBookingItemId: null,
+              };
+
+        await this.inventoryModel.updateMany(
+          { _id: { $in: invIds } },
+          { $set: inventoryUpdate },
+        );
+      }
+
+      await reservationModel.updateMany(
+        { bookingItemId: targetItem._id, status: { $in: ['PENDING', 'CONFIRMED'] } },
+        { $set: { status: 'COMPLETED' } },
+      );
+
+      // 6. Kiểm tra toàn bộ BookingItem của booking để aggregate state chuẩn xác
+      const allProductItems = await this.bookingItemModel
+        .find({ bookingId: booking._id, itemType: BookingItemType.Product })
+        .lean()
+        .exec();
+
+      const finalSettlementStatuses = [
+        DepositSettlementStatus.FullyReleased,
+        DepositSettlementStatus.PartiallyDeducted,
+        DepositSettlementStatus.FullyDeducted,
+      ];
+
+      const allItemsSettled = allProductItems.every(
+        (it: any) =>
+          it.rentalFulfillment?.depositSettlementStatus &&
+          finalSettlementStatuses.includes(it.rentalFulfillment.depositSettlementStatus),
+      );
+
+      const allItemsCompleted = allProductItems.every(
+        (it: any) => it.rentalFulfillment?.status === RentalFulfillmentStatus.Completed,
+      );
+
+      // Chỉ thực hiện hoàn cọc toàn booking khi TẤT CẢ các áo đã có final settlement
+      if (allItemsSettled) {
+        const totalRefundAmount = allProductItems.reduce(
+          (sum: number, it: any) => sum + (it.rentalFulfillment?.depositRefundAmount || 0),
+          0,
+        );
+
+        if (totalRefundAmount > 0) {
+          try {
+            refundResult = await this.refundWorkflowService.createFromDispute({
+              bookingId: booking._id.toString(),
+              requestedBy: this.getCustomerIdStr(booking),
+              amount: totalRefundAmount,
+              reason: 'Refund after customer accepted incident resolution',
+              type: RefundType.Dispute,
+              sourceEventId: `refund:dispute:${incident._id}:customer-agree`,
+            });
+          } catch (rfErr) {
+            console.warn('createFromDispute warning in customerAgreeIncident:', rfErr);
+          }
+
+          try {
+            const existingRefundPayment = await this.bookingModel.db.model('Payment').findOne({
+              bookingId: booking._id,
+              purpose: 'DEPOSIT_REFUND',
+            });
+            if (!existingRefundPayment) {
+              const refundPaymentCode = `REF${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
+              await this.bookingModel.db.model('Payment').create({
+                bookingId: booking._id,
+                paymentCode: refundPaymentCode,
+                amount: totalRefundAmount,
+                purpose: 'DEPOSIT_REFUND',
+                paymentMethod: 'PAYOS_REFUND',
+                status: 'SUCCESS',
+                paidAt: new Date(),
+              });
+            } else {
+              existingRefundPayment.amount = totalRefundAmount;
+              existingRefundPayment.status = 'SUCCESS';
+              await existingRefundPayment.save();
+            }
+          } catch (errPayment) {
+            console.error('Error ensuring DEPOSIT_REFUND payment record:', errPayment);
+          }
+
+          (booking as any).rentalDepositRefund = {
+            status: 'REFUNDED',
+            amount: totalRefundAmount,
+            completedAt: new Date(),
+            rentalDepositReason: `Hoàn cọc sau khi trừ ${deductAmount.toLocaleString('vi-VN')}đ bồi thường hư hỏng`,
+            refundRequestId: refundResult?._id || null,
+          };
+          if (!booking.paymentSummary) (booking as any).paymentSummary = {};
+          booking.paymentSummary.totalRefunded = totalRefundAmount;
+          booking.paymentSummary.paymentStatus = 'REFUNDED' as any;
+        } else {
+          try {
+            await this.bookingModel.db.model('Payment').deleteMany({
+              bookingId: booking._id,
+              purpose: 'DEPOSIT_REFUND',
+            });
+          } catch (delErr) {
+            console.warn('Could not delete old DEPOSIT_REFUND payment records:', delErr);
+          }
+
+          (booking as any).rentalDepositRefund = {
+            status: 'NO_REFUND',
+            amount: 0,
+            completedAt: new Date(),
+            rentalDepositReason: 'Khấu trừ toàn bộ cọc để bồi thường hư hỏng trang phục',
+            refundRequestId: null,
+          };
+          if (!booking.paymentSummary) (booking as any).paymentSummary = {};
+          booking.paymentSummary.totalRefunded = 0;
+        }
+
+        await this.bookingModel.db.model('BookingEscrow').updateOne(
+          { bookingId: booking._id },
+          { $set: { status: EscrowStatus.DisputedResolved } },
+        );
+      }
+
+      // Chỉ đánh dấu Booking COMPLETED khi TẤT CẢ các áo đã COMPLETED
+      if (allItemsCompleted) {
+        booking.status = BookingStatus.Completed;
+        booking.statusTimeline.push({
+          status: BookingStatus.Completed,
+          changedAt: new Date(),
+          note: `Khách hàng đồng ý đền bù ${deductAmount.toLocaleString('vi-VN')}đ. Tất cả sản phẩm đã hoàn tất. Đơn hàng hoàn thành thành công.`,
+        });
+        await booking.save();
+
+        // Chia doanh thu thuê và cộng ví cho Provider chuẩn xác
+        await this.paymentsService.executeProfitSplit(booking);
+        await this.paymentsService.creditWalletsForBooking(booking._id);
+      } else {
+        booking.statusTimeline.push({
+          status: booking.status,
+          changedAt: new Date(),
+          note: `Khách hàng đã đồng ý đền bù ${deductAmount.toLocaleString('vi-VN')}đ cho sản phẩm gặp sự cố. Các sản phẩm khác tiếp tục thực hiện.`,
+        });
+        await booking.save();
+      }
 
       // Gửi thông báo cho khách hàng và shop
       try {
@@ -760,7 +947,7 @@ export class DisputesService {
         await notificationModel.create({
           userId: customerUserId,
           title: `Xử lý sự cố thành công đơn hàng #${booking.bookingCode}`,
-          content: `Bạn đã đồng ý đền bù ${incident.requestedAmount.toLocaleString('vi-VN')}đ cho Shop. ${remainingRefund > 0 ? `Số tiền cọc còn lại ${remainingRefund.toLocaleString('vi-VN')}đ đã được hoàn trả.` : `Toàn bộ tiền cọc đã được khấu trừ.`} Đơn hàng đã hoàn thành.`,
+          content: `Bạn đã đồng ý đền bù ${deductAmount.toLocaleString('vi-VN')}đ cho Shop. ${remainingRefund > 0 ? `Số tiền cọc còn lại ${remainingRefund.toLocaleString('vi-VN')}đ sẽ được xử lý theo quy định.` : `Toàn bộ tiền cọc của áo này đã được khấu trừ.`}`,
           type: 'DISPUTE',
           metadata: { bookingId: booking._id, incidentId: incident._id },
           isRead: false,
@@ -770,7 +957,7 @@ export class DisputesService {
           await notificationModel.create({
             userId: provider.userId,
             title: `Khách hàng đã đồng ý đền bù đơn hàng #${booking.bookingCode}`,
-            content: `Khách hàng đã đồng ý mức đền bù ${incident.requestedAmount.toLocaleString('vi-VN')}đ. Tiền đền bù đã được chuyển khoản và doanh thu thuê đã được cộng vào ví của Shop.`,
+            content: `Khách hàng đã đồng ý mức đền bù ${deductAmount.toLocaleString('vi-VN')}đ. Tiền đền bù đã được chuyển khoản cho Shop.`,
             type: 'DISPUTE',
             metadata: { bookingId: booking._id, incidentId: incident._id },
             isRead: false,
@@ -790,6 +977,8 @@ export class DisputesService {
       throw err;
     }
 
+    await this.emitBookingUpdateHelper(booking._id, booking.status);
+
     return {
       success: true,
       message: 'Xử lý đền bù thành công',
@@ -801,6 +990,7 @@ export class DisputesService {
   async customerDisagreeIncident(
     incidentId: string,
     customerUserId: string,
+    body?: { reason?: string; evidencePhotos?: string[] },
   ): Promise<any> {
     const incident = await this.incidentModel.findById(incidentId);
     if (!incident) {
@@ -825,11 +1015,30 @@ export class DisputesService {
     // Chuyển incident sang trạng thái tranh chấp
     const transitioned = await this.incidentModel.findOneAndUpdate(
       { _id: incident._id, status: IncidentStatus.PendingCustomer },
-      { $set: { status: IncidentStatus.Disputed } },
+      {
+        $set: {
+          status: IncidentStatus.Disputed,
+          customerReason: body?.reason?.trim() || null,
+          customerEvidencePhotos: body?.evidencePhotos || [],
+        },
+      },
       { new: true },
     );
     if (!transitioned) {
       throw new ConflictException('Sự cố đã được xử lý bởi thao tác khác');
+    }
+
+    // Đồng bộ BookingItem issueStatus sang UnderReview CHỈ CHO ÁO BỊ SỰ CỐ, không làm ảnh hưởng áo khác
+    if (typeof this.bookingItemModel?.updateOne === 'function') {
+      await this.bookingItemModel.updateOne(
+        { _id: incident.bookingItemId },
+        {
+          $set: {
+            'rentalFulfillment.issueStatus': RentalIssueStatus.UnderReview,
+            'rentalFulfillment.depositSettlementStatus': DepositSettlementStatus.Held,
+          },
+        },
+      );
     }
 
     // Chuyển booking sang trạng thái tranh chấp
@@ -837,7 +1046,7 @@ export class DisputesService {
     booking.statusTimeline.push({
       status: BookingStatus.Disputed,
       changedAt: new Date(),
-      note: 'Khách hàng từ chối đền bù. Đơn đặt lịch chuyển sang trạng thái tranh chấp chờ Admin xử lý.',
+      note: `Khách hàng từ chối đền bù${body?.reason?.trim() ? ` (${body.reason.trim()})` : ''}. Đơn đặt lịch chuyển sang trạng thái tranh chấp chờ Admin xử lý.`,
     });
     await booking.save();
 
@@ -849,7 +1058,8 @@ export class DisputesService {
       );
     }
 
-    // Tạo Dispute record
+    // Tạo hoặc cập nhật Dispute record
+    const customerNote = body?.reason?.trim() ? ` - Lý do: ${body.reason.trim()}` : '';
     await this.disputeModel.findOneAndUpdate(
       { bookingId: booking._id },
       {
@@ -858,8 +1068,8 @@ export class DisputesService {
           bookingItemId: incident.bookingItemId,
           openedBy: new Types.ObjectId(customerUserId),
           againstProviderId: incident.reportedBy,
-          reason: `Khách hàng khiếu nại yêu cầu đền bù của Shop: ${incident.description}`,
-          evidencePhotos: incident.evidencePhotos,
+          reason: `Khách hàng khiếu nại yêu cầu đền bù của Shop: ${incident.description}${customerNote}`,
+          evidencePhotos: [...(incident.evidencePhotos || []), ...(body?.evidencePhotos || [])],
           status: DisputeStatus.Open,
         },
       },
@@ -893,6 +1103,8 @@ export class DisputesService {
     } catch (notifErr) {
       console.error('Failed to create disagree incident notifications:', notifErr);
     }
+
+    await this.emitBookingUpdateHelper(booking._id, BookingStatus.Disputed);
 
     return {
       success: true,
@@ -1033,9 +1245,10 @@ export class DisputesService {
         refundAmount = depositTotal;      // hoàn tiền cọc cho khách
         compensationAmount = 0;
       } else {
-        // SHOP_RIGHT — provider lấy tiền cọc, khách không được gì
-        refundAmount = 0;
-        compensationAmount = Math.min(incident?.requestedAmount ?? depositTotal, depositTotal);
+        // SHOP_RIGHT — provider lấy tiền đền bù theo yêu cầu (tối đa bằng tiền cọc), khách nhận lại phần cọc còn lại (nếu có)
+        const claimed = Math.min(incident?.requestedAmount ?? depositTotal, depositTotal);
+        compensationAmount = claimed;
+        refundAmount = Math.max(depositTotal - claimed, 0);
       }
     }
 
@@ -1051,13 +1264,13 @@ export class DisputesService {
       );
     }
 
-    // 1. Cập nhật trạng thái Escrow sang DisputedResolved nếu có
-    const escrow = await this.bookingModel.db
+    // 1. Cập nhật trạng thái Escrow sang DisputedResolved
+    let escrow = await this.bookingModel.db
       .model('BookingEscrow')
       .findOneAndUpdate(
         {
           bookingId: booking._id,
-          status: { $in: [EscrowStatus.Held, EscrowStatus.Settled] },
+          status: { $in: [EscrowStatus.Held, EscrowStatus.Settled, EscrowStatus.Disputed] },
         },
         { $set: { status: EscrowStatus.DisputedResolved } },
         { new: false },
@@ -1191,14 +1404,18 @@ export class DisputesService {
         await incident.save();
       }
 
-      const item = await this.bookingItemModel.findOne({ bookingId: booking._id });
+      let disputeBookingItemId = incident?.bookingItemId || null;
+      if (!disputeBookingItemId && typeof this.bookingItemModel?.findOne === 'function') {
+        const item = await this.bookingItemModel.findOne({ bookingId: booking._id });
+        disputeBookingItemId = item?._id || null;
+      }
       const resolvedDispute = await this.disputeModel.findOneAndUpdate(
         {
           bookingId,
         },
         {
           $set: {
-            bookingItemId: item?._id || new Types.ObjectId(),
+            bookingItemId: disputeBookingItemId || new Types.ObjectId(),
             openedBy: (booking as any).customerId?._id || booking.customerId,
             againstProviderId: reportedBy || (booking.providerIds?.[0] || new Types.ObjectId()),
             reason: notes || 'Khách hàng khiếu nại',
@@ -1258,6 +1475,147 @@ export class DisputesService {
         resolvedAt: new Date(),
       };
 
+      // Cập nhật trạng thái hoàn thành, cọc & tồn kho cho ĐÚNG áo dài trong tranh chấp (không updateMany bừa bãi)
+      let targetItemId: Types.ObjectId | null | undefined = incident?.bookingItemId;
+      if (!targetItemId && typeof this.disputeModel?.findOne === 'function') {
+        try {
+          const dispute = await this.disputeModel.findOne({ bookingId: booking._id });
+          targetItemId = (dispute as any)?.bookingItemId;
+        } catch {
+          targetItemId = null;
+        }
+      }
+
+      const targetItem = targetItemId && typeof this.bookingItemModel?.findById === 'function'
+        ? await this.bookingItemModel.findById(targetItemId)
+        : null;
+
+      if (targetItem) {
+        const targetDeposit = (targetItem.depositAmount || 0) * (targetItem.quantity || 1);
+        let itemDeduct = 0;
+        let itemRefund = 0;
+        let itemSettlement = DepositSettlementStatus.FullyReleased;
+        let itemInventoryStatus = RentalInventoryStatus.Available;
+
+        if (decision === 'CUSTOMER_RIGHT') {
+          itemRefund = targetDeposit;
+          itemDeduct = 0;
+          itemSettlement = DepositSettlementStatus.FullyReleased;
+          itemInventoryStatus = RentalInventoryStatus.Available;
+        } else if (decision === 'SHOP_RIGHT') {
+          itemDeduct = Math.min(incident?.requestedAmount || targetDeposit, targetDeposit);
+          itemRefund = Math.max(targetDeposit - itemDeduct, 0);
+          itemSettlement = itemRefund > 0 ? DepositSettlementStatus.PartiallyDeducted : DepositSettlementStatus.FullyDeducted;
+          itemInventoryStatus = incident?.actionType === 'MAINTENANCE' ? RentalInventoryStatus.Maintenance : RentalInventoryStatus.Available;
+        } else {
+          // SPLIT
+          itemDeduct = Math.min(compensationAmount, targetDeposit);
+          itemRefund = Math.max(targetDeposit - itemDeduct, 0);
+          itemSettlement = DepositSettlementStatus.PartiallyDeducted;
+          itemInventoryStatus = incident?.actionType === 'MAINTENANCE' ? RentalInventoryStatus.Maintenance : RentalInventoryStatus.Available;
+        }
+
+        // Cập nhật InventoryItem của targetItem
+        try {
+          const reservationModel = this.bookingModel.db.model('InventoryReservation');
+          if (reservationModel && typeof reservationModel.find === 'function') {
+            const reservations = await reservationModel.find({ bookingItemId: targetItem._id }).lean().exec();
+            const invIds = (reservations as any[]).map((r) => r.inventoryItemId).filter(Boolean);
+            if (invIds.length === 0 && (targetItem as any).inventoryItemId) {
+              invIds.push((targetItem as any).inventoryItemId);
+            }
+            if (invIds.length > 0 && typeof this.inventoryModel?.updateMany === 'function') {
+              const invStatus =
+                itemInventoryStatus === RentalInventoryStatus.Maintenance
+                  ? InventoryItemStatus.Maintenance
+                  : InventoryItemStatus.Available;
+              await this.inventoryModel.updateMany(
+                { _id: { $in: invIds } },
+                { $set: { status: invStatus } },
+              );
+            }
+
+            if (typeof reservationModel.updateMany === 'function') {
+              await reservationModel.updateMany(
+                { bookingItemId: targetItem._id, status: { $in: ['PENDING', 'CONFIRMED'] } },
+                { $set: { status: 'COMPLETED' } },
+              );
+            }
+          }
+        } catch (resErr) {
+          console.warn('Lỗi cập nhật reservation/inventory cho item:', resErr);
+        }
+
+        // Cập nhật DUY NHẤT target item
+        if (typeof this.bookingItemModel?.updateOne === 'function') {
+          await this.bookingItemModel.updateOne(
+            { _id: targetItem._id },
+            {
+              $set: {
+                'rentalFulfillment.status': RentalFulfillmentStatus.Completed,
+                'rentalFulfillment.inventoryStatus': itemInventoryStatus,
+                'rentalFulfillment.completedAt': new Date(),
+                'rentalFulfillment.depositSettlementStatus': itemSettlement,
+                'rentalFulfillment.depositRefundAmount': itemRefund,
+                'rentalFulfillment.depositDeductedAmount': itemDeduct,
+                'rentalFulfillment.issueStatus': RentalIssueStatus.Resolved,
+              },
+              $push: {
+                'rentalFulfillment.history': {
+                  action: 'INCIDENT_RESOLVED',
+                  actor: { role: 'ADMIN', userId: new Types.ObjectId(adminUserId) },
+                  occurredAt: new Date(),
+                  note: `Admin giải quyết tranh chấp: ${decisionLabel}`,
+                  metadata: { decision, refundAmount: itemRefund, compensationAmount: itemDeduct },
+                },
+              },
+            },
+          );
+        }
+      } else {
+        // Fallback khi không có item riêng biệt
+        const settlementStatus =
+          refundAmount > 0
+            ? compensationAmount > 0
+              ? DepositSettlementStatus.PartiallyDeducted
+              : DepositSettlementStatus.FullyReleased
+            : DepositSettlementStatus.FullyDeducted;
+
+        if (typeof this.bookingItemModel?.updateMany === 'function') {
+          await this.bookingItemModel.updateMany(
+            { bookingId: (booking as any)._id, itemType: 'PRODUCT' as any } as any,
+            {
+              $set: {
+                'rentalFulfillment.status': RentalFulfillmentStatus.Completed,
+                'rentalFulfillment.inventoryStatus': RentalInventoryStatus.Available,
+                'rentalFulfillment.completedAt': new Date(),
+                'rentalFulfillment.depositSettlementStatus': settlementStatus,
+                'rentalFulfillment.depositRefundAmount': refundAmount,
+                'rentalFulfillment.depositDeductedAmount': compensationAmount,
+                'rentalFulfillment.issueStatus': RentalIssueStatus.Resolved,
+              },
+            },
+          );
+        }
+      }
+
+      // Kiểm tra toàn bộ items trong Booking xem tất cả đã hoàn tất chưa
+      let allItemsCompleted = true;
+      if (typeof this.bookingItemModel?.find === 'function') {
+        try {
+          const allProductItems = await this.bookingItemModel
+            .find({ bookingId: booking._id, itemType: BookingItemType.Product })
+            .lean()
+            .exec();
+
+          allItemsCompleted = (allProductItems || []).every(
+            (it: any) => it.rentalFulfillment?.status === RentalFulfillmentStatus.Completed,
+          );
+        } catch {
+          allItemsCompleted = true;
+        }
+      }
+
       let finalBookingStatus: BookingStatus;
       let finalScheduleStatus: string;
       if (refundAmount >= actualPaidTotal) {
@@ -1271,102 +1629,109 @@ export class DisputesService {
         finalScheduleStatus = 'COMPLETED';
       }
 
-      booking.status = finalBookingStatus;
-      booking.statusTimeline.push({
-        status: finalBookingStatus,
-        changedAt: new Date(),
-        note: `Admin giải quyết tranh chấp. Quyết định: ${decisionLabel}. Hoàn khách: ${refundAmount.toLocaleString('vi-VN')}đ, bồi thường provider: ${compensationAmount.toLocaleString('vi-VN')}đ. Ghi chú: ${notes}`,
-      });
-      await booking.save();
+      if (allItemsCompleted) {
+        booking.status = finalBookingStatus;
+        booking.statusTimeline.push({
+          status: finalBookingStatus,
+          changedAt: new Date(),
+          note: `Admin giải quyết tranh chấp. Quyết định: ${decisionLabel}. Hoàn khách: ${refundAmount.toLocaleString('vi-VN')}đ, bồi thường provider: ${compensationAmount.toLocaleString('vi-VN')}đ. Ghi chú: ${notes}`,
+        });
+        await booking.save();
 
-      try {
-        await this.bookingModel.db.model('BookingSchedule').updateMany(
-          { bookingId: booking._id },
-          { $set: { status: finalScheduleStatus } },
-        );
-      } catch (schErr) {
-        console.warn('Lỗi đồng bộ BookingSchedule khi giải quyết tranh chấp:', schErr);
-      }
+        try {
+          await this.bookingModel.db.model('BookingSchedule').updateMany(
+            { bookingId: booking._id },
+            { $set: { status: finalScheduleStatus } },
+          );
+        } catch (schErr) {
+          console.warn('Lỗi đồng bộ BookingSchedule khi giải quyết tranh chấp:', schErr);
+        }
 
-      // Cập nhật trạng thái hoàn thành, cọc & giải phóng tồn kho cho các sản phẩm áo dài trong đơn
-      try {
-        await this.bookingItemModel.updateMany(
-          { bookingId: (booking as any)._id, itemType: 'PRODUCT' as any } as any,
-          {
-            $set: {
-              'rentalFulfillment.status': 'COMPLETED',
-              'rentalFulfillment.inventoryStatus': 'AVAILABLE',
-              'rentalFulfillment.completedAt': new Date(),
-              'rentalFulfillment.depositSettlementStatus': refundAmount > 0 ? 'FULLY_RELEASED' : 'FULLY_DEDUCTED',
-              'rentalFulfillment.depositRefundAmount': refundAmount,
-              'rentalFulfillment.depositDeductedAmount': refundAmount > 0 ? 0 : depositTotal,
-            },
-          },
-        );
-      } catch (itemErr) {
-        console.warn('Lỗi tự động cập nhật rentalFulfillment cho booking items:', itemErr);
-      }
-
-      if (decision === 'CUSTOMER_RIGHT') {
-        await this.settlementsService.cancelSettlementsForBooking(
-          booking._id.toString(),
-          notes,
-          adminUserId,
-        );
-
-        if (reportedBy) {
+        if (decision === 'CUSTOMER_RIGHT') {
+          await this.settlementsService.cancelSettlementsForBooking(
+            booking._id.toString(),
+            notes,
+            adminUserId,
+          );
+        } else {
+          await this.settlementsService.releaseSettlementsForBooking(
+            booking._id.toString(),
+            notes,
+            adminUserId,
+          );
           try {
-            const providerModel = this.bookingModel.db.model('Provider');
-            const provider = await providerModel.findById(reportedBy);
-            if (provider) {
-              const newViolationCount = (provider.violationCount || 0) + 1;
-              const updateData: Record<string, any> = { violationCount: newViolationCount };
-              if (newViolationCount >= 3) {
-                updateData.status = 'SUSPENDED';
-              }
-              await providerModel.findByIdAndUpdate(reportedBy, { $set: updateData });
-            }
-          } catch (pErr) {
-            console.error('Lỗi tự động ghi nhận vi phạm/đình chỉ đối tác:', pErr);
+            await this.paymentsService.executeProfitSplit(booking);
+            await this.paymentsService.creditWalletsForBooking(booking._id);
+          } catch (walletErr) {
+            console.warn('Lỗi chia lợi nhuận ví khi giải quyết tranh chấp:', walletErr);
           }
         }
       } else {
-        await this.settlementsService.releaseSettlementsForBooking(
-          booking._id.toString(),
-          notes,
-          adminUserId,
-        );
-        await this.paymentsService.executeProfitSplit(booking);
-        await this.paymentsService.creditWalletsForBooking(booking._id);
+        // Vẫn còn item khác chưa hoàn tất -> không đánh dấu Booking hoàn tất sớm
+        booking.statusTimeline.push({
+          status: booking.status,
+          changedAt: new Date(),
+          note: `Admin giải quyết tranh chấp cho sản phẩm gặp sự cố. Quyết định: ${decisionLabel}. Các sản phẩm khác tiếp tục thực hiện.`,
+        });
+        await booking.save();
+      }
+
+      if (decision === 'CUSTOMER_RIGHT' && reportedBy) {
+        try {
+          const providerModel = this.bookingModel.db.model('Provider');
+          const provider = await providerModel.findById(reportedBy);
+          if (provider) {
+            const newViolationCount = (provider.violationCount || 0) + 1;
+            const updateData: Record<string, any> = { violationCount: newViolationCount };
+            if (newViolationCount >= 3) {
+              updateData.status = 'SUSPENDED';
+            }
+            await providerModel.findByIdAndUpdate(reportedBy, { $set: updateData });
+          }
+        } catch (pErr) {
+          console.error('Lỗi tự động ghi nhận vi phạm/đình chỉ đối tác:', pErr);
+        }
       }
 
       // Gửi thông báo cho khách hàng và shop
       try {
         const notificationModel = this.bookingModel.db.model('Notification');
-        const customerUserId = booking.customerId._id || booking.customerId;
+        const title = `Kết quả giải quyết tranh chấp đơn hàng #${booking.bookingCode}`;
+        const metadata = {
+          bookingId: booking._id.toString(),
+          disputeResolution: true,
+          decision,
+          decisionLabel,
+          refundAmount,
+          compensationAmount,
+          adminNotes: notes,
+        };
+        const customerUserId = (booking.customerId as any)?._id || booking.customerId;
+        const customerContent = `Admin đã đưa ra phán quyết cho đơn hàng ${booking.bookingCode}. Quyết định: ${decisionLabel}. Số tiền hoàn lại cho bạn: ${refundAmount.toLocaleString('vi-VN')}đ. Ghi chú của Admin: ${notes}`;
 
-        await notificationModel.create({
-          userId: customerUserId,
-          title: `Kết quả giải quyết tranh chấp đơn hàng #${booking.bookingCode}`,
-          content: `Admin đã đưa ra phán quyết cho đơn hàng ${booking.bookingCode}. Quyết định: ${decisionLabel}. Số tiền hoàn lại cho bạn: ${refundAmount.toLocaleString('vi-VN')}đ. Ghi chú của Admin: ${notes}`,
-          type: 'SYSTEM',
-          metadata: { bookingId: booking._id },
-          isRead: false,
-        });
+        // Use NotificationsService so the result is both persisted and pushed
+        // through the socket to an already-open customer/provider session.
+        if (this.notificationsService && customerUserId) {
+          await this.notificationsService.createNotification(
+            customerUserId.toString(), title, customerContent, 'SYSTEM' as any, metadata,
+          );
+        } else {
+          await notificationModel.create({ userId: customerUserId, title, content: customerContent, type: 'SYSTEM', metadata, isRead: false });
+        }
 
-        for (const pId of booking.providerIds) {
+        for (const pId of (booking.providerIds || [])) {
           const provider = await this.bookingModel.db
             .model('Provider')
-            .findById(pId);
+            .findById((pId as any)?._id || pId);
           if (provider && provider.userId) {
-            await notificationModel.create({
-              userId: provider.userId,
-              title: `Kết quả giải quyết tranh chấp đơn hàng #${booking.bookingCode}`,
-              content: `Admin đã đưa ra phán quyết cho đơn hàng ${booking.bookingCode}. Quyết định: ${decisionLabel}. Số tiền bồi thường giải ngân cho Shop: ${compensationAmount.toLocaleString('vi-VN')}đ. Ghi chú của Admin: ${notes}`,
-              type: 'SYSTEM',
-              metadata: { bookingId: booking._id },
-              isRead: false,
-            });
+            const providerContent = `Admin đã đưa ra phán quyết cho đơn hàng ${booking.bookingCode}. Quyết định: ${decisionLabel}. Số tiền bồi thường giải ngân cho Shop: ${compensationAmount.toLocaleString('vi-VN')}đ. Ghi chú của Admin: ${notes}`;
+            if (this.notificationsService) {
+              await this.notificationsService.createNotification(
+                provider.userId.toString(), title, providerContent, 'SYSTEM' as any, metadata,
+              );
+            } else {
+              await notificationModel.create({ userId: provider.userId, title, content: providerContent, type: 'SYSTEM', metadata, isRead: false });
+            }
           }
         }
       } catch (notifErr) {
@@ -1386,6 +1751,8 @@ export class DisputesService {
       throw err;
     }
 
+    await this.emitBookingUpdateHelper(booking._id, booking.status);
+
     return {
       success: true,
       message: 'Admin giải quyết tranh chấp thành công',
@@ -1397,7 +1764,13 @@ export class DisputesService {
   async getDisputedIncidents(): Promise<any[]> {
     const incidents = await this.incidentModel
       .find({ status: { $in: [IncidentStatus.Disputed, IncidentStatus.Resolved] } })
-      .populate('bookingId')
+      .populate({
+        path: 'bookingId',
+        populate: [
+          { path: 'customerId', select: 'fullName profile email phone phoneNumber avatar' },
+          { path: 'providerIds', select: 'businessName fullName profile phone' },
+        ],
+      })
       .populate('bookingItemId')
       .populate('productId')
       .populate('reportedBy')
@@ -1407,7 +1780,13 @@ export class DisputesService {
       .find({
         status: { $in: [DisputeStatus.Open, DisputeStatus.UnderReview, DisputeStatus.Resolved] },
       })
-      .populate('bookingId')
+      .populate({
+        path: 'bookingId',
+        populate: [
+          { path: 'customerId', select: 'fullName profile email phone phoneNumber avatar' },
+          { path: 'providerIds', select: 'businessName fullName profile phone' },
+        ],
+      })
       .populate('bookingItemId')
       .populate('openedBy')
       .populate('againstProviderId')
@@ -1424,12 +1803,17 @@ export class DisputesService {
         reportedBy: d.againstProviderId,
         description: d.reason,
         actionType: 'REJECT_HANDOVER',
-        evidencePhotos: d.evidencePhotos,
+        evidencePhotos: d.evidencePhotos || [],
+        customerEvidencePhotos: (d as any).customerEvidencePhotos || [],
+        customerReason: d.reason,
         requestedAmount:
           pricingSummary.grandTotal || pricingSummary.subTotal || 0,
         status: isResolved ? 'RESOLVED' : IncidentStatus.Disputed,
         isDirectDispute: true,
         openedBy: d.openedBy,
+        adminDecision: (d as any).adminDecision || null,
+        adminNotes: (d as any).adminDecision?.decisionNote || null,
+        resolvedAt: (d as any).adminDecision?.decidedAt || null,
         createdAt: d.createdAt,
       };
     });
@@ -1437,6 +1821,7 @@ export class DisputesService {
     const mappedIncidents = incidents.map((i: any) => {
       const pricingSummary = i.bookingId?.pricingSummary || {};
       const isResolved = i.status === IncidentStatus.Resolved || i.status === 'RESOLVED';
+      const customer = i.bookingId?.customerId || null;
       return {
         _id: i._id,
         bookingId: i.bookingId,
@@ -1444,12 +1829,16 @@ export class DisputesService {
         productId: i.productId,
         reportedBy: i.reportedBy,
         description: i.description || i.incidentType,
-        actionType: 'INCIDENT_REPORT',
-        evidencePhotos: i.evidencePhotos,
-        requestedAmount: i.compensationAmount || pricingSummary.depositTotal || 0,
+        actionType: i.actionType || 'CLEANING',
+        evidencePhotos: i.evidencePhotos || [],
+        customerEvidencePhotos: i.customerEvidencePhotos || [],
+        customerReason: i.customerReason || null,
+        requestedAmount: i.requestedAmount || i.compensationAmount || pricingSummary.depositTotal || 0,
         status: isResolved ? 'RESOLVED' : IncidentStatus.Disputed,
         isDirectDispute: false,
-        openedBy: i.reportedBy,
+        openedBy: customer,
+        adminNotes: i.adminNotes || null,
+        resolvedAt: i.resolvedAt || null,
         createdAt: i.createdAt,
       };
     });
@@ -1526,6 +1915,7 @@ export class DisputesService {
               : (b as any).evidencePhotos?.length
               ? (b as any).evidencePhotos
               : b.deliveredPhotos || b.handoverPhotos || [],
+          customerEvidencePhotos: (b as any).customerEvidencePhotos || [],
           requestedAmount: b.pricingSummary?.grandTotal || b.pricingSummary?.subTotal || 0,
           status: isResolved ? 'RESOLVED' : IncidentStatus.Disputed,
           isDirectDispute: true,
@@ -1535,7 +1925,45 @@ export class DisputesService {
         };
       });
 
-    return [...mappedIncidents, ...mappedDisputes, ...mappedDisputedBookings];
+    // A customer rejection can create both the original IncidentReport and a
+    // Dispute document. They are two records for one business case, not two
+    // separate admin tasks. Collapse them by booking + booking item while
+    // retaining all evidence and the most actionable fields.
+    const mergedByCase = new Map<string, any>();
+    for (const entry of [...mappedIncidents, ...mappedDisputes, ...mappedDisputedBookings] as any[]) {
+      const bookingId = entry.bookingId?._id?.toString?.() || entry.bookingId?.toString?.() || '';
+      const itemId = entry.bookingItemId?._id?.toString?.() || entry.bookingItemId?.toString?.() || 'booking';
+      const key = `${bookingId}:${itemId}`;
+      const previous = mergedByCase.get(key);
+      if (!previous) {
+        mergedByCase.set(key, { ...entry });
+        continue;
+      }
+
+      const unique = (values: any[]) => [...new Set((values || []).filter(Boolean))];
+      const previousResolved = previous.status === 'RESOLVED';
+      const entryResolved = entry.status === 'RESOLVED';
+      mergedByCase.set(key, {
+        ...previous,
+        // Prefer the direct customer dispute identity when available, since
+        // that is the record the admin resolves by bookingId.
+        _id: entry.isDirectDispute ? entry._id : previous._id,
+        isDirectDispute: previous.isDirectDispute || entry.isDirectDispute,
+        isBookingDisputeOnly: previous.isBookingDisputeOnly || entry.isBookingDisputeOnly,
+        status: previousResolved && entryResolved ? 'RESOLVED' : IncidentStatus.Disputed,
+        actionType: entry.isDirectDispute ? entry.actionType : previous.actionType,
+        description: entry.isDirectDispute ? entry.description : previous.description,
+        evidencePhotos: unique([...(previous.evidencePhotos || []), ...(entry.evidencePhotos || [])]),
+        customerEvidencePhotos: unique([...(previous.customerEvidencePhotos || []), ...(entry.customerEvidencePhotos || [])]),
+        adminNotes: entry.adminNotes || previous.adminNotes || null,
+        resolvedAt: entry.resolvedAt || previous.resolvedAt || null,
+        createdAt: previous.createdAt || entry.createdAt,
+      });
+    }
+
+    return [...mergedByCase.values()].sort((a, b) =>
+      new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime(),
+    );
   }
 
   private async executeCompensationTransfer(input: {

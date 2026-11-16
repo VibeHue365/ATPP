@@ -8,7 +8,8 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react';
-import { AppState, type AppStateStatus } from 'react-native';
+import { AppState, Platform, type AppStateStatus } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { notificationApi } from '@/apis/notificationApi';
 import { useAuth } from './AuthContext';
 import { useSocket } from './SocketContext';
@@ -18,6 +19,8 @@ import {
   formatNotification,
   type FormattedNotification,
 } from '@/utils/notificationFormatter';
+import { registerCurrentDeviceForPush } from '@/services/pushNotifications';
+import { openNotificationData } from '@/utils/notificationNavigation';
 
 export interface ActiveNotificationBanner {
   rawId: string;
@@ -116,7 +119,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
           list.forEach((n) => seenIdsRef.current.add(n._id));
           initializedRef.current = true;
         } else {
-          // Detect newly added unread notifications (e.g. from V2 payment finalization or other device)
+          // Detect newly added unread notifications (e.g. V2 payment finalization or another device)
           const newestUnseenUnread = list.find(
             (n) => !n.isRead && !seenIdsRef.current.has(n._id),
           );
@@ -158,6 +161,51 @@ export function NotificationProvider({ children }: PropsWithChildren) {
       sub.remove();
     };
   }, [reload, isAuthenticated]);
+
+  // Native OS Push Notifications (Expo Push Token + tap/receive listeners)
+  useEffect(() => {
+    if (!isAuthenticated || (Platform.OS !== 'android' && Platform.OS !== 'ios')) {
+      return;
+    }
+
+    void registerCurrentDeviceForPush().catch(() => undefined);
+
+    const received = Notifications.addNotificationReceivedListener(() => {
+      void reload(true);
+    });
+
+    const response = Notifications.addNotificationResponseReceivedListener(
+      (event) => {
+        openNotificationData(
+          (event.notification.request.content.data ?? {}) as Record<
+            string,
+            unknown
+          >,
+        );
+        void reload(true);
+      },
+    );
+
+    void Notifications.getLastNotificationResponseAsync()
+      .then((event) => {
+        if (!event) return;
+        openNotificationData(
+          (event.notification.request.content.data ?? {}) as Record<
+            string,
+            unknown
+          >,
+        );
+        void Notifications.clearLastNotificationResponseAsync().catch(
+          () => undefined,
+        );
+      })
+      .catch(() => undefined);
+
+    return () => {
+      received.remove();
+      response.remove();
+    };
+  }, [isAuthenticated, reload]);
 
   // Real-time WebSocket listeners for new notifications & booking state changes
   useEffect(() => {
@@ -215,10 +263,17 @@ export function NotificationProvider({ children }: PropsWithChildren) {
     setNotifications((v) => v.map((n) => ({ ...n, isRead: true })));
   }, []);
 
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  useEffect(() => {
+    if (Platform.OS !== 'android' && Platform.OS !== 'ios') return;
+    void Notifications.setBadgeCountAsync(unreadCount).catch(() => undefined);
+  }, [unreadCount]);
+
   const value = useMemo(
     () => ({
       notifications,
-      unreadCount: notifications.filter((n) => !n.isRead).length,
+      unreadCount,
       loading,
       error,
       bookingSyncVersion,
@@ -232,6 +287,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
     }),
     [
       notifications,
+      unreadCount,
       loading,
       error,
       bookingSyncVersion,

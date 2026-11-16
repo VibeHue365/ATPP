@@ -318,62 +318,86 @@ export class InventoryService {
 
     const itemIds = items.map((i) => i._id);
     const now = new Date();
+    const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
 
-    // Lấy các hiện vật đang có lịch đặt/cho thuê hoạt động (TEMP_RESERVED hoặc CONFIRMED, đã/đang tới ngày thuê)
-    const activeReservations =
+    // 1. Lấy tất cả active reservations (hỗ trợ legacy reservation)
+    const reservations =
       itemIds.length > 0
         ? await this.inventoryReservationModel
             .find({
               inventoryItemId: { $in: itemIds },
               status: { $in: [ReservationStatus.TempReserved, ReservationStatus.Confirmed] },
-              reservedFrom: { $lte: now },
+              $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
             })
-            .select({ inventoryItemId: 1, bookingId: 1, bookingItemId: 1 })
+            .select({ inventoryItemId: 1, bookingId: 1, bookingItemId: 1, reservedFrom: 1, reservedTo: 1 })
             .lean()
             .exec()
         : [];
 
-    let activeRentedItemIds = new Set<string>();
-
-    if (activeReservations.length > 0) {
-      const bookingModel = this.connection.model('Booking');
-      const bookingItemModel = this.connection.model('BookingItem');
-
-      const bookingIds = Array.from(new Set(activeReservations.map((r) => r.bookingId?.toString()).filter(Boolean)));
-      const bookingItemIds = Array.from(new Set(activeReservations.map((r) => r.bookingItemId?.toString()).filter(Boolean)));
-
-      const inactiveBookings = bookingIds.length > 0
-        ? await bookingModel
+    // 2. Lấy tất cả active slot leases (hợp nhất cả InventorySlotLease)
+    const slotLeases =
+      itemIds.length > 0
+        ? await this.connection
+            .collection('inventory_slot_leases')
             .find({
-              _id: { $in: bookingIds.map((id) => new Types.ObjectId(id)) },
-              status: { $in: ['RETURNED', 'COMPLETED', 'CANCELLED', 'REFUNDED'] },
+              inventoryItemId: { $in: itemIds },
+              status: { $in: ['TEMP', 'CONFIRMED'] },
+              $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
             })
-            .select({ _id: 1 })
-            .lean()
-            .exec()
+            .project({ inventoryItemId: 1, bookingId: 1, bookingItemId: 1, dateStr: 1, slotIndex: 1 })
+            .toArray()
         : [];
-      const inactiveBookingIds = new Set(inactiveBookings.map((b: any) => b._id.toString()));
 
-      const inactiveBookingItems = bookingItemIds.length > 0
-        ? await bookingItemModel
-            .find({
-              _id: { $in: bookingItemIds.map((id) => new Types.ObjectId(id)) },
-              'rentalFulfillment.status': { $in: ['Returned', 'Completed'] },
-            })
-            .select({ _id: 1 })
-            .lean()
-            .exec()
-        : [];
-      const inactiveBookingItemIds = new Set(inactiveBookingItems.map((bi: any) => bi._id.toString()));
+    // 3. Map booking status to filter inactive / completed bookings
+    const allBookingIds = Array.from(
+      new Set([
+        ...reservations.map((r) => r.bookingId?.toString()),
+        ...slotLeases.map((l) => l.bookingId?.toString()),
+      ].filter(Boolean)),
+    );
 
-      activeReservations.forEach((r) => {
-        const isBookingInactive = r.bookingId && inactiveBookingIds.has(r.bookingId.toString());
-        const isItemInactive = r.bookingItemId && inactiveBookingItemIds.has(r.bookingItemId.toString());
-        if (!isBookingInactive && !isItemInactive) {
-          activeRentedItemIds.add(r.inventoryItemId.toString());
-        }
-      });
-    }
+    const bookingModel = this.connection.model('Booking');
+    const bookings = allBookingIds.length > 0
+      ? await bookingModel
+          .find({
+            _id: { $in: allBookingIds.map((id) => new Types.ObjectId(id)) },
+          })
+          .select({ _id: 1, status: 1 })
+          .lean()
+          .exec()
+      : [];
+    const bookingStatusMap = new Map<string, string>();
+    bookings.forEach((b: any) => bookingStatusMap.set(b._id.toString(), b.status));
+
+    // 4. Sets for rented and future booked items (deduped by inventoryItemId)
+    const activeRentedItemIds = new Set<string>();
+    const futureBookedItemIds = new Set<string>();
+
+    reservations.forEach((r) => {
+      const bStatus = r.bookingId ? bookingStatusMap.get(r.bookingId.toString()) : null;
+      if (bStatus === 'CANCELLED' || bStatus === 'REFUNDED') return;
+      if (bStatus === 'COMPLETED' && r.reservedTo && new Date(r.reservedTo) <= now) return;
+
+      const itemIdStr = r.inventoryItemId.toString();
+      if (bStatus === 'PICKED_UP') {
+        activeRentedItemIds.add(itemIdStr);
+      } else if (r.reservedFrom && new Date(r.reservedFrom) > now) {
+        futureBookedItemIds.add(itemIdStr);
+      }
+    });
+
+    slotLeases.forEach((l) => {
+      const bStatus = l.bookingId ? bookingStatusMap.get(l.bookingId.toString()) : null;
+      if (bStatus === 'CANCELLED' || bStatus === 'REFUNDED') return;
+      if (bStatus === 'COMPLETED' && l.dateStr < todayStr) return;
+
+      const itemIdStr = l.inventoryItemId.toString();
+      if (bStatus === 'PICKED_UP') {
+        activeRentedItemIds.add(itemIdStr);
+      } else if (l.dateStr >= todayStr) {
+        futureBookedItemIds.add(itemIdStr);
+      }
+    });
 
     // Grouping by productId, size, color
     const summaryMap = new Map<string, {
@@ -384,6 +408,7 @@ export class InventoryService {
       material: string | null;
       total: number;
       available: number;
+      bookedAhead: number;
       rented: number;
       maintenance: number;
     }>();
@@ -414,6 +439,7 @@ export class InventoryService {
           material: materialVal,
           total: 0,
           available: 0,
+          bookedAhead: 0,
           rented: 0,
           maintenance: 0,
         });
@@ -436,6 +462,10 @@ export class InventoryService {
         summary.rented++;
       } else {
         summary.available++;
+      }
+
+      if (futureBookedItemIds.has(item._id.toString())) {
+        summary.bookedAhead++;
       }
     });
 
@@ -499,6 +529,10 @@ export class InventoryService {
       throw new BadRequestException('Không được tự động đặt trạng thái RENTED bằng tay.');
     }
 
+    if (item.status === InventoryItemStatus.Rented && dto.status !== undefined) {
+      throw new BadRequestException('Hiện vật đang được khách thuê, quy trình nhận áo phải thực hiện tại Đơn đặt lịch.');
+    }
+
     // Thanh lý qua đường cập nhật cũng phải qua cùng một hàng rào như nút "Thanh lý",
     // nếu không đây sẽ là cửa hậu bỏ qua kiểm tra lịch thuê.
     if (dto.conditionStatus === ConditionStatus.Retired) {
@@ -510,6 +544,10 @@ export class InventoryService {
 
     if (dto.status !== undefined) {
       item.status = dto.status;
+      if (dto.status === InventoryItemStatus.Available) {
+        item.operationalAvailableFrom = null as any;
+        item.activeTurnaroundBookingItemId = null as any;
+      }
     }
     if (dto.conditionStatus !== undefined) {
       item.conditionStatus = dto.conditionStatus;

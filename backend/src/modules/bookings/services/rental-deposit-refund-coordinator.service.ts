@@ -26,7 +26,7 @@ export class RentalDepositRefundCoordinatorService {
     const booking = await this.bookingModel.findById(bookingId).lean().exec();
     if (!booking) return { status: 'PENDING' as const };
     const existing = booking.rentalDepositRefund;
-    if (existing?.status === 'REFUNDED' || existing?.status === 'NO_REFUND') return existing;
+    if (existing?.status === 'REFUNDED' || existing?.status === 'NO_REFUND' || existing?.status === 'REQUESTED') return existing;
 
     if (booking.bookingType === 'PHOTOGRAPHY' && booking.status !== 'CANCELLED' && booking.status !== 'DISPUTED') {
       await this.bookingModel.updateOne(
@@ -47,37 +47,14 @@ export class RentalDepositRefundCoordinatorService {
       return { status: 'NO_REFUND' as const, amount: 0 };
     }
 
-    for (const item of productItems) {
-      if (
-        item.rentalFulfillment &&
-        ['RETURNED', 'COMPLETED'].includes(item.rentalFulfillment.status) &&
-        (item.rentalFulfillment.depositSettlementStatus === DepositSettlementStatus.PendingSettlement ||
-          !finalDepositStatuses.includes(item.rentalFulfillment.depositSettlementStatus))
-      ) {
-        const charges = Object.values(item.rentalFulfillment.charges || {}).filter(Boolean) as Array<{ status: string }>;
-        const hasProposedCharges = charges.some((c) => c?.status === 'PROPOSED');
-        if (!hasProposedCharges) {
-          let depositAmt = (item.depositAmount || 0) * (item.quantity || 1);
-          if (depositAmt === 0 && productItems.length === 1 && booking.bookingType === 'AODAI_RENTAL') {
-            depositAmt = (booking.pricingSummary?.depositTotal || 0);
-          }
-          await this.bookingItemModel.updateOne(
-            { _id: item._id },
-            {
-              $set: {
-                'rentalFulfillment.depositSettlementStatus': DepositSettlementStatus.FullyReleased,
-                'rentalFulfillment.depositDeductedAmount': 0,
-                'rentalFulfillment.depositRefundAmount': depositAmt,
-              },
-            },
-          ).exec();
-        }
-      }
+    // Note: Do NOT auto-convert PendingSettlement to FullyReleased here.
+    // Transition to final deposit statuses (FullyReleased, PartiallyDeducted, FullyDeducted)
+    // MUST be performed explicitly by Provider ("No incident"), Customer agree, or Admin resolution.
+    if (productItems.some((item) => !item.rentalFulfillment || !finalDepositStatuses.includes(item.rentalFulfillment.depositSettlementStatus))) {
+      return { status: 'PENDING' as const };
     }
 
-    items = await this.bookingItemModel.find({ bookingId }).lean().exec();
-    const updatedProductItems = items.filter(isProductItem);
-    if (updatedProductItems.some((item) => !item.rentalFulfillment || !finalDepositStatuses.includes(item.rentalFulfillment.depositSettlementStatus))) return { status: 'PENDING' as const };
+    const updatedProductItems = productItems;
 
     let amount = updatedProductItems.reduce((sum, item) => sum + Math.max(item.rentalFulfillment?.depositRefundAmount ?? 0, 0), 0);
     if (amount === 0) {

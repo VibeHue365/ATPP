@@ -4,6 +4,7 @@ import { contractTestTarget } from '../../contracts/contract-test-target';
 import { Booking, BookingSchema, BookingStatus, BookingType } from '../../bookings/schemas/booking.schema';
 import { BookingItem, BookingItemSchema, BookingItemType } from '../../bookings/schemas/booking-item.schema';
 import { BookingSchedule, BookingScheduleSchema } from '../../bookings/schemas/booking-schedule.schema';
+import { InventorySlotLease, InventorySlotLeaseSchema } from '../../bookings/schemas/inventory-slot-lease.schema';
 import { InventoryReservation, InventoryReservationSchema, ReservationStatus } from '../../products/schemas/inventory-reservation.schema';
 import { BookingEscrow, BookingEscrowSchema, EscrowStatus } from '../schemas/booking-escrow.schema';
 import { Notification, NotificationSchema } from '../../notifications/schemas/notification.schema';
@@ -35,6 +36,7 @@ const oid = () => new Types.ObjectId();
   let contracts: Model<DigitalContract>;
   let versions: Model<ContractVersion>;
   let consents: Model<ContractConsent>;
+  let slotLeases: Model<any>;
 
   let recoveryService: PaymentRecoveryService;
 
@@ -63,6 +65,7 @@ const oid = () => new Types.ObjectId();
     contracts = connection.model(DigitalContract.name, DigitalContractSchema);
     versions = connection.model(ContractVersion.name, ContractVersionSchema);
     consents = connection.model(ContractConsent.name, ContractConsentSchema);
+    slotLeases = connection.model(InventorySlotLease.name, InventorySlotLeaseSchema);
 
     await connection.db!.collection('payments').createIndex(
       { contractIntentKey: 1 },
@@ -268,6 +271,7 @@ const oid = () => new Types.ObjectId();
       mockPreparation as any,
       mockSnapshots as any,
       mockTemplates as any,
+      slotLeases,
     );
 
     return {

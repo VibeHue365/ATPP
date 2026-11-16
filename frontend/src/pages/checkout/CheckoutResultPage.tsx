@@ -14,6 +14,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { ROUTES } from '../../config/routes';
+import { CONTRACTS_V2_ENABLED } from '../../config/features';
 import { useCart } from '../../context/CartContext';
 import { httpClient } from '../../services/httpClient';
 import './CheckoutResultPage.css';
@@ -33,6 +34,10 @@ export interface PaymentStatusResponse {
   bookingStatus: string;
   confirmed: boolean;
   needsManualReview?: boolean;
+  bookingId?: string;
+  bookingCode?: string;
+  bookingType?: string;
+  contractFlowVersion?: number | null;
 }
 
 const MAX_POLL_COUNT = 30;
@@ -48,6 +53,8 @@ export const CheckoutResultPage: React.FC = () => {
     '';
   const { removeFromCart } = useCart();
   const [state, setState] = useState<CheckoutResultState>('PENDING');
+  const [paymentData, setPaymentData] =
+    useState<PaymentStatusResponse | null>(null);
   const [message, setMessage] = useState(
     'Hệ thống đang xác minh giao dịch của bạn. Quá trình này chỉ mất ít phút.',
   );
@@ -76,6 +83,7 @@ export const CheckoutResultPage: React.FC = () => {
    */
   const evaluateStatus = useCallback(
     (data: PaymentStatusResponse): boolean => {
+      setPaymentData(data);
       // 1. High priority: If payment was SUCCESS, evaluate whether it is truly confirmed or needs review/reconciliation
       if (data.paymentStatus === 'SUCCESS') {
         // If needs manual review, or booking is not confirmed, or booking was cancelled while payment succeeded:
@@ -288,39 +296,81 @@ export const CheckoutResultPage: React.FC = () => {
         )}
 
         {success && (
-          <div
-            style={{
-              marginTop: '16px',
-              padding: '12px 16px',
-              backgroundColor: '#F8FAFC',
-              borderRadius: '10px',
-              border: '1px solid #E2E8F0',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              fontSize: '13px',
-              color: '#334155',
-              textAlign: 'left',
-              gap: '12px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <FileText size={18} color="#76141c" style={{ flexShrink: 0 }} />
-              <span>Hợp đồng điện tử của bạn đã được xác lập và sẵn sàng trong tài khoản.</span>
-            </div>
-            <Link
-              to={`${ROUTES.PROFILE}?tab=contracts`}
+          paymentData?.contractFlowVersion === 2 &&
+          CONTRACTS_V2_ENABLED &&
+          paymentData?.bookingType !== 'AODAI_RENTAL' &&
+          (paymentData?.bookingType === 'COMBO' ||
+            paymentData?.bookingType === 'PHOTOGRAPHY') ? (
+            <div
               style={{
-                fontSize: '12.5px',
-                fontWeight: 700,
-                color: '#76141c',
-                textDecoration: 'none',
-                whiteSpace: 'nowrap',
+                marginTop: '16px',
+                padding: '12px 16px',
+                backgroundColor: '#F8FAFC',
+                borderRadius: '10px',
+                border: '1px solid #E2E8F0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                fontSize: '13px',
+                color: '#334155',
+                textAlign: 'left',
+                gap: '12px',
               }}
             >
-              Xem hợp đồng →
-            </Link>
-          </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FileText size={18} color="#76141c" style={{ flexShrink: 0 }} />
+                <span>Hợp đồng điện tử của bạn đã được xác lập và sẵn sàng trong tài khoản.</span>
+              </div>
+              <Link
+                to={`${ROUTES.PROFILE}?tab=contracts`}
+                style={{
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  color: '#76141c',
+                  textDecoration: 'none',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Xem hợp đồng →
+              </Link>
+            </div>
+          ) : (
+            <div
+              style={{
+                marginTop: '16px',
+                padding: '12px 16px',
+                backgroundColor: '#F8FAFC',
+                borderRadius: '10px',
+                border: '1px solid #E2E8F0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                fontSize: '13px',
+                color: '#334155',
+                textAlign: 'left',
+                gap: '12px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ShoppingBag size={18} color="#76141c" style={{ flexShrink: 0 }} />
+                <span>
+                  Đơn thuê của bạn đã được xác nhận. Shop sẽ chuẩn bị trang phục sẵn sàng trước giờ hẹn nhận.
+                </span>
+              </div>
+              <Link
+                to={`${ROUTES.PROFILE}?tab=schedule&category=rental`}
+                style={{
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  color: '#76141c',
+                  textDecoration: 'none',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Xem lịch thuê →
+              </Link>
+            </div>
+          )
         )}
 
         {reviewRequired && (
@@ -370,7 +420,15 @@ export const CheckoutResultPage: React.FC = () => {
           {(success || reviewRequired || timeout) && (
             <Link
               className="checkout-result-button primary"
-              to={ROUTES.PROFILE}
+              to={
+                paymentData?.contractFlowVersion === 2 &&
+                CONTRACTS_V2_ENABLED &&
+                paymentData?.bookingType !== 'AODAI_RENTAL' &&
+                (paymentData?.bookingType === 'COMBO' ||
+                  paymentData?.bookingType === 'PHOTOGRAPHY')
+                  ? `${ROUTES.PROFILE}?tab=contracts`
+                  : `${ROUTES.PROFILE}?tab=schedule&category=rental`
+              }
             >
               <ShoppingBag size={18} /> Xem đơn hàng <ArrowRight size={17} />
             </Link>
