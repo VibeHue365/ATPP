@@ -65,8 +65,9 @@ describe('RentalFulfillmentWorkflowService', () => {
     };
     const fulfillment = {
       markReady: jest.fn(async (input) => ({ ...input, status: 'READY_FOR_PICKUP' })),
-      markPickedUp: jest.fn(),
+      submitPickupEvidence: jest.fn(),
       markReturned: jest.fn(async (input) => ({ ...input, status: 'RETURNED' })),
+      confirmNoIncident: jest.fn(async (input) => ({ ...input, status: 'RETURNED' })),
       markCompleted: jest.fn(),
     };
     const slotLeaseService = {
@@ -152,7 +153,7 @@ describe('RentalFulfillmentWorkflowService', () => {
   });
 
   describe('markReturned & markCleaningCompleted Guards and Turnaround Lifecycle', () => {
-    it('markReturned calculates availableFrom and sets status CLEANING with operationalAvailableFrom', async () => {
+    it('markReturned does not set CLEANING, confirmNoIncident calculates availableFrom and sets status CLEANING with operationalAvailableFrom', async () => {
       const { service, inventoryItemModel, evidenceModel } = setup(true);
       evidenceModel.find.mockReturnValue(query([{ fileId: 'return-file' }]));
 
@@ -161,6 +162,15 @@ describe('RentalFulfillmentWorkflowService', () => {
         itemId.toString(),
         providerUser,
         { fileIds: ['return-file'], note: 'Khách trả đúng hẹn' },
+      );
+
+      expect(inventoryItemModel.updateOne).not.toHaveBeenCalled();
+
+      await service.confirmNoIncident(
+        bookingId.toString(),
+        itemId.toString(),
+        providerUser,
+        'Đồ nguyên vẹn',
       );
 
       expect(inventoryItemModel.updateOne).toHaveBeenCalledWith(
@@ -195,7 +205,7 @@ describe('RentalFulfillmentWorkflowService', () => {
 
       expect(res.message).toContain('thành công');
       expect(inventoryItemModel.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({ status: 'CLEANING', conditionStatus: { $nin: ['RETIRED', 'LOCKED'] } }),
+        expect.objectContaining({ status: 'CLEANING', conditionStatus: { $nin: ['RETIRED', 'LOCKED', 'MINOR_DAMAGE'] } }),
         expect.objectContaining({
           $set: expect.objectContaining({
             status: 'AVAILABLE',
@@ -289,6 +299,15 @@ describe('RentalFulfillmentWorkflowService', () => {
           { fileIds: ['return-file-1'], note: 'Trang phục bình thường' },
         );
 
+        expect(storedItem.status).toBe('AVAILABLE');
+
+        await service.confirmNoIncident(
+          bookingId.toString(),
+          itemId.toString(),
+          providerUser,
+          'Xác nhận không sự cố',
+        );
+
         expect(storedItem.status).toBe('CLEANING');
         expect(storedItem.operationalAvailableFrom).toBeInstanceOf(Date);
         expect(storedItem.activeTurnaroundBookingItemId).toEqual(itemId);
@@ -325,6 +344,13 @@ describe('RentalFulfillmentWorkflowService', () => {
           itemId.toString(),
           providerUser,
           { fileIds: ['return-file-2'], note: 'Trang phục bị rách nhỏ' },
+        );
+
+        await service.confirmNoIncident(
+          bookingId.toString(),
+          itemId.toString(),
+          providerUser,
+          'Xác nhận',
         );
 
         // Guard must prevent update!
@@ -366,6 +392,12 @@ describe('RentalFulfillmentWorkflowService', () => {
           itemId.toString(),
           providerUser,
           { fileIds: ['return-file-3'] },
+        );
+
+        await service.confirmNoIncident(
+          bookingId.toString(),
+          itemId.toString(),
+          providerUser,
         );
 
         expect(storedItems[0].conditionStatus).toBe('LOCKED');

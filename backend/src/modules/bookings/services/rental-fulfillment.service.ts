@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, BadRequestException } from '@nestjs/common';
+import { ConflictException, Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { BookingItem, BookingItemType } from '../schemas/booking-item.schema';
@@ -28,22 +28,103 @@ export class RentalFulfillmentService {
     return this.transition({ ...input, expectedStatus: RentalFulfillmentStatus.ReadyForPickup, nextStatus: RentalFulfillmentStatus.PickedUp, action: 'MARKED_PICKED_UP', set: { 'rentalFulfillment.pickedUpAt': new Date(), 'rentalFulfillment.pickupEvidence': input.evidence, 'rentalFulfillment.pickupConditionNote': input.conditionNote?.trim() || null, 'rentalFulfillment.inventoryStatus': RentalInventoryStatus.RentedOut } });
   }
 
-  async markReturned(input: TransitionInput) {
-    this.assertEvidence(input.evidence, 'Nhận lại áo dài yêu cầu ít nhất một ảnh tình trạng.');
+  /**
+   * Shop only records the handover condition.  Physical possession is not
+   * confirmed until the customer has reviewed that evidence and confirms
+   * receipt through customerConfirmPickup.
+   */
+  async submitPickupEvidence(input: TransitionInput) {
+    this.assertEvidence(input.evidence, 'Bàn giao áo dài yêu cầu ít nhất một ảnh tình trạng.');
+    const itemId = this.objectId(input.itemId);
+    const updated = await this.bookingItemModel.findOneAndUpdate(
+      {
+        _id: itemId,
+        itemType: BookingItemType.Product,
+        'rentalFulfillment.status': RentalFulfillmentStatus.ReadyForPickup,
+        'rentalFulfillment.pickupEvidence.files.0': { $exists: false },
+      },
+      {
+        $set: {
+          'rentalFulfillment.pickupEvidence': input.evidence,
+          'rentalFulfillment.pickupConditionNote': input.conditionNote?.trim() || null,
+        },
+        $push: {
+          'rentalFulfillment.history': this.history(
+            'PICKUP_EVIDENCE_SUBMITTED',
+            input.actor,
+            input.note || 'Shop đã gửi ảnh bàn giao, chờ khách xác nhận nhận áo.',
+          ),
+        },
+      },
+      { new: true },
+    ).lean().exec();
+    if (!updated) {
+      throw new ConflictException('Ảnh bàn giao đã được gửi hoặc trạng thái áo không còn chờ khách nhận.');
+    }
+    return updated;
+  }
+
+  async requestCustomerReturn(input: TransitionInput) {
+    this.assertEvidence(input.evidence, 'Bắt buộc tải lên ít nhất một ảnh tình trạng áo khi trả.');
     const itemId = this.objectId(input.itemId);
     const current = await this.bookingItemModel.findOne({ _id: itemId, itemType: BookingItemType.Product }).lean().exec();
-    const depositAmt = current?.depositAmount || 0;
-    const hasProposedCharges = Object.values(current?.rentalFulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED');
+    if (!current?.rentalFulfillment) {
+      throw new NotFoundException('Không tìm thấy thông tin sản phẩm thuê.');
+    }
+    const currentStatus = current.rentalFulfillment.status;
+    if (currentStatus === RentalFulfillmentStatus.CustomerReturnRequested) {
+      throw new ConflictException('Áo dài này đã được gửi yêu cầu trả trước đó, đang chờ Shop xác nhận.');
+    }
+    if (currentStatus !== RentalFulfillmentStatus.PickedUp) {
+      throw new ConflictException(`Không thể gửi yêu cầu trả áo khi trạng thái là ${currentStatus}. Áo dài phải đang ở trạng thái Đang thuê (PICKED_UP).`);
+    }
+    const issueStatus = current.rentalFulfillment.issueStatus;
+    if (issueStatus && issueStatus !== RentalIssueStatus.None && issueStatus !== RentalIssueStatus.Resolved) {
+      throw new ConflictException('Không thể gửi yêu cầu trả áo khi đang có sự cố hoặc tranh chấp.');
+    }
 
-    const depositSettlementStatus = hasProposedCharges
-      ? DepositSettlementStatus.PendingSettlement
-      : DepositSettlementStatus.FullyReleased;
-    const depositDeductedAmount = 0;
-    const depositRefundAmount = hasProposedCharges ? 0 : depositAmt;
+    const customerReturnEvidence = {
+      files: input.evidence?.files?.map((f) => f.fileId) || [],
+      returnedAt: new Date(),
+      note: input.note || input.conditionNote || null,
+    };
 
     return this.transition({
       ...input,
       expectedStatus: RentalFulfillmentStatus.PickedUp,
+      nextStatus: RentalFulfillmentStatus.CustomerReturnRequested,
+      action: 'CUSTOMER_RETURN_REQUESTED' as any,
+      set: {
+        'rentalFulfillment.customerReturnEvidence': customerReturnEvidence,
+        'rentalFulfillment.inventoryStatus': RentalInventoryStatus.ReturnedPendingInspection,
+      },
+    });
+  }
+
+  async markReturned(input: TransitionInput) {
+    const itemId = this.objectId(input.itemId);
+    const current = await this.bookingItemModel.findOne({ _id: itemId, itemType: BookingItemType.Product }).lean().exec();
+    if (!current?.rentalFulfillment) {
+      throw new NotFoundException('Không tìm thấy sản phẩm thuê.');
+    }
+    const currentStatus = current.rentalFulfillment.status;
+    if (currentStatus === RentalFulfillmentStatus.PickedUp) {
+      throw new ConflictException('Khách hàng chưa gửi yêu cầu trả áo. Shop chỉ được xác nhận nhận lại sau khi khách đã gửi yêu cầu trả đồ kèm ảnh.');
+    }
+    if (
+      currentStatus !== RentalFulfillmentStatus.CustomerReturnRequested &&
+      currentStatus !== RentalFulfillmentStatus.Returned
+    ) {
+      throw new ConflictException(`Áo dài chưa ở bước nhận lại để xác nhận kiểm tra (trạng thái: ${currentStatus}).`);
+    }
+
+    const depositSettlementStatus = DepositSettlementStatus.PendingSettlement;
+    const depositDeductedAmount = 0;
+    const depositRefundAmount = 0;
+
+    return this.transition({
+      ...input,
+      expectedStatus: [RentalFulfillmentStatus.CustomerReturnRequested, RentalFulfillmentStatus.Returned],
       nextStatus: RentalFulfillmentStatus.Returned,
       action: 'MARKED_RETURNED',
       set: {
@@ -56,6 +137,49 @@ export class RentalFulfillmentService {
         'rentalFulfillment.depositRefundAmount': depositRefundAmount,
       },
     });
+  }
+
+  async confirmNoIncident(input: TransitionInput) {
+    const itemId = this.objectId(input.itemId);
+    const current = await this.bookingItemModel.findOne({ _id: itemId, itemType: BookingItemType.Product }).lean().exec();
+    if (!current?.rentalFulfillment || ![RentalFulfillmentStatus.Returned, RentalFulfillmentStatus.Completed].includes(current.rentalFulfillment.status)) {
+      throw new ConflictException('Áo dài chưa ở bước nhận lại để xác nhận kiểm tra.');
+    }
+    if (
+      current.rentalFulfillment.status === RentalFulfillmentStatus.Completed ||
+      current.rentalFulfillment.depositSettlementStatus === DepositSettlementStatus.FullyReleased
+    ) {
+      return current;
+    }
+    const depositAmt = (current.depositAmount || 0) * (current.quantity || 1);
+    const updated = await this.bookingItemModel.findOneAndUpdate(
+      {
+        _id: itemId,
+        itemType: BookingItemType.Product,
+        'rentalFulfillment.status': { $in: [RentalFulfillmentStatus.Returned, RentalFulfillmentStatus.Completed] },
+        'rentalFulfillment.issueStatus': { $in: [RentalIssueStatus.None, null] },
+      },
+      {
+        $set: {
+          'rentalFulfillment.depositSettlementStatus': DepositSettlementStatus.FullyReleased,
+          'rentalFulfillment.depositDeductedAmount': 0,
+          'rentalFulfillment.depositRefundAmount': depositAmt,
+          'rentalFulfillment.issueStatus': RentalIssueStatus.None,
+          'rentalFulfillment.inventoryStatus': RentalInventoryStatus.Cleaning,
+        },
+        $push: {
+          'rentalFulfillment.history': this.history('DEPOSIT_SETTLED' as any, input.actor, input.note || 'Xác nhận đồ nguyên vẹn - không có sự cố', {
+            depositRefundAmount: depositAmt,
+            depositSettlementStatus: DepositSettlementStatus.FullyReleased,
+          }),
+        },
+      },
+      { new: true },
+    ).lean().exec();
+    if (!updated) {
+      throw new ConflictException('Không thể xác nhận: đơn đã có sự cố hoặc trạng thái không hợp lệ.');
+    }
+    return updated;
   }
 
   async proposeCharge(input: TransitionInput & { chargeType: ChargeType; amount: number; reason: string }) {
@@ -136,9 +260,10 @@ export class RentalFulfillmentService {
     return this.transition({ ...input, expectedStatus: RentalFulfillmentStatus.Returned, nextStatus: RentalFulfillmentStatus.Completed, action: 'MARKED_COMPLETED', set: { 'rentalFulfillment.completedAt': new Date(), 'rentalFulfillment.inventoryStatus': finalStatus }, extraFilter: { 'rentalFulfillment.issueStatus': { $in: [RentalIssueStatus.None, RentalIssueStatus.Resolved, null] }, 'rentalFulfillment.depositSettlementStatus': { $in: [DepositSettlementStatus.FullyReleased, DepositSettlementStatus.PartiallyDeducted, DepositSettlementStatus.FullyDeducted, DepositSettlementStatus.Held, null] } } });
   }
 
-  private async transition(input: TransitionInput & { expectedStatus: RentalFulfillmentStatus; nextStatus: RentalFulfillmentStatus; action: RentalFulfillmentAction; set: Record<string, unknown>; extraFilter?: Record<string, unknown> }) {
+  private async transition(input: TransitionInput & { expectedStatus: RentalFulfillmentStatus | RentalFulfillmentStatus[]; nextStatus: RentalFulfillmentStatus; action: RentalFulfillmentAction; set: Record<string, unknown>; extraFilter?: Record<string, unknown> }) {
     const itemId = this.objectId(input.itemId);
-    const updated = await this.bookingItemModel.findOneAndUpdate({ _id: itemId, itemType: BookingItemType.Product, 'rentalFulfillment.status': input.expectedStatus, ...input.extraFilter }, { $set: { ...input.set, 'rentalFulfillment.status': input.nextStatus }, $push: { 'rentalFulfillment.history': this.history(input.action, input.actor, input.note) } }, { new: true }).lean().exec();
+    const statusFilter = Array.isArray(input.expectedStatus) ? { $in: input.expectedStatus } : input.expectedStatus;
+    const updated = await this.bookingItemModel.findOneAndUpdate({ _id: itemId, itemType: BookingItemType.Product, 'rentalFulfillment.status': statusFilter, ...input.extraFilter }, { $set: { ...input.set, 'rentalFulfillment.status': input.nextStatus }, $push: { 'rentalFulfillment.history': this.history(input.action, input.actor, input.note) } }, { new: true }).lean().exec();
     if (!updated) throw new ConflictException('Trạng thái bàn giao đã thay đổi hoặc thao tác hiện không hợp lệ.');
     return updated;
   }

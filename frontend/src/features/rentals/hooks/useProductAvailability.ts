@@ -23,13 +23,37 @@ export const useProductAvailability = (input: AvailabilityInput) => {
     const ready = input.productId && input.size && input.color && input.rentalFrom && input.rentalTo && (input.rentalType !== 'HOURLY' || (input.startTime && input.endTime));
     if (!ready) { setState('idle'); setResult(null); return; }
     let active = true;
+    const controller = new AbortController();
     setState('checking');
     const timer = window.setTimeout(() => {
-      checkProductAvailability(input.productId!, input.size!, input.color!, input.rentalFrom!, input.rentalTo!, input.quantity, input.rentalType, input.startTime, input.endTime)
+      const request = async () => {
+        try {
+          return await checkProductAvailability(input.productId!, input.size!, input.color!, input.rentalFrom!, input.rentalTo!, input.quantity, input.rentalType, input.startTime, input.endTime, controller.signal);
+        } catch (error: any) {
+          // Do not retry 429s: retrying a rate-limited request compounds the
+          // burst. Only transient server failures are retried once.
+          if (![500, 502, 503, 504].includes(error?.status) || controller.signal.aborted) throw error;
+          await new Promise<void>((resolve, reject) => {
+            const retryTimer = window.setTimeout(resolve, 500);
+            controller.signal.addEventListener('abort', () => {
+              window.clearTimeout(retryTimer);
+              reject(new DOMException('Aborted', 'AbortError'));
+            }, { once: true });
+          });
+          return checkProductAvailability(input.productId!, input.size!, input.color!, input.rentalFrom!, input.rentalTo!, input.quantity, input.rentalType, input.startTime, input.endTime, controller.signal);
+        }
+      };
+      request()
         .then((next) => { if (active) { setResult(next); setState(next.available ? 'available' : 'unavailable'); } })
-        .catch(() => { if (active) { setResult(null); setState('error'); } });
+        .catch((error: any) => {
+          // A request from an older date/variant must never overwrite the
+          // current selection. Aborted requests are expected during typing.
+          if (!active || controller.signal.aborted || error?.name === 'AbortError') return;
+          setResult(null);
+          setState('error');
+        });
     }, 350);
-    return () => { active = false; window.clearTimeout(timer); };
+    return () => { active = false; window.clearTimeout(timer); controller.abort(); };
   }, [input.productId, input.size, input.color, input.rentalFrom, input.rentalTo, input.quantity, input.rentalType, input.startTime, input.endTime]);
 
   return { state, result };

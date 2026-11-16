@@ -24,6 +24,7 @@ import { CreateProductDto } from '../dto/create-product.dto';
 import { UpdateProductDto } from '../dto/update-product.dto';
 import { PublicMediaService } from '../../storage/services/public-media.service';
 import { ProductAvailabilityService } from '../services/product-availability.service';
+import { SkipThrottle } from '@nestjs/throttler';
 import { PersonalizedProductRecommendationService } from '../services/personalized-product-recommendation.service';
 import { AnalyticsService } from '../../analytics/services/analytics.service';
 
@@ -151,6 +152,9 @@ export class ProductsController {
   }
 
   @Get(':id/availability')
+  // Public read-only calendar probes should not consume the global throttle
+  // budget while users move between dates, sizes, and colors.
+  @SkipThrottle({ default: true })
   async getAvailability(@Param('id') id: string, @Query('size') size: string, @Query('color') color: string, @Query('rentalFrom') rentalFrom: string, @Query('rentalTo') rentalTo: string, @Query('quantity') quantity?: string, @Query('rentalType') rentalType?: string, @Query('startTime') startTime?: string, @Query('endTime') endTime?: string) {
     return this.availabilityService.check(id, size, color, rentalFrom, rentalTo, quantity ? Number(quantity) : 1, rentalType, startTime, endTime);
   }

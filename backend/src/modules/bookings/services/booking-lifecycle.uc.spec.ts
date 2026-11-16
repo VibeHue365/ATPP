@@ -272,12 +272,24 @@ describe('UC-44 Update Booking Status (NgocL)', () => {
       asProvider,
     );
 
+    // Provider cannot complete unilaterally
+    await expect(
+      service.updateBookingStatus(
+        'b1',
+        BookingStatus.Completed,
+        undefined,
+        providerUserId,
+        ['PROVIDER'],
+      ),
+    ).rejects.toThrow(ForbiddenException);
+
+    // Customer confirms completion
     await service.updateBookingStatus(
       'b1',
       BookingStatus.Completed,
       undefined,
-      providerUserId,
-      ['PROVIDER'],
+      customerId.toString(),
+      ['CUSTOMER'],
     );
 
     expect(booking.status).toBe(BookingStatus.Completed);
@@ -295,8 +307,8 @@ describe('UC-44 Update Booking Status (NgocL)', () => {
         'b1',
         BookingStatus.Completed,
         undefined,
-        providerUserId,
-        ['PROVIDER'],
+        customerId.toString(),
+        ['CUSTOMER'],
       ),
     ).rejects.toThrow(
       'Không thể hoàn thành đơn đặt lịch từ trạng thái hiện tại: CONFIRMED.',
@@ -359,8 +371,8 @@ describe('UC-45 Respond to Booking Request (NgocL)', () => {
     expect(booking.status).toBe(BookingStatus.Confirmed);
     expect(notificationsService.createNotification).toHaveBeenCalledWith(
       customerId.toString(),
-      'Cập nhật trạng thái đơn hàng',
-      expect.stringContaining('CONFIRMED'),
+      expect.stringContaining('Đã xác nhận'),
+      expect.stringContaining('xác nhận đơn hàng'),
       expect.anything(),
       expect.anything(),
     );

@@ -149,7 +149,9 @@ export const CartItemCard: React.FC<CartItemCardProps> = ({
                           marginTop: '2px',
                         }}
                       >
-                        (Còn lại {itemStocks[item.id]} sản phẩm trong kho)
+                        {itemStocks[item.id] > 0
+                          ? `(Còn ${itemStocks[item.id]} sản phẩm phù hợp với lịch này)`
+                          : '(Không còn sản phẩm phù hợp với lịch này)'}
                       </span>
                     )}
                   </div>

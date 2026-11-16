@@ -10,6 +10,7 @@ import { ROUTES } from '../../config/routes';
 import { adminVerificationApi } from '../../features/admin-verifications/api/adminVerificationApi';
 import { adminDisputesApi } from '../../features/admin-disputes/api/adminDisputesApi';
 import { adminReportedReviewsApi } from '../../features/admin-reviews/api/adminReportedReviewsApi';
+import { useAuth } from '../../features/auth/hooks/useAuth';
 
 interface NotificationItem {
   _id: string;
@@ -33,6 +34,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
 }) => {
   const navigate = useNavigate();
   const toast = useToast();
+  const { isAuthenticated } = useAuth();
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,6 +45,11 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
   const itemsPerPage = 6;
 
   const fetchNotifications = useCallback(async () => {
+    if (variant !== 'admin' && !isAuthenticated) {
+      setNotifications([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const userNotis = await httpClient.request<NotificationItem[]>('/notifications').catch(() => []);
@@ -155,7 +162,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [variant, toast]);
+  }, [isAuthenticated, variant, toast]);
 
   useEffect(() => {
     fetchNotifications();

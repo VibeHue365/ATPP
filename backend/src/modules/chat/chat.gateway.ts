@@ -63,8 +63,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       userSockets.push(client.id);
       this.activeConnections.set(userId, userSockets);
 
+      // Join individual user room for targeted notifications
+      client.join(`user:${userId}`);
+
+      // If user has ADMIN role, join the admin broadcast room
+      const roles = Array.isArray(payload.roles) ? payload.roles : [];
+      if (roles.some((r: string) => String(r).toUpperCase() === 'ADMIN')) {
+        client.join('role:admin');
+      }
+
       this.logger.log(
-        `User connected: ${userId} (Socket ID: ${client.id}). Total online users: ${this.activeConnections.size}`,
+        `User connected: ${userId} (Socket ID: ${client.id}, Roles: ${roles.join(',') || 'none'}). Total online users: ${this.activeConnections.size}`,
       );
 
       client.emit('authenticated', { userId });

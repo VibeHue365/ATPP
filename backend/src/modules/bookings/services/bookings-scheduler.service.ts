@@ -125,21 +125,6 @@ export class BookingsSchedulerService {
 
       for (const candidate of candidates) {
         try {
-          // Atomic status lock: only succeeds if status is STILL AWAITING_REVIEW.
-          // Prevents double-processing if cron overlaps with a customer confirm-complete call.
-          const locked = await this.bookingModel.findOneAndUpdate(
-            { _id: candidate._id, status: BookingStatus.AwaitingReview },
-            { $set: { status: BookingStatus.Completed, photosApproved: true } },
-            { new: false }, // return OLD doc — if null, someone else already changed it
-          );
-
-          if (!locked) {
-            this.logger.warn(
-              `Booking ${candidate.bookingCode} already processed — skipping.`,
-            );
-            continue;
-          }
-
           // Run the full completion logic (settlement, wallet update, notifications)
           await this.bookingStatusService.completeBooking(
             candidate._id.toString(),
@@ -157,6 +142,16 @@ export class BookingsSchedulerService {
     } catch (err) {
       this.logger.error('Auto-complete cron job failed:', err);
     }
+  }
+
+  /**
+   * Auto-complete rental bookings in RETURNED status after 24 hours.
+   * NOTE: Disabled for rentals: Rental bookings require explicit inspection & deposit settlement
+   * by Provider/Customer/Admin and cannot be auto-completed by cron timer.
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  async autoCompleteReturnedRentals() {
+    this.logger.log('Skipping auto-complete for rental bookings (requires manual handover & deposit settlement inspection).');
   }
 
   /**
@@ -231,37 +226,12 @@ export class BookingsSchedulerService {
 
   /**
    * Auto-unlock maintenance items (LOCKED status) after 48 hours.
-   * Runs every hour.
+   * NOTE: Disabled: LOCKED maintenance items must only be unlocked via manual action with audit note,
+   * not automatically by cron timer.
    */
   @Cron(CronExpression.EVERY_HOUR)
   async autoUnlockMaintenanceItems() {
-    this.logger.log('Running auto-unlock for maintenance items...');
-    try {
-      const inventoryItemModel = this.bookingModel.db.model('InventoryItem');
-      const lockedItems = await inventoryItemModel.find({
-        conditionStatus: 'LOCKED',
-        notes: { $regex: /^LOCKED_UNTIL_/ },
-      });
-
-      const now = new Date();
-      for (const item of lockedItems) {
-        const notesStr = item.notes || '';
-        const match = notesStr.match(/^LOCKED_UNTIL_([^:]+):/);
-        if (match && match[1]) {
-          const lockedUntil = new Date(match[1]);
-          if (now >= lockedUntil) {
-            item.conditionStatus = 'GOOD';
-            item.notes = 'Tự động mở khóa sau 48 giờ bảo trì.';
-            await item.save();
-            this.logger.log(
-              `Auto-unlocked inventory item SKU ${item.sku} after maintenance.`,
-            );
-          }
-        }
-      }
-    } catch (err) {
-      this.logger.error('Failed to auto-unlock maintenance items:', err);
-    }
+    this.logger.log('Skipping auto-unlock for LOCKED items: unlocking requires provider/admin action with audit note.');
   }
 
   @Cron(CronExpression.EVERY_5_MINUTES)

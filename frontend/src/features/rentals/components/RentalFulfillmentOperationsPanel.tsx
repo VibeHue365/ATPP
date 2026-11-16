@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CheckCircle2, Clock3, ImagePlus, LoaderCircle, PackageCheck, RotateCcw, ShieldCheck, DollarSign, Wrench } from 'lucide-react';
+import { CheckCircle2, Clock3, ImagePlus, LoaderCircle, PackageCheck, RotateCcw, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { httpClient } from '../../../services/httpClient';
 import { RentalEvidenceImage } from './RentalEvidenceImage';
 import './RentalFulfillmentOperationsPanel.css';
@@ -8,6 +8,13 @@ type ViewerRole = 'customer' | 'provider' | 'admin';
 type RentalItem = {
   _id: string;
   productId?: { name?: string } | string | null;
+  inventoryItem?: {
+    _id?: string;
+    sku?: string;
+    status?: string;
+    conditionStatus?: string;
+    operationalAvailableFrom?: string | null;
+  } | null;
   rentalFulfillment?: {
     status?: string;
     pickupDueAt?: string | null;
@@ -18,6 +25,7 @@ type RentalItem = {
     completedAt?: string | null;
     issueStatus?: string;
     depositSettlementStatus?: string;
+    customerReturnEvidence?: { files?: string[]; returnedAt?: string; note?: string } | null;
     pickupEvidence?: { files?: Array<{ fileId: string }> } | null;
     returnEvidence?: { files?: Array<{ fileId: string }> } | null;
     inventoryStatus?: string;
@@ -36,6 +44,7 @@ const labelByStatus: Record<string, string> = {
   PENDING: 'Chờ shop chuẩn bị',
   READY_FOR_PICKUP: 'Sẵn sàng nhận áo',
   PICKED_UP: 'Khách đang thuê',
+  CUSTOMER_RETURN_REQUESTED: 'Khách đã trả áo • Chờ shop nhận',
   RETURNED: 'Đã nhận lại, chờ tất toán',
   COMPLETED: 'Đã hoàn tất',
   CANCELLED: 'Đã hủy',
@@ -51,20 +60,23 @@ export const RentalFulfillmentOperationsPanel = ({ bookingId, item, viewerRole, 
   const [conditionNote, setConditionNote] = useState('');
   const [busyAction, setBusyAction] = useState<'ready' | 'pickup' | 'return' | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [chargeType, setChargeType] = useState<'lateFee' | 'damageFee' | 'compensationAmount'>('damageFee');
-  const [chargeAmount, setChargeAmount] = useState('');
-  const [chargeReason, setChargeReason] = useState('');
-  const [settlementDeduct, setSettlementDeduct] = useState('0');
-  const [finalInventoryStatus, setFinalInventoryStatus] = useState('AVAILABLE');
   const [reviewing, setReviewing] = useState<string | null>(null);
+  const [showIncidentForm, setShowIncidentForm] = useState(false);
+  const [incidentActionType, setIncidentActionType] = useState<'CLEANING' | 'MAINTENANCE' | 'OTHER'>('MAINTENANCE');
+  const [incidentAmount, setIncidentAmount] = useState('');
+  const [incidentDescription, setIncidentDescription] = useState('');
+  const [incidentFiles, setIncidentFiles] = useState<File[]>([]);
+  const [isSubmittingIncident, setIsSubmittingIncident] = useState(false);
   const isOperator = viewerRole === 'provider' || viewerRole === 'admin';
   const status = fulfillment?.status ?? 'PENDING';
+  const hasPickupEvidence = Boolean(fulfillment?.pickupEvidence?.files?.length);
   const productName = typeof item.productId === 'object' ? item.productId?.name : undefined;
   const basePath = `/bookings/${bookingId}/items/${item._id}/rental`;
   const timeline = useMemo(() => [
     { key: 'PENDING', label: 'Chuẩn bị' },
     { key: 'READY_FOR_PICKUP', label: 'Sẵn sàng' },
     { key: 'PICKED_UP', label: 'Đã giao' },
+    { key: 'CUSTOMER_RETURN_REQUESTED', label: 'Khách trả' },
     { key: 'RETURNED', label: 'Đã nhận lại' },
     { key: 'COMPLETED', label: 'Hoàn tất' },
   ], []);
@@ -103,44 +115,105 @@ export const RentalFulfillmentOperationsPanel = ({ bookingId, item, viewerRole, 
     }
   };
 
-  const proposeCharge = async () => {
-    const amount = Number(chargeAmount);
-    if (!Number.isFinite(amount) || amount <= 0 || !chargeReason.trim()) {
-      setMessage('Nhập số tiền và lý do trước khi đề xuất phí.');
+  const confirmNoIncident = async () => {
+    const isConfirmed = window.confirm(
+      'Xác nhận trang phục nguyên vẹn, không có hư hỏng hay sự cố phát sinh?\nTiền cọc sẽ được hoàn trả đầy đủ cho khách hàng và trang phục chuyển sang quy trình giặt ủi.'
+    );
+    if (!isConfirmed) return;
+
+    setReviewing('confirm-no-incident');
+    setMessage(null);
+    try {
+      await httpClient.post(`${basePath}/confirm-no-incident`, {});
+      onChanged();
+    } catch (error: any) {
+      setMessage(error?.response?.data?.message || error?.message || 'Không thể xác nhận.');
+    } finally {
+      setReviewing(null);
+    }
+  };
+
+  const submitIncident = async () => {
+    const amount = Number(incidentAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setMessage('Vui lòng nhập số tiền yêu cầu đền bù hợp lệ.');
       return;
     }
-    setReviewing('propose'); setMessage(null);
+    if (!incidentDescription.trim()) {
+      setMessage('Vui lòng nhập mô tả sự cố hư hỏng.');
+      return;
+    }
+    if (incidentFiles.length === 0) {
+      setMessage('Bắt buộc phải tải lên ít nhất một ảnh bằng chứng hỏng đồ.');
+      return;
+    }
+
+    setIsSubmittingIncident(true);
+    setMessage(null);
     try {
-      await httpClient.post(`${basePath}/charges`, { chargeType, amount, reason: chargeReason.trim() });
-      setChargeAmount(''); setChargeReason(''); onChanged();
-    } catch (error: any) { setMessage(error?.message || 'Không thể đề xuất phí.'); } finally { setReviewing(null); }
-  };
+      const formData = new FormData();
+      incidentFiles.forEach((f) => formData.append('images', f));
+      const uploadRes = await httpClient.post<{ urls: string[] }>('/api/disputes/incidents/evidence', formData);
+      const evidencePhotos = uploadRes.urls || [];
 
-  const reviewCharge = async (type: 'lateFee' | 'damageFee' | 'compensationAmount', approved: boolean) => {
-    setReviewing(`${type}-${approved}`); setMessage(null);
-    try { await httpClient.post(`${basePath}/charges/${type}/review`, { approved }); onChanged(); }
-    catch (error: any) { setMessage(error?.message || 'Không thể xử lý đề xuất phí.'); } finally { setReviewing(null); }
-  };
+      await httpClient.post('/api/disputes/incidents', {
+        bookingId,
+        bookingItemId: item._id,
+        actionType: incidentActionType,
+        requestedAmount: amount,
+        description: incidentDescription.trim(),
+        evidencePhotos,
+      });
 
-  const settleDeposit = async () => {
-    const deductAmount = Number(settlementDeduct);
-    if (!Number.isFinite(deductAmount) || deductAmount < 0) { setMessage('Số tiền khấu trừ không hợp lệ.'); return; }
-    setReviewing('settle'); setMessage(null);
-    try { await httpClient.post(`${basePath}/deposit/settle`, { deductAmount, inventoryStatus: finalInventoryStatus }); onChanged(); }
-    catch (error: any) { setMessage(error?.message || 'Không thể tất toán cọc.'); } finally { setReviewing(null); }
+      setShowIncidentForm(false);
+      setIncidentAmount('');
+      setIncidentDescription('');
+      setIncidentFiles([]);
+      onChanged();
+    } catch (error: any) {
+      setMessage(error?.response?.data?.message || error?.message || 'Không thể tạo yêu cầu đền bù.');
+    } finally {
+      setIsSubmittingIncident(false);
+    }
   };
-
-  const completeRental = async () => {
-    setReviewing('complete'); setMessage(null);
-    const validStatuses = ['AVAILABLE', 'MAINTENANCE', 'DAMAGED', 'LOST'];
-    const targetStatus = fulfillment.inventoryStatus && validStatuses.includes(fulfillment.inventoryStatus)
-      ? fulfillment.inventoryStatus
-      : 'AVAILABLE';
-    try { await httpClient.post(`${basePath}/complete`, { inventoryStatus: targetStatus }); onChanged(); }
-    catch (error: any) { setMessage(error?.message || 'Không thể hoàn tất áo dài.'); } finally { setReviewing(null); }
-  };
-  const canComplete = fulfillment.issueStatus === 'NONE' || fulfillment.issueStatus === 'RESOLVED';
   const isSettled = ['FULLY_RELEASED', 'PARTIALLY_DEDUCTED', 'FULLY_DEDUCTED'].includes(fulfillment.depositSettlementStatus || '');
+  const [isCleaningCompleting, setIsCleaningCompleting] = useState(false);
+
+  const handleCleaningCompleted = async () => {
+    const isConfirmed = window.confirm(
+      'Xác nhận đã giặt ủi xong trang phục này sớm hơn dự kiến?\nTrang phục sẽ chuyển sang trạng thái SẴN SÀNG (AVAILABLE) và giải phóng các khung giờ đệm còn lại.'
+    );
+    if (!isConfirmed) return;
+
+    setIsCleaningCompleting(true);
+    setMessage(null);
+    try {
+      await httpClient.post(`${basePath}/cleaning-completed`, {
+        note: 'Hoàn tất giặt ủi sớm từ bảng vận hành',
+      });
+      onChanged();
+    } catch (error: any) {
+      setMessage(error?.response?.data?.message || error?.message || 'Không thể hoàn tất giặt ủi.');
+    } finally {
+      setIsCleaningCompleting(false);
+    }
+  };
+
+  const inv = item.inventoryItem;
+  const isCleaning =
+    inv?.status === 'CLEANING' ||
+    fulfillment.inventoryStatus === 'CLEANING' ||
+    (status === 'RETURNED' && isSettled);
+  const isConditionGood = !['LOCKED', 'RETIRED', 'MAINTENANCE', 'MINOR_DAMAGE'].includes(inv?.conditionStatus || '');
+  const isNotMaintenance = inv?.status !== 'MAINTENANCE';
+  const hasNoUnresolvedIssue = !fulfillment.issueStatus || fulfillment.issueStatus === 'NONE' || fulfillment.issueStatus === 'RESOLVED';
+  const canEarlyClean =
+    isOperator &&
+    (status === 'RETURNED' || status === 'COMPLETED') &&
+    isCleaning &&
+    isConditionGood &&
+    isNotMaintenance &&
+    hasNoUnresolvedIssue;
 
   return (
     <section className="rental-fulfillment" aria-label={`Vận hành ${productName || 'áo dài'}`}>
@@ -165,6 +238,29 @@ export const RentalFulfillmentOperationsPanel = ({ bookingId, item, viewerRole, 
         <span><RotateCcw size={14} /> Hạn trả: {formatDateTime(fulfillment.returnDueAt)}</span>
       </div>
 
+      {fulfillment.customerReturnEvidence && (
+        <div style={{ padding: '12px 14px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '10px', margin: '10px 0' }}>
+          <strong style={{ fontSize: '12.5px', color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <PackageCheck size={15} /> Ảnh &amp; ghi chú trả áo từ khách hàng
+          </strong>
+          {fulfillment.customerReturnEvidence.note && (
+            <p style={{ margin: '4px 0 8px 0', fontSize: '12px', color: '#15803D' }}>
+              &ldquo;{fulfillment.customerReturnEvidence.note}&rdquo;
+            </p>
+          )}
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
+            {fulfillment.customerReturnEvidence.files?.map((url: string, idx: number) => (
+              <img
+                key={idx}
+                src={url}
+                alt={`Ảnh trả đồ ${idx + 1}`}
+                style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #86EFAC' }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {(fulfillment.pickedUpAt || fulfillment.returnedAt) && (
         <div className="rental-fulfillment__evidence-summary">
           {fulfillment.pickedUpAt && <span><ShieldCheck size={14} /> Đã giao lúc {formatDateTime(fulfillment.pickedUpAt)} · {fulfillment.pickupEvidence?.files?.length || 0} ảnh private</span>}
@@ -182,54 +278,194 @@ export const RentalFulfillmentOperationsPanel = ({ bookingId, item, viewerRole, 
         </button>
       )}
 
-      {isOperator && (status === 'READY_FOR_PICKUP' || status === 'PICKED_UP') && (
+      {isOperator && status === 'READY_FOR_PICKUP' && !hasPickupEvidence && (
         <div className="rental-fulfillment__form">
           <label>
-            <ImagePlus size={15} /> Ảnh tình trạng áo dài <em>*</em>
+            <ImagePlus size={15} /> Ảnh tình trạng áo dài lúc bàn giao <em>*</em>
             <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => setFiles(Array.from(event.target.files || []).slice(0, 5))} />
           </label>
           {files.length > 0 && <small>Đã chọn {files.length} ảnh. Ảnh chỉ hiển thị cho khách, shop sở hữu item và Admin.</small>}
           <textarea value={conditionNote} onChange={(event) => setConditionNote(event.target.value)} maxLength={2000} placeholder="Ghi chú tình trạng áo dài (không bắt buộc)" />
-          <button type="button" className="rental-fulfillment__action" disabled={busyAction !== null} onClick={() => void runAction(status === 'READY_FOR_PICKUP' ? 'pickup' : 'return')}>
-            {busyAction ? <LoaderCircle className="is-spinning" size={16} /> : status === 'READY_FOR_PICKUP' ? <PackageCheck size={16} /> : <RotateCcw size={16} />}
-            {status === 'READY_FOR_PICKUP' ? 'Xác nhận đã giao áo' : 'Xác nhận đã nhận lại áo'}
+          <button type="button" className="rental-fulfillment__action" disabled={busyAction !== null} onClick={() => void runAction('pickup')}>
+            {busyAction ? <LoaderCircle className="is-spinning" size={16} /> : <PackageCheck size={16} />}
+            Gửi ảnh bàn giao – chờ khách xác nhận
           </button>
         </div>
       )}
 
-      {viewerRole === 'provider' && status === 'RETURNED' && !isSettled && (
-        <div className="rental-fulfillment__form rental-fulfillment__form--fee">
-          <strong><DollarSign size={15} /> Đề xuất phí (cần Admin duyệt)</strong>
-          <select value={chargeType} onChange={(event) => setChargeType(event.target.value as typeof chargeType)}>
-            <option value="damageFee">Phí hư hỏng</option><option value="lateFee">Phí trả trễ</option><option value="compensationAmount">Bồi thường khác</option>
-          </select>
-          <input type="number" min="1" value={chargeAmount} onChange={(event) => setChargeAmount(event.target.value)} placeholder="Số tiền đề xuất" />
-          <textarea value={chargeReason} onChange={(event) => setChargeReason(event.target.value)} maxLength={1000} placeholder="Lý do và tình trạng kiểm tra" />
-          <button type="button" className="rental-fulfillment__action" disabled={reviewing !== null} onClick={() => void proposeCharge()}>{reviewing === 'propose' ? <LoaderCircle className="is-spinning" size={16} /> : <DollarSign size={16} />} Gửi Admin duyệt</button>
+      {isOperator && status === 'READY_FOR_PICKUP' && hasPickupEvidence && (
+        <div style={{ padding: '12px 16px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '10px', color: '#92400E', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Clock3 size={16} />
+          <span>Đã gửi ảnh bàn giao. Đang chờ khách đối soát và xác nhận nhận áo.</span>
         </div>
       )}
 
-      {viewerRole === 'admin' && status === 'RETURNED' && !isSettled && (
-        <div className="rental-fulfillment__form rental-fulfillment__form--fee">
-          <strong><DollarSign size={15} /> Admin: duyệt phí và tất toán cọc</strong>
-          {Object.entries(fulfillment.charges || {}).map(([type, charge]) => charge && (
-            <div className="rental-fulfillment__charge" key={type}><span><b>{type === 'damageFee' ? 'Hư hỏng' : type === 'lateFee' ? 'Trả trễ' : 'Bồi thường'}:</b> {charge.amount.toLocaleString('vi-VN')}đ — {charge.reason}</span><em>{charge.status}</em>
-              {charge.status === 'PROPOSED' && <span className="rental-fulfillment__charge-actions"><button type="button" disabled={reviewing !== null} onClick={() => void reviewCharge(type as any, true)}>Duyệt</button><button type="button" disabled={reviewing !== null} onClick={() => void reviewCharge(type as any, false)}>Từ chối</button></span>}
+      {isOperator && status === 'PICKED_UP' && (
+        <div style={{ padding: '12px 16px', backgroundColor: '#F0F9FF', border: '1px solid #BAE6FD', borderRadius: '10px', color: '#0369A1', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Clock3 size={16} />
+          <span>Khách đang trải nghiệm trang phục. Chờ khách gửi yêu cầu trả áo kèm hình ảnh bằng chứng.</span>
+        </div>
+      )}
+
+      {isOperator && status === 'CUSTOMER_RETURN_REQUESTED' && (
+        <div className="rental-fulfillment__form" style={{ border: '1.5px solid #FCD34D', backgroundColor: '#FFFDF9' }}>
+          <strong style={{ fontSize: '13px', color: '#92400E', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <RotateCcw size={15} /> Xác nhận thực nhận áo dài từ khách
+          </strong>
+          <label>
+            <ImagePlus size={15} /> Ảnh thực nhận áo dài lúc kiểm đồ <em>*</em>
+            <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => setFiles(Array.from(event.target.files || []).slice(0, 5))} />
+          </label>
+          {files.length > 0 && <small>Đã chọn {files.length} ảnh. Bắt buộc có ít nhất 1 ảnh thực nhận làm bằng chứng đối soát.</small>}
+          <textarea value={conditionNote} onChange={(event) => setConditionNote(event.target.value)} maxLength={2000} placeholder="Ghi chú tình trạng khi nhận lại áo (không bắt buộc)" />
+          <button type="button" className="rental-fulfillment__action" disabled={busyAction !== null} onClick={() => void runAction('return')}>
+            {busyAction ? <LoaderCircle className="is-spinning" size={16} /> : <RotateCcw size={16} />}
+            Xác nhận đã nhận áo &amp; kiểm tra
+          </button>
+        </div>
+      )}
+
+      {viewerRole === 'provider' && status === 'RETURNED' && !isSettled && hasNoUnresolvedIssue && (
+        <div className="rental-fulfillment__inspection-actions" style={{ padding: '16px', backgroundColor: '#FDFBF7', border: '1.5px solid #FCD34D', borderRadius: '12px', marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <strong style={{ fontSize: '13.5px', color: '#92400E', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <ShieldCheck size={16} /> Kiểm tra đồ sau khi nhận lại
+          </strong>
+          <p style={{ margin: 0, fontSize: '12px', color: '#78350F', lineHeight: 1.5 }}>
+            Vui lòng kiểm tra kỹ hiện trạng áo dài và phụ kiện đối soát với ảnh bàn giao ban đầu. Chọn một trong 2 hình thức xử lý dưới đây:
+          </p>
+
+          {!showIncidentForm ? (
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="rental-fulfillment__action"
+                disabled={reviewing !== null}
+                onClick={() => void confirmNoIncident()}
+                style={{ backgroundColor: '#059669', color: '#FFFFFF', flex: 1, minWidth: '180px' }}
+              >
+                {reviewing === 'confirm-no-incident' ? <LoaderCircle className="is-spinning" size={16} /> : <CheckCircle2 size={16} />}
+                ✓ Không có sự cố (Hoàn cọc)
+              </button>
+
+              <button
+                type="button"
+                className="rental-fulfillment__action"
+                onClick={() => setShowIncidentForm(true)}
+                style={{ backgroundColor: '#DC2626', color: '#FFFFFF', flex: 1, minWidth: '180px' }}
+              >
+                <AlertTriangle size={16} />
+                ⚠️ Yêu cầu đền bù sự cố
+              </button>
             </div>
-          ))}
-          <label>Khấu trừ từ cọc<input type="number" min="0" value={settlementDeduct} onChange={(event) => setSettlementDeduct(event.target.value)} /></label>
-          <label><Wrench size={15} /> Tình trạng tồn kho cuối<select value={finalInventoryStatus} onChange={(event) => setFinalInventoryStatus(event.target.value)}><option value="AVAILABLE">Sẵn sàng cho thuê</option><option value="MAINTENANCE">Bảo trì</option><option value="DAMAGED">Hư hỏng</option><option value="LOST">Thất lạc</option></select></label>
-          <button type="button" className="rental-fulfillment__action" disabled={reviewing !== null} onClick={() => void settleDeposit()}>{reviewing === 'settle' ? <LoaderCircle className="is-spinning" size={16} /> : <CheckCircle2 size={16} />} Chốt cọc và tồn kho</button>
+          ) : (
+            <div className="rental-fulfillment__form" style={{ marginTop: '8px' }}>
+              <strong>Báo cáo sự cố &amp; yêu cầu đền bù (Gửi khách hàng duyệt)</strong>
+              <label>
+                Loại sự cố:
+                <select value={incidentActionType} onChange={(e) => setIncidentActionType(e.target.value as any)}>
+                  <option value="MAINTENANCE">Bảo trì / Sửa chữa / Rách vải</option>
+                  <option value="CLEANING">Giặt ủi đặc biệt / Tẩy vết bẩn cứng đầu</option>
+                  <option value="OTHER">Hư hỏng khác / Mất phụ kiện</option>
+                </select>
+              </label>
+
+              <label>
+                Số tiền yêu cầu đền bù (VNĐ):
+                <input
+                  type="number"
+                  min="1"
+                  value={incidentAmount}
+                  onChange={(e) => setIncidentAmount(e.target.value)}
+                  placeholder="Nhập số tiền khấu trừ từ cọc..."
+                />
+              </label>
+
+              <label>
+                Mô tả chi tiết sự cố:
+                <textarea
+                  value={incidentDescription}
+                  onChange={(e) => setIncidentDescription(e.target.value)}
+                  placeholder="Nêu rõ vị trí rách, vết ố, phụ kiện bị thiếu..."
+                  rows={2}
+                />
+              </label>
+
+              <label>
+                <ImagePlus size={15} /> Ảnh bằng chứng hỏng đồ (Bắt buộc):
+                <input
+                  type="file"
+                  multiple
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(e) => setIncidentFiles(Array.from(e.target.files || []).slice(0, 5))}
+                />
+              </label>
+              {incidentFiles.length > 0 && <small>Đã chọn {incidentFiles.length} ảnh bằng chứng.</small>}
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  style={{ backgroundColor: '#7D736B', color: '#FFFFFF' }}
+                  className="rental-fulfillment__action"
+                  onClick={() => setShowIncidentForm(false)}
+                  disabled={isSubmittingIncident}
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  className="rental-fulfillment__action"
+                  disabled={isSubmittingIncident}
+                  onClick={() => void submitIncident()}
+                  style={{ backgroundColor: '#DC2626', color: '#FFFFFF' }}
+                >
+                  {isSubmittingIncident ? <LoaderCircle className="is-spinning" size={16} /> : <AlertTriangle size={16} />}
+                  Gửi yêu cầu đền bù cho khách
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {isOperator && status === 'RETURNED' && (
-        <p className="rental-fulfillment__notice">
-          {canComplete && isSettled ? 'Cọc và tồn kho đã được chốt. Có thể hoàn tất item.' : 'Chờ Admin xử lý tiền cọc và kiểm tra kho trước khi hoàn tất. Không thể bỏ qua bước này.'}
-        </p>
+      {viewerRole === 'provider' && status === 'RETURNED' && !isSettled && !hasNoUnresolvedIssue && (
+        <div style={{ padding: '14px 16px', backgroundColor: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: '12px', marginTop: '12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Clock3 size={18} color="#D97706" />
+          <div style={{ fontSize: '13px', color: '#92400E' }}>
+            <strong>Đã gửi yêu cầu đền bù sự cố</strong>
+            <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#B45309' }}>
+              Đang chờ khách hàng phản hồi (Đồng ý đền bù hoặc Khiếu nại lên Admin).
+            </p>
+          </div>
+        </div>
       )}
-      {isOperator && status === 'RETURNED' && canComplete && isSettled && (
-        <button type="button" className="rental-fulfillment__action" disabled={reviewing !== null} onClick={() => void completeRental()}>{reviewing === 'complete' ? <LoaderCircle className="is-spinning" size={16} /> : <CheckCircle2 size={16} />} Hoàn tất áo dài</button>
+
+      {canEarlyClean && (
+        <button
+          type="button"
+          className="rental-fulfillment__action rental-fulfillment__action--cleaning"
+          disabled={isCleaningCompleting}
+          onClick={() => void handleCleaningCompleted()}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            backgroundColor: '#059669',
+            color: '#FFFFFF',
+            fontWeight: 700,
+            padding: '10px 16px',
+            borderRadius: '8px',
+            border: 'none',
+            cursor: isCleaningCompleting ? 'not-allowed' : 'pointer',
+            marginTop: '8px',
+          }}
+        >
+          {isCleaningCompleting ? (
+            <LoaderCircle className="is-spinning" size={16} />
+          ) : (
+            <CheckCircle2 size={16} />
+          )}
+          <span>Hoàn tất giặt ủi – mở lịch sớm</span>
+        </button>
       )}
       {message && <p className="rental-fulfillment__error" role="alert">{message}</p>}
       {!isOperator && <p className="rental-fulfillment__notice">Bạn có thể theo dõi tiến trình. Shop chịu trách nhiệm xác nhận giao và nhận lại áo.</p>}

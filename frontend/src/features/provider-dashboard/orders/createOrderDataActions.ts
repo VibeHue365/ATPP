@@ -98,7 +98,7 @@ export function createOrderDataActions({ setLoadingOrders, setOrders, actionMenu
           PICKUP_PENDING: 'CHỜ NHẬN ĐỒ',
           PICKED_UP: 'ĐANG THUÊ',
           COMBO_PHOTOS_APPROVED: 'ĐÃ DUYỆT ẢNH • CHỜ TRẢ ĐỒ',
-          RETURN_PENDING: 'CHỜ KHÁCH DUYỆT SỰ CỐ',
+          RETURN_PENDING: (b.incident?.status === 'PENDING_CUSTOMER') ? 'CHỜ KHÁCH DUYỆT SỰ CỐ' : 'CHỜ KIỂM TRA ĐỒ',
           RETURNED: 'ĐÃ TRẢ ĐỒ',
           COMPLETED: 'HOÀN THÀNH',
           CANCELLED: 'ĐÃ HỦY',
@@ -150,6 +150,7 @@ export function createOrderDataActions({ setLoadingOrders, setOrders, actionMenu
           pricingSummary: b.pricingSummary,
           paymentSummary: b.paymentSummary,
           pickupDamageReport: b.pickupDamageReport || null,
+          incident: b.incident || null,
           cancellation: b.cancellation || null,
           cancellationReason: b.cancellation?.reason || b.cancellationReason || b.cancelReason || '',
           statusTimeline: b.statusTimeline || [],
@@ -163,6 +164,7 @@ export function createOrderDataActions({ setLoadingOrders, setOrders, actionMenu
           if (prev[i].rawStatus !== next[i].rawStatus) return true;
           if (prev[i].status !== next[i].status) return true;
           if (prev[i].photosApproved !== next[i].photosApproved) return true;
+          if ((prev[i] as any)?.incident?.status !== (next[i] as any)?.incident?.status) return true;
           const previousScheduleState = (prev[i].schedules || [])
             .map((schedule) => `${schedule._id || ''}:${schedule.status || ''}:${schedule.startsAt || schedule.scheduledDate || ''}`)
             .join('|');

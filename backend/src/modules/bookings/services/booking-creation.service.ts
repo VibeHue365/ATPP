@@ -48,6 +48,7 @@ import {
 import { NotificationsService } from '../../notifications/notifications.service';
 import { NotificationType } from '../../notifications/schemas/notification.schema';
 import { CreateBookingDto } from '../dto/create-booking.dto';
+import { buildReservationOverlapFilter } from './reservation-overlap-filter';
 import { CreateProductBookingDto } from '../dto/create-product-booking.dto';
 import { CreatePhotographyBookingDto } from '../dto/create-photography-booking.dto';
 import { BookingsRepository } from '../repositories/bookings.repository';
@@ -262,6 +263,8 @@ export class BookingCreationService {
   private async getBusySchedulesForProduct(productId: string): Promise<{
     bookedDates: string[];
     bookedSlots: { date: string; timeSlot: string }[];
+    variantBookedDates: Record<string, string[]>;
+    variantBookedSlots: Record<string, { date: string; timeSlot: string }[]>;
   }> {
     const activeBookings = await this.bookingsRepository.findBookings({
       status: {
@@ -282,6 +285,8 @@ export class BookingCreationService {
 
     const bookedDates = new Set<string>();
     const bookedSlots: { date: string; timeSlot: string }[] = [];
+    const variantDates = new Map<string, Set<string>>();
+    const variantSlots = new Map<string, { date: string; timeSlot: string }[]>();
 
     items.forEach((item) => {
       if (item.rentalType === 'DAILY') {
@@ -294,6 +299,9 @@ export class BookingCreationService {
               timeZone: 'Asia/Ho_Chi_Minh',
             });
             bookedDates.add(dateStr);
+            const key = `${String(item.selectedSize || 'M').trim().toUpperCase()}_${this.normalizeColor(item.selectedColor)}`;
+            if (!variantDates.has(key)) variantDates.set(key, new Set());
+            variantDates.get(key)!.add(dateStr);
             current.setDate(current.getDate() + 1);
           }
         }
@@ -303,6 +311,9 @@ export class BookingCreationService {
             timeZone: 'Asia/Ho_Chi_Minh',
           });
           bookedSlots.push({ date: dateStr, timeSlot: item.shootTimeSlot });
+          const key = `${String(item.selectedSize || 'M').trim().toUpperCase()}_${this.normalizeColor(item.selectedColor)}`;
+          if (!variantSlots.has(key)) variantSlots.set(key, []);
+          variantSlots.get(key)!.push({ date: dateStr, timeSlot: item.shootTimeSlot });
         }
       }
     });
@@ -310,6 +321,10 @@ export class BookingCreationService {
     return {
       bookedDates: Array.from(bookedDates),
       bookedSlots,
+      variantBookedDates: Object.fromEntries(
+        Array.from(variantDates.entries()).map(([key, dates]) => [key, Array.from(dates)]),
+      ),
+      variantBookedSlots: Object.fromEntries(variantSlots.entries()),
     };
   }
 
@@ -614,17 +629,20 @@ export class BookingCreationService {
               }
             }
 
+            const isHourly = rType === 'HOURLY';
+            const targetEnd = (reservedToForTurnaround || reservedTo) as Date;
+            const now = new Date();
+            const overlapFilter = buildReservationOverlapFilter(
+              reservedFrom as Date,
+              targetEnd,
+              isHourly,
+              now,
+            );
+
             const conflictingReservations = await this.inventoryReservationModel
               .find({
                 inventoryItemId: { $in: inventoryItems.map((i) => i._id) },
-                status: {
-                  $in: [
-                    ReservationStatus.TempReserved,
-                    ReservationStatus.Confirmed,
-                  ],
-                },
-                reservedFrom: { $lte: reservedToForTurnaround || reservedTo },
-                reservedTo: { $gte: reservedFrom },
+                ...overlapFilter,
               })
               .session(session);
 
@@ -660,6 +678,39 @@ export class BookingCreationService {
                   busyInventoryItemIds.add(bl.inventoryItemId.toString());
                 }
               }
+            } else if (!upfrontBlock && this.leaseModel && reservedFrom && targetEnd) {
+              const dateStrs: string[] = [];
+              const cur = new Date(reservedFrom);
+              const end = new Date(targetEnd);
+              while (cur <= end) {
+                const dStr = cur.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+                if (!dateStrs.includes(dStr)) dateStrs.push(dStr);
+                cur.setDate(cur.getDate() + 1);
+              }
+              const endStr = end.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+              if (!dateStrs.includes(endStr)) dateStrs.push(endStr);
+
+              if (dateStrs.length > 0) {
+                const busyDailyLeases =
+                  (await this.leaseModel
+                    .find({
+                      inventoryItemId: { $in: inventoryItems.map((i) => i._id) },
+                      dateStr: { $in: dateStrs },
+                      $and: [
+                        {
+                          $or: [
+                            { status: SlotLeaseStatus.Confirmed },
+                            { status: SlotLeaseStatus.Temp, expiresAt: { $gt: new Date() } },
+                          ],
+                        },
+                      ],
+                    })
+                    .session(session)
+                    .lean()) || [];
+                for (const bl of busyDailyLeases) {
+                  busyInventoryItemIds.add(bl.inventoryItemId.toString());
+                }
+              }
             }
 
             const availableItems = inventoryItems.filter(
@@ -690,14 +741,7 @@ export class BookingCreationService {
               const allOverlapping = await this.inventoryReservationModel
                 .find({
                   inventoryItemId: availableItem._id,
-                  status: {
-                    $in: [
-                      ReservationStatus.TempReserved,
-                      ReservationStatus.Confirmed,
-                    ],
-                  },
-                  reservedFrom: { $lte: reservedToForTurnaround || reservedTo },
-                  reservedTo: { $gte: reservedFrom },
+                  ...overlapFilter,
                 })
                 .session(session)
                 .sort({ _id: 1 });
@@ -848,7 +892,15 @@ export class BookingCreationService {
             const busySchedules = await this.getBusySchedulesForProduct(
               detail.productId.toString(),
             );
-            const busyDatesSet = new Set(busySchedules.bookedDates);
+            const variantKey = `${(detail.selectedSize || 'M').trim().toUpperCase()}_${this.normalizeColor(detail.selectedColor || 'WHITE')}`;
+            const hasVariantBusyDates = Boolean(
+              busySchedules.variantBookedDates && Object.keys(busySchedules.variantBookedDates).length > 0,
+            );
+            const busyDatesSet = new Set(
+              hasVariantBusyDates
+                ? busySchedules.variantBookedDates?.[variantKey] || []
+                : busySchedules.bookedDates,
+            );
             const start = new Date(detail.rentalFrom);
             const end = new Date(detail.rentalTo);
             const current = new Date(start);
@@ -868,9 +920,16 @@ export class BookingCreationService {
             const dateStr = new Date(detail.shootDate)
               .toISOString()
               .split('T')[0];
+            const variantKey = `${(detail.selectedSize || 'M').trim().toUpperCase()}_${this.normalizeColor(detail.selectedColor || 'WHITE')}`;
+            const hasVariantBusySlots = Boolean(
+              busySchedules.variantBookedSlots && Object.keys(busySchedules.variantBookedSlots).length > 0,
+            );
+            const busySlots = hasVariantBusySlots
+              ? busySchedules.variantBookedSlots?.[variantKey] || []
+              : busySchedules.bookedSlots;
             const isSlotConflict =
               detail.shootTimeSlot != null &&
-              busySchedules.bookedSlots.some(
+              busySlots.some(
                 (slot) =>
                   slot.date === dateStr &&
                   slot.timeSlot &&
@@ -1341,7 +1400,15 @@ export class BookingCreationService {
 
       if (rentalType === 'DAILY' && rentalFrom && rentalTo) {
         const busySchedules = await this.getBusySchedulesForProduct(productId);
-        const busyDatesSet = new Set(busySchedules.bookedDates);
+        const variantKey = `${size.trim().toUpperCase()}_${this.normalizeColor(color)}`;
+        const hasVariantBusyDates = Boolean(
+          busySchedules.variantBookedDates && Object.keys(busySchedules.variantBookedDates).length > 0,
+        );
+        const busyDatesSet = new Set(
+          hasVariantBusyDates
+            ? busySchedules.variantBookedDates?.[variantKey] || []
+            : busySchedules.bookedDates,
+        );
         const start = new Date(rentalFrom);
         const end = new Date(rentalTo);
         const current = new Date(start);
@@ -1357,9 +1424,16 @@ export class BookingCreationService {
       } else if (rentalType === 'HOURLY' && shootDate) {
         const busySchedules = await this.getBusySchedulesForProduct(productId);
         const dateStr = new Date(shootDate).toISOString().split('T')[0];
+        const variantKey = `${size.trim().toUpperCase()}_${this.normalizeColor(color)}`;
+        const hasVariantBusySlots = Boolean(
+          busySchedules.variantBookedSlots && Object.keys(busySchedules.variantBookedSlots).length > 0,
+        );
+        const busySlots = hasVariantBusySlots
+          ? busySchedules.variantBookedSlots?.[variantKey] || []
+          : busySchedules.bookedSlots;
         const isSlotConflict =
           shootTimeSlot != null &&
-          busySchedules.bookedSlots.some(
+          busySlots.some(
             (slot) =>
               slot.date === dateStr &&
               slot.timeSlot &&
@@ -1511,6 +1585,7 @@ export class BookingCreationService {
         }
       }
 
+      const targetEnd = (reservedToForTurnaround || reservedTo) as Date;
       const conflictingReservations = await this.inventoryReservationModel
         .find({
           inventoryItemId: { $in: inventoryItems.map((item) => item._id) },
@@ -1547,6 +1622,39 @@ export class BookingCreationService {
             })
             .session(session);
           for (const bl of busyLeases) {
+            busyInventoryItemIds.add(bl.inventoryItemId.toString());
+          }
+        }
+      } else if (!upfrontBlock && this.leaseModel && reservedFrom && targetEnd) {
+        const dateStrs: string[] = [];
+        const cur = new Date(reservedFrom);
+        const end = new Date(targetEnd);
+        while (cur <= end) {
+          const dStr = cur.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+          if (!dateStrs.includes(dStr)) dateStrs.push(dStr);
+          cur.setDate(cur.getDate() + 1);
+        }
+        const endStr = end.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+        if (!dateStrs.includes(endStr)) dateStrs.push(endStr);
+
+        if (dateStrs.length > 0) {
+          const busyDailyLeases =
+            (await this.leaseModel
+              .find({
+                inventoryItemId: { $in: inventoryItems.map((i) => i._id) },
+                dateStr: { $in: dateStrs },
+                $and: [
+                  {
+                    $or: [
+                      { status: SlotLeaseStatus.Confirmed },
+                      { status: SlotLeaseStatus.Temp, expiresAt: { $gt: new Date() } },
+                    ],
+                  },
+                ],
+              })
+              .session(session)
+              .lean()) || [];
+          for (const bl of busyDailyLeases) {
             busyInventoryItemIds.add(bl.inventoryItemId.toString());
           }
         }

@@ -15,6 +15,7 @@ interface ProductVariantsBookingProps {
   selectedColor: string;
   onSelectColor: (color: string) => void;
   selectedSize: string;
+  isVariantUnavailable?: (size: string, color: string) => boolean;
   onSelectSize: (size: string) => void;
   rentalMode: RentalMode;
   onChangeRentalMode: (mode: RentalMode) => void;
@@ -45,6 +46,7 @@ export const ProductVariantsBooking: React.FC<ProductVariantsBookingProps> = ({
   selectedColor,
   onSelectColor,
   selectedSize,
+  isVariantUnavailable,
   onSelectSize,
   rentalMode,
   onChangeRentalMode,
@@ -72,7 +74,8 @@ export const ProductVariantsBooking: React.FC<ProductVariantsBookingProps> = ({
   const isActionDisabled =
     isCurrentTimeSlotBusy ||
     availability.state === 'checking' ||
-    availability.state === 'unavailable';
+    availability.state === 'unavailable' ||
+    (rentalMode === 'DAILY' ? !startDate || !endDate : !singleDate || !startTime || !endTime);
 
   return (
     <>
@@ -136,24 +139,30 @@ export const ProductVariantsBooking: React.FC<ProductVariantsBookingProps> = ({
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '8px' }}>
             {product.sizes.map((s) => {
               const isSelected = selectedSize === s;
+              const isUnavailable = isVariantUnavailable?.(s, selectedColor) ?? false;
               return (
                 <button
                   key={s}
                   type="button"
-                  onClick={() => onSelectSize(s)}
+                  onClick={() => { if (!isUnavailable) onSelectSize(s); }}
+                  disabled={isUnavailable}
+                  aria-label={isUnavailable ? `Kích cỡ ${s} không khả dụng` : `Kích cỡ ${s}`}
                   style={{
                     padding: '12px 28px',
                     borderRadius: '8px',
                     fontSize: '13px',
                     fontWeight: 700,
-                    backgroundColor: isSelected
+                    backgroundColor: isUnavailable
+                      ? '#F5F5F5'
+                      : isSelected
                       ? 'var(--color-primary)'
                       : 'white',
-                    color: isSelected ? 'white' : 'var(--color-text-primary)',
+                    color: isUnavailable ? '#B8B8B8' : isSelected ? 'white' : 'var(--color-text-primary)',
                     border: isSelected
                       ? '1px solid var(--color-primary)'
                       : '1px solid var(--color-light-border)',
-                    cursor: 'pointer',
+                    cursor: isUnavailable ? 'not-allowed' : 'pointer',
+                    opacity: isUnavailable ? 0.75 : 1,
                     transition: 'all 0.2s ease',
                     minWidth: '56px',
                   }}
@@ -163,6 +172,19 @@ export const ProductVariantsBooking: React.FC<ProductVariantsBookingProps> = ({
               );
             })}
           </div>
+          {isVariantUnavailable?.(selectedSize, selectedColor) && (
+            <div
+              role="status"
+              style={{
+                marginTop: '8px',
+                color: '#B42318',
+                fontSize: '12px',
+                fontWeight: 600,
+              }}
+            >
+              Size {selectedSize} màu {selectedColor} hiện không khả dụng. Hãy chọn màu hoặc size khác.
+            </div>
+          )}
         </div>
       )}
 

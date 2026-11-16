@@ -5,27 +5,38 @@ import { RentalMainCard } from './RentalMainCard';
 import { RentalInfoColumns } from './RentalInfoColumns';
 import { RentalTimelineAndPhotos } from './RentalTimelineAndPhotos';
 import { RentalBottomActionBar } from './RentalBottomActionBar';
+import { RentalPickupDamageReportCard } from './RentalPickupDamageReportCard';
+import { RentalPickupReportModal, type PickupModalMode } from './RentalPickupReportModal';
+import { RentalReturnModal } from './RentalReturnModal';
 import { PrivateEvidenceImage } from '../../../../components/common/PrivateEvidenceImage';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../../../services/httpClient';
+import { useSocket } from '../../../../context/SocketContext';
 
 interface ProfileRentalDetailPageProps {
   booking?: any;
   onBack: () => void;
-  onOpenRescheduleOrExtend?: (item: any) => void;
+  onOpenReschedule?: (item: any) => void;
   onOpenCancel?: (booking: any) => void;
   onRefreshBooking?: () => void;
+  onContinuePayment?: (bookingId: string) => void;
 }
 
 export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = ({
   booking,
   onBack,
-  onOpenRescheduleOrExtend,
+  onOpenReschedule,
   onOpenCancel,
-  onRefreshBooking
+  onRefreshBooking,
+  onContinuePayment
 }) => {
-  const [incident, setIncident] = React.useState<any>(null);
+  const [incident, setIncident] = React.useState<any>(booking?.incident || null);
   const [respondingIncident, setRespondingIncident] = React.useState<boolean>(false);
+  const [pickupModalMode, setPickupModalMode] = React.useState<PickupModalMode | null>(null);
+  const [isSubmittingPickup, setIsSubmittingPickup] = React.useState<boolean>(false);
+  const [isReturnModalOpen, setIsReturnModalOpen] = React.useState<boolean>(false);
+
+  const { socket } = useSocket();
 
   const fetchIncidentDetails = React.useCallback(async () => {
     if (!booking?._id) return;
@@ -38,8 +49,27 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
   }, [booking?._id]);
 
   React.useEffect(() => {
-    fetchIncidentDetails();
-  }, [fetchIncidentDetails]);
+    if (booking?.incident) {
+      setIncident(booking.incident);
+    } else {
+      fetchIncidentDetails();
+    }
+  }, [booking?.incident, booking?.status, booking?.updatedAt, fetchIncidentDetails]);
+
+  // Targeted socket refresh: Only refetch if booking_updated event matches this open booking
+  React.useEffect(() => {
+    if (!socket || !booking?._id) return;
+    const handler = (payload: { bookingId: string }) => {
+      if (payload?.bookingId === booking._id) {
+        fetchIncidentDetails();
+        onRefreshBooking?.();
+      }
+    };
+    socket.on('booking_updated', handler);
+    return () => {
+      socket.off('booking_updated', handler);
+    };
+  }, [socket, booking?._id, fetchIncidentDetails, onRefreshBooking]);
 
   const item = booking?.items?.[0] || {};
   const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE';
@@ -66,15 +96,24 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     item.image ||
     item.productImage;
 
-  const itemCode = booking?.bookingCode || (booking?._id ? 'RT-' + booking._id.slice(-4) : 'RT-LUME');
+  const itemCode = booking?.bookingCode || (booking?._id ? 'RT-' + String(booking._id).slice(-4) : 'RT-LUME');
   const itemSize = isPhoto ? '' : (item.selectedSize || item.size || '');
-  const itemColor = item.selectedColor || item.color || prodObj?.color || 'Đa sắc';
+  const itemColor =
+    item.selectedColor ||
+    item.color ||
+    (Array.isArray(prodObj?.colors) ? prodObj.colors.join(', ') : prodObj?.color) ||
+    'Đa sắc';
   const itemBrand = prodObj?.brand || provider?.businessName || provider?.fullName || 'LUMÉ Premium';
-  const itemMaterial = prodObj?.material || 'Lụa cao cấp';
-  const itemAccessories = item.accessories || prodObj?.accessories || 'Mấn đội đầu';
+  const itemMaterial =
+    (Array.isArray(prodObj?.materials) ? prodObj.materials.join(', ') : prodObj?.material) ||
+    'Lụa cao cấp';
+  const itemAccessories =
+    (Array.isArray(item.accessories) ? item.accessories.join(', ') : item.accessories) ||
+    (Array.isArray(prodObj?.accessories) ? prodObj.accessories.join(', ') : prodObj?.accessories) ||
+    'Mấn đội đầu';
 
   // Dates & Times
-  const rawPickup = item.rentalFrom || item.startDate || item.shootDate || booking?.startDate;
+  const rawPickup = item.rentalFrom || booking?.rentalFrom || item.startDate || item.shootDate || booking?.startDate;
   const rawReturn = item.rentalTo || item.endDate || booking?.endDate;
 
   const pickupDateStr = rawPickup
@@ -127,6 +166,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     AWAITING_REVIEW: 'CHỜ DUYỆT ẢNH',
     RETURN_PENDING: isPendingCustomerIncident ? 'CHỜ DUYỆT SỰ CỐ' : 'CHỜ TRẢ ĐỒ',
     RETURNED: isPhoto ? 'HOÀN THÀNH' : 'ĐÃ TRẢ ĐỒ',
+    COMBO_PHOTOS_APPROVED: isPhoto ? 'ĐÃ DUYỆT ẢNH' : 'ĐÃ TRẢ ĐỒ',
     COMPLETED: 'HOÀN THÀNH',
     CANCELLED: 'ĐÃ HỦY',
     DISPUTED: 'TRANH CHẤP'
@@ -153,14 +193,36 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     ? new Date(booking.createdAt).toLocaleDateString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })
     : 'Gần đây';
 
+  // Helper to safely format address object or string
+  const formatStoreAddress = (addr: any): string => {
+    if (!addr) return '';
+    if (typeof addr === 'string') return addr.trim();
+    if (typeof addr === 'object') {
+      const parts = [
+        addr.addressLine || addr.street || addr.address,
+        addr.ward,
+        addr.district,
+        addr.city || addr.province
+      ].filter((p): p is string => typeof p === 'string' && p.trim().length > 0);
+      if (parts.length > 0) return parts.join(', ');
+      if (addr.formattedAddress && typeof addr.formattedAddress === 'string') return addr.formattedAddress;
+    }
+    return '';
+  };
+
   // Store information
   const storeName = provider?.businessName || provider?.fullName || 'Cửa hàng LUMÉ';
-  const storeAddress =
+  const rawAddress =
     item.pickupReturnLocationSnapshot?.address ||
+    item.pickupReturnLocationSnapshot ||
+    provider?.rentalSettings?.pickupLocation ||
+    provider?.pickupLocation ||
     provider?.address ||
     provider?.businessAddress ||
     booking?.deliveryAddress?.address ||
-    '15 Lê Lợi, Phú Hội, TP. Huế';
+    booking?.deliveryAddress;
+
+  const storeAddress = formatStoreAddress(rawAddress) || '15 Lê Lợi, Phú Hội, TP. Huế';
 
   // Support hotline handler
   const handleSupport = () => {
@@ -242,22 +304,21 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     });
   };
 
-  // Return Ao Dai handler
+  // Return Ao Dai handler: Mở modal trả áo kèm bắt buộc tải ảnh tình trạng áo khi trả
   const handleReturn = () => {
-    Swal.fire({
-      title: 'Xác nhận hoàn trả áo dài?',
-      text: `Nhân viên LUMÉ tại ${storeAddress} sẽ kiểm tra tình trạng áo và hoàn cọc ${depositFee.toLocaleString('vi-VN')}đ cho bạn.`,
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'Đến điểm trả áo',
-      cancelButtonText: 'Đóng',
+    setIsReturnModalOpen(true);
+  };
+
+  const handleReturnSubmit = async (data: { evidencePhotos: string[]; note?: string }) => {
+    if (!booking?._id) return;
+    await httpClient.post(`/bookings/${booking._id}/customer-return`, data);
+    await Swal.fire({
+      icon: 'success',
+      title: 'Đã gửi thông báo trả áo!',
+      text: `Cửa hàng ${storeName} đã nhận được thông báo kèm ảnh bằng chứng trả áo. Nhân viên sẽ kiểm tra và đối soát hoàn cọc ${depositFee.toLocaleString('vi-VN')}đ cho bạn.`,
       confirmButtonColor: '#8E1B2E',
-      cancelButtonColor: '#7D736B'
-    }).then((res) => {
-      if (res.isConfirmed) {
-        handleOpenMap();
-      }
     });
+    onRefreshBooking?.();
   };
 
   // Handle customer agrees to incident compensation
@@ -332,14 +393,17 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
   const handleDisagreeIncident = async () => {
     if (!incident?._id) return;
 
-    const result = await Swal.fire({
+    const { value: reasonText, isConfirmed } = await Swal.fire({
       title: 'Khiếu nại lên Ban Quản Trị?',
+      input: 'textarea',
+      inputLabel: 'Lý do khiếu nại (tùy chọn):',
+      inputPlaceholder: 'Nêu rõ lý do bạn không đồng ý với yêu cầu đền bù của Shop...',
       html: `
-        <div style="text-align: left; font-size: 13.5px; color: #4A3F35; line-height: 1.6;">
-          <p style="margin-bottom: 12px;">
+        <div style="text-align: left; font-size: 13.5px; color: #4A3F35; line-height: 1.6; margin-bottom: 12px;">
+          <p style="margin-bottom: 10px;">
             Bạn không đồng ý với yêu cầu đền bù của Shop? Đơn hàng sẽ được chuyển lên Ban Quản Trị (Admin) để thẩm định và giải quyết.
           </p>
-          <div style="background-color: #FEF2F2; border: 1px solid #FECACA; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; color: #991B1B;">
+          <div style="background-color: #FEF2F2; border: 1px solid #FECACA; border-radius: 10px; padding: 12px 14px; color: #991B1B;">
             <p style="margin: 0 0 6px 0; font-weight: 700; font-size: 13px;">⚠️ Quy trình xử lý tranh chấp:</p>
             <ul style="margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.6;">
               <li>Tiền cọc và doanh thu thuê được <strong>đóng băng an toàn</strong> trong tài khoản ký quỹ.</li>
@@ -353,19 +417,21 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
       confirmButtonText: 'Gửi khiếu nại lên Admin',
       cancelButtonText: 'Quay lại',
       confirmButtonColor: '#DC2626',
-      cancelButtonColor: '#6B7280'
+      cancelButtonColor: '#6B7280',
     });
 
-    if (!result.isConfirmed) return;
+    if (!isConfirmed) return;
 
     try {
       setRespondingIncident(true);
-      await httpClient.post(`/api/disputes/incidents/${incident._id}/disagree`);
+      await httpClient.post(`/api/disputes/incidents/${incident._id}/disagree`, {
+        reason: reasonText?.trim() || undefined,
+      });
       await Swal.fire({
         icon: 'success',
         title: 'Đã gửi khiếu nại!',
         text: 'Đơn hàng đã được chuyển sang trạng thái tranh chấp. Ban Quản Trị sẽ kiểm tra và thông báo kết quả sớm nhất cho bạn.',
-        confirmButtonColor: '#8E1B2E'
+        confirmButtonColor: '#8E1B2E',
       });
       onRefreshBooking?.();
       fetchIncidentDetails();
@@ -374,94 +440,100 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
         icon: 'error',
         title: 'Có lỗi xảy ra',
         text: err?.response?.data?.message || err?.message || 'Không thể gửi khiếu nại.',
-        confirmButtonColor: '#8E1B2E'
+        confirmButtonColor: '#8E1B2E',
       });
     } finally {
       setRespondingIncident(false);
     }
   };
 
-  // Confirm pickup with optional photo upload
-  const handleConfirmPickup = async () => {
+  // Handle pickup modal submit for CONFIRM, DAMAGE, and REJECT flows
+  const handlePickupModalSubmit = async (data: { description?: string; reason?: string; evidencePhotos: string[] }) => {
+    if (!booking?._id || !pickupModalMode) return;
+    setIsSubmittingPickup(true);
+    try {
+      if (pickupModalMode === 'CONFIRM') {
+        await httpClient.post(`/bookings/${booking._id}/customer-confirm-pickup`, {
+          evidencePhotos: data.evidencePhotos.length > 0 ? data.evidencePhotos : undefined
+        });
+        await Swal.fire({
+          icon: 'success',
+          title: 'Nhận áo thành công!',
+          text: 'Đơn thuê của bạn đã chuyển sang trạng thái Đang thuê. Chúc bạn có trải nghiệm tuyệt vời!',
+          confirmButtonColor: '#8E1B2E'
+        });
+      } else if (pickupModalMode === 'DAMAGE') {
+        await httpClient.post(`/bookings/${booking._id}/customer-report-damage`, {
+          description: data.description,
+          evidencePhotos: data.evidencePhotos
+        });
+        await Swal.fire({
+          icon: 'success',
+          title: 'Báo cáo thành công!',
+          text: 'Báo cáo được ghi nhận là tình trạng có sẵn trước khi thuê và dùng để bảo vệ tiền cọc của bạn. Đơn thuê đã bắt đầu.',
+          confirmButtonColor: '#8E1B2E'
+        });
+      } else if (pickupModalMode === 'REJECT') {
+        await httpClient.post(`/bookings/${booking._id}/customer-reject-handover`, {
+          reason: data.reason,
+          evidencePhotos: data.evidencePhotos
+        });
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Đã từ chối nhận áo!',
+          text: 'Đơn sẽ được chuyển sang quy trình tranh chấp để Admin đối soát. Bạn sẽ không bắt đầu thời gian thuê.',
+          confirmButtonColor: '#8E1B2E'
+        });
+      }
+      setPickupModalMode(null);
+      onRefreshBooking?.();
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || err?.message || 'Có lỗi xảy ra khi xử lý yêu cầu.';
+      throw new Error(errorMsg);
+    } finally {
+      setIsSubmittingPickup(false);
+    }
+  };
+
+  // Confirm complete rental and refund deposit
+  const handleConfirmComplete = async () => {
     if (!booking?._id) return;
 
-    let selectedFiles: File[] = [];
-
     const result = await Swal.fire({
-      title: 'Xác nhận đã nhận áo dài',
+      title: 'Xác nhận hoàn tất đơn thuê?',
       html: `
         <div style="text-align: left; font-size: 13.5px; color: #4A3F35; line-height: 1.6;">
           <p style="margin-bottom: 12px;">
-            Bạn xác nhận đã nhận đầy đủ áo dài và phụ kiện trực tiếp từ cửa hàng <strong>${storeName}</strong>?
-          </p>
-          <div style="background-color: #F8F5F1; border: 1px dashed #DED7CB; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
-            <label style="display: block; font-weight: 700; margin-bottom: 6px; color: #8E1B2E; font-size: 13px;">
-              📸 Tải ảnh hiện trạng áo lúc nhận (Khuyến nghị):
-            </label>
-            <input
-              type="file"
-              id="swal-pickup-photos"
-              accept="image/*"
-              multiple
-              style="width: 100%; font-size: 12px;"
-            />
-            <small style="color: #7D736B; display: block; margin-top: 4px; font-size: 11px;">
-              Chụp rõ nếp áo, phụ kiện đi kèm để lưu bằng chứng đối soát khi hoàn trả tiền cọc.
-            </small>
-          </div>
-          <p style="margin: 0; font-size: 12px; color: #059669; font-weight: 600;">
-            ✓ Sau khi xác nhận, thời gian thuê của bạn sẽ chính thức bắt đầu tính.
+            Cửa hàng đã xác nhận nhận lại trang phục nguyên vẹn. Bạn xác nhận hoàn tất đơn để hệ thống tiến hành giải ngân và hoàn trả tiền cọc <strong>${depositFee.toLocaleString('vi-VN')}đ</strong> cho bạn?
           </p>
         </div>
       `,
+      icon: 'question',
       showCancelButton: true,
-      confirmButtonText: 'Xác nhận nhận áo',
+      confirmButtonText: 'Xác nhận hoàn tất & Nhận cọc',
       cancelButtonText: 'Đóng',
       confirmButtonColor: '#059669',
-      cancelButtonColor: '#7D736B',
-      didOpen: () => {
-        const input = document.getElementById('swal-pickup-photos') as HTMLInputElement;
-        if (input) {
-          input.addEventListener('change', (e: any) => {
-            selectedFiles = Array.from(e.target.files || []);
-          });
-        }
-      },
-      preConfirm: async () => {
-        try {
-          Swal.showLoading();
-          const uploadedUrls: string[] = [];
-
-          for (const file of selectedFiles) {
-            const formData = new FormData();
-            formData.append('file', file);
-            try {
-              const res: any = await httpClient.post('/bookings/upload-reference', formData);
-              if (res?.url) uploadedUrls.push(res.url);
-            } catch (upErr) {
-              console.warn('Lỗi tải ảnh:', upErr);
-            }
-          }
-
-          await httpClient.post(`/bookings/${booking._id}/customer-confirm-pickup`, {
-            evidencePhotos: uploadedUrls.length > 0 ? uploadedUrls : undefined
-          });
-          return true;
-        } catch (err: any) {
-          Swal.showValidationMessage(err?.message || 'Có lỗi xảy ra khi xác nhận nhận áo.');
-          return false;
-        }
-      }
+      cancelButtonColor: '#7D736B'
     });
 
-    if (result.isConfirmed) {
+    if (!result.isConfirmed) return;
+
+    try {
+      await httpClient.post(`/bookings/${booking._id}/confirm-complete`, {});
       await Swal.fire({
         icon: 'success',
-        title: 'Nhận áo thành công!',
-        text: 'Đơn thuê của bạn đã chuyển sang trạng thái Đang thuê. Chúc bạn có trải nghiệm tuyệt vời!',
+        title: 'Hoàn tất đơn hàng thành công!',
+        text: 'Cảm ơn bạn đã sử dụng dịch vụ của LUMÉ. Tiền cọc đang được hệ thống xử lý hoàn trả.',
         confirmButtonColor: '#8E1B2E'
       });
       onRefreshBooking?.();
+    } catch (err: any) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Có lỗi xảy ra',
+        text: err?.response?.data?.message || err?.message || 'Không thể xác nhận hoàn tất đơn.',
+        confirmButtonColor: '#8E1B2E'
+      });
     }
   };
 
@@ -476,24 +548,24 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     {
       id: 'step-1',
       title: 'Shop chuẩn bị áo',
-      description: ['PICKUP_PENDING', 'READY_FOR_PICKUP', 'PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+      description: ['PICKUP_PENDING', 'READY_FOR_PICKUP', 'PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(currentStatus)
         ? 'Đã chuẩn bị xong và kiểm tra chất lượng tại cửa hàng'
         : 'Cửa hàng đang kiểm tra và chuẩn bị áo dài',
       timestamp: readyTimeStr,
-      status: ['PICKUP_PENDING', 'READY_FOR_PICKUP', 'PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+      status: ['PICKUP_PENDING', 'READY_FOR_PICKUP', 'PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(currentStatus)
         ? 'COMPLETED'
         : 'ACTIVE'
     },
     {
       id: 'step-2',
-      title: ['PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+      title: ['PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(currentStatus)
         ? 'Đã nhận áo'
         : 'Chờ nhận áo tại cửa hàng',
-      description: ['PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+      description: ['PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(currentStatus)
         ? `Đã nhận áo tại ${storeName}`
         : `Vui lòng đến ${storeName} để nhận áo theo lịch hẹn`,
       timestamp: rawPickup ? new Date(rawPickup).toLocaleDateString('vi-VN') + ' • ' + pickupTimeStr : undefined,
-      status: ['PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+      status: ['PICKED_UP', 'IN_PROGRESS', 'RENTING', 'RETURN_PENDING', 'RETURNED', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(currentStatus)
         ? 'COMPLETED'
         : ['PICKUP_PENDING', 'READY_FOR_PICKUP'].includes(currentStatus)
         ? 'ACTIVE'
@@ -502,12 +574,12 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     {
       id: 'step-3',
       title: 'Khách đang thuê',
-      description: ['RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+      description: ['RETURN_PENDING', 'RETURNED', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(currentStatus)
         ? 'Đã hoàn tất thời gian trải nghiệm trang phục'
         : ['PICKED_UP', 'IN_PROGRESS', 'RENTING'].includes(currentStatus)
         ? 'Thời gian thuê đang diễn ra theo hợp đồng'
         : 'Chưa bắt đầu thời gian thuê',
-      status: ['RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(currentStatus)
+      status: ['RETURN_PENDING', 'RETURNED', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(currentStatus)
         ? 'COMPLETED'
         : ['PICKED_UP', 'IN_PROGRESS', 'RENTING'].includes(currentStatus)
         ? 'ACTIVE'
@@ -516,13 +588,13 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     {
       id: 'step-4',
       title: 'Trả áo & Hoàn cọc',
-      description: ['RETURNED', 'COMPLETED'].includes(currentStatus)
+      description: ['RETURNED', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(currentStatus)
         ? 'Đã hoàn tất kiểm tra và hoàn cọc'
         : currentStatus === 'RETURN_PENDING'
         ? 'Đang kiểm tra áo và đối soát hoàn cọc'
         : `Trả áo tại ${storeAddress} để nhận lại tiền cọc`,
-      timestamp: ['RETURNED', 'COMPLETED'].includes(currentStatus) && rawReturn ? new Date(rawReturn).toLocaleDateString('vi-VN') : undefined,
-      status: ['RETURNED', 'COMPLETED'].includes(currentStatus)
+      timestamp: ['RETURNED', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(currentStatus) && rawReturn ? new Date(rawReturn).toLocaleDateString('vi-VN') : undefined,
+      status: ['RETURNED', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(currentStatus)
         ? 'COMPLETED'
         : currentStatus === 'RETURN_PENDING'
         ? 'ACTIVE'
@@ -562,7 +634,8 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     });
   });
 
-  (booking?.handoverPhotos || []).forEach((url: string, idx: number) => {
+  (Array.isArray(booking?.handoverPhotos) ? booking.handoverPhotos : []).forEach((photoItem: any, idx: number) => {
+    const url = typeof photoItem === 'string' ? photoItem : photoItem?.url || '';
     photos.push({
       id: `handover-${idx}`,
       title: `Ảnh xác nhận #${idx + 1}`,
@@ -570,6 +643,19 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
       image: url,
     });
   });
+
+  let canReschedule = false;
+  if (['CONFIRMED', 'DEPOSIT_PAID'].includes(currentStatus)) {
+    try {
+      const pickupDate = rawPickup ? new Date(rawPickup) : null;
+      if (pickupDate && !isNaN(pickupDate.getTime())) {
+        const msUntilPickup = pickupDate.getTime() - Date.now();
+        canReschedule = msUntilPickup >= 24 * 60 * 60 * 1000;
+      }
+    } catch {
+      canReschedule = false;
+    }
+  }
 
   return (
     <div
@@ -581,14 +667,15 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
         minWidth: 0
       }}
     >
-      {/* 1. Top Header with Back button and Support/Extend actions */}
+      {/* 1. Top Header with Back button and Support/Reschedule actions */}
       <RentalDetailHeader
         onBack={onBack}
         onOpenSupport={handleSupport}
-        onOpenRescheduleOrExtend={() => onOpenRescheduleOrExtend?.(item)}
+        canReschedule={canReschedule}
+        onOpenReschedule={() => onOpenReschedule?.(item)}
       />
 
-      {/* 2. Main Rental Overview Card & Horizontal Stepper */}
+      {/* 2. Main Rental Overview Card & Horizontal Stepper with Integrated Handover Inspection */}
       <RentalMainCard
         rentalData={{
           image: itemImage,
@@ -606,7 +693,65 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
           dueTime: dueTimeStr,
           remainingTime: remainingTimeStr
         }}
+        pickupInspection={
+          ['PICKUP_PENDING', 'READY_FOR_PICKUP'].includes(currentStatus)
+            ? {
+                // New fulfillment evidence is private and belongs to the item;
+                // fall back to legacy booking-level URLs only for old bookings.
+                handoverPhotos: pickupFiles.length > 0 ? pickupFiles : booking?.handoverPhotos,
+                bookingId,
+                itemId,
+                isSubmitting: isSubmittingPickup,
+                onConfirm: () => setPickupModalMode('CONFIRM'),
+                onReportDamage: () => setPickupModalMode('DAMAGE'),
+                onReject: () => setPickupModalMode('REJECT'),
+                onViewPhoto: (url) => {
+                  Swal.fire({
+                    title: 'Ảnh bàn giao từ Cửa hàng',
+                    imageUrl: url,
+                    confirmButtonText: 'Đóng',
+                    confirmButtonColor: '#8E1B2E'
+                  });
+                }
+              }
+            : undefined
+        }
       />
+
+      {(() => {
+        const result = booking?.disputeResult || (() => {
+          const timeline = Array.isArray((booking as any)?.statusTimeline) ? (booking as any).statusTimeline : [];
+          const resolved = [...timeline].reverse().find((entry: any) => typeof entry?.note === 'string' && entry.note.includes('Admin giải quyết tranh chấp'));
+          return resolved ? { decisionLabel: resolved.note, resolvedAt: resolved.changedAt } : null;
+        })();
+        if (!result) return null;
+        return (
+        <div style={{ background: '#FFFBEA', border: '1px solid #F3C969', borderRadius: 14, padding: '16px 20px', color: '#5B3A00' }}>
+          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 10 }}>⚖️ Kết quả giải quyết tranh chấp từ Admin</div>
+          <div style={{ display: 'grid', gap: 6, fontSize: 13.5 }}>
+            <div><strong>Phán quyết:</strong> {result.decisionLabel || result.decision || 'Đã xử lý'}</div>
+            {typeof result.refundAmount === 'number' && <div><strong>Hoàn tiền cho khách:</strong> {result.refundAmount.toLocaleString('vi-VN')}đ</div>}
+            {result.notes && <div><strong>Ghi chú Admin:</strong> {result.notes}</div>}
+            {result.resolvedAt && <div style={{ color: '#8A6A35', fontSize: 12 }}>Thời gian xử lý: {new Date(result.resolvedAt).toLocaleString('vi-VN')}</div>}
+          </div>
+        </div>
+        );
+      })()}
+
+      {/* 2a. Ghi nhận tình trạng áo có sẵn trước khi thuê nếu khách đã báo cáo */}
+      {booking?.pickupDamageReport && (
+        <RentalPickupDamageReportCard
+          report={booking.pickupDamageReport}
+          onViewPhoto={(url) => {
+            Swal.fire({
+              title: 'Ảnh bằng chứng hư hỏng khi nhận áo',
+              imageUrl: url,
+              confirmButtonText: 'Đóng',
+              confirmButtonColor: '#8E1B2E'
+            });
+          }}
+        />
+      )}
 
       {/* 2b. Khách hàng xem xét & xử lý yêu cầu đền bù sự cố từ Shop */}
       {isPendingCustomerIncident && (
@@ -911,13 +1056,43 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
         incident={incident}
         respondingIncident={respondingIncident}
         onCancel={() => onOpenCancel?.(booking || { _id: 'demo-1', bookingCode: itemCode })}
-        onExtend={() => onOpenRescheduleOrExtend?.(item)}
         onSupport={handleSupport}
         onReturn={handleReturn}
         onOpenMap={handleOpenMap}
-        onConfirmPickup={handleConfirmPickup}
+        onConfirmPickup={() => setPickupModalMode('CONFIRM')}
+        onReportDamage={() => setPickupModalMode('DAMAGE')}
+        onRejectHandover={() => setPickupModalMode('REJECT')}
+        isSubmittingPickup={isSubmittingPickup}
+        onConfirmComplete={handleConfirmComplete}
         onAgreeIncident={handleAgreeIncident}
         onDisagreeIncident={handleDisagreeIncident}
+        onContinuePayment={() => onContinuePayment?.(booking?._id)}
+        canCustomerConfirmCompletion={Boolean(booking?.canCustomerConfirmCompletion)}
+      />
+
+      {/* 6. Modal Báo cáo hiện trạng / Xác nhận / Từ chối nhận áo */}
+      {pickupModalMode && (
+        <RentalPickupReportModal
+          isOpen={Boolean(pickupModalMode)}
+          mode={pickupModalMode}
+          bookingCode={itemCode}
+          onClose={() => {
+            if (!isSubmittingPickup) setPickupModalMode(null);
+          }}
+          onSubmit={handlePickupModalSubmit}
+        />
+      )}
+
+      {/* 7. Modal Xác nhận trả áo dài kèm ảnh bằng chứng */}
+      <RentalReturnModal
+        isOpen={isReturnModalOpen}
+        bookingCode={itemCode}
+        storeName={storeName}
+        storeAddress={storeAddress}
+        depositAmount={depositFee}
+        onClose={() => setIsReturnModalOpen(false)}
+        onOpenMap={handleOpenMap}
+        onSubmit={handleReturnSubmit}
       />
     </div>
   );

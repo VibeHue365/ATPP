@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PaymentsController } from './payments.controller';
 
 describe('PaymentsController PayOS webhook', () => {
@@ -200,6 +200,47 @@ describe('PaymentsController PayOS webhook', () => {
         { orderCode: 123456, status: 'PAID', amount: 500000, currency: 'VND' },
         null, // signature redacted for V2 minimal audit
       );
+    });
+  });
+
+  describe('Simulator environment guard', () => {
+    it('allows simulator when NODE_ENV is unset/undefined (defaults to development)', () => {
+      const originalEnv = process.env.NODE_ENV;
+      delete process.env.NODE_ENV;
+      const fixture = createController();
+      (fixture.controller as any).configService = {
+        get: jest.fn().mockImplementation((key: string) => {
+          if (key === 'NODE_ENV') return undefined;
+          if (key === 'ENABLE_PAYMENT_SIMULATOR') return undefined;
+          return '';
+        }),
+      };
+      expect(() => (fixture.controller as any).ensureSimulatorEnabled()).not.toThrow();
+      process.env.NODE_ENV = originalEnv;
+    });
+
+    it('blocks simulator when NODE_ENV is production and simulator not explicitly enabled', () => {
+      const fixture = createController();
+      (fixture.controller as any).configService = {
+        get: jest.fn().mockImplementation((key: string) => {
+          if (key === 'NODE_ENV') return 'production';
+          if (key === 'ENABLE_PAYMENT_SIMULATOR') return 'false';
+          return '';
+        }),
+      };
+      expect(() => (fixture.controller as any).ensureSimulatorEnabled()).toThrow(NotFoundException);
+    });
+
+    it('allows simulator in production when ENABLE_PAYMENT_SIMULATOR is true', () => {
+      const fixture = createController();
+      (fixture.controller as any).configService = {
+        get: jest.fn().mockImplementation((key: string) => {
+          if (key === 'NODE_ENV') return 'production';
+          if (key === 'ENABLE_PAYMENT_SIMULATOR') return 'true';
+          return '';
+        }),
+      };
+      expect(() => (fixture.controller as any).ensureSimulatorEnabled()).not.toThrow();
     });
   });
 });

@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import { BadRequestException } from '@nestjs/common';
 import { BookingsService } from './bookings.service';
 import { ReservationStatus } from '../../products/schemas/inventory-reservation.schema';
 import { ProductBusyCacheService } from './product-busy-cache.service';
@@ -681,5 +682,25 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
     expect(result.variantBookedSlots!['XL_RED']).toEqual([
       { date: '2026-11-15', timeSlot: '07:00-09:00', purpose: 'RENTAL' },
     ]);
+  });
+
+  describe('Defensive ID validation for getBusySchedulesForProduct', () => {
+    it('throws BadRequestException when productId is an invalid string, not BSON/Cast error', async () => {
+      await expect(service.getBusySchedulesForProduct('invalid')).rejects.toThrow(BadRequestException);
+      await expect(service.getBusySchedulesForProduct('invalid')).rejects.toThrow('ID sản phẩm không hợp lệ');
+    });
+
+    it('throws BadRequestException when productId is empty or malformed', async () => {
+      await expect(service.getBusySchedulesForProduct('')).rejects.toThrow(BadRequestException);
+      await expect(service.getBusySchedulesForProduct('123456789012')).rejects.toThrow(BadRequestException);
+      await expect(service.getBusySchedulesForProduct(null as any)).rejects.toThrow(BadRequestException);
+    });
+
+    it('successfully processes valid ObjectId without throwing', async () => {
+      const validId = new Types.ObjectId().toString();
+      const result = await service.getBusySchedulesForProduct(validId);
+      expect(result).toHaveProperty('bookedDates');
+      expect(result).toHaveProperty('bookedSlots');
+    });
   });
 });

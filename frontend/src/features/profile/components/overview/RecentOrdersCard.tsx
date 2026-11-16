@@ -5,12 +5,14 @@ interface RecentOrdersCardProps {
   orders: RecentOrderItem[];
   onViewAll: () => void;
   onViewDetails: (booking: any) => void;
+  onContinuePayment: (bookingId: string) => void;
 }
 
 export const RecentOrdersCard: React.FC<RecentOrdersCardProps> = ({
   orders,
   onViewAll,
-  onViewDetails
+  onViewDetails,
+  onContinuePayment
 }) => {
   return (
     <div className="lume-dashboard-card">
@@ -66,6 +68,29 @@ export const RecentOrdersCard: React.FC<RecentOrdersCardProps> = ({
               >
                 {order.statusLabel}
               </span>
+              {['PENDING_PAYMENT', 'WAITING_PAYMENT'].includes(order.status) && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onContinuePayment(order.bookingId);
+                  }}
+                  style={{
+                    marginLeft: '8px',
+                    border: 'none',
+                    borderRadius: '7px',
+                    padding: '5px 8px',
+                    background: '#8E1B2E',
+                    color: '#fff',
+                    fontSize: '11px',
+                    fontWeight: 750,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  Thanh toán
+                </button>
+              )}
             </div>
           ))}
         </div>

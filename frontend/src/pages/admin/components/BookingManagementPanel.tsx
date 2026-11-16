@@ -26,6 +26,7 @@ import Swal from 'sweetalert2';
 import { useToast } from '../../../components/feedback/Toast';
 import { httpClient } from '../../../services/httpClient';
 import { useAuth } from '../../../features/auth/hooks/useAuth';
+import { useSocket } from '../../../context/SocketContext';
 import { BookingContractsSection } from '../../../components/contracts/BookingContractsSection';
 import './bookingManagementFigma.css';
 
@@ -259,6 +260,20 @@ export const BookingManagementPanel: React.FC = () => {
     fetchBookings();
   }, [fetchBookings]);
 
+  const { socket } = useSocket();
+
+  // Targeted realtime update for Admin Booking Management
+  useEffect(() => {
+    if (!socket) return;
+    const handler = (_payload: { bookingId: string }) => {
+      fetchBookings();
+    };
+    socket.on('booking_updated', handler);
+    return () => {
+      socket.off('booking_updated', handler);
+    };
+  }, [socket, fetchBookings]);
+
   // Mouse Drag to Scroll Table
   const onMouseDown = (e: React.MouseEvent) => {
     if (!tableScrollRef.current) return;
@@ -419,22 +434,9 @@ export const BookingManagementPanel: React.FC = () => {
       }
       fetchBookings();
       setStatusModalBooking(null);
-    } catch {
-      // Optimistically update locally
-      setBookings((prev) =>
-        prev.map((b) =>
-          b.id === statusModalBooking.id || b.bookingId === statusModalBooking.bookingId
-            ? { ...b, status: newStatusValue, statusLabel: displayLabel }
-            : b
-        )
-      );
-      if (
-        activeBooking &&
-        (activeBooking.id === statusModalBooking.id || activeBooking.bookingId === statusModalBooking.bookingId)
-      ) {
-        setActiveBooking((prev) => (prev ? { ...prev, status: newStatusValue, statusLabel: displayLabel } : null));
-      }
-      toast.success(`Đã cập nhật trạng thái đơn ${statusModalBooking.bookingCode}`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Không thể cập nhật trạng thái đơn hàng');
+      fetchBookings();
       setStatusModalBooking(null);
     } finally {
       setUpdatingStatus(false);

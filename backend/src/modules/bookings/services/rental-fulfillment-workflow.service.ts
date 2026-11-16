@@ -10,6 +10,7 @@ import {
   RentalActorSnapshot,
   RentalInventoryStatus,
   RentalFulfillmentStatus,
+  RentalIssueStatus,
 } from '../schemas/rental-fulfillment.types';
 import { Provider } from '../../providers/schemas/provider.schema';
 import { ProviderSchedule, ScheduleType, ScheduleCapability } from '../../products/schemas/provider-schedule.schema';
@@ -18,6 +19,7 @@ import { RentalFulfillmentService } from './rental-fulfillment.service';
 import { RentalDepositRefundCoordinatorService } from './rental-deposit-refund-coordinator.service';
 import { InventorySlotLeaseService } from './inventory-slot-lease.service';
 import { ShopScheduleConfig, TimeSlotEngineService } from './time-slot-engine.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 
 interface RentalItemAccess {
   bookingId: Types.ObjectId;
@@ -45,6 +47,8 @@ export class RentalFulfillmentWorkflowService {
     @Optional()
     @InjectModel(ProviderSchedule.name)
     private readonly providerScheduleModel?: Model<ProviderSchedule>,
+    @Optional()
+    private readonly notificationsService?: NotificationsService,
   ) { }
 
   private async getProviderScheduleConfig(
@@ -112,15 +116,25 @@ export class RentalFulfillmentWorkflowService {
   ) {
     const access = await this.requireProviderOrAdmin(bookingId, itemId, user);
     this.requireOperationalBooking(access.bookingStatus, 'bàn giao áo dài');
+    const currentItem = await this.bookingItemModel
+      .findById(access.itemId)
+      .select({ 'rentalFulfillment.status': 1, 'rentalFulfillment.pickupEvidence': 1 })
+      .lean()
+      .exec();
+    if (currentItem?.rentalFulfillment?.pickupEvidence?.files?.length) {
+      throw new ConflictException('Shop đã gửi ảnh bàn giao cho áo dài này. Vui lòng chờ khách xác nhận nhận áo.');
+    }
     const evidence = await this.resolveEvidence(access, user, input, 'PICKUP');
-    const updated = await this.rentalFulfillment.markPickedUp({
+    // Uploading the provider's evidence is not a customer pickup.  Keep the
+    // item READY_FOR_PICKUP until the customer has reviewed these private
+    // photos and explicitly confirms receipt.
+    const updated = await this.rentalFulfillment.submitPickupEvidence({
       itemId: access.itemId.toString(),
       actor: access.actor,
       evidence,
       note: input.note,
       conditionNote: input.conditionNote,
     });
-    await this.syncBookingProgress(access.bookingId, access.actor);
     return updated;
   }
 
@@ -128,11 +142,13 @@ export class RentalFulfillmentWorkflowService {
     bookingId: string,
     itemId: string,
     user: AuthUser,
-    input: { fileIds: string[]; note?: string; conditionNote?: string },
+    input: { fileIds?: string[]; note?: string; conditionNote?: string },
   ) {
     const access = await this.requireProviderOrAdmin(bookingId, itemId, user);
     this.requireOperationalBooking(access.bookingStatus, 'nhận lại áo dài');
-    const evidence = await this.resolveEvidence(access, user, input, 'RETURN');
+    // Customer-return evidence already exists. Shop evidence is required only
+    // if the shop later submits an incident/compensation request.
+    const evidence = await this.resolveEvidence(access, user, input, 'RETURN', true);
     const updated = await this.rentalFulfillment.markReturned({
       itemId: access.itemId.toString(),
       actor: access.actor,
@@ -140,7 +156,23 @@ export class RentalFulfillmentWorkflowService {
       note: input.note,
       conditionNote: input.conditionNote,
     });
-    // Mặc định chuyển hiện vật sang trạng thái CLEANING (Đang giặt ủi) và gán operationalAvailableFrom = availableFrom
+
+    // markReturned chỉ chuyển hiện vật sang trạng thái chờ kiểm tra (ReturnedPendingInspection).
+    // Tuyệt đối KHÔNG tự chuyển sang CLEANING và KHÔNG gọi refund coordinator trước khi shop kiểm tra.
+    await this.syncBookingProgress(access.bookingId, access.actor);
+    return updated;
+  }
+
+  async confirmNoIncident(bookingId: string, itemId: string, user: AuthUser, note?: string) {
+    const access = await this.requireProviderOrAdmin(bookingId, itemId, user);
+    this.requireOperationalBooking(access.bookingStatus, 'xác nhận không có sự cố');
+    const updated = await this.rentalFulfillment.confirmNoIncident({
+      itemId: access.itemId.toString(),
+      actor: access.actor,
+      note,
+    });
+
+    // Sau khi xác nhận không có sự cố, chuyển hiện vật sang CLEANING và gán operationalAvailableFrom
     const item = await this.bookingItemModel.findById(access.itemId).lean().exec();
     const actualReturnedAt = new Date();
     const contractualRentalTo = (item as any)?.rentalTo || actualReturnedAt;
@@ -162,29 +194,51 @@ export class RentalFulfillmentWorkflowService {
     const inventoryModel = this.bookingItemModel.db.model('InventoryItem');
     const reservationModel = this.bookingItemModel.db.model('InventoryReservation');
     const reservations = await reservationModel.find({ bookingItemId: access.itemId }).select({ inventoryItemId: 1 }).lean().exec();
-    for (const res of reservations as any[]) {
-      if (res.inventoryItemId) {
-        await inventoryModel.updateOne(
-          {
-            _id: res.inventoryItemId,
-            status: { $ne: 'MAINTENANCE' },
-            conditionStatus: { $nin: ['LOCKED', 'RETIRED', 'MINOR_DAMAGE'] },
+    const inventoryItemIds = (reservations as any[]).map((r) => r.inventoryItemId).filter(Boolean);
+    if (inventoryItemIds.length === 0 && (item as any)?.inventoryItemId) {
+      inventoryItemIds.push((item as any).inventoryItemId);
+    }
+    for (const invId of inventoryItemIds) {
+      await inventoryModel.updateOne(
+        {
+          _id: invId,
+          status: { $ne: 'MAINTENANCE' },
+          conditionStatus: { $nin: ['LOCKED', 'RETIRED', 'MINOR_DAMAGE'] },
+        },
+        {
+          $set: {
+            status: 'CLEANING',
+            operationalAvailableFrom: availableFrom,
+            activeTurnaroundBookingItemId: access.itemId,
           },
-          {
-            $set: {
-              status: 'CLEANING',
-              operationalAvailableFrom: availableFrom,
-              activeTurnaroundBookingItemId: access.itemId,
-            },
-          },
-        ).exec();
-      }
+        },
+      ).exec();
     }
     if (this.slotLeaseService && (item as any)?.slotLeaseRequired) {
       await this.slotLeaseService.reconcileTurnaroundLeases(access.itemId, availableFrom);
     }
-    await this.syncBookingProgress(access.bookingId, access.actor);
+
     await this.rentalDepositRefundCoordinator.coordinate(access.bookingId.toString());
+    await this.syncBookingProgress(access.bookingId, access.actor);
+    return updated;
+  }
+
+  async requestCustomerReturn(
+    bookingId: string,
+    itemId: string,
+    user: AuthUser,
+    input: { fileIds?: string[]; evidencePhotos?: string[]; note?: string },
+  ) {
+    const access = await this.requireCustomerOrAdmin(bookingId, itemId, user);
+    this.requireOperationalBooking(access.bookingStatus, 'yêu cầu trả áo dài');
+    const evidence = await this.resolveEvidence(access, user, input as any, 'RETURN');
+    const updated = await this.rentalFulfillment.requestCustomerReturn({
+      itemId: access.itemId.toString(),
+      actor: access.actor,
+      evidence,
+      note: input.note,
+    });
+    await this.syncBookingProgress(access.bookingId, access.actor);
     return updated;
   }
 
@@ -193,24 +247,34 @@ export class RentalFulfillmentWorkflowService {
     if (![RentalFulfillmentStatus.Returned, RentalFulfillmentStatus.Completed].includes(access.fulfillmentStatus)) {
       throw new ConflictException('Chỉ có thể xác nhận hoàn tất giặt ủi sau khi đã nhận lại đồ (Returned).');
     }
+
+    const item = await this.bookingItemModel.findById(access.itemId).lean().exec();
+    const issueStatus = (item as any)?.rentalFulfillment?.issueStatus;
+    if (issueStatus && issueStatus !== RentalIssueStatus.None && issueStatus !== RentalIssueStatus.Resolved) {
+      throw new ConflictException('Không thể hoàn tất giặt ủi khi sự cố chưa được giải quyết.');
+    }
+
     const inventoryModel = this.bookingItemModel.db.model('InventoryItem');
     const reservationModel = this.bookingItemModel.db.model('InventoryReservation');
     const reservations = await reservationModel.find({ bookingItemId: access.itemId }).select({ inventoryItemId: 1 }).lean().exec();
     const inventoryItemIds = (reservations as any[]).map((r) => r.inventoryItemId).filter(Boolean);
+    if (inventoryItemIds.length === 0 && (item as any)?.inventoryItemId) {
+      inventoryItemIds.push((item as any).inventoryItemId);
+    }
 
     if (inventoryItemIds.length === 0) {
       throw new ConflictException('Không tìm thấy hiện vật kho tương ứng với đơn thuê này.');
     }
 
     const items = await inventoryModel.find({ _id: { $in: inventoryItemIds } }).lean().exec();
-    const hasMaintenanceOrRetired = items.some(
+    const hasBlockedStatus = items.some(
       (it: any) =>
         it.status === 'MAINTENANCE' ||
-        ['RETIRED', 'LOCKED'].includes(it.conditionStatus),
+        ['RETIRED', 'LOCKED', 'MINOR_DAMAGE'].includes(it.conditionStatus),
     );
-    if (hasMaintenanceOrRetired) {
+    if (hasBlockedStatus) {
       throw new ConflictException(
-        'Hiện vật đang ở trạng thái bảo trì hoặc thanh lý (MAINTENANCE/RETIRED), không thể mở kho hoặc hoàn tất giặt ủi.',
+        'Hiện vật đang ở trạng thái bảo trì, hư hại hoặc thanh lý, không thể mở kho hoặc hoàn tất giặt ủi.',
       );
     }
 
@@ -218,7 +282,7 @@ export class RentalFulfillmentWorkflowService {
       {
         _id: { $in: inventoryItemIds },
         status: 'CLEANING',
-        conditionStatus: { $nin: ['RETIRED', 'LOCKED'] },
+        conditionStatus: { $nin: ['RETIRED', 'LOCKED', 'MINOR_DAMAGE'] },
       },
       {
         $set: {
@@ -241,6 +305,11 @@ export class RentalFulfillmentWorkflowService {
     await this.bookingItemModel.updateOne(
       { _id: access.itemId },
       {
+        $set: {
+          'rentalFulfillment.status': RentalFulfillmentStatus.Completed,
+          'rentalFulfillment.completedAt': new Date(),
+          'rentalFulfillment.inventoryStatus': RentalInventoryStatus.Available,
+        },
         $push: {
           'rentalFulfillment.history': {
             action: 'CLEANING_COMPLETED',
@@ -350,14 +419,41 @@ export class RentalFulfillmentWorkflowService {
     return evidence;
   }
 
+  /** Return non-sensitive evidence metadata so provider/customer UIs can
+   * reconcile a handover after the booking list was refreshed. */
+  async getEvidenceSummary(bookingId: string, itemId: string, user: AuthUser) {
+    const access = await this.requireAuthorizedViewer(bookingId, itemId, user);
+    const uploads = await this.evidenceUploadModel.find({
+      bookingId: access.bookingId,
+      bookingItemId: access.itemId,
+      consumedFor: { $in: ['PICKUP', 'RETURN'] },
+    }).select('fileId mimeType createdAt consumedFor').sort({ createdAt: 1 }).lean().exec();
+    return {
+      pickup: uploads.filter((upload: any) => upload.consumedFor === 'PICKUP').map((upload: any) => ({
+        fileId: upload.fileId,
+        type: 'IMAGE',
+        uploadedAt: upload.createdAt,
+      })),
+      return: uploads.filter((upload: any) => upload.consumedFor === 'RETURN').map((upload: any) => ({
+        fileId: upload.fileId,
+        type: 'IMAGE',
+        uploadedAt: upload.createdAt,
+      })),
+    };
+  }
+
   private async resolveEvidence(
     access: RentalItemAccess,
     user: AuthUser,
-    input: { fileIds: string[]; note?: string },
+    input: { fileIds?: string[]; note?: string },
     purpose: 'PICKUP' | 'RETURN',
+    allowEmpty = false,
   ): Promise<FulfillmentEvidence> {
     const uniqueFileIds = [...new Set(input.fileIds ?? [])];
-    if (!uniqueFileIds.length) throw new BadRequestException('Cần có ít nhất một ảnh bằng chứng.');
+    if (!uniqueFileIds.length) {
+      if (allowEmpty) return { files: [], note: input.note?.trim() || undefined };
+      throw new BadRequestException('Cần có ít nhất một ảnh bằng chứng.');
+    }
     if (uniqueFileIds.length > 5) throw new BadRequestException('Tối đa năm ảnh bằng chứng cho mỗi lần bàn giao.');
     const uploads = await this.evidenceUploadModel.find({
       fileId: { $in: uniqueFileIds },
@@ -430,6 +526,8 @@ export class RentalFulfillmentWorkflowService {
       nextStatus = BookingStatus.Completed;
     } else if (statuses.every((status) => [RentalFulfillmentStatus.Returned, RentalFulfillmentStatus.Completed].includes(status as RentalFulfillmentStatus))) {
       nextStatus = BookingStatus.Returned;
+    } else if (statuses.some((status) => status === RentalFulfillmentStatus.CustomerReturnRequested)) {
+      nextStatus = BookingStatus.ReturnPending;
     } else if (statuses.some((status) => [RentalFulfillmentStatus.PickedUp, RentalFulfillmentStatus.Returned].includes(status as RentalFulfillmentStatus))) {
       nextStatus = BookingStatus.PickedUp;
     } else if (statuses.some((status) => status === RentalFulfillmentStatus.ReadyForPickup)) {
@@ -445,7 +543,35 @@ export class RentalFulfillmentWorkflowService {
       },
       { new: true },
     ).lean().exec();
-    if (changed && nextStatus === BookingStatus.Completed) await this.paymentsService.settleBooking(bookingId.toString());
+    if (changed && nextStatus === BookingStatus.Completed) {
+      try {
+        await this.paymentsService.settleBooking(bookingId.toString());
+      } catch (err: any) {
+        console.warn(`Failed to auto-settle booking ${bookingId} upon completion:`, err?.message || err);
+      }
+    }
+
+    const recipientUserIds: string[] = [];
+    if (booking.customerId) {
+      recipientUserIds.push(booking.customerId.toString());
+    }
+    const providerDocIds = (booking.providerIds || []).map((id: any) => (id?._id || id).toString());
+    if (providerDocIds.length > 0) {
+      try {
+        const providers = await this.providerModel.find({ _id: { $in: providerDocIds } }).select({ userId: 1 }).lean().exec();
+        providers.forEach((p) => {
+          if (p.userId) recipientUserIds.push(p.userId.toString());
+        });
+      } catch (err) {
+        console.warn('Failed to resolve provider user IDs in syncBookingProgress:', err);
+      }
+    }
+
+    this.notificationsService?.emitBookingUpdate({
+      bookingId: bookingId.toString(),
+      bookingCode: booking.bookingCode,
+      status: nextStatus || booking.status,
+    }, recipientUserIds);
   }
 
   private requireOperationalBooking(status: BookingStatus, action: string): void {
@@ -459,6 +585,16 @@ export class RentalFulfillmentWorkflowService {
     if (!this.isAdmin(user)) throw new ForbiddenException('Chỉ quản trị viên mới được duyệt phí và tất toán cọc.');
     return { ...access, actor: this.actor(user, 'ADMIN') };
   }
+
+  private async requireCustomerOrAdmin(bookingId: string, itemId: string, user: AuthUser): Promise<RentalItemAccess> {
+    const access = await this.resolveItemAccess(bookingId, itemId, user);
+    if (this.isAdmin(user)) return { ...access, actor: this.actor(user, 'ADMIN') };
+    if (access.customerId.toString() !== user.sub) {
+      throw new ForbiddenException('Chỉ khách hàng của đơn hàng hoặc quản trị viên mới được gửi yêu cầu trả áo.');
+    }
+    return { ...access, actor: this.actor(user, 'CUSTOMER') };
+  }
+
   private async requireProviderOrAdmin(bookingId: string, itemId: string, user: AuthUser): Promise<RentalItemAccess> {
     const access = await this.resolveItemAccess(bookingId, itemId, user);
     if (this.isAdmin(user)) return { ...access, actor: this.actor(user, 'ADMIN') };

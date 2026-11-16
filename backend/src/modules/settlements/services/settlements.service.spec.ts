@@ -20,9 +20,14 @@ describe('SettlementsService', () => {
   const bookingItemModel = { find: jest.fn() };
   const paymentModel = { findOne: jest.fn() };
   const adjustmentModel = { find: jest.fn(), updateOne: jest.fn() };
+  const providerModel = {
+    find: jest.fn(),
+    findById: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue({ userId: new Types.ObjectId() }) }),
+  };
   const calculationService = { calculateSettlementsForBooking: jest.fn() };
   const codeService = { generateSettlementCode: jest.fn() };
   const securityLogService = { recordAdminAudit: jest.fn() };
+  const notificationsService = { createNotification: jest.fn() };
 
   let service: SettlementsService;
 
@@ -37,9 +42,11 @@ describe('SettlementsService', () => {
       bookingItemModel as never,
       paymentModel as never,
       adjustmentModel as never,
+      providerModel as never,
       calculationService as never,
       codeService as never,
       securityLogService as never,
+      notificationsService as never,
     );
   });
 
@@ -78,7 +85,7 @@ describe('SettlementsService', () => {
 
   it('does not create settlements before the booking is paid', async () => {
     bookingModel.findById.mockResolvedValue(
-      booking(BookingStatus.Completed, BookingPaymentStatus.Pending),
+      booking(BookingStatus.Completed, BookingPaymentStatus.Unpaid),
     );
 
     await expect(

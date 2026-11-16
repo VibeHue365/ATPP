@@ -6,6 +6,7 @@ interface CartMobileStickyBarProps {
   depositToPayNow: number;
   grandTotal: number;
   isLoading: boolean;
+  hasUnavailableItem?: boolean;
   onCheckout: () => void;
 }
 
@@ -14,9 +15,10 @@ export const CartMobileStickyBar: React.FC<CartMobileStickyBarProps> = ({
   depositToPayNow,
   grandTotal,
   isLoading,
+  hasUnavailableItem = false,
   onCheckout,
 }) => {
-  const isCheckoutDisabled = selectedCount === 0 || isLoading;
+  const isCheckoutDisabled = selectedCount === 0 || isLoading || hasUnavailableItem;
 
   return (
     <div className="vh-cart-mobile-sticky-bar">

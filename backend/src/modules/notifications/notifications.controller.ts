@@ -1,4 +1,5 @@
 import { Controller, Get, Patch, Post, Param, UseGuards } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../common/decorators/current-user.decorator';
@@ -11,6 +12,9 @@ export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
   @Get()
+  // Notification reads are polled by the header and dashboard; keep writes
+  // protected while avoiding a global budget hit for harmless GET polling.
+  @SkipThrottle({ default: true })
   async getNotifications(@CurrentUser() user: AuthUser): Promise<Notification[]> {
     return this.notificationsService.findAll(user.sub);
   }

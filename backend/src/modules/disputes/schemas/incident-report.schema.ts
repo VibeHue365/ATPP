@@ -47,6 +47,12 @@ export class IncidentReport {
   @Prop({ type: String, default: null, trim: true })
   adminNotes?: string | null;
 
+  @Prop({ type: String, default: null, trim: true })
+  customerReason?: string | null;
+
+  @Prop({ type: [String], default: [] })
+  customerEvidencePhotos?: string[];
+
   @Prop({ type: Date, default: null })
   resolvedAt?: Date | null;
 }

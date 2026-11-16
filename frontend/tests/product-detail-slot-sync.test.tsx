@@ -266,4 +266,88 @@ describe('ProductDetailPage Real Integration Test - Slot Display & Synchronizati
     const addToCartBtn = screen.getByRole('button', { name: 'THÊM VÀO GIỎ HÀNG' });
     expect((addToCartBtn as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it('disables and blurs dates with hourly bookings when in DAILY rental mode (XL_RED on day 15)', async () => {
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: 'Ao dai rong' })).toBeDefined();
+    });
+
+    // Ensure we are in DAILY rental mode
+    const dailyTab = screen.getByRole('button', { name: /Thuê Theo Ngày/i });
+    expect(dailyTab).toBeDefined();
+
+    // Select Size XL
+    const xlBtn = screen.getByRole('button', { name: 'XL' });
+    fireEvent.click(xlBtn);
+
+    // On XL_RED, 2026-11-15 has hourly bookings: day 15 MUST be disabled on the DAILY calendar!
+    const day15Btn = screen.getByRole('button', { name: '15' }) as HTMLButtonElement;
+    expect(day15Btn.disabled).toBe(true);
+
+    // Switch to Size S (which has no bookings on day 15)
+    const sBtn = screen.getByRole('button', { name: 'S' });
+    fireEvent.click(sBtn);
+
+    // For Size S, day 15 should now be enabled on the calendar
+    expect(day15Btn.disabled).toBe(false);
+  });
+
+  it('4. Fallback busy slots parity tests (a, b, c)', async () => {
+    // 4c: API legacy returns only busySlots, no variantBookedSlots
+    vi.mocked(httpClient.get).mockImplementation(async (url: string) => {
+      if (url.includes('/products/6aeafbc54dd6bb560f0c0dbc')) {
+        return mockProductData;
+      }
+      if (url.includes('/api/bookings/busy-dates/product/')) {
+        return {
+          bookedDates: [],
+          bookedSlots: [
+            { date: '2026-11-15', timeSlot: '07:00-09:00' },
+          ],
+          // variantBookedSlots is omitted or empty
+          variantBookedSlots: {},
+          hasSchedule: true,
+          workingDays: [0, 1, 2, 3, 4, 5, 6],
+          offDays: [],
+        };
+      }
+      if (url.includes('/users/me')) {
+        return { _id: 'user1', height: 165, weight: 55 };
+      }
+      if (url.includes('/reviews/item/')) {
+        return [];
+      }
+      if (url.includes('/reviews/my-status/')) {
+        return { canReview: false };
+      }
+      return {};
+    });
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: 'Ao dai rong' })).toBeDefined();
+    });
+
+    // Switch to HOURLY mode
+    const hourlyTab = screen.getByRole('button', { name: /Thuê Theo Giờ/i });
+    fireEvent.click(hourlyTab);
+
+    // Select Size XL
+    const xlBtn = screen.getByRole('button', { name: 'XL' });
+    fireEvent.click(xlBtn);
+
+    // Select Date 15
+    const day15Btn = screen.getByRole('button', { name: '15' });
+    fireEvent.click(day15Btn);
+
+    // 4c: Even without variantBookedSlots, legacy busySlots locks 07:00 - 09:00!
+    await waitFor(() => {
+      const slot07Btn = screen.getByText('07:00 - 09:00').closest('button') as HTMLButtonElement;
+      expect(slot07Btn.disabled).toBe(true);
+      expect(slot07Btn.textContent).toContain('Đã bận');
+    });
+  });
 });

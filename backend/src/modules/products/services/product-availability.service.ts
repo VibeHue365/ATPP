@@ -69,6 +69,16 @@ export class ProductAvailabilityService {
       to.setHours(23, 59, 59, 999);
     }
 
+    // Daily rentals reserve the item through the provider's turnaround day.
+    // Checkout already applies this rule; availability must use the same end
+    // boundary or the product page can say "available" while checkout rejects
+    // the exact same selection.
+    const reservationTo = new Date(to);
+    if (rentalType !== 'HOURLY') {
+      reservationTo.setDate(reservationTo.getDate() + 1);
+      reservationTo.setHours(23, 59, 59, 999);
+    }
+
     const productId = new Types.ObjectId(productIdValue);
     const product = await this.products.findPublicById(productId);
     if (!product) throw new NotFoundException('Product not found');
@@ -206,7 +216,7 @@ export class ProductAvailabilityService {
         .find({
           inventoryItemId: { $in: items.map((item) => item._id) },
           status: { $in: [ReservationStatus.TempReserved, ReservationStatus.Confirmed] },
-          reservedFrom: { $lte: to },
+          reservedFrom: { $lte: reservationTo },
           reservedTo: { $gte: from },
         })
         .select({ inventoryItemId: 1 })
@@ -214,6 +224,34 @@ export class ProductAvailabilityService {
         .exec();
 
       bookedIds = new Set(booked.map((item) => item.inventoryItemId.toString()));
+
+      // Daily checkout also blocks confirmed/temporary slot leases (including
+      // turnaround days). Mirror that rule here so the product page cannot say
+      // "available" while booking creation later rejects the same dates.
+      if (useSlotLeases && rentalType !== 'HOURLY' && this.leaseModel) {
+        const dateStrs: string[] = [];
+        const cursor = new Date(from);
+        const end = new Date(reservationTo);
+        while (cursor <= end) {
+          const dateStr = this.timeEngine.getVnParts(cursor).dateStr;
+          if (!dateStrs.includes(dateStr)) dateStrs.push(dateStr);
+          cursor.setDate(cursor.getDate() + 1);
+        }
+        const now = new Date();
+        const busyLeases = await this.leaseModel
+          .find({
+            inventoryItemId: { $in: items.map((item) => item._id) },
+            dateStr: { $in: dateStrs },
+            $or: [
+              { status: SlotLeaseStatus.Confirmed },
+              { status: SlotLeaseStatus.Temp, expiresAt: { $gt: now } },
+            ],
+          })
+          .select({ inventoryItemId: 1 })
+          .lean()
+          .exec();
+        for (const lease of busyLeases) bookedIds.add(lease.inventoryItemId.toString());
+      }
     }
 
     const availableQuantity = items.filter((item) => !bookedIds.has(item._id.toString())).length;

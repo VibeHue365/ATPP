@@ -142,13 +142,16 @@ export class NotificationsService {
   }, recipientUserIds: string[]): void {
     try {
       if (!this.chatGateway?.server) return;
-      const connections = this.chatGateway.getActiveConnections();
-      for (const userId of recipientUserIds) {
-        const sockets = connections.get(userId) || [];
-        sockets.forEach((socketId) => {
-          this.chatGateway.server.to(socketId).emit('booking_updated', payload);
-        });
+
+      const uniqueUserIds = [...new Set(recipientUserIds.filter(Boolean))];
+
+      // Emit strictly to the involved customer and provider user rooms (avoid double emit to socketId)
+      for (const userId of uniqueUserIds) {
+        this.chatGateway.server.to(`user:${userId}`).emit('booking_updated', payload);
       }
+
+      // Also emit strictly to connected Admins
+      this.chatGateway.server.to('role:admin').emit('booking_updated', payload);
     } catch (e) {
       console.warn('emitBookingUpdate failed:', e);
     }
