@@ -283,7 +283,7 @@ export const ContractReviewModal: React.FC<ContractReviewModalProps> = ({
     try {
       // Strictly pass exact hashes from backend, zero client recalculation
       const idempotencyKey = `consent-${currentContract.contractId}-${currentContract.versionId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      await contractService.submitConsent(
+      const consentResult = await contractService.submitConsent(
         currentContract.contractId,
         {
           contractVersionId: currentContract.versionId,
@@ -294,11 +294,19 @@ export const ContractReviewModal: React.FC<ContractReviewModalProps> = ({
         },
       );
 
-      toast.success(
-        action === 'ACCEPT'
-          ? 'Đã chấp thuận điều khoản hợp đồng!'
-          : 'Đã ghi nhận từ chối điều khoản hợp đồng.',
-      );
+      if (action === 'ACCEPT') {
+        if (consentResult.emailDelivery?.status === 'SENT') {
+          toast.success(`Đã ký hợp đồng và gửi bản PDF đến ${consentResult.emailDelivery.recipient}.`);
+        } else if (consentResult.emailDelivery?.status === 'IN_PROGRESS') {
+          toast.success('Đã ký hợp đồng. Hệ thống đang gửi bản PDF đến email của bạn.');
+        } else if (consentResult.emailDelivery?.status === 'FAILED') {
+          toast.warning('Đã ký hợp đồng, nhưng chưa thể gửi email. Bạn vẫn có thể tải PDF trong mục Hợp đồng.');
+        } else {
+          toast.success('Đã chấp thuận điều khoản hợp đồng!');
+        }
+      } else {
+        toast.success('Đã ghi nhận từ chối điều khoản hợp đồng.');
+      }
 
       // Refetch state from backend to enforce single source of truth
       await loadContractsData();

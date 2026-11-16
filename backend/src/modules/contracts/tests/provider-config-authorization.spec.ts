@@ -114,6 +114,7 @@ describe('Phase 2A Regression Suite: Provider Config API Authorization & IDOR De
       {} as any, // providerPolicy
       configService,
       {} as any, // evidence
+      {} as any, // signedEmail
     );
   });
 

@@ -25,6 +25,7 @@ import { ContractPolicyService } from './contract-policy.service';
 import { ContractPreparationService } from './contract-preparation.service';
 import { ContractReadService } from './contract-read.service';
 import { ContractEvidenceService } from './contract-evidence.service';
+import { ContractSignedEmailService } from './contract-signed-email.service';
 import { contractTestTarget } from './contract-test-target';
 import { ContractsController } from './contracts.controller';
 import { ProviderContractApprovalService } from './provider-contract-approval.service';
@@ -419,6 +420,10 @@ const template = {
           {
             provide: ContractEvidenceService,
             useValue: evidenceServiceMock,
+          },
+          {
+            provide: ContractSignedEmailService,
+            useValue: { sendAfterAcceptance: jest.fn() },
           },
         ],
       }).compile();

@@ -231,7 +231,7 @@ export const ContractQuickConsentCard: React.FC<ContractQuickConsentCardProps> =
 
     try {
       const idempotencyKey = `quick-consent-${contract.contractId}-${contract.versionId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      await contractService.submitConsent(contract.contractId, {
+      const consentResult = await contractService.submitConsent(contract.contractId, {
         contractVersionId: contract.versionId,
         action: 'ACCEPT',
         contentHash: contract.contentHash,
@@ -239,7 +239,15 @@ export const ContractQuickConsentCard: React.FC<ContractQuickConsentCardProps> =
         idempotencyKey,
       });
 
-      toast.success('Đã xác nhận điều khoản thuê trang phục!');
+      if (consentResult.emailDelivery?.status === 'SENT') {
+        toast.success(`Đã ký hợp đồng và gửi bản PDF đến ${consentResult.emailDelivery.recipient}.`);
+      } else if (consentResult.emailDelivery?.status === 'IN_PROGRESS') {
+        toast.success('Đã ký hợp đồng. Hệ thống đang gửi bản PDF đến email của bạn.');
+      } else if (consentResult.emailDelivery?.status === 'FAILED') {
+        toast.warning('Đã ký hợp đồng, nhưng chưa thể gửi email. Bạn vẫn có thể tải PDF trong mục Hợp đồng.');
+      } else {
+        toast.success('Đã xác nhận điều khoản thuê trang phục!');
+      }
       onConsented();
     } catch (err: unknown) {
       console.error('Failed to submit quick consent:', err);
