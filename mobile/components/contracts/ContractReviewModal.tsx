@@ -217,23 +217,36 @@ export function ContractReviewModal({
 
     setSubmitting(true);
     try {
-      await contractApi.submitConsent(activeDetail.contractId, {
-        contractVersionId: activeDetail.versionId,
-        action: 'ACCEPT',
-        contentHash: activeDetail.contentHash,
-        bookingFingerprint: activeDetail.bookingFingerprint,
-        idempotencyKey: createConsentIdempotencyKey(),
-      });
+      const consentResult = await contractApi.submitConsent(
+        activeDetail.contractId,
+        {
+          contractVersionId: activeDetail.versionId,
+          action: 'ACCEPT',
+          contentHash: activeDetail.contentHash,
+          bookingFingerprint: activeDetail.bookingFingerprint,
+          idempotencyKey: createConsentIdempotencyKey(),
+        },
+      );
 
       bumpBookingSync();
       const updatedReadiness = await contractApi.getBookingReadiness(bookingId);
       setReadiness(updatedReadiness);
 
+      const emailStatus = consentResult.emailDelivery?.status;
+      const emailRecipient = consentResult.emailDelivery?.recipient;
+      const emailHint =
+        emailStatus === 'SENT' && emailRecipient
+          ? ` Bản PDF đã được gửi đến ${emailRecipient}.`
+          : emailStatus === 'IN_PROGRESS'
+            ? ' Hệ thống đang gửi bản PDF đến email của bạn.'
+            : emailStatus === 'FAILED'
+              ? ' Bạn có thể tải bản PDF trực tiếp trong mục Hợp đồng.'
+              : '';
+
       if (updatedReadiness.ready) {
         pushLocalBanner({
           title: 'Đã xác nhận Hợp đồng điện tử',
-          content:
-            'Bạn đã đồng ý đầy đủ điều khoản hợp đồng. Đang chuyển sang bước thanh toán PayOS.',
+          content: `Bạn đã đồng ý đầy đủ điều khoản hợp đồng.${emailHint} Đang chuyển sang bước thanh toán PayOS.`,
           type: 'CONTRACT_SIGNED',
           metadata: { bookingId },
         });
@@ -247,7 +260,10 @@ export function ContractReviewModal({
       if (nextPending) {
         setActiveProviderId(nextPending.providerId);
         setAgreed(false);
-        show('Đã xác nhận hợp đồng shop hiện tại. Vui lòng xem tiếp shop kế tiếp.', 'info');
+        show(
+          `Đã xác nhận hợp đồng shop hiện tại.${emailHint} Vui lòng xem tiếp shop kế tiếp.`,
+          'info',
+        );
       } else {
         await loadContracts();
       }

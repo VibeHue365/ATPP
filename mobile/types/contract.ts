@@ -85,6 +85,11 @@ export interface ContractConsentResponse {
   decidedAt: string;
   formedAt: string | null;
   effectiveAt: string | null;
+  emailDelivery?: {
+    status: 'SENT' | 'FAILED' | 'IN_PROGRESS';
+    recipient: string;
+    sentAt: string | null;
+  } | null;
 }
 
 export interface ContractEligibilityItem {

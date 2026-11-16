@@ -8,6 +8,7 @@ export function openNotificationData(
       ? (data.booking as Record<string, unknown>)
       : {};
   const bookingId = String(data.bookingId ?? nested._id ?? "");
+  const contractId = String(data.contractId ?? "");
   const paymentCode = String(data.paymentCode ?? data.code ?? "");
   if (paymentCode) {
     router.push({
@@ -18,6 +19,10 @@ export function openNotificationData(
   }
   if (bookingId) {
     router.push(`/booking/${bookingId}` as Href);
+    return true;
+  }
+  if (contractId) {
+    router.push("/contracts" as Href);
     return true;
   }
   router.push("/notifications" as Href);
