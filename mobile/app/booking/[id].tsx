@@ -21,6 +21,9 @@ import { CustomerRefundPanel } from '@/components/booking/CustomerRefundPanel';
 import { BookingRouteMapCard } from '@/components/booking/BookingRouteMapCard';
 import { LocationChangeModal } from '@/components/booking/LocationChangeModal';
 import { RescheduleModal } from '@/components/booking/RescheduleModal';
+import { HeritageWeatherCard } from '@/components/weather/HeritageWeatherCard';
+import { PlanBSelectionModal } from '@/components/weather/PlanBSelectionModal';
+import { WeatherCancellationModal } from '@/components/weather/WeatherCancellationModal';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppModal } from '@/components/ui/AppModal';
 import { ErrorState, LoadingState } from '@/components/ui/ScreenState';
@@ -110,6 +113,8 @@ function BookingDetail() {
   const [reason, setReason] = useState('');
   const [rescheduleItem, setRescheduleItem] = useState<BookingItem | null>(null);
   const [locationSchedule, setLocationSchedule] = useState<BookingSchedule | null>(null);
+  const [planBModalOpen, setPlanBModalOpen] = useState(false);
+  const [weatherCancelModalOpen, setWeatherCancelModalOpen] = useState(false);
 
   if (loading) return <LoadingState label="Đang tải chi tiết vé đặt lịch..." />;
   if (error || !booking)
@@ -271,6 +276,26 @@ function BookingDetail() {
         </Pressable>
 
         <ActionNotice booking={booking} />
+
+        {photoItems.length > 0 && (
+          <HeritageWeatherCard
+            bookingId={booking._id}
+            shootDate={
+              photoItems[0].shootDate
+                ? new Date(photoItems[0].shootDate).toISOString().split('T')[0]
+                : photoshootSchedule?.scheduledDate
+                  ? new Date(photoshootSchedule.scheduledDate).toISOString().split('T')[0]
+                  : ''
+            }
+            timeSlot={photoItems[0].shootTimeSlot || photoshootSchedule?.timeSlot || '09:00 - 11:00'}
+            spotId={(photoItems[0] as any).spotId}
+            spotName={photoItems[0].shootLocation || photoshootSchedule?.locationAddress || 'Di tích Huế'}
+            weatherRescheduleCount={(booking as any).weatherRescheduleCount || 0}
+            hasPendingWeatherAction={(booking as any).hasPendingWeatherAction || false}
+            onOpenPlanB={() => setPlanBModalOpen(true)}
+            onOpenCancellation={() => setWeatherCancelModalOpen(true)}
+          />
+        )}
 
         <Section
           title={booking.bookingType === 'COMBO' ? 'Chi tiết gói Combo' : 'Thông tin dịch vụ'}>
@@ -549,6 +574,36 @@ function BookingDetail() {
         onClose={() => setLocationSchedule(null)}
         onSuccess={reload}
       />
+      {photoItems.length > 0 && (
+        <>
+          <PlanBSelectionModal
+            visible={planBModalOpen}
+            onClose={() => setPlanBModalOpen(false)}
+            bookingId={booking._id}
+            originalSpotName={photoItems[0].shootLocation || photoshootSchedule?.locationAddress || 'Di tích Huế'}
+            originalTravelFee={(photoItems[0] as any).travelFee || 0}
+            originalDate={
+              photoItems[0].shootDate
+                ? new Date(photoItems[0].shootDate).toISOString().split('T')[0]
+                : photoshootSchedule?.scheduledDate
+                  ? new Date(photoshootSchedule.scheduledDate).toISOString().split('T')[0]
+                  : ''
+            }
+            originalTimeSlot={photoItems[0].shootTimeSlot || photoshootSchedule?.timeSlot || '09:00 - 11:00'}
+            weatherRescheduleCount={(booking as any).weatherRescheduleCount || 0}
+            onSuccess={() => void reload()}
+          />
+
+          <WeatherCancellationModal
+            visible={weatherCancelModalOpen}
+            onClose={() => setWeatherCancelModalOpen(false)}
+            bookingId={booking._id}
+            bookingCode={booking.bookingCode}
+            weatherRescheduleCount={(booking as any).weatherRescheduleCount || 0}
+            onSuccess={() => void reload()}
+          />
+        </>
+      )}
     </SafeAreaView>
   );
 }
