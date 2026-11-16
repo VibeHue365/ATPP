@@ -2695,6 +2695,19 @@ export class BookingsService implements OnApplicationBootstrap {
               s.status !== 'EXPIRED',
           ) as any;
           if (matchedSchedule) {
+            let slot = item.shootTimeSlot || matchedSchedule.timeSlot;
+            if (!slot && matchedSchedule.startsAt && matchedSchedule.endsAt) {
+              const startD = new Date(matchedSchedule.startsAt);
+              const endD = new Date(matchedSchedule.endsAt);
+              const startH = String(startD.getHours()).padStart(2, '0');
+              const startM = String(startD.getMinutes()).padStart(2, '0');
+              const endH = String(endD.getHours()).padStart(2, '0');
+              const endM = String(endD.getMinutes()).padStart(2, '0');
+              slot = `${startH}:${startM} - ${endH}:${endM}`;
+            }
+            if (slot && !matchedSchedule.timeSlot) {
+              matchedSchedule.timeSlot = slot;
+            }
             return {
               ...item,
               name: resolvedName,
@@ -2702,7 +2715,7 @@ export class BookingsService implements OnApplicationBootstrap {
                 item.shootDate ||
                 matchedSchedule.startsAt ||
                 matchedSchedule.scheduledDate,
-              shootTimeSlot: item.shootTimeSlot || matchedSchedule.timeSlot,
+              shootTimeSlot: slot || null,
               shootLocation:
                 item.shootLocation || matchedSchedule.locationAddress,
             };
@@ -2785,6 +2798,19 @@ export class BookingsService implements OnApplicationBootstrap {
             s.status !== 'EXPIRED',
         ) as any;
         if (matchedSchedule) {
+          let slot = item.shootTimeSlot || matchedSchedule.timeSlot;
+          if (!slot && matchedSchedule.startsAt && matchedSchedule.endsAt) {
+            const startD = new Date(matchedSchedule.startsAt);
+            const endD = new Date(matchedSchedule.endsAt);
+            const startH = String(startD.getHours()).padStart(2, '0');
+            const startM = String(startD.getMinutes()).padStart(2, '0');
+            const endH = String(endD.getHours()).padStart(2, '0');
+            const endM = String(endD.getMinutes()).padStart(2, '0');
+            slot = `${startH}:${startM} - ${endH}:${endM}`;
+          }
+          if (slot && !matchedSchedule.timeSlot) {
+            matchedSchedule.timeSlot = slot;
+          }
           return {
             ...item,
             name: resolvedName,
@@ -2793,7 +2819,7 @@ export class BookingsService implements OnApplicationBootstrap {
               item.shootDate ||
               matchedSchedule.startsAt ||
               matchedSchedule.scheduledDate,
-            shootTimeSlot: item.shootTimeSlot || matchedSchedule.timeSlot,
+            shootTimeSlot: slot || null,
             shootLocation:
               item.shootLocation || matchedSchedule.locationAddress,
           };
@@ -2928,6 +2954,16 @@ export class BookingsService implements OnApplicationBootstrap {
             s.status !== 'EXPIRED',
         ) as any;
         if (matchedSchedule) {
+          let slot = item.shootTimeSlot || matchedSchedule.timeSlot || null;
+          if (!slot && matchedSchedule.startsAt && matchedSchedule.endsAt) {
+            const fmt = new Intl.DateTimeFormat('en-GB', {
+              timeZone: matchedSchedule.timezone || 'Asia/Ho_Chi_Minh',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            });
+            slot = `${fmt.format(new Date(matchedSchedule.startsAt))} - ${fmt.format(new Date(matchedSchedule.endsAt))}`;
+          }
           return {
             ...item,
             name: resolvedName,
@@ -2935,7 +2971,7 @@ export class BookingsService implements OnApplicationBootstrap {
               item.shootDate ||
               matchedSchedule.startsAt ||
               matchedSchedule.scheduledDate,
-            shootTimeSlot: item.shootTimeSlot || matchedSchedule.timeSlot,
+            shootTimeSlot: slot,
             shootLocation:
               item.shootLocation || matchedSchedule.locationAddress,
           };
@@ -3720,6 +3756,30 @@ export class BookingsService implements OnApplicationBootstrap {
       );
     }
 
+    // PR 3 Financial Guard: Chặn hủy thông thường khi đang có yêu cầu thời tiết chờ xử lý
+    if (booking.hasPendingWeatherAction) {
+      throw new BadRequestException(
+        'Đơn hàng đang có yêu cầu đổi lịch hoặc hủy vì thời tiết đang chờ xử lý. Không thể thực hiện hủy đơn thông thường.',
+      );
+    }
+
+    try {
+      const activeWeatherCancel = await this.bookingModel.db
+        .model('WeatherCancellationRequest')
+        .findOne({
+          bookingId: booking._id,
+          status: 'PENDING_ADMIN_REVIEW',
+        })
+        .lean();
+      if (activeWeatherCancel) {
+        throw new BadRequestException(
+          'Đơn hàng đang có yêu cầu hủy vì thời tiết chờ Admin xử lý. Không thể thực hiện hủy đơn thông thường.',
+        );
+      }
+    } catch (err: any) {
+      if (err instanceof BadRequestException) throw err;
+    }
+
     const now = new Date();
     const cancellationPolicy =
       await this.policyResolverService.getCancellationPolicy();
@@ -3941,36 +4001,42 @@ export class BookingsService implements OnApplicationBootstrap {
         }
 
         if (providerPenalty > 0) {
-          const provider = await this.bookingModel.db
-            .model('Provider')
-            .findById(new Types.ObjectId(pIdStr));
-          if (provider) {
-            let bankName = 'VietinBank';
-            let accountNumber = '1029384756';
-            let accountHolder = 'PROVIDER STUDIO';
-
-            if (
-              provider.paymentAccounts &&
-              provider.paymentAccounts.length > 0
-            ) {
-              const activeAccount =
-                provider.paymentAccounts.find((a: any) => a.isDefault) ||
-                provider.paymentAccounts[0];
-              bankName = activeAccount.bankName || bankName;
-              accountNumber = activeAccount.accountNumberMasked
-                ? activeAccount.accountNumberMasked.replace(/\*/g, '8')
-                : accountNumber;
-              accountHolder = activeAccount.accountHolder || accountHolder;
-            }
-
-            const transferRef = `CANCEL_PENALTY_${booking.bookingCode}`;
-            await this.paymentsService.executeAutoTransfer(
-              bankName,
-              accountNumber,
-              accountHolder,
-              providerPenalty,
-              transferRef,
+          if (booking.hasPendingWeatherAction) {
+            console.warn(
+              `Blocked executeAutoTransfer penalty for booking ${booking.bookingCode} due to active weather action.`,
             );
+          } else {
+            const provider = await this.bookingModel.db
+              .model('Provider')
+              .findById(new Types.ObjectId(pIdStr));
+            if (provider) {
+              let bankName = 'VietinBank';
+              let accountNumber = '1029384756';
+              let accountHolder = 'PROVIDER STUDIO';
+
+              if (
+                provider.paymentAccounts &&
+                provider.paymentAccounts.length > 0
+              ) {
+                const activeAccount =
+                  provider.paymentAccounts.find((a: any) => a.isDefault) ||
+                  provider.paymentAccounts[0];
+                bankName = activeAccount.bankName || bankName;
+                accountNumber = activeAccount.accountNumberMasked
+                  ? activeAccount.accountNumberMasked.replace(/\*/g, '8')
+                  : accountNumber;
+                accountHolder = activeAccount.accountHolder || accountHolder;
+              }
+
+              const transferRef = `CANCEL_PENALTY_${booking.bookingCode}`;
+              await this.paymentsService.executeAutoTransfer(
+                bankName,
+                accountNumber,
+                accountHolder,
+                providerPenalty,
+                transferRef,
+              );
+            }
           }
         }
       }

@@ -815,10 +815,23 @@ export class BookingsSchedulerService {
         .find({
           status: { $in: [BookingStatus.Confirmed, BookingStatus.DepositPaid] },
         })
-        .select('_id bookingCode customerId providerIds status statusTimeline')
+        .select(
+          '_id bookingCode customerId providerIds status statusTimeline hasPendingWeatherAction disputeDeferredUntil',
+        )
         .lean();
 
       for (const booking of pendingBookings) {
+        // PR 3 Financial Guard: Hoãn auto-dispute nếu đơn có cờ thời tiết hoặc đang trong thời gian hoãn
+        if (
+          booking.hasPendingWeatherAction ||
+          (booking.disputeDeferredUntil &&
+            now < new Date(booking.disputeDeferredUntil))
+        ) {
+          this.logger.log(
+            `Skipping auto-dispute for booking ${booking.bookingCode} due to active weather action or dispute deferral.`,
+          );
+          continue;
+        }
         const photoItem = await this.bookingItemModel.findOne({
           bookingId: booking._id,
           itemType: BookingItemType.PhotographyPackage,
