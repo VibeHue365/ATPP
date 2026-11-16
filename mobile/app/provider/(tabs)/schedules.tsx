@@ -172,7 +172,21 @@ export default function ProviderSchedulesScreen() {
         firstItem?.depositAmount ||
         0;
 
+      const photoSched =
+        b.photoshootSchedule ||
+        (Array.isArray(b.schedules)
+          ? b.schedules.find(
+              (s: any) =>
+                s?.scheduleType === 'PHOTOSHOOT' &&
+                s?.status !== 'CANCELLED' &&
+                s?.status !== 'EXPIRED',
+            )
+          : null);
+
       const startRaw =
+        firstItem?.shootDate ||
+        photoSched?.startsAt ||
+        photoSched?.scheduledDate ||
         firstItem?.rentalPeriod?.startDate ||
         firstItem?.startDate ||
         b.startDate ||
@@ -180,14 +194,27 @@ export default function ProviderSchedulesScreen() {
       const endRaw =
         firstItem?.rentalPeriod?.endDate ||
         firstItem?.endDate ||
+        photoSched?.endsAt ||
         b.endDate ||
         startRaw;
 
       const startDateObj = startRaw ? new Date(startRaw) : new Date();
       const endDateObj = endRaw ? new Date(endRaw) : new Date();
 
-      const startDayKey = startDateObj.toISOString().slice(0, 10);
+      const startDayKey =
+        photoSched?.providerLocalDate || startDateObj.toISOString().slice(0, 10);
       const endDayKey = endDateObj.toISOString().slice(0, 10);
+
+      const shootTimeLabel =
+        firstItem?.shootTimeSlot ||
+        photoSched?.timeSlot ||
+        (photoSched?.startsAt
+          ? new Date(photoSched.startsAt).toLocaleTimeString('vi-VN', {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            })
+          : '15:00');
 
       const shootSnap =
         b.photoshootSchedule?.locationSnapshot ||
@@ -214,7 +241,7 @@ export default function ProviderSchedulesScreen() {
           bookingId: b._id,
           bookingCode: code,
           type: 'PHOTOSHOOT',
-          timeLabel: '15:00',
+          timeLabel: shootTimeLabel,
           dateStr: startDayKey,
           dateDisplay: startDateObj.toLocaleDateString('vi-VN'),
           customerName: custName,

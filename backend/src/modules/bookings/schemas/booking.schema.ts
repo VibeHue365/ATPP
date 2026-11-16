@@ -367,6 +367,24 @@ export class Booking {
 
   @Prop({ type: Object, default: null })
   voucherSnapshot?: VoucherSnapshot | null;
+
+  /** SÃ´Ì lÃ¢Ì€n Ä‘Ã£ dÆ¡Ì€i liÌ£ch do thÆ¡Ì€i tiÃªÌt (tÃ´Ìi Ä‘a 2 lÃ¢Ì€n miÃªÌƒn phiÌ) per AD-02 */
+  @Prop({ type: Number, default: 0, min: 0 })
+  weatherRescheduleCount: number;
+
+  /** CÆ¡Ì€ khoÌa taÌ€i chiÌnh: true khi coÌ Proposal hoÄƒÌ£c Cancellation Ä‘ang chÆ¡Ì€ duyÃªÌ£t */
+  @Prop({ type: Boolean, default: false, index: true })
+  hasPendingWeatherAction: boolean;
+
+  @Prop({ type: Types.ObjectId, ref: 'WeatherProposal', default: null })
+  activeWeatherProposalId?: Types.ObjectId | null;
+
+  @Prop({ type: Types.ObjectId, ref: 'WeatherCancellationRequest', default: null })
+  activeWeatherCancellationId?: Types.ObjectId | null;
+
+  /** MÃ´Ìc thÆ¡Ì€i gian hoaÌƒn auto-dispute sweeper */
+  @Prop({ type: Date, default: null, index: true })
+  disputeDeferredUntil?: Date | null;
 }
 
 export const BookingSchema = SchemaFactory.createForClass(Booking);
