@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -21,6 +22,13 @@ import {
   BookingScheduleDocument,
   BookingScheduleType,
 } from '../../bookings/schemas/booking-schedule.schema';
+import { SlotLeaseStatus } from '../../bookings/schemas/inventory-slot-lease.schema';
+import { InventorySlotLeaseService } from '../../bookings/services/inventory-slot-lease.service';
+import {
+  TimeSlotEngineService,
+  type ShopScheduleConfig,
+} from '../../bookings/services/time-slot-engine.service';
+import { ProductBusyCacheService } from '../../bookings/services/product-busy-cache.service';
 import {
   InventoryReservation,
   InventoryReservationDocument,
@@ -59,7 +67,90 @@ export class ComboRescheduleCoordinatorService {
     private readonly inventoryReservationModel: Model<InventoryReservationDocument>,
     private readonly redisService: RedisService,
     private readonly configService: ConfigService,
+    @Optional()
+    private readonly slotLeaseService?: InventorySlotLeaseService,
+    @Optional()
+    private readonly timeSlotEngine?: TimeSlotEngineService,
+    @Optional()
+    private readonly productBusyCacheService?: ProductBusyCacheService,
   ) {}
+
+  /**
+   * Resolves new RENTAL + TURNAROUND slots for hourly / slot-leased rental items.
+   */
+  private async resolveShiftedLeasePlan(
+    item: BookingItemDocument,
+    newRentalFrom: Date,
+    newRentalTo: Date,
+    fallbackInventoryItemId?: Types.ObjectId | null,
+  ) {
+    const usesLease = Boolean(
+      item.slotLeaseRequired || item.rentalType === 'HOURLY',
+    );
+    const inventoryItemId =
+      item.inventoryItemId ?? fallbackInventoryItemId ?? null;
+    if (!usesLease || !this.timeSlotEngine || !inventoryItemId) {
+      return null;
+    }
+
+    let turnaroundSlots = 1;
+    let scheduleConfig: ShopScheduleConfig | undefined;
+    try {
+      const providersColl = this.bookingModel?.db?.collection('providers');
+      if (providersColl && item.providerId) {
+        const providerDoc = await providersColl.findOne({
+          _id: item.providerId,
+        });
+        const settings = (providerDoc as any)?.rentalSettings;
+        if (settings) {
+          turnaroundSlots = settings.turnaroundSlots ?? 1;
+          scheduleConfig = {
+            offDays: settings.offDays,
+            weeklyOffDays: settings.weeklyOffDays,
+          };
+        }
+      }
+    } catch {
+      // Fallback to default turnaround=1 when DB connection is mocked in unit tests
+    }
+
+    const startParts = this.timeSlotEngine.getVnParts(newRentalFrom);
+    const startSlotIndex = Math.max(
+      1,
+      Math.min(7, Math.floor((startParts.hour - 7) / 2) + 1),
+    );
+    const durationHours = Math.max(
+      2,
+      Math.round(
+        (newRentalTo.getTime() - newRentalFrom.getTime()) / (1000 * 60 * 60),
+      ),
+    );
+    const rentalSlotCount = Math.max(1, Math.ceil(durationHours / 2));
+
+    const upfrontBlock = this.timeSlotEngine.calculateUpfrontBlock(
+      startParts.dateStr,
+      startSlotIndex,
+      rentalSlotCount,
+      turnaroundSlots,
+      scheduleConfig,
+    );
+
+    const rentalSlots = upfrontBlock.rentalSlots.map((s) => ({
+      dateStr: s.dateStr,
+      slotIndex: s.slotIndex,
+    }));
+    const cleaningSlots = upfrontBlock.turnaroundSlots.map((s) => ({
+      dateStr: s.dateStr,
+      slotIndex: s.slotIndex,
+    }));
+
+    return {
+      inventoryItemId,
+      rentalSlots,
+      turnaroundSlots: cleaningSlots,
+      allSlots: [...rentalSlots, ...cleaningSlots],
+    };
+  }
 
   /**
    * Checks whether a booking is a multi-provider Combo booking.
@@ -124,21 +215,56 @@ export class ComboRescheduleCoordinatorService {
         },
       });
 
-      if (!currentReservation) continue;
+      const targetInventoryItemId =
+        currentReservation?.inventoryItemId ?? item.inventoryItemId ?? null;
+      if (!targetInventoryItemId) continue;
 
-      // Check if another booking has reserved the same inventory item in the new window
-      const conflict = await this.inventoryReservationModel.findOne({
-        inventoryItemId: currentReservation.inventoryItemId,
-        bookingId: { $ne: new Types.ObjectId(bookingId.toString()) },
-        status: {
-          $in: [ReservationStatus.TempReserved, ReservationStatus.Confirmed],
-        },
-        reservedFrom: { $lt: newRentalTo },
-        reservedTo: { $gt: newRentalFrom },
-      });
+      if (currentReservation) {
+        // Check if another booking has reserved the same inventory item in the new window
+        const conflict = await this.inventoryReservationModel.findOne({
+          inventoryItemId: currentReservation.inventoryItemId,
+          bookingId: { $ne: new Types.ObjectId(bookingId.toString()) },
+          status: {
+            $in: [ReservationStatus.TempReserved, ReservationStatus.Confirmed],
+          },
+          reservedFrom: { $lt: newRentalTo },
+          reservedTo: { $gt: newRentalFrom },
+        });
 
-      if (conflict) {
-        conflictingItemIds.push(item._id.toString());
+        if (conflict) {
+          conflictingItemIds.push(item._id.toString());
+          continue;
+        }
+      }
+
+      // Check V2 InventorySlotLease conflicts for hourly / slot-leased garments
+      const leasePlan = await this.resolveShiftedLeasePlan(
+        item,
+        newRentalFrom,
+        newRentalTo,
+        targetInventoryItemId,
+      );
+      const leaseColl = this.bookingModel?.db?.collection(
+        'inventory_slot_leases',
+      );
+      if (leasePlan && leaseColl && leasePlan.allSlots.length > 0) {
+        const now = new Date();
+        const leaseConflict = await leaseColl.findOne({
+          inventoryItemId: leasePlan.inventoryItemId,
+          bookingItemId: { $ne: item._id },
+          $or: leasePlan.allSlots,
+          $and: [
+            {
+              $or: [
+                { status: SlotLeaseStatus.Confirmed },
+                { status: SlotLeaseStatus.Temp, expiresAt: { $gt: now } },
+              ],
+            },
+          ],
+        });
+        if (leaseConflict) {
+          conflictingItemIds.push(item._id.toString());
+        }
       }
     }
 
@@ -497,6 +623,13 @@ export class ComboRescheduleCoordinatorService {
         );
 
         // Update InventoryReservation dates
+        const existingReservation = await this.inventoryReservationModel.findOne({
+          bookingItemId: item._id,
+          status: {
+            $in: [ReservationStatus.TempReserved, ReservationStatus.Confirmed],
+          },
+        });
+
         await this.inventoryReservationModel.updateMany(
           {
             bookingItemId: item._id,
@@ -511,6 +644,48 @@ export class ComboRescheduleCoordinatorService {
             },
           },
         );
+
+        // Synchronize V2 InventorySlotLease (RENTAL + TURNAROUND) if item uses slot leases
+        const leasePlan = await this.resolveShiftedLeasePlan(
+          item,
+          shift.newRentalFrom,
+          shift.newRentalTo,
+          existingReservation?.inventoryItemId ?? null,
+        );
+        if (leasePlan && this.slotLeaseService) {
+          const leaseColl = this.bookingModel?.db?.collection(
+            'inventory_slot_leases',
+          );
+          if (leaseColl) {
+            await leaseColl.updateMany(
+              {
+                bookingItemId: item._id,
+                status: {
+                  $in: [SlotLeaseStatus.Temp, SlotLeaseStatus.Confirmed],
+                },
+              },
+              {
+                $set: {
+                  status: SlotLeaseStatus.Released,
+                  releasedAt: new Date(),
+                  releaseReason: 'RESCHEDULED',
+                },
+              },
+            );
+          }
+
+          await this.slotLeaseService.acquireUpfrontBlockLease({
+            inventoryItemId: leasePlan.inventoryItemId,
+            providerId: item.providerId,
+            bookingId: booking._id,
+            bookingItemId: item._id,
+            reservationId: existingReservation?._id ?? null,
+            rentalSlots: leasePlan.rentalSlots,
+            turnaroundSlots: leasePlan.turnaroundSlots,
+            status: SlotLeaseStatus.Confirmed,
+          });
+          this.productBusyCacheService?.invalidate();
+        }
 
         // Update BookingSchedule for RentalPeriod, Pickup and Return
         const shiftMs = shift.shiftDays * 24 * 60 * 60 * 1000;

@@ -79,4 +79,31 @@ describe('formatNotification', () => {
     expect(contractDoc.category).toBe('CONTRACT');
     expect(contractDoc.contractId).toBe('ct-1');
   });
+
+  it('formats WEATHER notifications with dedicated category, icon and actionRequired flag', () => {
+    const alert = formatNotification(
+      makeNotification({
+        type: 'WEATHER',
+        title: 'Cảnh báo thời tiết xấu',
+        content: 'Dự báo mưa lớn tại Đại Nội. Hãy chọn Plan B để đổi lịch chụp.',
+        metadata: { bookingId: 'bk-weather-1' },
+      }),
+    );
+
+    expect(alert.category).toBe('WEATHER');
+    expect(alert.categoryLabel).toBe('THỜI TIẾT');
+    expect(alert.icon).toBe('cloud-outline');
+    expect(alert.actionRequired).toBe(true);
+    expect(alert.bookingId).toBe('bk-weather-1');
+
+    const info = formatNotification(
+      makeNotification({
+        type: 'WEATHER',
+        title: 'Hoàn tất cập nhật điểm chụp',
+        content: 'Lịch chụp mới đã được cập nhật thuận lợi.',
+      }),
+    );
+    expect(info.category).toBe('WEATHER');
+    expect(info.actionRequired).toBe(false);
+  });
 });

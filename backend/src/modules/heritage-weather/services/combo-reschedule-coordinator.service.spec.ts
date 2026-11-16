@@ -18,6 +18,10 @@ import {
   ReservationStatus,
 } from '../../products/schemas/inventory-reservation.schema';
 import { RedisService } from '../../../common/redis/redis.service';
+import { SlotLeaseStatus } from '../../bookings/schemas/inventory-slot-lease.schema';
+import { InventorySlotLeaseService } from '../../bookings/services/inventory-slot-lease.service';
+import { TimeSlotEngineService } from '../../bookings/services/time-slot-engine.service';
+import { ProductBusyCacheService } from '../../bookings/services/product-busy-cache.service';
 
 describe('ComboRescheduleCoordinatorService', () => {
   let service: ComboRescheduleCoordinatorService;
@@ -56,6 +60,14 @@ describe('ComboRescheduleCoordinatorService', () => {
     get: jest.fn().mockReturnValue('https://vibe-hue.vn'),
   };
 
+  const mockSlotLeaseService: any = {
+    acquireUpfrontBlockLease: jest.fn().mockResolvedValue([]),
+  };
+
+  const mockProductBusyCacheService: any = {
+    invalidate: jest.fn(),
+  };
+
   const photoProviderId = new Types.ObjectId();
   const shopProviderId = new Types.ObjectId();
   const bookingId = new Types.ObjectId();
@@ -76,6 +88,12 @@ describe('ComboRescheduleCoordinatorService', () => {
         },
         { provide: RedisService, useValue: mockRedisService },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: InventorySlotLeaseService, useValue: mockSlotLeaseService },
+        TimeSlotEngineService,
+        {
+          provide: ProductBusyCacheService,
+          useValue: mockProductBusyCacheService,
+        },
       ],
     }).compile();
 
@@ -314,6 +332,60 @@ describe('ComboRescheduleCoordinatorService', () => {
       expect(result.overallStatus).toBe(ProposalStatus.REJECTED);
       expect(result.reason).toContain('khách hàng khác đặt thuê');
       expect(proposal.status).toBe(ProposalStatus.REJECTED);
+    });
+
+    it('should release old leases and acquire new InventorySlotLease for HOURLY slotLeaseRequired combo rental item', async () => {
+      const invItemId = new Types.ObjectId();
+      const rentalItemId = new Types.ObjectId();
+      const rentalItem: any = {
+        _id: rentalItemId,
+        providerId: shopProviderId,
+        inventoryItemId: invItemId,
+        itemType: BookingItemType.Product,
+        rentalType: 'HOURLY',
+        slotLeaseRequired: true,
+        rentalFrom: new Date('2026-11-15T02:00:00.000Z'), // 09:00 VN
+        rentalTo: new Date('2026-11-15T04:00:00.000Z'), // 11:00 VN
+      };
+      const proposal: any = {
+        _id: new Types.ObjectId(),
+        bookingId,
+        changeType: ProposalChangeType.BOTH,
+        originalSchedule: {
+          date: '2026-11-15',
+          timeSlot: '09:00 - 11:00',
+        },
+        proposedSchedule: {
+          date: '2026-11-16',
+          timeSlot: '09:00 - 11:00',
+          spotName: 'Đại Nội',
+          spotId: new Types.ObjectId(),
+        },
+      };
+      const comboBooking: any = {
+        _id: bookingId,
+        bookingType: BookingType.Combo,
+      };
+
+      mockBookingItemModel.find.mockResolvedValueOnce([rentalItem]);
+      mockInventoryReservationModel.findOne.mockResolvedValueOnce({
+        _id: new Types.ObjectId(),
+        inventoryItemId: invItemId,
+      });
+      mockBookingScheduleModel.find.mockResolvedValueOnce([]);
+
+      await service.applyComboProposalChanges(proposal, comboBooking);
+
+      expect(mockSlotLeaseService.acquireUpfrontBlockLease).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inventoryItemId: invItemId,
+          bookingId,
+          bookingItemId: rentalItemId,
+          status: SlotLeaseStatus.Confirmed,
+          rentalSlots: [{ dateStr: '2026-11-16', slotIndex: 2 }],
+        }),
+      );
+      expect(mockProductBusyCacheService.invalidate).toHaveBeenCalled();
     });
   });
 });

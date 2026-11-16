@@ -8,6 +8,7 @@ export type NotificationCategory =
   | 'RETURN'
   | 'REFUND'
   | 'DISPUTE'
+  | 'WEATHER'
   | 'BOOKING'
   | 'SYSTEM';
 
@@ -164,6 +165,12 @@ export const NOTIFICATION_CATEGORY_STYLE: Record<
     bg: '#FDECEE',
     label: 'SỰ CỐ / HỖ TRỢ',
   },
+  WEATHER: {
+    icon: 'cloud-outline',
+    color: '#0284C7',
+    bg: '#E0F2FE',
+    label: 'THỜI TIẾT',
+  },
   BOOKING: {
     icon: 'calendar-outline',
     color: '#BA0049',
@@ -250,11 +257,24 @@ export function formatNotification(item: NotificationItem): FormattedNotificatio
     category = 'HANDOVER';
   } else if (joined.includes('trả đồ') || joined.includes('trả áo')) {
     category = 'RETURN';
+  } else if (
+    rawType === 'WEATHER' ||
+    joined.includes('thời tiết') ||
+    joined.includes('plan b') ||
+    joined.includes('cảnh báo mưa')
+  ) {
+    category = 'WEATHER';
   } else if (rawType === 'BOOKING' || joined.includes('đơn') || joined.includes('lịch')) {
     category = 'BOOKING';
   }
 
   const style = NOTIFICATION_CATEGORY_STYLE[category];
+  const weatherNeedsAction =
+    category === 'WEATHER' &&
+    (joined.includes('plan b') ||
+      joined.includes('cảnh báo') ||
+      joined.includes('đề xuất') ||
+      joined.includes('chờ duyệt'));
   return {
     id: item._id,
     category,
@@ -269,6 +289,9 @@ export function formatNotification(item: NotificationItem): FormattedNotificatio
     paymentCode,
     statusCode: detectedStatus,
     actionRequired:
-      category === 'CONTRACT' || category === 'HANDOVER' || category === 'DISPUTE',
+      category === 'CONTRACT' ||
+      category === 'HANDOVER' ||
+      category === 'DISPUTE' ||
+      weatherNeedsAction,
   };
 }

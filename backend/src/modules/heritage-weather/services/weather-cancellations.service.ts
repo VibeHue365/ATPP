@@ -47,6 +47,7 @@ import { OpenMeteoClientService } from './open-meteo-client.service';
 import { HeritageScoringService } from './heritage-scoring.service';
 import { RefundOutboxService } from './refund-outbox.service';
 import { WeatherNotificationService } from './weather-notification.service';
+import { InventorySlotLeaseService } from '../../bookings/services/inventory-slot-lease.service';
 import { SubmitWeatherCancellationDto } from '../dto/submit-weather-cancellation.dto';
 import { AdminReviewWeatherCancellationDto } from '../dto/admin-review-weather-cancellation.dto';
 import { ListWeatherCancellationsQueryDto } from '../dto/list-weather-cancellations-query.dto';
@@ -75,6 +76,8 @@ export class WeatherCancellationsService {
     private readonly refundOutboxService: RefundOutboxService,
     @Optional()
     private readonly weatherNotificationService?: WeatherNotificationService,
+    @Optional()
+    private readonly slotLeaseService?: InventorySlotLeaseService,
   ) {}
 
   /**
@@ -429,6 +432,13 @@ export class WeatherCancellationsService {
     booking.hasPendingWeatherAction = false;
     booking.activeWeatherCancellationId = null;
     await booking.save();
+
+    if (this.slotLeaseService) {
+      await this.slotLeaseService.releaseBookingLeases(
+        booking._id,
+        'CANCELLED',
+      );
+    }
 
     let refundRequestDoc: RefundRequestDocument | null = null;
 

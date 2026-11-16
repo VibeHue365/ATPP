@@ -76,7 +76,7 @@ function Notifications() {
         if (filter === 'UNREAD') return !raw.isRead;
         if (filter === 'ACTION') return formatted.actionRequired;
         if (filter === 'RENTAL') {
-          return ['CONTRACT', 'HANDOVER', 'RETURN', 'BOOKING'].includes(
+          return ['CONTRACT', 'HANDOVER', 'RETURN', 'BOOKING', 'WEATHER'].includes(
             formatted.category,
           );
         }

@@ -28,6 +28,7 @@ import { RefundRequest } from '../../payments/schemas/refund-request.schema';
 import { OpenMeteoClientService } from './open-meteo-client.service';
 import { HeritageScoringService } from './heritage-scoring.service';
 import { RefundOutboxService } from './refund-outbox.service';
+import { InventorySlotLeaseService } from '../../bookings/services/inventory-slot-lease.service';
 
 describe('WeatherCancellationsService', () => {
   let service: WeatherCancellationsService;
@@ -75,6 +76,10 @@ describe('WeatherCancellationsService', () => {
 
   const mockRefundOutboxService: any = {
     enqueueRefund: jest.fn(),
+  };
+
+  const mockSlotLeaseService: any = {
+    releaseBookingLeases: jest.fn().mockResolvedValue(2),
   };
 
   const customerId = new Types.ObjectId();
@@ -127,6 +132,10 @@ describe('WeatherCancellationsService', () => {
         {
           provide: RefundOutboxService,
           useValue: mockRefundOutboxService,
+        },
+        {
+          provide: InventorySlotLeaseService,
+          useValue: mockSlotLeaseService,
         },
       ],
     }).compile();
@@ -639,6 +648,10 @@ describe('WeatherCancellationsService', () => {
           bookingId,
           amount: 700000,
         }),
+      );
+      expect(mockSlotLeaseService.releaseBookingLeases).toHaveBeenCalledWith(
+        bookingId,
+        'CANCELLED',
       );
     });
   });
