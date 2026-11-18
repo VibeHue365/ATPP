@@ -67,6 +67,8 @@ function createStatusService(
       .fn()
       .mockReturnValue({
         session: () => Promise.resolve(options.providers ?? []),
+        // Status notifications look up the provider owners with select().lean().
+        select: () => ({ lean: () => Promise.resolve(options.providers ?? []) }),
       }),
     findOneAndUpdate: jest.fn().mockResolvedValue(undefined),
     db: {
@@ -122,8 +124,8 @@ function createStatusService(
 
 const asProvider = { providers: [{ _id: providerId }] };
 
-describe('UC-44 Update Booking Status (NgocL)', () => {
-  it('UT-44 UTCID04 forbids a customer from updating the booking status', async () => {
+describe('UC-43 Update Booking Status (NgocL)', () => {
+  it('UT-43 UTCID04 forbids a customer from updating the booking status', async () => {
     const { service } = createStatusService(bookingDoc(), { providers: [] });
 
     await expect(
@@ -141,7 +143,7 @@ describe('UC-44 Update Booking Status (NgocL)', () => {
     );
   });
 
-  it('UT-44 UTCID05 returns not found for a missing booking', async () => {
+  it('UT-43 UTCID05 returns not found for a missing booking', async () => {
     const { service } = createStatusService(null);
 
     await expect(
@@ -149,7 +151,7 @@ describe('UC-44 Update Booking Status (NgocL)', () => {
     ).rejects.toThrow(new NotFoundException('Không tìm thấy đơn hàng'));
   });
 
-  it('UT-44 UTCID06 starts the Ao Dai handover window and notifies the customer', async () => {
+  it('UT-43 UTCID06 starts the Ao Dai handover window and notifies the customer', async () => {
     const booking = bookingDoc();
     const { service, notificationsService, session } = createStatusService(
       booking,
@@ -172,7 +174,7 @@ describe('UC-44 Update Booking Status (NgocL)', () => {
     expect(session.commitTransaction).toHaveBeenCalled();
   });
 
-  it('UT-44 UTCID07 opens the 48-hour review window after a photoshoot', async () => {
+  it('UT-43 UTCID07 opens the 48-hour review window after a photoshoot', async () => {
     const booking = bookingDoc({ status: BookingStatus.InProgress });
     const { service } = createStatusService(booking, asProvider);
 
@@ -191,7 +193,7 @@ describe('UC-44 Update Booking Status (NgocL)', () => {
     });
   });
 
-  it('UT-44 UTCID08 completes inventory reservations when the costume is returned', async () => {
+  it('UT-43 UTCID08 completes inventory reservations when the costume is returned', async () => {
     const booking = bookingDoc({ status: BookingStatus.PickedUp });
     const { service, inventoryReservationModel } = createStatusService(
       booking,
@@ -212,7 +214,7 @@ describe('UC-44 Update Booking Status (NgocL)', () => {
     );
   });
 
-  it('UT-44 UTCID09 rejects a transition that skips the handover flow', async () => {
+  it('UT-43 UTCID09 rejects a transition that skips the handover flow', async () => {
     const { service, session } = createStatusService(bookingDoc(), asProvider);
 
     await expect(
@@ -231,7 +233,7 @@ describe('UC-44 Update Booking Status (NgocL)', () => {
     expect(session.abortTransaction).toHaveBeenCalled();
   });
 
-  it('UT-44 UTCID10 does not change a booking that is already in a final status', async () => {
+  it('UT-43 UTCID10 does not change a booking that is already in a final status', async () => {
     const { service } = createStatusService(
       bookingDoc({ status: BookingStatus.Refunded }),
       asProvider,
@@ -250,7 +252,7 @@ describe('UC-44 Update Booking Status (NgocL)', () => {
     );
   });
 
-  it('UT-44 UTCID11 treats an update to the current status as a no-op', async () => {
+  it('UT-43 UTCID11 treats an update to the current status as a no-op', async () => {
     const booking = bookingDoc();
     const { service } = createStatusService(booking, asProvider);
 
@@ -265,7 +267,7 @@ describe('UC-44 Update Booking Status (NgocL)', () => {
     expect(booking.save).not.toHaveBeenCalled();
   });
 
-  it('UT-44 UTCID12 completes a returned booking and settles provider payouts', async () => {
+  it('UT-43 UTCID12 completes a returned booking and settles provider payouts', async () => {
     const booking = bookingDoc({ status: BookingStatus.Returned });
     const { service, paymentsService } = createStatusService(
       booking,
@@ -296,7 +298,7 @@ describe('UC-44 Update Booking Status (NgocL)', () => {
     expect(paymentsService.settleBooking).toHaveBeenCalledWith('b1');
   });
 
-  it('UT-44 UTCID13 rejects completing a booking that has not been delivered', async () => {
+  it('UT-43 UTCID13 rejects completing a booking that has not been delivered', async () => {
     const { service, paymentsService } = createStatusService(
       bookingDoc(),
       asProvider,
@@ -316,7 +318,7 @@ describe('UC-44 Update Booking Status (NgocL)', () => {
     expect(paymentsService.settleBooking).not.toHaveBeenCalled();
   });
 
-  it('UT-44 UTCID14 rolls back the transaction when saving fails', async () => {
+  it('UT-43 UTCID14 rolls back the transaction when saving fails', async () => {
     const booking = bookingDoc({
       save: jest.fn().mockRejectedValue(new Error('write conflict')),
     });
@@ -337,8 +339,8 @@ describe('UC-44 Update Booking Status (NgocL)', () => {
   });
 });
 
-describe('UC-45 Respond to Booking Request (NgocL)', () => {
-  it('UT-45 UTCID03 confirms a paid deposit booking', async () => {
+describe('UC-44 Respond to Booking Request (NgocL)', () => {
+  it('UT-44 UTCID03 confirms a paid deposit booking', async () => {
     const booking = bookingDoc({ status: BookingStatus.DepositPaid });
     const { service } = createStatusService(booking, asProvider);
 
@@ -353,7 +355,7 @@ describe('UC-45 Respond to Booking Request (NgocL)', () => {
     expect(booking.status).toBe(BookingStatus.Confirmed);
   });
 
-  it('UT-45 UTCID04 confirms a booking that is still waiting for payment', async () => {
+  it('UT-44 UTCID04 confirms a booking that is still waiting for payment', async () => {
     const booking = bookingDoc({ status: BookingStatus.PendingPayment });
     const { service, notificationsService } = createStatusService(
       booking,
@@ -374,11 +376,11 @@ describe('UC-45 Respond to Booking Request (NgocL)', () => {
       expect.stringContaining('Đã xác nhận'),
       expect.stringContaining('xác nhận đơn hàng'),
       expect.anything(),
-      expect.anything(),
+      expect.objectContaining({ newStatus: BookingStatus.Confirmed }),
     );
   });
 
-  it('UT-45 UTCID05 declines a request with a full refund and a provider violation', async () => {
+  it('UT-44 UTCID05 declines a request with a full refund and a provider violation', async () => {
     const booking = bookingDoc({ status: BookingStatus.Confirmed });
     const { service, providerModel, paymentsService } = createStatusService(
       booking,
@@ -406,7 +408,7 @@ describe('UC-45 Respond to Booking Request (NgocL)', () => {
     );
   });
 
-  it('UT-45 UTCID06 forbids responding to a booking of another shop', async () => {
+  it('UT-44 UTCID06 forbids responding to a booking of another shop', async () => {
     const { service } = createStatusService(
       bookingDoc({ status: BookingStatus.DepositPaid }),
       { providers: [{ _id: new Types.ObjectId() }] },
@@ -423,7 +425,7 @@ describe('UC-45 Respond to Booking Request (NgocL)', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('UT-45 UTCID07 cannot respond to a booking that was already cancelled', async () => {
+  it('UT-44 UTCID07 cannot respond to a booking that was already cancelled', async () => {
     const { service } = createStatusService(
       bookingDoc({ status: BookingStatus.Cancelled }),
       asProvider,
@@ -443,8 +445,8 @@ describe('UC-45 Respond to Booking Request (NgocL)', () => {
   });
 });
 
-describe('UC-46 Cancel Booking (NgocL)', () => {
-  it('UT-46 UTCID05 returns not found for a missing booking', async () => {
+describe('UC-45 Cancel Booking (NgocL)', () => {
+  it('UT-45 UTCID05 returns not found for a missing booking', async () => {
     const { service } = createStatusService(null);
 
     await expect(
@@ -452,7 +454,7 @@ describe('UC-46 Cancel Booking (NgocL)', () => {
     ).rejects.toThrow(new NotFoundException('Không tìm thấy đơn đặt lịch'));
   });
 
-  it('UT-46 UTCID06 forbids an unrelated user from cancelling', async () => {
+  it('UT-45 UTCID06 forbids an unrelated user from cancelling', async () => {
     const { service } = createStatusService(bookingDoc(), { providers: [] });
 
     await expect(
@@ -467,7 +469,7 @@ describe('UC-46 Cancel Booking (NgocL)', () => {
     );
   });
 
-  it('UT-46 UTCID07 returns an already cancelled booking without side effects', async () => {
+  it('UT-45 UTCID07 returns an already cancelled booking without side effects', async () => {
     const booking = bookingDoc({ status: BookingStatus.Cancelled });
     const { service, bookingsRepository, paymentsService } =
       createStatusService(booking);
@@ -479,7 +481,7 @@ describe('UC-46 Cancel Booking (NgocL)', () => {
     expect(paymentsService.getRefundableAmount).not.toHaveBeenCalled();
   });
 
-  it('UT-46 UTCID08 refuses to cancel a booking whose costume was already picked up', async () => {
+  it('UT-45 UTCID08 refuses to cancel a booking whose costume was already picked up', async () => {
     const { service } = createStatusService(
       bookingDoc({ status: BookingStatus.PickedUp }),
     );
@@ -493,7 +495,7 @@ describe('UC-46 Cancel Booking (NgocL)', () => {
     );
   });
 
-  it('UT-46 UTCID09 charges a 20% penalty for a late customer cancellation without touching the rental deposit', async () => {
+  it('UT-45 UTCID09 charges a 20% penalty for a late customer cancellation without touching the rental deposit', async () => {
     const items = [
       {
         itemType: BookingItemType.Product,
@@ -525,7 +527,7 @@ describe('UC-46 Cancel Booking (NgocL)', () => {
     );
   });
 
-  it('UT-46 UTCID10 reports a conflict when another process changed the booking first', async () => {
+  it('UT-45 UTCID10 reports a conflict when another process changed the booking first', async () => {
     const { service, session } = createStatusService(
       bookingDoc({ status: BookingStatus.PendingPayment }),
       { conflict: true },
@@ -537,7 +539,7 @@ describe('UC-46 Cancel Booking (NgocL)', () => {
     expect(session.abortTransaction).toHaveBeenCalled();
   });
 
-  it('UT-46 UTCID11 lets an administrator cancel any booking', async () => {
+  it('UT-45 UTCID11 lets an administrator cancel any booking', async () => {
     const { service } = createStatusService(
       bookingDoc({ status: BookingStatus.PendingPayment }),
       { providers: [] },
@@ -585,7 +587,7 @@ const rescheduleBookingId = new Types.ObjectId().toString();
 const isoDate = (days: number) =>
   new Date(Date.now() + days * DAY).toISOString().split('T')[0];
 
-describe('UC-47 Change Booking (NgocL)', () => {
+describe('UC-46 Change Booking (NgocL)', () => {
   const productItem = () => ({
     _id: new Types.ObjectId(),
     itemType: BookingItemType.Product,
@@ -601,7 +603,7 @@ describe('UC-47 Change Booking (NgocL)', () => {
 
   afterEach(() => jest.restoreAllMocks());
 
-  it('UT-47 UTCID05 rejects rescheduling a booking of another customer', async () => {
+  it('UT-46 UTCID05 rejects rescheduling a booking of another customer', async () => {
     const { service } = createRescheduleService(bookingDoc(), productItem());
 
     await expect(
@@ -615,7 +617,7 @@ describe('UC-47 Change Booking (NgocL)', () => {
     );
   });
 
-  it('UT-47 UTCID06 allows rescheduling only confirmed or deposit-paid bookings', async () => {
+  it('UT-46 UTCID06 allows rescheduling only confirmed or deposit-paid bookings', async () => {
     const { service } = createRescheduleService(
       bookingDoc({ status: BookingStatus.PendingPayment }),
       productItem(),
@@ -630,7 +632,7 @@ describe('UC-47 Change Booking (NgocL)', () => {
     );
   });
 
-  it('UT-47 UTCID07 returns not found for an item outside the booking', async () => {
+  it('UT-46 UTCID07 returns not found for an item outside the booking', async () => {
     const { service } = createRescheduleService(bookingDoc(), null);
 
     await expect(
@@ -640,7 +642,7 @@ describe('UC-47 Change Booking (NgocL)', () => {
     ).rejects.toThrow(new NotFoundException('Không tìm thấy mục đặt lịch'));
   });
 
-  it('UT-47 UTCID08 requires at least 24 hours before the current start', async () => {
+  it('UT-46 UTCID08 requires at least 24 hours before the current start', async () => {
     const item = {
       ...productItem(),
       rentalFrom: new Date(Date.now() + 23 * 60 * 60 * 1000),
@@ -660,7 +662,7 @@ describe('UC-47 Change Booking (NgocL)', () => {
     );
   });
 
-  it('UT-47 UTCID09 requires both new rental dates for a daily rental', async () => {
+  it('UT-46 UTCID09 requires both new rental dates for a daily rental', async () => {
     const item = productItem();
     const { service } = createRescheduleService(bookingDoc(), item);
 
@@ -674,7 +676,7 @@ describe('UC-47 Change Booking (NgocL)', () => {
     );
   });
 
-  it('UT-47 UTCID10 rejects a new pickup date in the past', async () => {
+  it('UT-46 UTCID10 rejects a new pickup date in the past', async () => {
     const item = productItem();
     const { service } = createRescheduleService(bookingDoc(), item);
 
@@ -689,7 +691,7 @@ describe('UC-47 Change Booking (NgocL)', () => {
     );
   });
 
-  it('UT-47 UTCID11 rejects a return date before the new pickup date', async () => {
+  it('UT-46 UTCID11 rejects a return date before the new pickup date', async () => {
     const item = productItem();
     const { service } = createRescheduleService(bookingDoc(), item);
 
@@ -704,7 +706,7 @@ describe('UC-47 Change Booking (NgocL)', () => {
     );
   });
 
-  it('UT-47 UTCID12 requires a new shoot date for a photography item', async () => {
+  it('UT-46 UTCID12 requires a new shoot date for a photography item', async () => {
     const item = photoItem();
     const { service } = createRescheduleService(bookingDoc(), item);
 
@@ -715,7 +717,7 @@ describe('UC-47 Change Booking (NgocL)', () => {
     ).rejects.toThrow(new BadRequestException('Yêu cầu ngày chụp mới'));
   });
 
-  it('UT-47 UTCID13 rejects a photographer slot that overlaps another booking', async () => {
+  it('UT-46 UTCID13 rejects a photographer slot that overlaps another booking', async () => {
     const item = photoItem();
     const { service } = createRescheduleService(bookingDoc(), item);
     jest

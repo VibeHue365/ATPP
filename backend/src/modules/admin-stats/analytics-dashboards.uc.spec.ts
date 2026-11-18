@@ -76,9 +76,24 @@ function createProviderAnalytics(
       .mockResolvedValueOnce(options.popular ?? [])
       .mockResolvedValueOnce(options.packages ?? []),
   };
+  const productRows = Object.entries(options.products ?? {})
+    .filter(([, row]) => row)
+    .map(([id, row]) => ({ _id: new Types.ObjectId(id), ...row }));
   const productModel = {
     findById: jest.fn(
       async (id: Types.ObjectId) => options.products?.[id.toString()] ?? null,
+    ),
+    // Popular products are now loaded in one batch: find({ _id: { $in } }).
+    find: jest.fn((filter: Row) =>
+      lean(
+        filter._id?.$in
+          ? productRows.filter((row) =>
+              filter._id.$in.some(
+                (id: Types.ObjectId) => id.toString() === row._id.toString(),
+              ),
+            )
+          : [],
+      ),
     ),
     countDocuments: jest.fn().mockResolvedValue(3),
   };
@@ -203,8 +218,12 @@ describe('UC-61 View Product / Popular Concept (DatTT)', () => {
       await service.getProviderAnalytics(providerUser);
 
     expect(popularProducts).toEqual([
-      { name: 'Áo đỏ', image: 'red.jpg', count: 5 },
-      { name: 'Áo trắng', image: '/hong_lien_hoa.png', count: 2 },
+      expect.objectContaining({ name: 'Áo đỏ', image: 'red.jpg', count: 5 }),
+      expect.objectContaining({
+        name: 'Áo trắng',
+        image: '/hong_lien_hoa.png',
+        count: 2,
+      }),
     ]);
   });
 
@@ -332,6 +351,7 @@ function createAdminStats(options: Row = {}) {
     reviewModel: { find: () => lean([]) },
     analyticsService: {
       getTopSearches: jest.fn().mockResolvedValue([]),
+      getHighViewZeroBookingProducts: jest.fn().mockResolvedValue([]),
       getViewCountMap: jest.fn().mockResolvedValue(new Map()),
     },
     overviewStatsCache: new Map(),

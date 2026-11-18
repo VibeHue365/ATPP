@@ -28,7 +28,7 @@ function Probe() {
 describe('Cart direct use-case behavior', () => {
   beforeEach(() => localStorage.clear());
 
-  it('UC-34 adds a configured Ao Dai item and merges an exact duplicate quantity', async () => {
+  it('UC-33 adds a configured Ao Dai item and merges an exact duplicate quantity', async () => {
     render(<CartProvider><Probe /></CartProvider>);
     await waitFor(() => expect(screen.getByTestId('count').textContent).toBe('0'));
     fireEvent.click(screen.getByText('add'));
@@ -37,7 +37,7 @@ describe('Cart direct use-case behavior', () => {
     expect(screen.getByTestId('quantity').textContent).toBe('2');
   });
 
-  it('UC-35 removes one item and clears the cart', async () => {
+  it('UC-34 removes one item and clears the cart', async () => {
     render(<CartProvider><Probe /></CartProvider>);
     fireEvent.click(screen.getByText('add'));
     expect(screen.getByTestId('count').textContent).toBe('1');
@@ -48,7 +48,7 @@ describe('Cart direct use-case behavior', () => {
     expect(screen.getByTestId('count').textContent).toBe('0');
   });
 
-  it('UC-36 updates quantity, size, color and rental dates in place', async () => {
+  it('UC-35 updates quantity, size, color and rental dates in place', async () => {
     render(<CartProvider><Probe /></CartProvider>);
     fireEvent.click(screen.getByText('add'));
     fireEvent.click(screen.getByText('quantity'));
@@ -59,7 +59,7 @@ describe('Cart direct use-case behavior', () => {
     expect(screen.getByTestId('details').textContent).toBe('L|PINK|2026-10-25|2026-10-27');
   });
 
-  it('UC-36 preserves the existing quantity when an invalid value is requested', async () => {
+  it('UC-35 preserves the existing quantity when an invalid value is requested', async () => {
     function InvalidQuantityProbe() {
       const cart = useCart();
       const first = cart.cart[0];

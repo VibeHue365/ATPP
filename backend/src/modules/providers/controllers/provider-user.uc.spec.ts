@@ -86,7 +86,7 @@ describe('Provider and profile direct use-case contracts', () => {
     const service = { getProviderAnalytics: jest.fn().mockResolvedValue({ totalRevenue: 1200000 }) };
     const controller = new ProvidersController(service as any);
     await controller.getAnalytics(provider, 'month');
-    expect(service.getProviderAnalytics).toHaveBeenCalledWith('provider-1', 'month');
+    expect(service.getProviderAnalytics).toHaveBeenCalledWith('provider-1', 'month', undefined, undefined);
   });
 
   it('UC-61 exposes popular products and concepts in provider analytics', async () => {

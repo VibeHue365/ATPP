@@ -37,6 +37,8 @@ function createChat(room: Row | null = { participants: [userId, partnerId] }) {
     })),
     find: jest.fn().mockReturnValue(query([])),
     updateMany: jest.fn().mockResolvedValue(undefined),
+    // getRooms now counts unread messages per room.
+    aggregate: jest.fn().mockResolvedValue([]),
   };
   const userModel = {
     findById: jest.fn().mockReturnValue(query({ _id: partnerId })),
