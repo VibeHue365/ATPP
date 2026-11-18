@@ -74,8 +74,8 @@ const dto = {
 
 afterEach(() => jest.restoreAllMocks());
 
-describe('UC-42 Booking Photographer - hold request (NgocL)', () => {
-  it('UT-42 UTCID08 rejects a malformed customer account id', async () => {
+describe('UC-41 Booking Photographer - hold request (NgocL)', () => {
+  it('UT-41 UTCID08 rejects a malformed customer account id', async () => {
     const { service, bookingModel } = createService();
 
     await expect(
@@ -84,7 +84,7 @@ describe('UC-42 Booking Photographer - hold request (NgocL)', () => {
     expect(bookingModel.findOne).not.toHaveBeenCalled();
   });
 
-  it('UT-42 UTCID09 rejects a malformed photography package id', async () => {
+  it('UT-41 UTCID09 rejects a malformed photography package id', async () => {
     const { service } = createService();
 
     await expect(
@@ -96,7 +96,7 @@ describe('UC-42 Booking Photographer - hold request (NgocL)', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('UT-42 UTCID10 accepts a 160-character idempotency key and rejects 161 characters', async () => {
+  it('UT-41 UTCID10 accepts a 160-character idempotency key and rejects 161 characters', async () => {
     const { service, transaction } = createService();
 
     await expect(
@@ -108,7 +108,7 @@ describe('UC-42 Booking Photographer - hold request (NgocL)', () => {
     expect(transaction).toHaveBeenCalledTimes(1);
   });
 
-  it('UT-42 UTCID11 returns the existing hold for a repeated idempotency key', async () => {
+  it('UT-41 UTCID11 returns the existing hold for a repeated idempotency key', async () => {
     const existing = { _id: new Types.ObjectId() };
     const { service, transaction, toHoldResponse } = createService({
       existing,
@@ -121,7 +121,7 @@ describe('UC-42 Booking Photographer - hold request (NgocL)', () => {
     expect(transaction).not.toHaveBeenCalled();
   });
 
-  it('UT-42 UTCID12 returns not found for an inactive photography package', async () => {
+  it('UT-41 UTCID12 returns not found for an inactive photography package', async () => {
     const { service, quoteService } = createService({ pkg: null });
 
     await expect(
@@ -130,7 +130,7 @@ describe('UC-42 Booking Photographer - hold request (NgocL)', () => {
     expect(quoteService.quote).not.toHaveBeenCalled();
   });
 
-  it('UT-42 UTCID13 rejects sessions that fail the schedule preflight with their errors', async () => {
+  it('UT-41 UTCID13 rejects sessions that fail the schedule preflight with their errors', async () => {
     const errors = [{ sessionIndex: 0, code: 'OUTSIDE_WORKING_HOURS' }];
     const { service, transaction } = createService({
       quote: { valid: false, errors },
@@ -147,9 +147,8 @@ describe('UC-42 Booking Photographer - hold request (NgocL)', () => {
     expect(transaction).not.toHaveBeenCalled();
   });
 
-  // Known defect UT-DEF-42-01: user-facing messages in photography-hold.service.ts are mis-encoded.
-  it.failing(
-    'UT-42 UTCID14 returns a readable Vietnamese message for an invalid package',
+  it(
+    'UT-41 UTCID14 returns a readable Vietnamese message for an invalid package',
     async () => {
       const { service } = createService();
 

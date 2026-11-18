@@ -309,11 +309,17 @@ async function createSession(
       refreshToken: 'r2',
       expiresIn: 900,
     });
+  const redisService = {
+    get: jest.fn().mockResolvedValue(null),
+    set: jest.fn().mockResolvedValue(undefined),
+    del: jest.fn().mockResolvedValue(undefined),
+  };
   const service = new SessionService(
     authRepository as any,
     usersRepository as any,
     securityLogService as any,
     tokenService,
+    redisService as any,
   );
   return {
     service,
@@ -633,11 +639,19 @@ async function createReset(
   const securityLogService = {
     recordSecurityEvent: jest.fn().mockResolvedValue(undefined),
   };
+  // Reset links now go through the email queue; this one hands them straight to the mailer.
+  const emailQueueService = {
+    enqueuePasswordReset: jest.fn(async (email: string, token: string) => {
+      await mailService.sendPasswordResetLink(email, token);
+      return 'job-1';
+    }),
+  };
   const service = new PasswordResetService(
     authRepository as any,
     usersRepository as any,
     config(),
     mailService as any,
+    emailQueueService as any,
     rateLimiter(options.counts).service,
     securityLogService as any,
     new PasswordPolicyService(config({ BCRYPT_SALT_ROUNDS: '10' })),
@@ -1331,12 +1345,12 @@ describe('UC-02 Login Google (HuyLDN)', () => {
     ).rejects.toThrow('OAuth state is expired or invalid');
   });
 
-  it('UT-02 UTCID05 accepts a valid state exactly once', async () => {
+  it('UT-02 UTCID05 accepts a valid state exactly once and returns its record', async () => {
     const { service, rawState, authRepository } = await createOAuth();
 
     await expect(
       service.validateGoogleOAuthState(rawState),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({ stateHash: expect.any(String) });
     expect(authRepository.markOAuthStateUsedIfActive).toHaveBeenCalledTimes(1);
   });
 

@@ -44,18 +44,23 @@ function createService(
   const refundPaymentModel = {
     findOne: jest.fn().mockReturnValue({ exec: () => Promise.resolve(null) }),
   };
+  const bookingDoc =
+    options.booking === undefined
+      ? {
+          _id: new Types.ObjectId(),
+          bookingCode: 'BK-2026',
+          customerId,
+          status: BookingStatus.PendingPayment,
+          pricingSummary: { amountDueNow: 350000, grandTotal: 900000 },
+          paymentSummary: { totalPaid: 350000 },
+        }
+      : options.booking;
   const bookingModel = {
-    findById: jest.fn().mockResolvedValue(
-      options.booking === undefined
-        ? {
-            _id: new Types.ObjectId(),
-            bookingCode: 'BK-2026',
-            customerId,
-            status: BookingStatus.PendingPayment,
-            pricingSummary: { amountDueNow: 350000, grandTotal: 900000 },
-            paymentSummary: { totalPaid: 350000 },
-          }
-        : options.booking,
+    // Awaited directly or through .lean() (the contract check reads it lean).
+    findById: jest.fn(() =>
+      Object.assign(Promise.resolve(bookingDoc), {
+        lean: () => Promise.resolve(bookingDoc),
+      }),
     ),
     find: jest.fn().mockImplementation(() => {
       const result = options.bookings ?? [];

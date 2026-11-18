@@ -17,7 +17,7 @@ export const ProfileFavoritesTab: React.FC = () => {
     setLoading(true);
     Promise.allSettled([
       httpClient.get<any[]>('/products').then((res: any) => (Array.isArray(res) ? res : res?.data || [])),
-      httpClient.get<any[]>('/providers/photographers').then((res: any) => (Array.isArray(res) ? res : res?.data || []))
+      httpClient.get<any[]>('/photographers?limit=48').then((res: any) => (Array.isArray(res) ? res : res?.data || []))
     ])
       .then(([prodRes, photoRes]) => {
         if (prodRes.status === 'fulfilled') setProducts(prodRes.value);
