@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  Sparkles, Camera, Upload, RefreshCw, Download, Settings, 
+  Sparkles, Camera, Upload, RefreshCw, Download, 
   Check, Layers, ShieldCheck 
 } from 'lucide-react';
 import { virtualTryOn2DService } from '../../services/virtualTryOn2DService';
@@ -12,7 +12,7 @@ export const VirtualTryOn2DPage: React.FC = () => {
   const [personPreview, setPersonPreview] = useState<string | null>(null);
   const [clothFile, setClothFile] = useState<File | null>(null);
   const [clothPreview, setClothPreview] = useState<string | null>(null);
-  const [category, setCategory] = useState<'one-pieces' | 'tops' | 'bottoms'>('one-pieces');
+  const category = 'one-pieces';
   
   const [loading, setLoading] = useState(false);
   const [stepMessage, setStepMessage] = useState('');
@@ -21,48 +21,6 @@ export const VirtualTryOn2DPage: React.FC = () => {
   const [resultImageUrl, setResultImageUrl] = useState<string | null>(null);
   const [processTime, setProcessTime] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'result' | 'original'>('result');
-
-  // Settings API
-  const [showSettings, setShowSettings] = useState(false);
-  const [apiUrl, setApiUrl] = useState(virtualTryOn2DService.getApiUrl());
-  const [testingConnection, setTestingConnection] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<string | null>(null);
-
-  // Danh sach mau Ao Dai co san de test
-  const sampleAoDaiList = [
-    { name: 'Áo Dài Truyền Thống Đỏ Hoàng Gia', url: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=600' },
-    { name: 'Áo Dài Cách Tân Xanh Ngọc Bích', url: 'https://images.unsplash.com/photo-1617627143750-d86bc21e42bb?w=600' },
-    { name: 'Áo Dài Cưới Gấm Thêu Hoa Sen', url: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600' },
-  ];
-
-  // Danh sach mau nguoi mau co san
-  const sampleModels = [
-    { name: 'Chân dung 1', url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600' },
-    { name: 'Chân dung 2', url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=600' },
-    { name: 'Toàn thân 3', url: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=600' },
-  ];
-
-  const handleSelectSampleCloth = async (url: string) => {
-    setClothPreview(url);
-    setResultImageUrl(null);
-    try {
-      const file = await virtualTryOn2DService.convertUrlToFile(url, 'sample_aodai.jpg');
-      setClothFile(file);
-    } catch (e) {
-      console.warn('Cannot convert sample cloth url to file', e);
-    }
-  };
-
-  const handleSelectSampleModel = async (url: string) => {
-    setPersonPreview(url);
-    setResultImageUrl(null);
-    try {
-      const file = await virtualTryOn2DService.convertUrlToFile(url, 'sample_model.jpg');
-      setPersonFile(file);
-    } catch (e) {
-      console.warn('Cannot convert sample model url to file', e);
-    }
-  };
 
   const handlePersonUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -80,24 +38,6 @@ export const VirtualTryOn2DPage: React.FC = () => {
       setClothPreview(URL.createObjectURL(file));
       setResultImageUrl(null);
     }
-  };
-
-  const handleTestConnection = async () => {
-    setTestingConnection(true);
-    setConnectionStatus(null);
-    const res = await virtualTryOn2DService.testConnection(apiUrl);
-    setTestingConnection(false);
-    if (res.ok) {
-      setConnectionStatus(`Kết nối máy chủ thành công! GPU: ${res.gpu || 'Hoạt động'}`);
-    } else {
-      setConnectionStatus('Không kết nối được đến máy chủ AI. Vui lòng kiểm tra lại Cloudflare Tunnel!');
-    }
-  };
-
-  const handleSaveApiUrl = () => {
-    virtualTryOn2DService.setApiUrl(apiUrl);
-    setShowSettings(false);
-    toast.success('Đã lưu địa chỉ máy chủ AI!');
   };
 
   const handleStartTryOn = async () => {
@@ -196,54 +136,7 @@ export const VirtualTryOn2DPage: React.FC = () => {
               Ướm thử các mẫu Áo Dài truyền thống và hiện đại lên ảnh chân dung của bạn chỉ trong 10-15 giây mà không cần thay trang phục thực tế.
             </p>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setShowSettings(!showSettings)}
-            className="self-start md:self-auto px-4 py-2 rounded-xl border border-stone-300 bg-white hover:bg-stone-50 text-stone-700 text-xs font-semibold flex items-center gap-2 transition shadow-sm"
-          >
-            <Settings size={15} />
-            <span>Cấu Hình API Máy Chủ</span>
-          </button>
         </div>
-
-        {/* Settings Box */}
-        {showSettings && (
-          <div className="my-6 p-5 rounded-2xl bg-amber-50/70 border border-amber-200 animate-fadeIn">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-amber-900 mb-2 flex items-center gap-1.5">
-              <Settings size={14} /> Cấu hình Cloudflare Tunnel URL từ Kaggle GPU:
-            </h4>
-            <div className="flex flex-col sm:flex-row gap-2 max-w-2xl">
-              <input
-                type="text"
-                value={apiUrl}
-                onChange={(e) => setApiUrl(e.target.value)}
-                placeholder="https://xxxx.trycloudflare.com"
-                className="flex-1 px-3 py-2 rounded-xl border border-amber-300 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-              />
-              <button
-                type="button"
-                onClick={handleTestConnection}
-                disabled={testingConnection}
-                className="px-4 py-2 rounded-xl bg-stone-200 hover:bg-stone-300 text-stone-800 text-xs font-semibold transition"
-              >
-                {testingConnection ? 'Kiểm tra...' : 'Kiểm Tra Kết Nối'}
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveApiUrl}
-                className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-sm transition"
-              >
-                Lưu Cấu Hình
-              </button>
-            </div>
-            {connectionStatus && (
-              <p className={`mt-2 text-xs font-medium ${connectionStatus.includes('thành công') ? 'text-emerald-700' : 'text-rose-700'}`}>
-                {connectionStatus}
-              </p>
-            )}
-          </div>
-        )}
 
         {/* Main Grid: 2 Columns */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mt-8">
@@ -288,28 +181,6 @@ export const VirtualTryOn2DPage: React.FC = () => {
                   </div>
                 )}
               </label>
-
-              {/* Mẫu thử nhanh */}
-              <div className="mt-4 pt-3 border-t border-stone-100">
-                <span className="text-xs font-semibold text-stone-500 block mb-2">
-                  Hoặc chọn ảnh mẫu có sẵn:
-                </span>
-                <div className="grid grid-cols-3 gap-3">
-                  {sampleModels.map((m, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => handleSelectSampleModel(m.url)}
-                      className="group relative rounded-xl overflow-hidden border border-stone-200 hover:border-amber-500 aspect-square transition shadow-xs"
-                    >
-                      <img src={m.url} alt={m.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
-                      <span className="absolute bottom-0 inset-x-0 bg-stone-900/60 backdrop-blur-xs text-[10px] text-white py-0.5 text-center">
-                        {m.name}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
 
             {/* Box 2: Áo Dài */}
@@ -351,54 +222,6 @@ export const VirtualTryOn2DPage: React.FC = () => {
                   </div>
                 )}
               </label>
-
-              {/* Mẫu Áo Dài có sẵn */}
-              <div className="mt-4 pt-3 border-t border-stone-100">
-                <span className="text-xs font-semibold text-stone-500 block mb-2">
-                  Bộ sưu tập Áo Dài tiêu biểu:
-                </span>
-                <div className="grid grid-cols-3 gap-3">
-                  {sampleAoDaiList.map((m, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => handleSelectSampleCloth(m.url)}
-                      className="group relative rounded-xl overflow-hidden border border-stone-200 hover:border-amber-500 aspect-square transition shadow-xs"
-                    >
-                      <img src={m.url} alt={m.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
-                      <span className="absolute bottom-0 inset-x-0 bg-stone-900/60 backdrop-blur-xs text-[9px] text-white py-0.5 text-center truncate px-1">
-                        {m.name}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Phân loại & Nút Thử đồ */}
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setCategory('one-pieces')}
-                className={`flex-1 py-2.5 text-xs font-bold rounded-xl border transition ${
-                  category === 'one-pieces'
-                    ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                    : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'
-                }`}
-              >
-                Áo Dài Toàn Thân
-              </button>
-              <button
-                type="button"
-                onClick={() => setCategory('tops')}
-                className={`flex-1 py-2.5 text-xs font-bold rounded-xl border transition ${
-                  category === 'tops'
-                    ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                    : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'
-                }`}
-              >
-                Áo Dài Cách Tân / Áo
-              </button>
             </div>
 
             <button
