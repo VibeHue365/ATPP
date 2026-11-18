@@ -20,12 +20,14 @@ export const providerVerificationService = {
   getCurrent() {
     return httpClient.get<ProviderVerificationDetail | null>(
       "/provider-verifications/me/current",
+      { timeoutMs: 25_000 },
     );
   },
 
   getById(id: string) {
     return httpClient.get<ProviderVerificationDetail>(
       `/provider-verifications/${id}`,
+      { timeoutMs: 25_000 },
     );
   },
 
@@ -80,7 +82,9 @@ export const providerVerificationService = {
       ocrStatus: string;
       operationId?: string | null;
       executionStatus?: string | null;
-    }>(`/provider-verifications/${id}/documents`, formData);
+    }>(`/provider-verifications/${id}/documents`, formData, {
+      timeoutMs: 60_000,
+    });
   },
 
   runOcr(id: string, documentType: ProviderDocumentType) {
@@ -91,7 +95,9 @@ export const providerVerificationService = {
       ocrConfidence?: number | null;
       extractedFields?: Record<string, unknown>;
       mismatchFlags?: string[];
-    }>(`/provider-verifications/${id}/documents/${documentType}/ocr`);
+    }>(`/provider-verifications/${id}/documents/${documentType}/ocr`, undefined, {
+      timeoutMs: 60_000,
+    });
   },
 
   submit(id: string) {

@@ -1747,7 +1747,13 @@ function DocumentStepV2({
                   key={doc.documentType}
                   documentType={doc.documentType}
                   label={documentLabels[doc.documentType]}
-                  hint="Ảnh chụp mặt trước rõ nét"
+                  hint={
+                    doc.documentType === 'IDENTITY_CARD_BACK'
+                      ? 'Ảnh chụp mặt sau rõ nét'
+                      : doc.documentType === 'PASSPORT'
+                        ? 'Ảnh trang thông tin hộ chiếu rõ nét'
+                        : 'Ảnh chụp mặt trước rõ nét'
+                  }
                   document={doc}
                   disabled={disabled}
                   actionLoading={actionLoading}
@@ -1877,6 +1883,7 @@ function UploadDropZone({
 }) {
   const current = document?.current;
   const isUploaded = current?.uploadStatus === 'UPLOADED';
+  const isUploading = actionLoading === `upload-${documentType}`;
   const isRequired = document?.required;
   const isOcrFailed = current?.ocrStatus === 'OCR_FAILED';
   const ocrNextAction = current?.ocr?.nextAction;
@@ -1984,14 +1991,25 @@ function UploadDropZone({
   return (
     <div className="vh-provider-upload-zone-wrapper">
       <div className={`vh-provider-upload-zone ${isUploaded ? 'uploaded' : ''} ${isOcrFailed ? 'ocr-failed' : ''}`}>
-        <label className={`vh-provider-upload-click ${disabled ? 'disabled' : ''}`}>
+        <label className={`vh-provider-upload-click ${disabled || isUploading ? 'disabled' : ''}`}>
           <input
             type="file"
             accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
-            disabled={disabled}
-            onChange={(event) => onUpload(documentType, event.target.files?.[0])}
+            disabled={disabled || isUploading}
+            onChange={(event) => {
+              const selectedFile = event.target.files?.[0];
+              event.currentTarget.value = '';
+              if (selectedFile) {
+                onUpload(documentType, selectedFile);
+              }
+            }}
           />
-          {previewUrl ? (
+          {isUploading ? (
+            <div className="vh-upload-preview-loading">
+              <Loader2 className="animate-spin" size={20} />
+              <span>Đang tải {label} lên...</span>
+            </div>
+          ) : previewUrl ? (
             <div className="vh-upload-image-preview-container">
               <img src={previewUrl} alt={label} className="vh-upload-image-preview" />
               {!disabled && (
