@@ -32,6 +32,7 @@ import type {
   PhotographerPackageCategory,
 } from '@/types/photographer';
 import { comboOriginalPrice, comboPublishedPrice, type ComboDeal } from '@/types/combo';
+import { buildLoginHref } from '@/utils/navigation';
 
 const formatVND = (value: number) => `${Math.round(value || 0).toLocaleString('vi-VN')}đ`;
 
@@ -255,7 +256,7 @@ export default function CustomerHomeScreen() {
   const handleToggleFavorite = async (productId: string) => {
     if (authLoading) return;
     if (!isAuthenticated) {
-      router.push('/(auth)/login');
+      router.push(buildLoginHref('/'));
       return;
     }
     try {
@@ -443,7 +444,7 @@ export default function CustomerHomeScreen() {
             onPress={() => {
               if (authLoading) return;
               if (isAuthenticated) router.push('/notifications');
-              else router.push('/(auth)/login');
+              else router.push(buildLoginHref('/notifications'));
             }}
           >
             <Ionicons name="notifications-outline" size={20} color="#1B1C1C" />
@@ -466,7 +467,7 @@ export default function CustomerHomeScreen() {
             onPress={() => {
               if (authLoading) return;
               if (isAuthenticated) router.push('/(tabs)/profile');
-              else router.push('/(auth)/login');
+              else router.push(buildLoginHref());
             }}
           >
             {getMediaUrl(user?.avatarUrl) ? (

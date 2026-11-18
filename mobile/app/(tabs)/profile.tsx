@@ -18,6 +18,7 @@ import { useNotifications } from '@/contexts/NotificationContext';
 import { useToast } from '@/contexts/ToastContext';
 import type { UserAddress } from '@/types/auth';
 import { getApiErrorMessage } from '@/utils/apiError';
+import { prepareImageUploadPart } from '@/utils/imageUpload';
 import { getMediaUrl } from '@/utils/media';
 
 const emptyAddress: AddressInput = {
@@ -34,7 +35,7 @@ const emptyAddress: AddressInput = {
 
 export default function Screen() {
   return (
-    <RequireAuth>
+    <RequireAuth preserveReturnTo={false}>
       <Profile />
     </RequireAuth>
   );
@@ -107,17 +108,10 @@ function Profile() {
     });
     if (result.canceled) return;
     const asset = result.assets[0];
-    const body = new FormData();
-    body.append(
-      'avatar',
-      asset.file ??
-        ({
-          uri: asset.uri,
-          name: asset.fileName ?? 'avatar.jpg',
-          type: asset.mimeType ?? 'image/jpeg',
-        } as unknown as Blob)
-    );
     try {
+      const part = await prepareImageUploadPart(asset, 'avatar.jpg');
+      const body = new FormData();
+      body.append('avatar', part);
       await userApi.updateAvatar(body);
       await refreshUser();
       show('Đã đổi ảnh đại diện', 'success');

@@ -13,9 +13,9 @@ export const bookingStatus: Record<
   PENDING_PAYMENT: { label: 'Chờ ký HĐ & thanh toán', tone: 'warning' },
   DEPOSIT_PAID: { label: 'Đã đặt cọc · Chờ duyệt', tone: 'success' },
   CONFIRMED: { label: 'Đã xác nhận', tone: 'success' },
-  PICKUP_PENDING: { label: 'Sẵn sàng nhận áo', tone: 'info' },
+  PICKUP_PENDING: { label: 'Chờ bàn giao / nhận áo', tone: 'info' },
   PICKED_UP: { label: 'Đang thuê cổ phục', tone: 'success' },
-  RETURN_PENDING: { label: 'Chờ duyệt sự cố trả đồ', tone: 'error' },
+  RETURN_PENDING: { label: 'Chờ xác nhận trả đồ', tone: 'warning' },
   RETURNED: { label: 'Đã trả áo · Chờ hoàn cọc', tone: 'info' },
   IN_PROGRESS: { label: 'Đang thực hiện', tone: 'info' },
   AWAITING_REVIEW: { label: 'Chờ bạn duyệt ảnh', tone: 'warning' },
@@ -138,15 +138,22 @@ const timelineAt = (booking: Booking, statuses: BookingStatus[]) => {
  * and current `booking.status` when BE `updateBookingStatus` does not explicitly
  * populate `rentalFulfillment.readyAt` / `returnedAt`.
  */
-export function getRentalEvidenceTimestamps(booking: Booking) {
+export function getRentalLifecycleTimestamps(booking: Booking) {
   const rentalItems = booking.items.filter((i) => i.itemType === 'PRODUCT');
   const firstReady =
     rentalItems.map((i) => i.rentalFulfillment?.readyAt).find(Boolean) ?? null;
   const firstPickedUp =
     rentalItems.map((i) => i.rentalFulfillment?.pickedUpAt).find(Boolean) ??
     null;
+  const firstCustomerReturnRequested =
+    rentalItems
+      .map((i) => i.rentalFulfillment?.customerReturnEvidence?.returnedAt)
+      .find(Boolean) ?? null;
   const firstReturned =
     rentalItems.map((i) => i.rentalFulfillment?.returnedAt).find(Boolean) ??
+    null;
+  const firstCompleted =
+    rentalItems.map((i) => i.rentalFulfillment?.completedAt).find(Boolean) ??
     null;
 
   const readyAt =
@@ -167,13 +174,32 @@ export function getRentalEvidenceTimestamps(booking: Booking) {
       ? booking.updatedAt ?? null
       : null);
 
+  const customerReturnRequestedAt =
+    firstCustomerReturnRequested ??
+    timelineAt(booking, ['RETURN_PENDING']) ??
+    null;
+
   const returnedAt =
     firstReturned ??
-    timelineAt(booking, ['RETURNED', 'RETURN_PENDING', 'COMPLETED']) ??
-    (['RETURNED', 'RETURN_PENDING', 'COMPLETED'].includes(booking.status)
+    timelineAt(booking, ['RETURNED', 'COMPLETED']) ??
+    (['RETURNED', 'COMPLETED'].includes(booking.status)
       ? booking.updatedAt ?? null
       : null);
 
+  return {
+    readyAt,
+    pickedUpAt,
+    customerReturnRequestedAt,
+    returnedAt,
+    completedAt: firstCompleted,
+  };
+}
+
+/**
+ * Legacy 3-key projection preserved for backwards compatibility.
+ */
+export function getRentalEvidenceTimestamps(booking: Booking) {
+  const { readyAt, pickedUpAt, returnedAt } = getRentalLifecycleTimestamps(booking);
   return { readyAt, pickedUpAt, returnedAt };
 }
 
@@ -183,9 +209,14 @@ export function formatDepositSettlementLabel(status?: string | null): string {
     case 'RELEASED':
     case 'REFUNDED':
       return 'Đã giải phóng / Hoàn trả khách hàng';
+    case 'PARTIALLY_DEDUCTED':
     case 'PARTIALLY_RELEASED':
     case 'DEDUCTED':
       return 'Đã đối soát & khấu trừ theo biên bản sự cố';
+    case 'FULLY_DEDUCTED':
+      return 'Đã khấu trừ toàn bộ tiền cọc theo quyết định xử lý';
+    case 'PENDING_SETTLEMENT':
+      return 'Đang chờ tất toán hoàn cọc';
     case 'DISPUTED':
       return 'Tạm khóa để xử lý tranh chấp';
     case 'HELD':

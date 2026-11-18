@@ -4,6 +4,14 @@ import { Image } from 'expo-image';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { getMediaUrl } from '@/utils/media';
 import { FontFamily } from '@/constants/theme';
+import {
+  getItemSkuOrCode,
+  getPhotoItems,
+  isPhotographyItem,
+  resolveBookingDisplayState,
+  resolveRentalItemStage,
+} from '@/utils/rentalState';
+import { formatDate } from '@/utils/booking';
 
 interface OrderCardProps {
   order: any;
@@ -38,111 +46,42 @@ export function OrderCard({
   const avatarUrl =
     order.customerId?.profile?.avatarUrl || order.customerId?.avatar;
 
-  const status = order.status || 'CONFIRMED';
-  const isCombo =
-    order.bookingType === 'COMBO' ||
-    (order.items?.some((i: any) => i.itemType === 'PRODUCT' || i.productId) &&
-      order.items?.some(
-        (i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId,
-      ));
-  const isPhotoshoot = order.bookingType === 'PHOTOGRAPHY';
+  const display = resolveBookingDisplayState(order, 'provider');
+  const stage = display.stage;
+  const isCombo = display.isCombo;
+  const isPhotoshootOnly = display.isPhotoshootOnly;
 
-  const firstItem = order.items?.[0] || {};
-  const itemName =
-    firstItem.name ||
-    firstItem.productName ||
-    firstItem.productId?.name ||
-    firstItem.photographyPackageId?.name ||
-    (isPhotoshoot
-      ? 'Gói Chụp Ảnh Di Sản Cố Đô'
-      : 'Áo Dài Ngũ Thân Cung Đình');
-  const itemImage =
-    firstItem.productId?.images?.[0] ||
-    firstItem.photographyPackageId?.images?.[0] ||
-    firstItem.images?.[0] ||
-    firstItem.image ||
-    (isPhotoshoot ? '/partner_cover.jpg' : '/hong_lien_hoa.webp');
+  const allItems: any[] = Array.isArray(order.items) ? order.items : [];
+  const firstItem = allItems[0] || {};
+  const myPhotoItems = getPhotoItems(order, true);
 
-  const size = firstItem.selectedSize || firstItem.size || 'M';
-  const tagCode = firstItem.inventoryItemId
-    ? `#TAG-${firstItem.inventoryItemId.toString().slice(-3).toUpperCase()}`
-    : '#TAG-042';
-
-  const subTotal =
-    order.pricingSummary?.subTotal ||
-    order.pricingSummary?.grandTotal ||
-    order.totalAmount ||
+  const grandTotal =
+    order.pricingSummary?.grandTotal ??
+    order.pricingSummary?.subTotal ??
+    order.totalAmount ??
     0;
   const depositTotal =
-    order.pricingSummary?.depositTotal ||
-    order.depositAmount ||
-    firstItem.depositAmount ||
-    0;
+    order.pricingSummary?.depositTotal ??
+    order.depositAmount ??
+    allItems.reduce(
+      (sum, it) =>
+        sum + (isPhotographyItem(it) ? 0 : (it.depositAmount ?? 0) * (it.quantity ?? 1)),
+      0,
+    );
 
-  // Check if any item has a PENDING reschedule request (just like Web OrderActionDropdown)
-  const pendingRescheduleItem = order.items?.find(
+  const pendingRescheduleItem = allItems.find(
     (it: any) => it?.rescheduleRequest?.status === 'PENDING',
   );
 
-  // Web-aligned Status Label & Tone
-  let statusLabel = 'Đang thực hiện';
-  let statusTone: 'rose' | 'amber' | 'emerald' | 'gray' = 'emerald';
-
-  switch (status) {
-    case 'PENDING':
-    case 'PENDING_PAYMENT':
-      statusLabel = 'Chờ xác nhận';
-      statusTone = 'amber';
-      break;
-    case 'DEPOSIT_PAID':
-      statusLabel = 'Đã đặt cọc · Chờ duyệt';
-      statusTone = 'rose';
-      break;
-    case 'CONFIRMED':
-      statusLabel = isPhotoshoot ? 'Đã duyệt lịch chụp' : 'Chuẩn bị trang phục';
-      statusTone = 'emerald';
-      break;
-    case 'PICKUP_PENDING':
-      statusLabel = 'Chờ khách duyệt nhận đồ';
-      statusTone = 'amber';
-      break;
-    case 'PICKED_UP':
-      statusLabel = 'Đang thuê';
-      statusTone = 'amber';
-      break;
-    case 'IN_PROGRESS':
-      statusLabel = 'Đang chụp ảnh';
-      statusTone = 'amber';
-      break;
-    case 'AWAITING_REVIEW':
-      statusLabel = 'Chờ khách duyệt ảnh';
-      statusTone = 'amber';
-      break;
-    case 'COMBO_PHOTOS_APPROVED':
-      statusLabel = 'Đã duyệt ảnh · Chờ trả đồ';
-      statusTone = 'emerald';
-      break;
-    case 'RETURN_PENDING':
-      statusLabel = 'Chờ khách duyệt sự cố';
-      statusTone = 'rose';
-      break;
-    case 'RETURNED':
-      statusLabel = 'Đã trả đồ · Chờ hoàn tất';
-      statusTone = 'rose';
-      break;
-    case 'DISPUTED':
-      statusLabel = 'Đang tranh chấp';
-      statusTone = 'rose';
-      break;
-    case 'COMPLETED':
-      statusLabel = 'Đã hoàn tất';
-      statusTone = 'gray';
-      break;
-    case 'CANCELLED':
-      statusLabel = 'Đã hủy';
-      statusTone = 'gray';
-      break;
-  }
+  const statusLabel = display.label;
+  const statusTone: 'rose' | 'amber' | 'emerald' | 'gray' =
+    display.tone === 'error'
+      ? 'rose'
+      : display.tone === 'warning' || display.tone === 'info'
+        ? 'amber'
+        : display.tone === 'success'
+          ? 'emerald'
+          : 'gray';
 
   const handleCall = () => {
     if (customerPhone) {
@@ -150,10 +89,8 @@ export function OrderCard({
     }
   };
 
-  // Determine Primary Action Button Label & Style (100% synced with Web OrderActionDropdown)
   const renderActionButtons = () => {
-    // 1. DEPOSIT_PAID
-    if (status === 'DEPOSIT_PAID' || status === 'PENDING') {
+    if (stage === 'DEPOSIT_PAID') {
       return (
         <View style={styles.twoBtnGrid}>
           <Pressable
@@ -172,15 +109,24 @@ export function OrderCard({
           >
             <Ionicons name="checkmark-circle-outline" size={16} color="#FFFFFF" />
             <Text style={styles.primaryRoseBtnText}>
-              {isPhotoshoot ? 'Chấp nhận lịch chụp' : 'Xác nhận & Chuẩn bị'}
+              {isPhotoshootOnly ? 'Chấp nhận lịch chụp' : 'Xác nhận & Chuẩn bị'}
             </Text>
           </Pressable>
         </View>
       );
     }
 
-    // 2. CONFIRMED
-    if (status === 'CONFIRMED') {
+    if (stage === 'PREPARING') {
+      if (isPhotoshootOnly && myPhotoItems.length === 0) {
+        return (
+          <Pressable
+            style={({ pressed }) => [styles.fullOutlineBtn, pressed && styles.pressed]}
+            onPress={() => onPressDetail(order)}
+          >
+            <Text style={styles.fullOutlineBtnText}>Xem chi tiết đơn</Text>
+          </Pressable>
+        );
+      }
       return (
         <View style={styles.twoBtnGrid}>
           <Pressable
@@ -194,38 +140,54 @@ export function OrderCard({
             onPress={() => onPressPrimaryAction(order)}
           >
             <Ionicons
-              name={isPhotoshoot ? 'play-circle-outline' : 'camera-outline'}
+              name={isPhotoshootOnly ? 'play-circle-outline' : 'shirt-outline'}
               size={16}
               color="#FFFFFF"
             />
             <Text style={styles.primaryRoseBtnText}>
-              {isPhotoshoot ? 'Bắt đầu buổi chụp' : 'Bàn giao áo (Tải ảnh)'}
+              {isPhotoshootOnly ? 'Bắt đầu buổi chụp' : 'Sẵn sàng giao đồ'}
             </Text>
           </Pressable>
         </View>
       );
     }
 
-    // 3. PICKUP_PENDING (Waiting for customer to confirm pickup)
-    if (status === 'PICKUP_PENDING') {
+    if (stage === 'READY_NEEDS_HANDOVER_PHOTOS') {
       return (
         <View style={styles.twoBtnGrid}>
           <Pressable
-            style={({ pressed }) => [styles.waitingPillBtn, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}
             onPress={() => onPressDetail(order)}
           >
-            <Ionicons name="time-outline" size={15} color="#B45309" />
-            <Text style={styles.waitingPillText}>
-              Chờ khách xác nhận nhận đồ...
-            </Text>
+            <Text style={styles.secondaryBtnText}>Chi tiết</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.primaryRoseBtn, pressed && styles.pressed]}
+            onPress={() => onPressPrimaryAction(order)}
+          >
+            <Ionicons name="camera-outline" size={16} color="#FFFFFF" />
+            <Text style={styles.primaryRoseBtnText}>Bàn giao áo (Tải ảnh)</Text>
           </Pressable>
         </View>
       );
     }
 
-    // 4. PICKED_UP / COMBO_PHOTOS_APPROVED
-    if (status === 'PICKED_UP' || status === 'COMBO_PHOTOS_APPROVED') {
-      if (isCombo && status === 'PICKED_UP' && !order.photosApproved) {
+    if (stage === 'HANDOVER_AWAITING_CUSTOMER') {
+      return (
+        <Pressable
+          style={({ pressed }) => [styles.waitingPillBtn, pressed && styles.pressed]}
+          onPress={() => onPressDetail(order)}
+        >
+          <Ionicons name="time-outline" size={15} color="#B45309" />
+          <Text style={styles.waitingPillText} numberOfLines={1}>
+            Đã gửi ảnh · Chờ khách xác nhận nhận áo
+          </Text>
+        </Pressable>
+      );
+    }
+
+    if (stage === 'IN_RENTAL') {
+      if (isCombo && !order.photosApproved && myPhotoItems.length > 0) {
         return (
           <View style={styles.twoBtnGrid}>
             <Pressable
@@ -246,31 +208,39 @@ export function OrderCard({
       }
 
       return (
+        <Pressable
+          style={({ pressed }) => [styles.waitingPillBtn, styles.emeraldWaitingBtn, pressed && styles.pressed]}
+          onPress={() => onPressDetail(order)}
+        >
+          <Ionicons name="bag-check-outline" size={15} color="#047857" />
+          <Text style={[styles.waitingPillText, { color: '#047857' }]} numberOfLines={1}>
+            Khách đang giữ áo · Chờ yêu cầu trả đồ
+          </Text>
+        </Pressable>
+      );
+    }
+
+    if (stage === 'CUSTOMER_RETURN_REQUESTED') {
+      return (
         <View style={styles.twoBtnGrid}>
           <Pressable
-            style={({ pressed }) => [styles.secondaryDangerBtn, pressed && styles.pressed]}
-            onPress={() =>
-              onPressSecondaryAction
-                ? onPressSecondaryAction(order, 'INCIDENT')
-                : onPressDetail(order)
-            }
+            style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}
+            onPress={() => onPressDetail(order)}
           >
-            <Ionicons name="warning-outline" size={14} color="#DC2626" />
-            <Text style={styles.secondaryDangerBtnText}>Báo sự cố</Text>
+            <Text style={styles.secondaryBtnText}>Chi tiết</Text>
           </Pressable>
           <Pressable
             style={({ pressed }) => [styles.primaryEmeraldBtn, pressed && styles.pressed]}
             onPress={() => onPressPrimaryAction(order)}
           >
             <Ionicons name="checkmark-done" size={16} color="#FFFFFF" />
-            <Text style={styles.primaryRoseBtnText}>Xác nhận đã trả đồ</Text>
+            <Text style={styles.primaryRoseBtnText}>Xác nhận đã nhận lại</Text>
           </Pressable>
         </View>
       );
     }
 
-    // 5. IN_PROGRESS (Photoshoot / Combo shooting)
-    if (status === 'IN_PROGRESS') {
+    if (stage === 'IN_PROGRESS') {
       return (
         <View style={styles.twoBtnGrid}>
           <Pressable
@@ -290,8 +260,7 @@ export function OrderCard({
       );
     }
 
-    // 6. RETURNED -> Ready to finalize COMPLETED & release Escrow
-    if (status === 'RETURNED') {
+    if (stage === 'RETURNED_NEEDS_INSPECTION') {
       return (
         <View style={styles.twoBtnGrid}>
           <Pressable
@@ -310,26 +279,71 @@ export function OrderCard({
             onPress={() => onPressPrimaryAction(order)}
           >
             <Ionicons name="cash-outline" size={16} color="#FFFFFF" />
-            <Text style={styles.primaryRoseBtnText}>
-              Hoàn thành & Hoàn cọc
-            </Text>
+            <Text style={styles.primaryRoseBtnText}>Không sự cố · Hoàn cọc</Text>
           </Pressable>
         </View>
       );
     }
 
-    // 7. AWAITING_REVIEW or RETURN_PENDING
-    if (status === 'AWAITING_REVIEW' || status === 'RETURN_PENDING') {
+    if (stage === 'CLEANING_AFTER_REFUND') {
+      return (
+        <View style={styles.twoBtnGrid}>
+          <Pressable
+            style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}
+            onPress={() => onPressDetail(order)}
+          >
+            <Text style={styles.secondaryBtnText}>Chi tiết</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.primaryEmeraldBtn, pressed && styles.pressed]}
+            onPress={() => onPressPrimaryAction(order)}
+          >
+            <Ionicons name="sparkles-outline" size={15} color="#FFFFFF" />
+            <Text style={styles.primaryRoseBtnText}>Hoàn tất giặt ủi</Text>
+          </Pressable>
+        </View>
+      );
+    }
+
+    if (
+      stage === 'AWAITING_REVIEW' ||
+      stage === 'INCIDENT_PENDING_CUSTOMER' ||
+      stage === 'COMBO_PHOTOS_APPROVED' ||
+      stage === 'DISPUTED' ||
+      stage === 'PENDING_PAYMENT'
+    ) {
       return (
         <Pressable
-          style={({ pressed }) => [styles.waitingPillBtn, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.waitingPillBtn,
+            (stage === 'INCIDENT_PENDING_CUSTOMER' || stage === 'DISPUTED') && styles.roseWaitingBtn,
+            pressed && styles.pressed,
+          ]}
           onPress={() => onPressDetail(order)}
         >
-          <Ionicons name="time-outline" size={15} color="#B45309" />
-          <Text style={styles.waitingPillText}>
-            {status === 'AWAITING_REVIEW'
-              ? 'Đang chờ khách duyệt nhận ảnh · Xem chi tiết'
-              : 'Đang chờ khách xác nhận đền bù sự cố · Xem chi tiết'}
+          <Ionicons
+            name={
+              stage === 'INCIDENT_PENDING_CUSTOMER' || stage === 'DISPUTED'
+                ? 'alert-circle-outline'
+                : 'time-outline'
+            }
+            size={15}
+            color={
+              stage === 'INCIDENT_PENDING_CUSTOMER' || stage === 'DISPUTED'
+                ? '#DC2626'
+                : '#B45309'
+            }
+          />
+          <Text
+            style={[
+              styles.waitingPillText,
+              (stage === 'INCIDENT_PENDING_CUSTOMER' || stage === 'DISPUTED') && {
+                color: '#DC2626',
+              },
+            ]}
+            numberOfLines={1}
+          >
+            {display.shortLabel} · Xem chi tiết
           </Text>
         </Pressable>
       );
@@ -350,10 +364,12 @@ export function OrderCard({
       {/* 1. Top Row: Order ID + Type Badge + Status Pill */}
       <View style={styles.topRow}>
         <View style={styles.codeGroup}>
-          <Text style={styles.orderCode}>{orderCode}</Text>
+          <Text style={styles.orderCode} numberOfLines={1}>
+            {orderCode}
+          </Text>
           <View style={styles.typeBadge}>
             <Text style={styles.typeBadgeText}>
-              {isCombo ? 'Combo' : isPhotoshoot ? 'Chụp ảnh' : 'Áo dài'}
+              {isCombo ? 'Combo' : isPhotoshootOnly ? 'Chụp ảnh' : 'Áo dài'}
             </Text>
           </View>
         </View>
@@ -384,6 +400,7 @@ export function OrderCard({
               statusTone === 'emerald' && styles.statusTextEmerald,
               statusTone === 'gray' && styles.statusTextGray,
             ]}
+            numberOfLines={1}
           >
             {statusLabel}
           </Text>
@@ -467,32 +484,85 @@ export function OrderCard({
         </View>
       </View>
 
-      {/* 3. Item Preview Row */}
-      <Pressable style={styles.itemBox} onPress={() => onPressDetail(order)}>
-        <Image source={{ uri: getMediaUrl(itemImage) }} style={styles.itemThumb} />
-        <View style={styles.itemTextCol}>
-          <Text style={styles.itemTitle} numberOfLines={1}>
-            {itemName}
+      {/* 3. Items List Preview (all items in order so nothing is hidden) */}
+      <Pressable style={styles.itemsStack} onPress={() => onPressDetail(order)}>
+        {(allItems.length > 0 ? allItems : [firstItem]).map((it: any, idx: number) => {
+          const isPhotoItem = isPhotographyItem(it);
+          const name =
+            it.name ||
+            it.productName ||
+            it.productId?.name ||
+            it.photographyPackageId?.name ||
+            it.packageSnapshot?.name ||
+            (isPhotoItem ? 'Gói Chụp Ảnh' : 'Áo Dài Cổ Phục');
+          const img =
+            it.productId?.images?.[0] ||
+            it.photographyPackageId?.images?.[0] ||
+            it.images?.[0] ||
+            it.image ||
+            (isPhotoItem ? '/partner_cover.jpg' : '/hong_lien_hoa.webp');
+          const sku = !isPhotoItem ? getItemSkuOrCode(it) : null;
+          const sizeVal = it.selectedSize || it.size;
+          const itemStage = !isPhotoItem ? resolveRentalItemStage(order, it) : null;
+          const itemDisplay = !isPhotoItem && itemStage
+            ? resolveBookingDisplayState({ ...order, items: [it] }, 'provider')
+            : null;
+          const dateLabel = isPhotoItem
+            ? `${it.shootDate ? formatDate(it.shootDate) : 'Chưa rõ ngày'}${it.shootTimeSlot ? ` · ${it.shootTimeSlot}` : ''}`
+            : it.rentalFrom && it.rentalTo
+              ? `${formatDate(it.rentalFrom)} → ${formatDate(it.rentalTo)}`
+              : 'Nhận đồ tại tiệm';
+
+          return (
+            <View
+              key={it._id || idx}
+              style={[styles.itemBox, idx > 0 && styles.itemBoxDivider]}
+            >
+              <Image source={{ uri: getMediaUrl(img) }} style={styles.itemThumb} />
+              <View style={styles.itemTextCol}>
+                <View style={styles.itemTitleRow}>
+                  <Text style={styles.itemTitle} numberOfLines={1}>
+                    {name}
+                  </Text>
+                  {itemDisplay && (
+                    <Text style={styles.itemStageText} numberOfLines={1}>
+                      {itemDisplay.shortLabel}
+                    </Text>
+                  )}
+                </View>
+                <View style={styles.metaRow}>
+                  {!isPhotoItem ? (
+                    <>
+                      {sizeVal ? <Text style={styles.metaText}>Size {sizeVal}</Text> : null}
+                      {sizeVal && sku ? <Text style={styles.metaDot}>•</Text> : null}
+                      {sku ? <Text style={styles.tagText}>{sku}</Text> : null}
+                      {(sizeVal || sku) ? <Text style={styles.metaDot}>•</Text> : null}
+                    </>
+                  ) : null}
+                  <Text style={styles.noteText} numberOfLines={1}>
+                    {dateLabel}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          );
+        })}
+
+        <View style={styles.nextStepHintRow}>
+          <Ionicons
+            name={display.actionRequired ? 'flash-outline' : 'information-circle-outline'}
+            size={13}
+            color={display.actionRequired ? '#BA0049' : '#64748B'}
+          />
+          <Text
+            style={[
+              styles.nextStepHintText,
+              display.actionRequired && { color: '#9D174D' },
+            ]}
+            numberOfLines={2}
+          >
+            {display.nextStepText}
           </Text>
-          <View style={styles.metaRow}>
-            {!isPhotoshoot && (
-              <>
-                <Text style={styles.metaText}>Size {size}</Text>
-                <Text style={styles.metaDot}>•</Text>
-                <Text style={styles.tagText}>{tagCode}</Text>
-                <Text style={styles.metaDot}>•</Text>
-              </>
-            )}
-            <Text style={styles.noteText} numberOfLines={1}>
-              {status === 'PICKUP_PENDING'
-                ? 'Đã gửi ảnh bàn giao'
-                : status === 'RETURNED'
-                  ? 'Khách đã trả đồ'
-                  : isPhotoshoot
-                    ? 'Lịch chụp ngoại cảnh'
-                    : 'Nhận đồ tại tiệm'}
-            </Text>
-          </View>
         </View>
       </Pressable>
 
@@ -502,7 +572,7 @@ export function OrderCard({
           <Text style={styles.rentalPrice}>
             Tổng đơn:{' '}
             <Text style={styles.rentalPriceBold}>
-              {subTotal.toLocaleString('vi-VN')}đ
+              {Number(grandTotal || 0).toLocaleString('vi-VN')}đ
             </Text>
           </Text>
 
@@ -512,7 +582,7 @@ export function OrderCard({
               <Text style={styles.escrowText}>
                 Cọc Escrow:{' '}
                 <Text style={styles.escrowBold}>
-                  {depositTotal.toLocaleString('vi-VN')}đ
+                  {Number(depositTotal || 0).toLocaleString('vi-VN')}đ
                 </Text>
               </Text>
             </View>
@@ -731,15 +801,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  itemBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+  itemsStack: {
     backgroundColor: '#FBF9F9',
     borderRadius: 14,
     padding: 9,
     borderWidth: 1,
     borderColor: '#EFECEB',
+    gap: 8,
+  },
+  itemBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  itemBoxDivider: {
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#EFECEB',
   },
   itemThumb: {
     width: 48,
@@ -752,10 +830,41 @@ const styles = StyleSheet.create({
     minWidth: 0,
     gap: 3,
   },
+  itemTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
   itemTitle: {
+    flex: 1,
     fontSize: 13,
     fontFamily: FontFamily.bodyBold,
     color: '#1B1C1C',
+  },
+  itemStageText: {
+    fontSize: 9.5,
+    fontFamily: FontFamily.bodyBold,
+    color: '#BA0049',
+    backgroundColor: '#FFF0F3',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  nextStepHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#EFECEB',
+  },
+  nextStepHintText: {
+    flex: 1,
+    fontSize: 11,
+    fontFamily: FontFamily.bodyMedium,
+    color: '#475569',
+    lineHeight: 15,
   },
   metaRow: {
     flexDirection: 'row',
@@ -888,6 +997,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
+    paddingHorizontal: 10,
+  },
+  emeraldWaitingBtn: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  roseWaitingBtn: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
   },
   waitingPillText: {
     fontSize: 11,

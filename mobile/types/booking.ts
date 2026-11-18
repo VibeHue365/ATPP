@@ -46,21 +46,57 @@ export interface BookingPackage {
   editedPhotosCount?: number;
 }
 
+export type RentalFulfillmentStatus =
+  | 'PENDING'
+  | 'READY_FOR_PICKUP'
+  | 'PICKED_UP'
+  | 'CUSTOMER_RETURN_REQUESTED'
+  | 'RETURNED'
+  | 'COMPLETED'
+  | 'CANCELLED';
+
+export type RentalInventoryStatus =
+  | 'RESERVED'
+  | 'RENTED_OUT'
+  | 'RETURNED_PENDING_INSPECTION'
+  | 'CLEANING'
+  | 'AVAILABLE'
+  | 'MAINTENANCE'
+  | 'DAMAGED'
+  | 'LOST';
+
+export type RentalDepositSettlementStatus =
+  | 'HELD'
+  | 'PENDING_SETTLEMENT'
+  | 'FULLY_RELEASED'
+  | 'PARTIALLY_DEDUCTED'
+  | 'FULLY_DEDUCTED';
+
+export type RentalIssueStatus = 'NONE' | 'REPORTED' | 'UNDER_REVIEW' | 'RESOLVED';
+
+export interface RentalEvidenceSnapshot {
+  files?: string[];
+  note?: string | null;
+  uploadedAt?: string | null;
+  returnedAt?: string | null;
+}
+
 export interface RentalFulfillment {
-  status?:
-    | 'PENDING'
-    | 'READY_FOR_PICKUP'
-    | 'PICKED_UP'
-    | 'RETURNED'
-    | 'COMPLETED'
-    | 'CANCELLED';
+  status?: RentalFulfillmentStatus | string;
+  inventoryStatus?: RentalInventoryStatus | string;
+  depositSettlementStatus?: RentalDepositSettlementStatus | string;
+  issueStatus?: RentalIssueStatus | string;
   pickupDueAt?: string | null;
   returnDueAt?: string | null;
   readyAt?: string | null;
   pickedUpAt?: string | null;
   returnedAt?: string | null;
   completedAt?: string | null;
-  depositSettlementStatus?: string;
+  pickupConditionNote?: string | null;
+  returnConditionNote?: string | null;
+  pickupEvidence?: RentalEvidenceSnapshot | null;
+  customerReturnEvidence?: RentalEvidenceSnapshot | null;
+  returnEvidence?: RentalEvidenceSnapshot | null;
   depositDeductedAmount?: number;
   depositRefundAmount?: number;
 }
@@ -107,6 +143,15 @@ export interface BookingItem {
   shootConcept?: string | null;
   customRequests?: string | null;
   isReviewed?: boolean;
+  isMyItem?: boolean;
+  inventoryItemId?: string | null;
+  inventoryItem?: {
+    _id: string;
+    sku?: string | null;
+    status?: string | null;
+    conditionStatus?: string | null;
+    operationalAvailableFrom?: string | null;
+  } | null;
   rentalFulfillment?: RentalFulfillment | null;
   packageSnapshot?: {
     name?: string;
@@ -196,11 +241,21 @@ export interface Booking {
   deliveryDriveUrl?: string | null;
   photosApproved?: boolean;
   hasIncident?: boolean;
+  incident?: {
+    _id: string;
+    status: string;
+    requestedAmount?: number;
+    description?: string;
+    actionType?: string;
+    evidencePhotos?: string[];
+  } | null;
   activeIncident?: {
     _id: string;
     status: string;
     requestedAmount?: number;
     description?: string;
+    actionType?: string;
+    evidencePhotos?: string[];
   } | null;
 }
 

@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { contractApi } from '@/apis/contractApi';
+import { TagoConfirmOverlay } from '@/components/ui/TagoAlertModal';
 import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -73,6 +73,7 @@ export function ContractReviewModal({
   const [viewMode, setViewMode] =
     useState<ContractPresentationMode>('DETAILED');
   const [agreed, setAgreed] = useState(false);
+  const [declineConfirmOpen, setDeclineConfirmOpen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   const loadContracts = useCallback(async () => {
@@ -138,6 +139,7 @@ export function ContractReviewModal({
       setActiveProviderId(null);
       setError(null);
       setAgreed(false);
+      setDeclineConfirmOpen(false);
     }
   }, [visible, bookingId, loadContracts]);
 
@@ -283,40 +285,31 @@ export function ContractReviewModal({
 
   const confirmDecline = () => {
     if (!bookingId || !activeDetail || !activeDetail.versionId) return;
-    Alert.alert(
-      'Từ chối hợp đồng?',
-      'Nếu bạn không đồng ý Hợp đồng điện tử, bạn sẽ chưa thể thanh toán đơn thuê này.',
-      [
-        { text: 'Quay lại', style: 'cancel' },
-        {
-          text: 'Xác nhận từ chối',
-          style: 'destructive',
-          onPress: () => {
-            void (async () => {
-              if (!activeDetail.versionId) return;
-              setSubmitting(true);
-              try {
-                await contractApi.submitConsent(activeDetail.contractId, {
-                  contractVersionId: activeDetail.versionId,
-                  action: 'DECLINE',
-                  contentHash: activeDetail.contentHash || '',
-                  bookingFingerprint: activeDetail.bookingFingerprint || '',
-                  idempotencyKey: createConsentIdempotencyKey(),
-                });
-                bumpBookingSync();
-                show('Đã ghi nhận từ chối hợp đồng.', 'info');
-                onDeclinedOrCancelled?.();
-                onClose();
-              } catch (err) {
-                show(getApiErrorMessage(err, 'Không thể gửi yêu cầu.'), 'error');
-              } finally {
-                setSubmitting(false);
-              }
-            })();
-          },
-        },
-      ],
-    );
+    setDeclineConfirmOpen(true);
+  };
+
+  const handleDecline = async () => {
+    if (!bookingId || !activeDetail || !activeDetail.versionId) return;
+    setSubmitting(true);
+    try {
+      await contractApi.submitConsent(activeDetail.contractId, {
+        contractVersionId: activeDetail.versionId,
+        action: 'DECLINE',
+        contentHash: activeDetail.contentHash || '',
+        bookingFingerprint: activeDetail.bookingFingerprint || '',
+        idempotencyKey: createConsentIdempotencyKey(),
+      });
+      bumpBookingSync();
+      show('Đã ghi nhận từ chối hợp đồng.', 'info');
+      setDeclineConfirmOpen(false);
+      onDeclinedOrCancelled?.();
+      onClose();
+    } catch (err) {
+      setDeclineConfirmOpen(false);
+      show(getApiErrorMessage(err, 'Không thể gửi yêu cầu.'), 'error');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const signedCount =
@@ -327,7 +320,13 @@ export function ContractReviewModal({
     <Modal
       visible={visible}
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={() => {
+        if (declineConfirmOpen) {
+          if (!submitting) setDeclineConfirmOpen(false);
+          return;
+        }
+        onClose();
+      }}
       presentationStyle="fullScreen"
     >
       <SafeAreaView style={styles.root}>
@@ -603,6 +602,22 @@ export function ContractReviewModal({
             />
           </View>
         )}
+
+        <TagoConfirmOverlay
+          visible={declineConfirmOpen}
+          loading={submitting}
+          title="Từ chối hợp đồng?"
+          message="Nếu bạn không đồng ý Hợp đồng điện tử, bạn sẽ chưa thể thanh toán đơn thuê này."
+          onClose={() => setDeclineConfirmOpen(false)}
+          buttons={[
+            { text: 'Quay lại', style: 'cancel' },
+            {
+              text: 'Xác nhận từ chối',
+              style: 'destructive',
+              onPress: handleDecline,
+            },
+          ]}
+        />
       </SafeAreaView>
     </Modal>
   );
@@ -763,6 +778,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tabsRow: {
+    flexGrow: 0,
+    flexShrink: 0,
     maxHeight: 50,
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,

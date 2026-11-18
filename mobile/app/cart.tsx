@@ -3,8 +3,9 @@ import { Image } from 'expo-image';
 import { type Href, router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,6 +17,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { DateSelector } from '@/components/product/DateSelector';
 import { AppButton } from '@/components/ui/AppButton';
 import { EmptyState, LoadingState } from '@/components/ui/ScreenState';
+import { TagoAlert } from '@/components/ui/TagoAlertModal';
 import { Colors, FontFamily, Shadow } from '@/constants/theme';
 import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -142,41 +144,69 @@ export default function CartScreen() {
   };
 
   const removeLinked = (item: CartItem) => {
-    Alert.alert(
-      'Xóa dịch vụ',
-      `Bạn có chắc chắn muốn xóa "${item.name ?? 'dịch vụ này'}" khỏi giỏ hàng?`,
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Xóa',
-          style: 'destructive',
-          onPress: () => {
-            linkedIds(item).forEach(removeItem);
-            show('Đã xóa dịch vụ khỏi giỏ hàng', 'info');
-          },
+    const ids = linkedIds(item);
+    const isComboGroup = Boolean(item.comboId && ids.length > 1);
+    const title = isComboGroup ? 'Xóa trọn gói Combo?' : 'Xóa dịch vụ khỏi giỏ?';
+    const message = isComboGroup
+      ? `“${item.name ?? 'Dịch vụ này'}” thuộc Combo gồm ${ids.length} hạng mục đi kèm. Xóa mục này sẽ gỡ cả gói khỏi giỏ hàng.`
+      : `Bạn có chắc chắn muốn xóa “${item.name ?? 'dịch vụ này'}” khỏi giỏ hàng?`;
+
+    TagoAlert.alert(title, message, [
+      { text: 'Giữ lại', style: 'cancel' },
+      {
+        text: isComboGroup ? `Xóa gói (${ids.length})` : 'Xóa dịch vụ',
+        style: 'destructive',
+        onPress: () => {
+          ids.forEach(removeItem);
+          setSelectedIds((current) => current.filter((id) => !ids.includes(id)));
+          show(
+            isComboGroup
+              ? 'Đã xóa gói Combo khỏi giỏ hàng'
+              : 'Đã xóa dịch vụ khỏi giỏ hàng',
+            'info',
+          );
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const removeSelected = () => {
-    if (!selected.length) return;
-    Alert.alert(
-      'Xóa mục đã chọn',
-      `Bạn có chắc muốn xóa ${selected.length} dịch vụ đã chọn khỏi giỏ hàng?`,
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Xóa tất cả',
-          style: 'destructive',
-          onPress: () => {
-            selected.forEach((item) => removeItem(item.id));
-            setSelectedIds([]);
-            show('Đã xóa các dịch vụ đã chọn', 'info');
-          },
+    const count = selected.length;
+    if (!count) return;
+    const isAll = count === items.length;
+    const title =
+      isAll && count > 1
+        ? 'Xóa toàn bộ giỏ hàng?'
+        : count === 1
+          ? 'Xóa dịch vụ đã chọn?'
+          : `Xóa ${count} dịch vụ đã chọn?`;
+    const message =
+      count === 1
+        ? `Bạn có chắc chắn muốn xóa “${selected[0].name ?? 'dịch vụ này'}” khỏi giỏ hàng?`
+        : `Bạn có chắc chắn muốn xóa ${count} dịch vụ đã chọn khỏi giỏ hàng?`;
+    const confirmLabel =
+      count === 1 ? 'Xóa dịch vụ' : isAll ? 'Xóa tất cả' : `Xóa (${count})`;
+
+    TagoAlert.alert(title, message, [
+      { text: 'Giữ lại', style: 'cancel' },
+      {
+        text: confirmLabel,
+        style: 'destructive',
+        onPress: () => {
+          const removedIds = selected.map((item) => item.id);
+          removedIds.forEach(removeItem);
+          setSelectedIds((current) =>
+            current.filter((id) => !removedIds.includes(id)),
+          );
+          show(
+            count === 1
+              ? 'Đã xóa dịch vụ khỏi giỏ hàng'
+              : `Đã xóa ${count} dịch vụ khỏi giỏ hàng`,
+            'info',
+          );
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const openEditModal = (item: CartItem) => {
@@ -260,8 +290,8 @@ export default function CartScreen() {
 
         {selected.length > 0 ? (
           <Pressable style={styles.clearBtn} onPress={removeSelected} hitSlop={8}>
-            <Ionicons name="trash-outline" size={17} color="#DC2626" />
-            <Text style={styles.clearBtnText}>Xóa</Text>
+            <Ionicons name="trash-outline" size={16} color="#DC2626" />
+            <Text style={styles.clearBtnText}>Xóa ({selected.length})</Text>
           </Pressable>
         ) : (
           <View style={styles.countBadge}>
@@ -509,7 +539,9 @@ export default function CartScreen() {
         transparent
         animationType="slide"
         onRequestClose={() => setEditingItem(null)}>
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
@@ -527,6 +559,7 @@ export default function CartScreen() {
             {editingItem?.itemType === 'PRODUCT' ? (
               <ScrollView
                 showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
                 contentContainerStyle={{ gap: 16, paddingBottom: 24 }}>
                 {/* Size Selection */}
                 <View>
@@ -637,7 +670,7 @@ export default function CartScreen() {
               </View>
             )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

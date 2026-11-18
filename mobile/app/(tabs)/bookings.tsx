@@ -23,15 +23,14 @@ import { useToast } from '@/contexts/ToastContext';
 import { useBookings } from '@/hooks/useBookings';
 import type { Booking } from '@/types/booking';
 import {
-  attentionStatuses,
   bookingDate,
-  bookingStatus,
   bookingTitle,
   formatDate,
   itemImage,
   terminalStatuses,
 } from '@/utils/booking';
 import { getMediaUrl } from '@/utils/media';
+import { resolveBookingDisplayState } from '@/utils/rentalState';
 
 type Filter = 'ALL' | 'PHOTO' | 'RENTAL' | 'ATTENTION';
 
@@ -76,7 +75,7 @@ function BookingsScreen() {
           if (!match) return false;
           if (filter === 'PHOTO') return item.bookingType === 'PHOTOGRAPHY' || item.bookingType === 'COMBO';
           if (filter === 'RENTAL') return item.bookingType === 'AODAI_RENTAL' || item.bookingType === 'COMBO';
-          if (filter === 'ATTENTION') return attentionStatuses.has(item.status);
+          if (filter === 'ATTENTION') return resolveBookingDisplayState(item, 'customer').actionRequired;
           return true;
         })
         .sort(
@@ -98,7 +97,7 @@ function BookingsScreen() {
     upcoming: items.filter((item) =>
       ['DEPOSIT_PAID', 'CONFIRMED', 'PICKUP_PENDING'].includes(item.status)
     ).length,
-    attention: items.filter((item) => attentionStatuses.has(item.status)).length,
+    attention: items.filter((item) => resolveBookingDisplayState(item, 'customer').actionRequired).length,
     done: items.filter((item) => item.status === 'COMPLETED').length,
   };
 
@@ -303,21 +302,20 @@ function BookingsScreen() {
 }
 
 function BookingCard({ item, onPay }: { item: Booking; onPay: () => void }) {
-  const status = bookingStatus[item.status] ?? {
-    label: item.status,
-    tone: 'neutral' as const,
-  };
+  const display = resolveBookingDisplayState(item, 'customer');
   const first = item.items[0];
   const isPhoto = item.bookingType === 'PHOTOGRAPHY';
   const isCombo = item.bookingType === 'COMBO';
   const imgUri = getMediaUrl(first && itemImage(first));
+  const rentalFrom = first?.rentalFrom;
+  const rentalTo = first?.rentalTo;
 
   return (
     <Pressable
       onPress={() => router.push(`/booking/${item._id}` as Href)}
       style={({ pressed }) => [
         styles.card,
-        item.status === 'PENDING_PAYMENT' && styles.cardAttention,
+        display.actionRequired && styles.cardAttention,
         pressed && { opacity: 0.94 },
       ]}
     >
@@ -335,7 +333,7 @@ function BookingCard({ item, onPay }: { item: Booking; onPay: () => void }) {
             {isCombo ? 'COMBO TRỌN GÓI' : isPhoto ? 'CA CHỤP ẢNH' : 'THUÊ CỔ PHỤC'}
           </Text>
         </View>
-        <StatusBadge label={status.label} tone={status.tone} />
+        <StatusBadge label={display.label} tone={display.tone} />
       </View>
 
       {/* Body Row */}
@@ -364,12 +362,30 @@ function BookingCard({ item, onPay }: { item: Booking; onPay: () => void }) {
 
           <View style={styles.dateRow}>
             <Ionicons name="calendar-outline" size={13} color="#5F5E5E" />
-            <Text style={styles.dateText}>
-              {formatDate(bookingDate(item))}
-              {first?.shootTimeSlot ? ` · ${first.shootTimeSlot}` : ''}
+            <Text style={styles.dateText} numberOfLines={1}>
+              {!isPhoto && rentalFrom && rentalTo
+                ? `${formatDate(rentalFrom)} → ${formatDate(rentalTo)}`
+                : `${formatDate(bookingDate(item))}${first?.shootTimeSlot ? ` · ${first.shootTimeSlot}` : ''}`}
             </Text>
           </View>
         </View>
+      </View>
+
+      <View style={styles.nextStepBanner}>
+        <Ionicons
+          name={display.actionRequired ? 'alert-circle-outline' : 'information-circle-outline'}
+          size={14}
+          color={display.actionRequired ? '#B45309' : '#0369A1'}
+        />
+        <Text
+          style={[
+            styles.nextStepText,
+            display.actionRequired && { color: '#92400E', fontFamily: FontFamily.bodySemiBold },
+          ]}
+          numberOfLines={2}
+        >
+          {display.nextStepText}
+        </Text>
       </View>
 
       {/* Footer Row */}
@@ -730,6 +746,24 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bodyMedium,
     fontSize: 12,
     color: '#5F5E5E',
+  },
+  nextStepBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  nextStepText: {
+    flex: 1,
+    fontFamily: FontFamily.body,
+    fontSize: 11,
+    lineHeight: 16,
+    color: '#334155',
   },
   cardBottom: {
     borderTopWidth: 1,

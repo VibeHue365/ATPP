@@ -47,14 +47,16 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
+    "prestart": "node ./scripts/ensure-adb-reverse.js",
     "start": "expo start",
+    "preandroid": "node ./scripts/ensure-adb-reverse.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "test:cov": "jest --runInBand --coverage",
-    "reverse": "adb reverse tcp:3000 tcp:3000 && adb reverse tcp:8081 tcp:8081",
+    "reverse": "node ./scripts/ensure-adb-reverse.js --verbose",
     "typecheck": "tsc --noEmit"
   },
   "private": true

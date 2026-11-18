@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  KeyboardAvoidingView,
+  Platform,
   View,
   Text,
   StyleSheet,
@@ -9,15 +11,19 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { providerApi } from '@/apis/providerApi';
 import { useToast } from '@/contexts/ToastContext';
+import { prepareImageUploadPart } from '@/utils/imageUpload';
 import { getMediaUrl } from '@/utils/media';
 
 interface AddProductModalProps {
   visible: boolean;
+  asScreen?: boolean;
+  editingProduct?: any | null;
   onClose: () => void;
   onCreated: () => void;
 }
@@ -34,9 +40,12 @@ const ALL_MATERIALS = ['Gấm Tơ Tằm', 'Lụa Tơ Tằm', 'Nhung The', 'Organ
 
 export function AddProductModal({
   visible,
+  asScreen = false,
+  editingProduct,
   onClose,
   onCreated,
 }: AddProductModalProps) {
+  const isEditing = Boolean(editingProduct?._id || editingProduct?.id);
   const { show } = useToast();
   const [name, setName] = useState('');
   const [style, setStyle] = useState(PRESET_STYLES[0]);
@@ -45,10 +54,59 @@ export function AddProductModal({
   const [selectedSizes, setSelectedSizes] = useState<string[]>(['S', 'M', 'L']);
   const [basePrice, setBasePrice] = useState('850000');
   const [depositAmount, setDepositAmount] = useState('300000');
+  const [replacementValue, setReplacementValue] = useState('');
+  const [description, setDescription] = useState('');
   const [initialQty, setInitialQty] = useState('2');
   const [images, setImages] = useState<string[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    if (editingProduct) {
+      setName(editingProduct.name || '');
+      setStyle(editingProduct.style || PRESET_STYLES[0]);
+      setColor(
+        Array.isArray(editingProduct.colors) && editingProduct.colors[0]
+          ? String(editingProduct.colors[0])
+          : 'Đỏ Chu Sa',
+      );
+      setMaterial(
+        Array.isArray(editingProduct.materials) && editingProduct.materials[0]
+          ? String(editingProduct.materials[0])
+          : ALL_MATERIALS[0],
+      );
+      setSelectedSizes(
+        Array.isArray(editingProduct.sizes) && editingProduct.sizes.length > 0
+          ? editingProduct.sizes.map(String)
+          : ['S', 'M', 'L'],
+      );
+      setBasePrice(String(editingProduct.basePrice ?? 500000));
+      setDepositAmount(String(editingProduct.depositAmount ?? 200000));
+      setReplacementValue(
+        typeof editingProduct.replacementValue === 'number' &&
+          editingProduct.replacementValue > 0
+          ? String(editingProduct.replacementValue)
+          : '',
+      );
+      setDescription(editingProduct.description || '');
+      setImages(
+        Array.isArray(editingProduct.images) ? editingProduct.images : [],
+      );
+    } else {
+      setName('');
+      setStyle(PRESET_STYLES[0]);
+      setColor('Đỏ Chu Sa');
+      setMaterial(ALL_MATERIALS[0]);
+      setSelectedSizes(['S', 'M', 'L']);
+      setBasePrice('850000');
+      setDepositAmount('300000');
+      setReplacementValue('');
+      setDescription('');
+      setInitialQty('2');
+      setImages([]);
+    }
+  }, [visible, editingProduct]);
 
   const toggleSize = (sz: string) => {
     setSelectedSizes((prev) => {
@@ -64,16 +122,13 @@ export function AddProductModal({
     setUploadingImage(true);
     try {
       const formData = new FormData();
-      assets.forEach((asset, idx) => {
-        formData.append(
-          'images',
-          (asset.file ?? {
-            uri: asset.uri,
-            name: asset.fileName ?? `garment_${Date.now()}_${idx}.jpg`,
-            type: asset.mimeType ?? 'image/jpeg',
-          }) as unknown as Blob,
+      for (let idx = 0; idx < assets.length; idx += 1) {
+        const part = await prepareImageUploadPart(
+          assets[idx],
+          `garment_${Date.now()}_${idx}.jpg`,
         );
-      });
+        formData.append('images', part);
+      }
       const res = await providerApi.uploadImages(formData);
       if (res?.urls?.length) {
         setImages((prev) => [...prev, ...res.urls]);
@@ -141,50 +196,106 @@ export function AddProductModal({
     }
   };
 
-  const handleCreate = async () => {
+  const handleSave = async () => {
     if (!name.trim()) {
       show('Vui lòng nhập tên mẫu áo dài', 'error');
       return;
     }
 
+    const cleanReplacementStr = replacementValue.replace(/[^0-9]/g, '');
+    const parsedReplacement = cleanReplacementStr
+      ? Math.round(Number(cleanReplacementStr))
+      : null;
+
+    if (replacementValue.trim() && (!parsedReplacement || parsedReplacement <= 0)) {
+      show('Giá trị bồi hoàn trang phục phải lớn hơn 0 VNĐ', 'error');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const categories = await providerApi.getCategories().catch(() => []);
-      const firstCategoryId =
-        Array.isArray(categories) && categories.length > 0
-          ? categories[0]._id || categories[0].id
-          : undefined;
-
       const finalImages =
         images.length > 0
           ? images
           : [
               'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=600&q=80',
             ];
+      const sizesToSave = selectedSizes.length > 0 ? selectedSizes : ['S', 'M', 'L'];
+      const cleanColor = color.trim() || 'Đỏ';
 
-      const sizesToCreate = selectedSizes.length > 0 ? selectedSizes : ['S', 'M', 'L'];
+      if (isEditing) {
+        const productId = String(editingProduct._id || editingProduct.id);
+        const existingColors = Array.isArray(editingProduct.colors)
+          ? editingProduct.colors.slice(1)
+          : [];
+        const existingMaterials = Array.isArray(editingProduct.materials)
+          ? editingProduct.materials.slice(1)
+          : [];
 
-      const created = await providerApi.createProduct({
+        const updatePayload: Record<string, any> = {
+          name: name.trim(),
+          style,
+          basePrice: Number(basePrice) || 0,
+          depositAmount: Number(depositAmount) || 0,
+          sizes: sizesToSave,
+          colors: Array.from(new Set([cleanColor, ...existingColors])),
+          materials: Array.from(new Set([material, ...existingMaterials])),
+          images: finalImages,
+          description:
+            description.trim() ||
+            `${name.trim()} - Bộ sưu tập ${style} chất liệu ${material} tại TàGo Atelier.`,
+        };
+
+        if (parsedReplacement !== null && parsedReplacement > 0) {
+          updatePayload.replacementValue = parsedReplacement;
+        } else if (
+          typeof editingProduct.replacementValue === 'number' &&
+          editingProduct.replacementValue > 0
+        ) {
+          updatePayload.replacementValue = null;
+        }
+
+        await providerApi.updateProduct(productId, updatePayload);
+        show('Đã cập nhật thông tin & giá trị bồi hoàn sản phẩm!', 'success');
+        onCreated();
+        onClose();
+        return;
+      }
+
+      const categories = await providerApi.getCategories().catch(() => []);
+      const firstCategoryId =
+        Array.isArray(categories) && categories.length > 0
+          ? categories[0]._id || categories[0].id
+          : undefined;
+
+      const createPayload: Record<string, any> = {
         name: name.trim(),
         categoryId: firstCategoryId,
         style,
         basePrice: Number(basePrice) || 500000,
         depositAmount: Number(depositAmount) || 200000,
-        sizes: sizesToCreate,
-        colors: [color.trim() || 'Đỏ'],
+        sizes: sizesToSave,
+        colors: [cleanColor],
         materials: [material],
         images: finalImages,
-        description: `${name.trim()} - Bộ sưu tập ${style} chất liệu ${material} tại TàGo Atelier.`,
-      });
+        description:
+          description.trim() ||
+          `${name.trim()} - Bộ sưu tập ${style} chất liệu ${material} tại TàGo Atelier.`,
+      };
+      if (parsedReplacement !== null && parsedReplacement > 0) {
+        createPayload.replacementValue = parsedReplacement;
+      }
+
+      const created = await providerApi.createProduct(createPayload);
 
       const qty = Math.max(1, parseInt(initialQty, 10) || 2);
       if (created?._id) {
         await Promise.allSettled(
-          sizesToCreate.map((sz) =>
+          sizesToSave.map((sz) =>
             providerApi.adjustVariantQuantity({
               productId: created._id,
               size: sz,
-              color: color.trim() || 'Đỏ',
+              color: cleanColor,
               material,
               quantity: qty,
             }),
@@ -199,83 +310,85 @@ export function AddProductModal({
       onClose();
     } catch (err: any) {
       const msg =
-        err?.response?.data?.message || 'Không thể tạo mẫu áo mới';
+        err?.response?.data?.message ||
+        (isEditing ? 'Không thể cập nhật sản phẩm' : 'Không thể tạo mẫu áo mới');
       show(Array.isArray(msg) ? msg[0] : msg, 'error');
     } finally {
       setSubmitting(false);
     }
   };
 
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <View style={styles.overlay}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-
-        <View style={styles.sheet}>
-          <View style={styles.handleBar} />
-
-          <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              <View style={styles.iconWrap}>
-                <MaterialIcons name="add-business" size={19} color="#BA0049" />
-              </View>
-              <View>
-                <Text style={styles.title}>Thêm Mẫu Áo Dài Mới</Text>
-                <Text style={styles.subtitle}>
-                  Tải ảnh thực tế & cấp mã SKU / chip RFID tự động
-                </Text>
-              </View>
+  const content = (
+    <SafeAreaView style={styles.fullScreenRoot} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.header}>
+          <Pressable style={styles.backBtn} onPress={onClose} hitSlop={8}>
+            <Ionicons name="arrow-back" size={20} color="#1B1C1C" />
+          </Pressable>
+          <View style={styles.headerLeft}>
+            <View style={styles.iconWrap}>
+              <MaterialIcons name="add-business" size={19} color="#BA0049" />
             </View>
-            <Pressable style={styles.closeBtn} onPress={onClose}>
-              <Ionicons name="close" size={20} color="#1B1C1C" />
-            </Pressable>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.title} numberOfLines={1}>
+                {isEditing ? 'Chỉnh sửa Mẫu Áo Dài' : 'Thêm Mẫu Áo Dài Mới'}
+              </Text>
+              <Text style={styles.subtitle} numberOfLines={2}>
+                {isEditing
+                  ? 'Cập nhật giá thuê, tiền cọc & giá trị bồi hoàn Hợp đồng V2'
+                  : 'Tải ảnh thực tế & cấp mã SKU / chip RFID tự động'}
+              </Text>
+            </View>
           </View>
+          <Pressable style={styles.closeBtn} onPress={onClose}>
+            <Ionicons name="close" size={20} color="#1B1C1C" />
+          </Pressable>
+        </View>
 
-          <ScrollView
-            style={styles.body}
-            contentContainerStyle={styles.bodyContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            {/* Image Picker Section */}
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Hình ảnh thực tế mẫu Cổ phục / Áo dài</Text>
-              <View style={styles.uploadActionRow}>
-                <Pressable
-                  style={styles.uploadBtn}
-                  onPress={() => void handlePickFromLibrary()}
-                  disabled={uploadingImage}
-                >
-                  {uploadingImage ? (
-                    <ActivityIndicator size="small" color="#BA0049" />
-                  ) : (
-                    <>
-                      <Ionicons name="images-outline" size={17} color="#BA0049" />
-                      <Text style={styles.uploadBtnText}>Chọn ảnh thư viện</Text>
-                    </>
-                  )}
-                </Pressable>
-                <Pressable
-                  style={styles.uploadBtn}
-                  onPress={() => void handleTakePhoto()}
-                  disabled={uploadingImage}
-                >
-                  <Ionicons name="camera-outline" size={17} color="#BA0049" />
-                  <Text style={styles.uploadBtnText}>Chụp ảnh mới</Text>
-                </Pressable>
-              </View>
+        <ScrollView
+          style={styles.body}
+          contentContainerStyle={styles.bodyContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Image Picker Section */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Hình ảnh thực tế mẫu Cổ phục / Áo dài</Text>
+            <View style={styles.uploadActionRow}>
+              <Pressable
+                style={styles.uploadBtn}
+                onPress={() => void handlePickFromLibrary()}
+                disabled={uploadingImage}
+              >
+                {uploadingImage ? (
+                  <ActivityIndicator size="small" color="#BA0049" />
+                ) : (
+                  <>
+                    <Ionicons name="images-outline" size={17} color="#BA0049" />
+                    <Text style={styles.uploadBtnText}>Chọn ảnh thư viện</Text>
+                  </>
+                )}
+              </Pressable>
+              <Pressable
+                style={styles.uploadBtn}
+                onPress={() => void handleTakePhoto()}
+                disabled={uploadingImage}
+              >
+                <Ionicons name="camera-outline" size={17} color="#BA0049" />
+                <Text style={styles.uploadBtnText}>Chụp ảnh mới</Text>
+              </Pressable>
+            </View>
 
-              {images.length > 0 && (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.thumbRow}
-                >
+            {images.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ flexGrow: 0, flexShrink: 0 }}
+                contentContainerStyle={styles.thumbRow}
+              >
                   {images.map((imgUrl, idx) => (
                     <View key={`${imgUrl}-${idx}`} style={styles.thumbWrap}>
                       <Image
@@ -393,15 +506,17 @@ export function AddProductModal({
                 />
               </View>
 
-              <View style={[styles.fieldGroup, { flex: 1 }]}>
-                <Text style={styles.label}>Số lượng mỗi Size</Text>
-                <TextInput
-                  style={styles.input}
-                  keyboardType="numeric"
-                  value={initialQty}
-                  onChangeText={setInitialQty}
-                />
-              </View>
+              {!isEditing && (
+                <View style={[styles.fieldGroup, { flex: 1 }]}>
+                  <Text style={styles.label}>Số lượng mỗi Size</Text>
+                  <TextInput
+                    style={styles.input}
+                    keyboardType="numeric"
+                    value={initialQty}
+                    onChangeText={setInitialQty}
+                  />
+                </View>
+              )}
             </View>
 
             <View style={styles.row2}>
@@ -425,6 +540,25 @@ export function AddProductModal({
                 />
               </View>
             </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>
+                Giá trị bồi hoàn trang phục (VNĐ) — Hợp đồng V2
+              </Text>
+              <TextInput
+                style={styles.input}
+                keyboardType="numeric"
+                placeholder="VD: 1500000 (không bắt buộc nếu không tính % tài sản)"
+                placeholderTextColor="#94A3B8"
+                value={replacementValue}
+                onChangeText={setReplacementValue}
+              />
+              <Text style={styles.helperHint}>
+                Căn cứ tính tiền bồi thường khi Chính sách chọn "% Giá trị áo".
+                Nếu thay đổi giá trị bồi hoàn, sản phẩm sẽ chuyển sang chờ Admin
+                kiểm duyệt trên Web.
+              </Text>
+            </View>
           </ScrollView>
 
           <View style={styles.footer}>
@@ -433,57 +567,70 @@ export function AddProductModal({
             </Pressable>
             <Pressable
               style={[styles.submitBtn, submitting && { opacity: 0.7 }]}
-              onPress={() => void handleCreate()}
+              onPress={() => void handleSave()}
               disabled={submitting}
             >
               {submitting ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <>
-                  <MaterialIcons name="add" size={18} color="#FFFFFF" />
-                  <Text style={styles.submitBtnText}>Lưu & Cấp Chip RFID</Text>
+                  <MaterialIcons
+                    name={isEditing ? 'save' : 'add'}
+                    size={18}
+                    color="#FFFFFF"
+                  />
+                  <Text style={styles.submitBtnText}>
+                    {isEditing ? 'Lưu thay đổi' : 'Lưu & Cấp Chip RFID'}
+                  </Text>
                 </>
               )}
             </Pressable>
           </View>
-        </View>
-      </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+
+  if (asScreen) {
+    return content;
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      {content}
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  fullScreenRoot: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '90%',
-    paddingBottom: 24,
-  },
-  handleBar: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#CBD5E1',
-    alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 6,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 18,
+    gap: 10,
+    paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
+    flexShrink: 0,
+  },
+  backBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F5F3F3',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -515,6 +662,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   body: {
+    flex: 1,
     paddingHorizontal: 18,
   },
   bodyContent: {
@@ -528,6 +676,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter_600SemiBold',
     color: '#1B1C1C',
+  },
+  helperHint: {
+    fontSize: 11,
+    fontFamily: 'Inter_400Regular',
+    color: '#64748B',
+    lineHeight: 15,
   },
   uploadActionRow: {
     flexDirection: 'row',

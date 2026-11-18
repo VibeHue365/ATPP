@@ -1,10 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, usePathname, type Href } from 'expo-router';
+import { usePathname } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, FontFamily, Shadow } from '@/constants/theme';
 import { useNotifications } from '@/contexts/NotificationContext';
+
+import { openNotificationData } from '@/utils/notificationNavigation';
+import { getCurrentPortalMode } from '@/utils/navigation';
 
 export function InAppNotificationBanner() {
   const insets = useSafeAreaInsets();
@@ -31,26 +34,18 @@ export function InAppNotificationBanner() {
       void markRead(rawId).catch(() => {});
     }
 
-    if (pathname.startsWith('/provider') && formatted.bookingId) {
-      router.push({
-        pathname: '/provider/(tabs)/orders',
-        params: { bookingId: formatted.bookingId },
-      } as unknown as Href);
-      return;
-    }
+    const isProviderContext =
+      pathname.startsWith('/provider') || getCurrentPortalMode() === 'provider';
 
-    if (formatted.bookingId) {
-      router.push(`/booking/${formatted.bookingId}` as Href);
-    } else if (formatted.contractId) {
-      router.push('/contracts' as Href);
-    } else if (formatted.paymentCode) {
-      router.push({
-        pathname: '/payment/result',
-        params: { code: formatted.paymentCode },
-      } as unknown as Href);
-    } else {
-      router.push('/notifications' as Href);
-    }
+    openNotificationData(
+      {
+        bookingId: formatted.bookingId,
+        contractId: formatted.contractId,
+        paymentCode: formatted.paymentCode,
+        targetRole: formatted.targetRole,
+      },
+      { isProviderPortal: isProviderContext },
+    );
   };
 
   return (

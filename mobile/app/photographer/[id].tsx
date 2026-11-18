@@ -27,6 +27,7 @@ import type { Photographer, PhotographyPackage, PhotographyQuote } from '@/types
 import { getApiErrorMessage } from '@/utils/apiError';
 import { resolveEntityCoords } from '@/utils/geo';
 import { getMediaUrl } from '@/utils/media';
+import { buildLoginHref } from '@/utils/navigation';
 
 const money = (value: number) => new Intl.NumberFormat('vi-VN').format(value) + 'đ';
 
@@ -460,9 +461,13 @@ export default function PhotographerDetailScreen() {
   if (error || !photographer)
     return <ErrorState message={error ?? 'Không tìm thấy nhiếp ảnh gia'} onRetry={reload} />;
 
+  const loginReturnTarget = selectedPackage?._id
+    ? `/photographer/${photographer._id}?packageId=${selectedPackage._id}`
+    : `/photographer/${photographer._id}`;
+
   const favorite = async () => {
     if (!isAuthenticated) {
-      router.push('/(auth)/login' as Href);
+      router.push(buildLoginHref(loginReturnTarget));
       return;
     }
     try {
@@ -475,7 +480,7 @@ export default function PhotographerDetailScreen() {
 
   const openChat = async () => {
     if (!isAuthenticated) {
-      router.push('/(auth)/login' as Href);
+      router.push(buildLoginHref(loginReturnTarget));
       return;
     }
     if (!photographer.userId) {

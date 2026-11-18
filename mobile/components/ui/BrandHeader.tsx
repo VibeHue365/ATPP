@@ -8,6 +8,7 @@ import { useNotifications } from '@/contexts/NotificationContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { useDestination } from '@/contexts/DestinationContext';
+import { buildLoginHref } from '@/utils/navigation';
 
 export function BrandHeader() {
   const { unreadCount } = useNotifications();
@@ -50,7 +51,7 @@ export function BrandHeader() {
         <Pressable
           accessibilityLabel="Yêu thích"
           onPress={() =>
-            router.push((isAuthenticated ? '/favorites' : '/(auth)/login') as Href)
+            router.push(isAuthenticated ? ('/favorites' as Href) : buildLoginHref('/favorites'))
           }
           style={styles.iconBtn}
         >
@@ -73,7 +74,9 @@ export function BrandHeader() {
         <Pressable
           accessibilityLabel="Thông báo"
           onPress={() =>
-            router.push((isAuthenticated ? '/notifications' : '/(auth)/login') as Href)
+            router.push(
+              isAuthenticated ? ('/notifications' as Href) : buildLoginHref('/notifications'),
+            )
           }
           style={styles.iconBtn}
         >

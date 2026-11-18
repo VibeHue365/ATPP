@@ -3,12 +3,12 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { contractApi } from '@/apis/contractApi';
 import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
@@ -78,13 +78,14 @@ export function ContractDetailModal({
     detail?.pdfStatus === 'READY';
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      onRequestClose={onClose}
-      presentationStyle="fullScreen"
-    >
-      <SafeAreaView style={styles.root}>
+    <>
+      <Modal
+        visible={visible && !pdfVisible}
+        animationType="slide"
+        onRequestClose={onClose}
+        presentationStyle="fullScreen"
+      >
+        <SafeAreaView style={styles.root}>
         <View style={styles.header}>
           <Pressable onPress={onClose} style={styles.iconBtn}>
             <Ionicons name="close" size={22} color={Colors.text} />
@@ -203,17 +204,18 @@ export function ContractDetailModal({
             <ContractDocumentView contract={detail} />
           </ScrollView>
         ) : null}
+        </SafeAreaView>
+      </Modal>
 
-        <ContractPdfModal
-          visible={pdfVisible}
-          contractId={detail?.contractId ?? contractId}
-          versionId={detail?.versionId ?? versionId}
-          contractCode={detail?.contractCode}
-          fallbackText={detail?.renderedText}
-          onClose={() => setPdfVisible(false)}
-        />
-      </SafeAreaView>
-    </Modal>
+      <ContractPdfModal
+        visible={visible && pdfVisible}
+        contractId={detail?.contractId ?? contractId}
+        versionId={detail?.versionId ?? versionId}
+        contractCode={detail?.contractCode}
+        fallbackText={detail?.renderedText}
+        onClose={() => setPdfVisible(false)}
+      />
+    </>
   );
 }
 

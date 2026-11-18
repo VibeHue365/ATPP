@@ -313,3 +313,127 @@ export function resolveDamageCompensationRules(
       (legacyModeratePct ?? 0) > 0 || (legacySeverePct ?? 0) > 0,
   };
 }
+
+export type ProviderContractMode =
+  | 'AUTO'
+  | 'CUSTOM_ORDER_THRESHOLD'
+  | 'ALWAYS_DETAILED';
+
+export type ProviderPolicyReviewStatus =
+  | 'DRAFT'
+  | 'PENDING_REVIEW'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'SUPERSEDED';
+
+export interface GarmentCarePolicy {
+  allowIroning: boolean;
+  allowWashing: boolean;
+  prohibitedActions: string[];
+  specialNotes?: string | null;
+}
+
+export interface LateReturnPolicy {
+  gracePeriodHours: number;
+  hourlyLateFee: number;
+  dailyLateFee: number;
+  maxLateDaysAllowed: number;
+}
+
+export interface CancellationRefundRule {
+  daysBeforeRental: number;
+  refundPercentage: number;
+}
+
+export interface CancellationPolicy {
+  refundRules: CancellationRefundRule[];
+  cancellationNotes?: string | null;
+}
+
+export interface ProviderSupportContact {
+  hotline: string;
+  supportWorkingHours: string;
+  contactNote?: string | null;
+}
+
+export interface ProviderContractPolicyVersion {
+  _id: string;
+  providerId: string;
+  versionNumber: number;
+  status: ProviderPolicyReviewStatus;
+  garmentCare: GarmentCarePolicy;
+  lateReturn: LateReturnPolicy;
+  damageCompensation: DamageCompensationPolicy;
+  cancellationPolicy: CancellationPolicy;
+  supportContact: ProviderSupportContact;
+  customTermsText?: string | null;
+  submittedAt?: string | null;
+  reviewedAt?: string | null;
+  reviewNote?: string | null;
+  approvedAt?: string | null;
+  policyFingerprint?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CurrentPolicyResponse {
+  providerId: string;
+  active: ProviderContractPolicyVersion | null;
+  pending: ProviderContractPolicyVersion | null;
+  draft: ProviderContractPolicyVersion | null;
+  totalVersions: number;
+}
+
+export interface SavePolicyPayload {
+  garmentCare: GarmentCarePolicy;
+  lateReturn: LateReturnPolicy;
+  damageCompensation: DamageCompensationPolicy;
+  cancellationPolicy: CancellationPolicy;
+  supportContact: ProviderSupportContact;
+  customTermsText?: string | null;
+}
+
+export interface ProviderMechanismResponse {
+  version: string;
+  status: 'DRAFT' | 'APPROVED';
+  approvedAt: string | null;
+  scope: string;
+  description: string;
+  regulationCode?: string;
+  hash: string;
+}
+
+export interface ProviderAcceptanceStatusResponse {
+  providerId: string;
+  scope: string;
+  status: 'ACTIVE' | 'REVOKED' | 'STALE' | 'NOT_ACCEPTED';
+  isStale?: boolean;
+  staleReason?: string | null;
+  active: {
+    id: string;
+    mechanismVersion: string;
+    templateVersion: string;
+    acceptedAt: string;
+    policyFingerprint?: string | null;
+  } | null;
+  revoked: {
+    id: string;
+    revokedAt: string;
+  } | null;
+}
+
+export interface ProviderContractConfig {
+  providerId: string;
+  contractMode: ProviderContractMode;
+  orderThresholdAmount: number | null;
+  version: number;
+  effectiveFrom: string;
+  updatedByUserId?: string;
+  isDefault?: boolean;
+}
+
+export interface UpdateProviderContractConfigPayload {
+  contractMode: ProviderContractMode;
+  orderThresholdAmount?: number | null;
+  changeNote?: string | null;
+}

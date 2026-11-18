@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import { type Href, router, useLocalSearchParams } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -14,18 +14,24 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Linking from 'expo-linking';
-import * as WebBrowser from 'expo-web-browser';
 import { FontFamily } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiErrorMessage } from '@/utils/apiError';
-import { safeReturnTo } from '@/utils/navigation';
-import { getGoogleSigninModule } from '@/services/googleAuth';
+import {
+  clearPendingOAuthReturnTo,
+  resolvePostAuthDestination,
+  savePendingOAuthReturnTo,
+} from '@/utils/navigation';
+import {
+  presentGoogleAuthError,
+  signInWithGoogleUnified,
+} from '@/services/googleAuth';
 import type { SessionUser } from '@/types/auth';
 
 export default function LoginScreen() {
   const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const { login, loginWithGoogle, loginWithOAuthCode } = useAuth();
+  const mountedRef = useRef(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -34,34 +40,18 @@ export default function LoginScreen() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const navigateAfterLogin = (loggedInUser: SessionUser) => {
-    const rolesUpper = (loggedInUser.roles ?? []).map((r) => String(r).toUpperCase());
-    if (rolesUpper.includes('PROVIDER')) {
-      router.replace('/provider' as unknown as Href);
-      return;
-    }
-    const destination = safeReturnTo(returnTo);
-    if (loggedInUser.hasCompletedOnboarding === false) {
-      router.replace({
-        pathname: '/preferences',
-        params: { onboarding: '1', returnTo: String(destination) },
-      } as unknown as Href);
-      return;
-    }
-    router.replace(destination);
-  };
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
-  const handleAuthToken = async (idToken: string) => {
-    setGoogleLoading(true);
-    setError('');
-    try {
-      const loggedInUser = await loginWithGoogle(idToken);
-      navigateAfterLogin(loggedInUser);
-    } catch (cause: unknown) {
-      setError(getApiErrorMessage(cause, 'Đăng nhập bằng Google không thành công.'));
-    } finally {
-      setGoogleLoading(false);
-    }
+  const navigateAfterLogin = (loggedInUser: SessionUser) => {
+    void clearPendingOAuthReturnTo();
+    // Skip when AuthLayout has already unmounted this screen to execute the single Redirect.
+    if (!mountedRef.current) return;
+    router.replace(resolvePostAuthDestination(loggedInUser, returnTo));
   };
 
   const submit = async () => {
@@ -84,55 +74,25 @@ export default function LoginScreen() {
     }
   };
 
-  const handleOAuthCodeExchange = async (code: string) => {
-    setGoogleLoading(true);
-    setError('');
-    try {
-      const loggedInUser = await loginWithOAuthCode(code);
-      navigateAfterLogin(loggedInUser);
-    } catch (cause: unknown) {
-      setError(getApiErrorMessage(cause, 'Đăng nhập bằng Google không thành công.'));
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
-
   const handleGoogleLogin = async () => {
     setGoogleLoading(true);
     setError('');
-
-    const googleModule = getGoogleSigninModule();
-    if (googleModule) {
-      try {
-        const { GoogleSignin } = googleModule;
-        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-        const signInResult = await GoogleSignin.signIn();
-        const idToken = signInResult.data?.idToken;
-        if (!idToken) {
-          throw new Error('Không nhận được mã xác thực từ Google.');
-        }
-        await handleAuthToken(idToken);
-      } catch (cause: any) {
-        if (cause?.code === 'SIGN_IN_CANCELLED' || cause?.code === 12501) {
-          return;
-        }
-        setError(getApiErrorMessage(cause, 'Đăng nhập bằng Google không thành công.'));
-      } finally {
-        setGoogleLoading(false);
-      }
-      return;
-    }
-
     try {
-      let apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
-      if (Platform.OS === 'android' && (apiUrl.includes('10.0.2.2') || apiUrl.includes('127.0.0.1'))) {
-        apiUrl = 'http://localhost:3000';
+      await savePendingOAuthReturnTo(returnTo);
+      const outcome = await signInWithGoogleUnified({
+        loginWithGoogle,
+        loginWithOAuthCode,
+      });
+      if (outcome.status === 'success') {
+        navigateAfterLogin(outcome.user);
+      } else if (outcome.status === 'cancelled') {
+        await clearPendingOAuthReturnTo();
       }
-      const redirectUri = Linking.createURL('/oauth/callback');
-      const authUrl = `${apiUrl}/auth/google?redirect_uri=${encodeURIComponent(redirectUri)}`;
-      await Linking.openURL(authUrl);
     } catch (cause: unknown) {
-      setError(getApiErrorMessage(cause, 'Không thể mở trình duyệt đăng nhập Google.'));
+      await clearPendingOAuthReturnTo();
+      setError(
+        presentGoogleAuthError(cause, 'Đăng nhập bằng Google không thành công.'),
+      );
     } finally {
       setGoogleLoading(false);
     }

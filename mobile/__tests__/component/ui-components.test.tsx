@@ -1,8 +1,9 @@
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { AppButton } from '@/components/ui/AppButton';
 import { ListPagination } from '@/components/ui/ListPagination';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/ScreenState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { TagoAlert, TagoAlertHost, TagoConfirmOverlay } from '@/components/ui/TagoAlertModal';
 
 describe('mobile UI primitives', () => {
   it('renders and presses an enabled application button', async () => {
@@ -57,5 +58,42 @@ describe('mobile UI primitives', () => {
     expect(view.getByText('Mất kết nối')).toBeTruthy();
     await fireEvent.press(view.getByRole('button', { name: 'Thử lại' }));
     expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders TagoAlertHost with cart visual metadata and triggers destructive action', async () => {
+    const onDelete = jest.fn();
+    const view = await render(<TagoAlertHost />);
+    await act(async () => {
+      TagoAlert.alert('Xóa dịch vụ khỏi giỏ?', 'Bạn có chắc chắn muốn xóa?', [
+        { text: 'Xóa dịch vụ', style: 'destructive', onPress: onDelete },
+        { text: 'Giữ lại', style: 'cancel' },
+      ]);
+    });
+    expect(view.getByText('GIỎ HÀNG DỊCH VỤ')).toBeTruthy();
+    expect(view.getByText('Xóa dịch vụ khỏi giỏ?')).toBeTruthy();
+    await fireEvent.press(view.getByText('Xóa dịch vụ'));
+    expect(onDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders TagoConfirmOverlay for contracts and blocks presses while loading', async () => {
+    const onConfirm = jest.fn();
+    const onClose = jest.fn();
+    const view = await render(
+      <TagoConfirmOverlay
+        visible
+        loading
+        title="Từ chối hợp đồng?"
+        message="Bạn sẽ chưa thể thanh toán đơn thuê này."
+        onClose={onClose}
+        buttons={[
+          { text: 'Quay lại', style: 'cancel' },
+          { text: 'Xác nhận từ chối', style: 'destructive', onPress: onConfirm },
+        ]}
+      />,
+    );
+    expect(view.getByText('HỢP ĐỒNG ĐIỆN TỬ')).toBeTruthy();
+    await fireEvent.press(view.getByText('Quay lại'));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 });

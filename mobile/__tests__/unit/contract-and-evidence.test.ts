@@ -6,18 +6,70 @@ import {
   formatDepositSettlementLabel,
   getRentalEvidenceTimestamps,
 } from '@/utils/booking';
+import { resolveBookingDisplayState } from '@/utils/rentalState';
 import {
   formatDamageTierValue,
   getContractReadinessMeta,
   getContractStateBadge,
 } from '@/utils/contractFormat';
+import {
+  DEFAULT_PROVIDER_POLICY_PAYLOAD,
+  normalizePolicyPayloadForSave,
+  policyRequiresAssetValue,
+  validateDisputeResolutionClause,
+  validatePolicyPayload,
+} from '@/utils/contractPolicy';
 
 describe('rental evidence & contract helpers', () => {
-  it('translates RETURN_PENDING clearly as return incident pending', () => {
+  it('distinguishes RETURN_PENDING between customer return request and incident report', () => {
     expect(bookingStatus.RETURN_PENDING).toEqual({
-      label: 'Chờ duyệt sự cố trả đồ',
-      tone: 'error',
+      label: 'Chờ xác nhận trả đồ',
+      tone: 'warning',
     });
+
+    const customerReturn = resolveBookingDisplayState(
+      {
+        _id: 'bk-ret-1',
+        bookingCode: 'VH-RET1',
+        bookingType: 'AODAI_RENTAL',
+        status: 'RETURN_PENDING',
+        items: [
+          {
+            _id: 'it-1',
+            itemType: 'PRODUCT',
+            unitPrice: 200000,
+            quantity: 1,
+            rentalFulfillment: { status: 'CUSTOMER_RETURN_REQUESTED' },
+          },
+        ],
+      },
+      'provider',
+    );
+    expect(customerReturn.stage).toBe('CUSTOMER_RETURN_REQUESTED');
+    expect(customerReturn.hasIncident).toBe(false);
+
+    const incidentReturn = resolveBookingDisplayState(
+      {
+        _id: 'bk-ret-2',
+        bookingCode: 'VH-RET2',
+        bookingType: 'AODAI_RENTAL',
+        status: 'RETURN_PENDING',
+        hasIncident: true,
+        activeIncident: { _id: 'inc-1', status: 'PENDING_CUSTOMER' },
+        items: [
+          {
+            _id: 'it-2',
+            itemType: 'PRODUCT',
+            unitPrice: 200000,
+            quantity: 1,
+            rentalFulfillment: { status: 'RETURNED', issueStatus: 'REPORTED' },
+          },
+        ],
+      },
+      'customer',
+    );
+    expect(incidentReturn.stage).toBe('INCIDENT_PENDING_CUSTOMER');
+    expect(incidentReturn.hasIncident).toBe(true);
   });
 
   it('extracts evidence timestamps from rentalFulfillment and falls back to statusTimeline', () => {
@@ -88,5 +140,40 @@ describe('rental evidence & contract helpers', () => {
     expect(translateApiMessage('CONTRACT_VERSION_NOT_ACCEPTED')).toContain('Hợp đồng điện tử');
     expect(translateApiMessage('CONTRACT_PDF_NOT_READY')).toContain('PDF');
     expect(translateApiMessage('BOOKING_HOLD_EXPIRED')).toContain('15 phút');
+  });
+
+  it('validates provider contract policy guardrails, asset-value flags, and sanitization', () => {
+    expect(
+      validateDisputeResolutionClause(
+        'Sàn VibeHue làm trọng tài phán quyết bắt buộc',
+      ).isValid,
+    ).toBe(false);
+    expect(
+      validateDisputeResolutionClause(
+        'Hai bên thương lượng và không tự ý giữ cọc.',
+      ).isValid,
+    ).toBe(true);
+
+    const missingHotline = normalizePolicyPayloadForSave(
+      DEFAULT_PROVIDER_POLICY_PAYLOAD,
+    );
+    expect(validatePolicyPayload(missingHotline, 'DRAFT')).toContain('Hotline');
+
+    const withHotline = normalizePolicyPayloadForSave(
+      DEFAULT_PROVIDER_POLICY_PAYLOAD,
+      '0901234567',
+    );
+    expect(validatePolicyPayload(withHotline, 'SUBMIT')).toBeNull();
+    expect(policyRequiresAssetValue(withHotline.damageCompensation)).toBe(false);
+    expect(
+      policyRequiresAssetValue({
+        ...withHotline.damageCompensation,
+        severeDamage: {
+          method: 'PERCENTAGE_ON_ASSET',
+          percentageOfAsset: 80,
+          fixedFeeAmount: null,
+        },
+      }),
+    ).toBe(true);
   });
 });

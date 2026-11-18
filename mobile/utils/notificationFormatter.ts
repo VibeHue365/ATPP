@@ -25,6 +25,7 @@ export interface FormattedNotification {
   contractId: string;
   paymentCode: string;
   statusCode: string | null;
+  targetRole?: 'customer' | 'provider';
   actionRequired: boolean;
 }
 
@@ -32,6 +33,66 @@ const STATUS_CONTENT_VI: Record<
   string,
   { title: string; copy: (code: string) => string; category: NotificationCategory; actionRequired: boolean }
 > = {
+  PREPARING: {
+    title: 'Tiệm đang chuẩn bị cổ phục',
+    copy: (code) => `${code} đã xác nhận và đang soạn, là ủi cổ phục theo yêu cầu.`,
+    category: 'BOOKING',
+    actionRequired: false,
+  },
+  READY_FOR_PICKUP: {
+    title: 'Cổ phục đã soạn xong',
+    copy: (code) => `${code} đã chuẩn bị xong tại tiệm, chuẩn bị chụp ảnh bàn giao cho khách.`,
+    category: 'HANDOVER',
+    actionRequired: true,
+  },
+  READY_NEEDS_HANDOVER_PHOTOS: {
+    title: 'Cổ phục đã soạn xong · Cần ảnh bàn giao',
+    copy: (code) => `${code} đã soạn xong, tiệm cần tải ảnh hiện trạng bàn giao để khách xác nhận.`,
+    category: 'HANDOVER',
+    actionRequired: true,
+  },
+  HANDOVER_AWAITING_CUSTOMER: {
+    title: 'Đã gửi ảnh bàn giao cổ phục',
+    copy: (code) =>
+      `${code} đã có ảnh hiện trạng bàn giao từ cửa hàng! Hãy kiểm tra và xác nhận đã nhận áo.`,
+    category: 'HANDOVER',
+    actionRequired: true,
+  },
+  IN_RENTAL: {
+    title: 'Đơn đang trong thời gian thuê',
+    copy: (code) =>
+      `${code} đã xác nhận bàn giao cổ phục. Vui lòng bảo quản cẩn thận và hoàn trả đúng hạn.`,
+    category: 'HANDOVER',
+    actionRequired: false,
+  },
+  CUSTOMER_RETURN_REQUESTED: {
+    title: 'Khách hàng đã gửi yêu cầu trả đồ',
+    copy: (code) =>
+      `${code} đã được khách gửi yêu cầu trả áo kèm ảnh đối soát. Tiệm vui lòng kiểm tra và xác nhận đã nhận lại đồ.`,
+    category: 'RETURN',
+    actionRequired: true,
+  },
+  INCIDENT_PENDING_CUSTOMER: {
+    title: 'Cần xác nhận biên bản sự cố trả đồ',
+    copy: (code) =>
+      `${code} có báo cáo sự cố hư hỏng/vết bẩn khi trả đồ. Vui lòng xem bằng chứng và phản hồi ngay.`,
+    category: 'DISPUTE',
+    actionRequired: true,
+  },
+  RETURNED_NEEDS_INSPECTION: {
+    title: 'Đã nhận lại đồ · Chờ kiểm tra hoàn cọc',
+    copy: (code) =>
+      `${code} đã được tiệm nhận lại cổ phục và đang kiểm tra hiện trạng để hoàn cọc Escrow.`,
+    category: 'RETURN',
+    actionRequired: true,
+  },
+  CLEANING_AFTER_REFUND: {
+    title: 'Đã đối soát hoàn cọc · Đang giặt ủi',
+    copy: (code) =>
+      `${code} đã xác nhận không sự cố và giải phóng cọc Escrow. Tiệm đang giặt ủi hoàn tất.`,
+    category: 'REFUND',
+    actionRequired: false,
+  },
   PENDING_PAYMENT: {
     title: 'Đơn chờ ký hợp đồng & thanh toán',
     copy: (code) =>
@@ -195,6 +256,10 @@ export function formatNotification(item: NotificationItem): FormattedNotificatio
   const bookingId = String(meta.bookingId ?? nestedBooking._id ?? '');
   const contractId = String(meta.contractId ?? '');
   const paymentCode = String(meta.paymentCode ?? meta.code ?? '');
+  const targetRole =
+    meta.targetRole === 'provider' || meta.targetRole === 'customer'
+      ? meta.targetRole
+      : undefined;
 
   // Detect raw BE message like: "Đơn hàng VH-... của bạn đã chuyển sang trạng thái: PICKUP_PENDING"
   const rawContent = String(item.content || '');
@@ -202,13 +267,16 @@ export function formatNotification(item: NotificationItem): FormattedNotificatio
   const statusMatch = rawContent.match(
     /(?:trạng thái|status)\s*:\s*([A-Z_]{3,32})/i,
   );
+  const metaStage =
+    typeof meta.stage === 'string' ? meta.stage.toUpperCase() : null;
   const metaStatus =
     typeof meta.newStatus === 'string'
       ? meta.newStatus.toUpperCase()
       : typeof meta.status === 'string'
         ? meta.status.toUpperCase()
         : null;
-  const detectedStatus = statusMatch?.[1]?.toUpperCase() ?? metaStatus;
+  const detectedStatus =
+    metaStage ?? statusMatch?.[1]?.toUpperCase() ?? metaStatus;
 
   const codeMatch = rawContent.match(/#\s*([A-Za-z0-9-]+)|Đơn(?:\s+hàng)?\s+([A-Z0-9-]{4,24})/i);
   const bookingCode = String(
@@ -220,15 +288,30 @@ export function formatNotification(item: NotificationItem): FormattedNotificatio
   ).trim();
   const codeLabel = bookingCode ? `Đơn #${bookingCode.replace(/^#/, '')}` : 'Đơn hàng';
 
-  if (detectedStatus && STATUS_CONTENT_VI[detectedStatus]) {
-    const mapped = STATUS_CONTENT_VI[detectedStatus];
+  // If this is a locally synthesized rental notification that already has specific
+  // contextual title/content from resolveBookingDisplayState, preserve that exact message
+  const isLocalSynthesized = item._id?.startsWith('local-') && Boolean(metaStage);
+
+  const joinedForReturnCheck = `${rawTitle} ${rawContent}`.toLowerCase();
+  const effectiveLookupKey =
+    detectedStatus === 'RETURN_PENDING' &&
+    !meta.incidentId &&
+    (item.type || '').toUpperCase() !== 'DISPUTE' &&
+    (joinedForReturnCheck.includes('trả áo') ||
+      joinedForReturnCheck.includes('hẹn trả') ||
+      joinedForReturnCheck.includes('mang đồ'))
+      ? 'CUSTOMER_RETURN_REQUESTED'
+      : detectedStatus;
+
+  if (effectiveLookupKey && STATUS_CONTENT_VI[effectiveLookupKey]) {
+    const mapped = STATUS_CONTENT_VI[effectiveLookupKey];
     const style = NOTIFICATION_CATEGORY_STYLE[mapped.category];
     return {
       id: item._id,
       category: mapped.category,
       categoryLabel: style.label,
-      title: mapped.title,
-      content: mapped.copy(codeLabel),
+      title: isLocalSynthesized && rawTitle ? rawTitle : mapped.title,
+      content: isLocalSynthesized && rawContent ? rawContent : mapped.copy(codeLabel),
       icon: style.icon,
       color: style.color,
       bg: style.bg,
@@ -236,6 +319,7 @@ export function formatNotification(item: NotificationItem): FormattedNotificatio
       contractId,
       paymentCode,
       statusCode: detectedStatus,
+      targetRole,
       actionRequired: mapped.actionRequired,
     };
   }
@@ -288,6 +372,7 @@ export function formatNotification(item: NotificationItem): FormattedNotificatio
     contractId,
     paymentCode,
     statusCode: detectedStatus,
+    targetRole,
     actionRequired:
       category === 'CONTRACT' ||
       category === 'HANDOVER' ||

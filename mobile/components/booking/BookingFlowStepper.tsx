@@ -8,11 +8,13 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, FontFamily, Radius } from '@/constants/theme';
-import type { BookingType } from '@/types/booking';
+import type { Booking, BookingType } from '@/types/booking';
+import { resolveBookingDisplayState } from '@/utils/rentalState';
 
 export interface BookingFlowStepperProps {
   bookingType: BookingType;
   status: string;
+  booking?: Partial<Booking>;
   variant?: 'customer' | 'provider';
   containerStyle?: StyleProp<ViewStyle>;
 }
@@ -28,9 +30,21 @@ interface StepDef {
 export function BookingFlowStepper({
   bookingType,
   status,
+  booking,
   variant = 'customer',
   containerStyle,
 }: BookingFlowStepperProps) {
+  const displayState = useMemo(
+    () =>
+      booking
+        ? resolveBookingDisplayState(
+            { ...booking, bookingType: booking.bookingType ?? bookingType, status: (booking.status ?? status) as Booking['status'] },
+            variant,
+          )
+        : null,
+    [booking, bookingType, status, variant],
+  );
+
   const isAbnormal = ['CANCELLED', 'DISPUTED', 'REFUNDED', 'PARTIALLY_REFUNDED'].includes(
     status,
   );
@@ -69,7 +83,7 @@ export function BookingFlowStepper({
       return [
         {
           key: 'CONFIRMED',
-          label: 'Xác nhận',
+          label: 'Soạn & Xác nhận',
           customerNote: 'Đơn combo đã đặt cọc thành công. Tiệm và thợ ảnh đang chuẩn bị.',
           providerNote: 'Đơn combo mới đã khóa lịch. Chuẩn bị trang phục và lịch trình chụp.',
         },
@@ -87,9 +101,9 @@ export function BookingFlowStepper({
         },
         {
           key: 'RETURNED',
-          label: 'Trả cổ phục',
-          customerNote: 'Hoàn trả trang phục tại tiệm sau khi chụp xong.',
-          providerNote: 'Kiểm tra hiện trạng cổ phục khi khách mang trả.',
+          label: 'Trả & Kiểm tra',
+          customerNote: 'Hoàn trả trang phục tại tiệm để tiệm kiểm tra và hoàn cọc.',
+          providerNote: 'Nhận lại cổ phục, kiểm tra hiện trạng để giải phóng tiền cọc.',
         },
         {
           key: 'COMPLETED',
@@ -100,7 +114,7 @@ export function BookingFlowStepper({
       ];
     }
 
-    // Default: AODAI_RENTAL (6 steps aligned with e-Contract V2 + Rental Escrow flow)
+    // Default: AODAI_RENTAL (6 steps aligned with e-Contract V2 + Rental Fulfillment workflow)
     return [
       {
         key: 'PENDING_PAYMENT',
@@ -112,39 +126,40 @@ export function BookingFlowStepper({
       },
       {
         key: 'CONFIRMED',
-        label: 'Đặt cọc',
+        label: 'Đặt cọc & Soạn',
         customerNote: 'Đơn đã cọc thành công. Tiệm đang xác nhận và soạn cổ phục theo yêu cầu.',
         providerNote: 'Đơn mới đã cọc. Vui lòng xác nhận đơn, kiểm tra tình trạng và soạn đồ.',
       },
       {
         key: 'PICKUP_PENDING',
-        label: 'Sẵn sàng',
-        customerNote: 'Cổ phục đã sẵn sàng tại tiệm! Hãy ghé lấy đồ đúng giờ và xác nhận trên ứng dụng.',
-        providerNote: 'Đã soạn đồ xong và tải ảnh hiện trạng, chờ khách đến nhận đồ.',
+        label: 'Giao & Nhận',
+        customerNote: 'Cổ phục đã soạn xong tại tiệm! Hãy xem ảnh hiện trạng và xác nhận khi nhận áo.',
+        providerNote: 'Đã soạn đồ xong, cần tải ảnh bàn giao và chờ khách xác nhận nhận đồ.',
       },
       {
         key: 'PICKED_UP',
         label: 'Đang thuê',
-        customerNote: 'Bạn đang giữ trang phục. Vui lòng bảo quản cẩn thận theo hợp đồng và trả đúng hạn.',
+        customerNote: 'Bạn đang giữ trang phục. Vui lòng bảo quản cẩn thận và gửi yêu cầu trả đúng hạn.',
         providerNote: 'Khách hàng đang giữ trang phục trong thời gian thuê.',
       },
       {
         key: 'RETURNED',
-        label: 'Đã trả đồ',
-        customerNote: 'Đã gửi lại đồ cho tiệm. Tiệm đang kiểm tra hiện trạng để hoàn cọc.',
-        providerNote: 'Đã nhận lại đồ. Vui lòng kiểm tra kỹ hiện trạng và bấm đối soát hoàn cọc.',
+        label: 'Trả & Hoàn cọc',
+        customerNote: 'Đã gửi lại đồ cho tiệm. Tiệm đang kiểm tra hiện trạng và giặt ủi để hoàn cọc.',
+        providerNote: 'Đã nhận lại đồ. Kiểm tra hiện trạng, xác nhận hoàn cọc và hoàn tất giặt ủi.',
       },
       {
         key: 'COMPLETED',
-        label: 'Hoàn cọc',
-        customerNote: 'Tiền cọc đã được hoàn trả. Đơn thuê hoàn tất, hãy đánh giá tiệm nhé!',
+        label: 'Hoàn tất',
+        customerNote: 'Tiền cọc đã được hoàn trả và giặt ủi hoàn tất. Hãy đánh giá tiệm nhé!',
         providerNote: 'Đơn thuê hoàn tất trọn vẹn, cọc Escrow đã được quyết toán.',
       },
     ];
   }, [bookingType]);
 
-  // Determine active step index
+  // Determine active step index (prefers item-level rentalFulfillment stage when available)
   const activeIndex = useMemo(() => {
+    const stage = displayState?.stage;
     if (bookingType === 'PHOTOGRAPHY') {
       if (['PENDING_PAYMENT', 'DRAFT', 'CONFIRMED', 'DEPOSIT_PAID'].includes(status)) return 0;
       if (status === 'IN_PROGRESS') return 1;
@@ -154,6 +169,13 @@ export function BookingFlowStepper({
     }
 
     if (bookingType === 'COMBO') {
+      if (stage) {
+        if (['PENDING_PAYMENT', 'DRAFT', 'DEPOSIT_PAID', 'PREPARING'].includes(stage)) return 0;
+        if (['READY_NEEDS_HANDOVER_PHOTOS', 'HANDOVER_AWAITING_CUSTOMER', 'IN_RENTAL', 'IN_PROGRESS'].includes(stage)) return 1;
+        if (['AWAITING_REVIEW', 'COMBO_PHOTOS_APPROVED'].includes(stage)) return 2;
+        if (['CUSTOMER_RETURN_REQUESTED', 'INCIDENT_PENDING_CUSTOMER', 'RETURNED_NEEDS_INSPECTION', 'CLEANING_AFTER_REFUND'].includes(stage)) return 3;
+        if (stage === 'COMPLETED') return 4;
+      }
       if (['PENDING_PAYMENT', 'DRAFT', 'CONFIRMED', 'DEPOSIT_PAID'].includes(status)) return 0;
       if (['PICKUP_PENDING', 'PICKED_UP', 'IN_PROGRESS'].includes(status)) return 1;
       if (['AWAITING_REVIEW', 'COMBO_PHOTOS_APPROVED'].includes(status)) return 2;
@@ -162,7 +184,16 @@ export function BookingFlowStepper({
       return 0;
     }
 
-    // Rental (6 steps)
+    if (stage) {
+      if (['PENDING_PAYMENT', 'DRAFT'].includes(stage)) return 0;
+      if (['DEPOSIT_PAID', 'PREPARING'].includes(stage)) return 1;
+      if (['READY_NEEDS_HANDOVER_PHOTOS', 'HANDOVER_AWAITING_CUSTOMER'].includes(stage)) return 2;
+      if (['IN_RENTAL', 'CUSTOMER_RETURN_REQUESTED', 'INCIDENT_PENDING_CUSTOMER'].includes(stage)) return 3;
+      if (['RETURNED_NEEDS_INSPECTION', 'CLEANING_AFTER_REFUND'].includes(stage)) return 4;
+      if (stage === 'COMPLETED') return 5;
+    }
+
+    // Fallback when booking object isn't passed (e.g. unit tests passing only status)
     if (['PENDING_PAYMENT', 'DRAFT'].includes(status)) return 0;
     if (['CONFIRMED', 'DEPOSIT_PAID'].includes(status)) return 1;
     if (status === 'PICKUP_PENDING') return 2;
@@ -170,7 +201,7 @@ export function BookingFlowStepper({
     if (status === 'RETURNED') return 4;
     if (status === 'COMPLETED') return 5;
     return 1;
-  }, [bookingType, status]);
+  }, [bookingType, displayState?.stage, status]);
 
   if (isAbnormal) {
     const isCancelled = status === 'CANCELLED';
@@ -206,18 +237,22 @@ export function BookingFlowStepper({
   }
 
   const currentStep = steps[activeIndex] || steps[0];
-  const isIncidentPending = status === 'RETURN_PENDING';
+  const isIncidentPending = displayState
+    ? displayState.stage === 'INCIDENT_PENDING_CUSTOMER'
+    : status === 'RETURN_PENDING';
   const activeNote = isIncidentPending
     ? variant === 'provider'
       ? 'Đã lập biên bản sự cố trả đồ. Đang chờ khách hàng xác nhận hoặc quản trị viên đối soát giải phóng cọc.'
       : 'Cửa hàng vừa báo cáo sự cố lúc trả đồ. Bạn vui lòng xem chi tiết biên bản, ảnh bằng chứng và xác nhận hoặc khiếu nại bên dưới.'
-    : bookingType !== 'AODAI_RENTAL' && ['PENDING_PAYMENT', 'DRAFT'].includes(status)
-      ? variant === 'provider'
-        ? 'Khách hàng đang hoàn tất xác nhận hợp đồng (nếu có) và thanh toán qua PayOS.'
-        : 'Đơn hàng đang chờ xác nhận hợp đồng (nếu áp dụng) và thanh toán cọc qua PayOS.'
-      : variant === 'provider'
-        ? currentStep?.providerNote
-        : currentStep?.customerNote;
+    : displayState
+      ? displayState.nextStepText
+      : bookingType !== 'AODAI_RENTAL' && ['PENDING_PAYMENT', 'DRAFT'].includes(status)
+        ? variant === 'provider'
+          ? 'Khách hàng đang hoàn tất xác nhận hợp đồng (nếu có) và thanh toán qua PayOS.'
+          : 'Đơn hàng đang chờ xác nhận hợp đồng (nếu áp dụng) và thanh toán cọc qua PayOS.'
+        : variant === 'provider'
+          ? currentStep?.providerNote
+          : currentStep?.customerNote;
 
   return (
     <View style={[styles.container, containerStyle]}>

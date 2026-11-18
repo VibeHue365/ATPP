@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -107,7 +109,10 @@ export function PlanBSelectionModal({
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         <View style={styles.sheetContainer}>
           {/* Header */}
           <View style={styles.headerRow}>
@@ -122,7 +127,11 @@ export function PlanBSelectionModal({
             </Pressable>
           </View>
 
-          <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.scrollArea}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             {/* Change Type Selector */}
             <Text style={styles.sectionLabel}>1. Hình thức điều chỉnh</Text>
             <View style={styles.typeSelectorRow}>
@@ -321,7 +330,7 @@ export function PlanBSelectionModal({
             </Pressable>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

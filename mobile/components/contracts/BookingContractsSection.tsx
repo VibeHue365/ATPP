@@ -23,6 +23,8 @@ interface Props {
   viewerRole?: 'customer' | 'provider';
   onOpenSign?: () => void;
   refreshTrigger?: number;
+  onRequestOpenDetail?: (item: ContractSummary) => void;
+  onRequestOpenPdf?: (item: ContractSummary) => void;
 }
 
 export function BookingContractsSection({
@@ -32,6 +34,8 @@ export function BookingContractsSection({
   viewerRole = 'customer',
   onOpenSign,
   refreshTrigger = 0,
+  onRequestOpenDetail,
+  onRequestOpenPdf,
 }: Props) {
   const [contracts, setContracts] = useState<ContractSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -165,7 +169,13 @@ export function BookingContractsSection({
                   )}
 
                   <Pressable
-                    onPress={() => setSelectedDetail(item)}
+                    onPress={() => {
+                      if (onRequestOpenDetail) {
+                        onRequestOpenDetail(item);
+                      } else {
+                        setSelectedDetail(item);
+                      }
+                    }}
                     style={styles.secondaryBtn}
                   >
                     <Ionicons
@@ -178,7 +188,13 @@ export function BookingContractsSection({
 
                   {pdfReady && (
                     <Pressable
-                      onPress={() => setSelectedPdf(item)}
+                      onPress={() => {
+                        if (onRequestOpenPdf) {
+                          onRequestOpenPdf(item);
+                        } else {
+                          setSelectedPdf(item);
+                        }
+                      }}
                       style={styles.pdfBtn}
                     >
                       <Ionicons

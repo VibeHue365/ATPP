@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { type Href, router, useFocusEffect, usePathname } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
+  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -19,12 +20,18 @@ import {
   LoadingState,
 } from '@/components/ui/ScreenState';
 import { Colors, FontFamily, Shadow } from '@/constants/theme';
+import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/contexts/NotificationContext';
 import type { NotificationItem } from '@/types/notification';
 import {
   formatNotification,
   type FormattedNotification,
 } from '@/utils/notificationFormatter';
+import { openNotificationData } from '@/utils/notificationNavigation';
+import {
+  getCurrentPortalMode,
+  isPartnerPortalUser,
+} from '@/utils/navigation';
 
 type Filter = 'ALL' | 'UNREAD' | 'ACTION' | 'RENTAL' | 'PAYMENT';
 
@@ -37,12 +44,14 @@ export default function Screen() {
 }
 
 function Notifications() {
-  const pathname = usePathname();
+  const { user } = useAuth();
   const {
     notifications,
     unreadCount,
     loading,
     error,
+    osPermissionStatus,
+    requestOsPermission,
     reload,
     markRead,
     markAllRead,
@@ -97,24 +106,20 @@ function Notifications() {
       await markRead(raw._id).catch(() => {});
     }
 
-    if (pathname.startsWith('/provider') && formatted.bookingId) {
-      router.push({
-        pathname: '/provider/(tabs)/orders',
-        params: { bookingId: formatted.bookingId },
-      } as unknown as Href);
-      return;
-    }
+    const portal = getCurrentPortalMode();
+    const isProviderContext =
+      portal === 'provider' || (portal !== 'customer' && isPartnerPortalUser(user));
 
-    if (formatted.bookingId) {
-      router.push(`/booking/${formatted.bookingId}` as Href);
-    } else if (formatted.contractId) {
-      router.push('/contracts' as Href);
-    } else if (formatted.paymentCode) {
-      router.push({
-        pathname: '/payment/result',
-        params: { code: formatted.paymentCode },
-      } as unknown as Href);
-    }
+    openNotificationData(
+      {
+        ...(raw.metadata ?? {}),
+        bookingId: formatted.bookingId,
+        contractId: formatted.contractId,
+        paymentCode: formatted.paymentCode,
+        targetRole: formatted.targetRole,
+      },
+      { isProviderPortal: isProviderContext },
+    );
   };
 
   if (loading && !notifications.length) {
@@ -157,6 +162,30 @@ function Notifications() {
         contentContainerStyle={s.content}
         showsVerticalScrollIndicator={false}
       >
+        {(osPermissionStatus === 'denied' || osPermissionStatus === 'undetermined') && (
+          <Pressable
+            style={s.permBanner}
+            onPress={() => {
+              if (osPermissionStatus === 'denied') {
+                void Linking.openSettings();
+              } else {
+                void requestOsPermission();
+              }
+            }}
+          >
+            <View style={s.permIcon}>
+              <Ionicons name="notifications-off-outline" size={18} color="#B45309" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.permTitle}>Thông báo trên điện thoại đang tắt</Text>
+              <Text style={s.permSub}>
+                Chạm để bật thông báo bàn giao, trả đồ và hoàn cọc ngay trên thanh trạng thái.
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#B45309" />
+          </Pressable>
+        )}
+
         <View style={s.search}>
           <Ionicons name="search-outline" size={18} color="#8F8E8E" />
           <TextInput
@@ -340,6 +369,36 @@ const s = StyleSheet.create({
     color: Colors.primary,
   },
   content: { padding: 16, paddingBottom: 38, gap: 14 },
+  permBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  permIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  permTitle: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 12,
+    color: '#92400E',
+  },
+  permSub: {
+    fontFamily: FontFamily.body,
+    fontSize: 10.5,
+    color: '#B45309',
+    marginTop: 2,
+    lineHeight: 15,
+  },
   search: {
     height: 46,
     borderRadius: 14,

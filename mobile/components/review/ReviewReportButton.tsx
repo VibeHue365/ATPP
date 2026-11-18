@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { type Href, router, usePathname } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { reviewApi } from '@/apis/reviewApi';
@@ -10,6 +10,7 @@ import { Colors, FontFamily } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { getApiErrorMessage } from '@/utils/apiError';
+import { buildLoginHref } from '@/utils/navigation';
 
 export function ReviewReportButton({ reviewId, authorId }: { reviewId: string; authorId?: string }) {
   const { user, isAuthenticated } = useAuth();
@@ -24,7 +25,7 @@ export function ReviewReportButton({ reviewId, authorId }: { reviewId: string; a
 
   const begin = () => {
     if (!isAuthenticated) {
-      router.push({ pathname: '/(auth)/login', params: { returnTo: pathname } } as unknown as Href);
+      router.push(buildLoginHref(pathname));
       return;
     }
     setOpen(true);

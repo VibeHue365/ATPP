@@ -4,7 +4,7 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import type { ProviderProfile } from '@/types/provider';
 import { FontFamily } from '@/constants/theme';
-import { getMediaUrl } from '@/utils/media';
+import { resolveProviderAvatarUri } from '@/utils/media';
 
 interface ProviderHeaderProps {
   profile: ProviderProfile | null;
@@ -29,6 +29,12 @@ export function ProviderHeader({
 }: ProviderHeaderProps) {
   const [hueTemp, setHueTemp] = useState<number>(28);
   const [weatherDesc, setWeatherDesc] = useState<string>('Nắng nhẹ · Thuận lợi chụp');
+  const [avatarFailed, setAvatarFailed] = useState(false);
+
+  const resolvedAvatarUrl = resolveProviderAvatarUri(profile);
+  useEffect(() => {
+    setAvatarFailed(false);
+  }, [resolvedAvatarUrl]);
 
   useEffect(() => {
     let mounted = true;
@@ -64,10 +70,14 @@ export function ProviderHeader({
     profile?.providerCode ||
     (profile?._id ? `#VH-${profile._id.slice(-4).toUpperCase()}` : '#VH-892');
   const city = (profile?.address?.city || 'Huế').replace('Thành phố ', '').replace('TP. ', '');
-  const avatarUrl = profile?.avatarUrl || profile?.media?.logoUrl;
+  const avatarUrl = !avatarFailed ? resolvedAvatarUrl : undefined;
   const ratingVal = profile?.rating?.averageRating
     ? profile.rating.averageRating.toFixed(1)
     : '5.0';
+  const isVerified =
+    Boolean(profile?.isVerified) ||
+    profile?.verificationStatus === 'APPROVED' ||
+    profile?.status === 'APPROVED';
 
   return (
     <View style={styles.container}>
@@ -77,9 +87,10 @@ export function ProviderHeader({
           <View style={styles.avatarWrap}>
             {avatarUrl ? (
               <Image
-                source={{ uri: getMediaUrl(avatarUrl) }}
+                source={{ uri: avatarUrl }}
                 style={styles.avatarImage}
                 contentFit="cover"
+                onError={() => setAvatarFailed(true)}
               />
             ) : (
               <View style={styles.avatarFallback}>
@@ -95,14 +106,16 @@ export function ProviderHeader({
           </View>
 
           <View style={styles.storeTextCol}>
-            <Text style={styles.storeName} numberOfLines={1} ellipsizeMode="tail">
+            <Text style={styles.storeName} numberOfLines={2} ellipsizeMode="tail">
               {storeName}
             </Text>
             <View style={styles.storeMetaRow}>
-              <View style={styles.verifiedBadge}>
-                <Ionicons name="checkmark-circle" size={11} color="#059669" />
-                <Text style={styles.verifiedText}>Đã xác minh</Text>
-              </View>
+              {isVerified && (
+                <View style={styles.verifiedBadge}>
+                  <Ionicons name="checkmark-circle" size={11} color="#059669" />
+                  <Text style={styles.verifiedText}>Đã xác minh</Text>
+                </View>
+              )}
               <View style={styles.ratingBadge}>
                 <Ionicons name="star" size={10} color="#D97706" />
                 <Text style={styles.ratingText}>{ratingVal}</Text>
@@ -246,7 +259,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    flexWrap: 'nowrap',
+    flexWrap: 'wrap',
   },
   verifiedBadge: {
     flexDirection: 'row',

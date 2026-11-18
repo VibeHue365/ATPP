@@ -8,7 +8,14 @@ import type {
   ContractEligibilityResponse,
   ContractEvidenceSummary,
   ContractSummary,
+  CurrentPolicyResponse,
   CustomerContractItem,
+  ProviderAcceptanceStatusResponse,
+  ProviderContractConfig,
+  ProviderContractPolicyVersion,
+  ProviderMechanismResponse,
+  SavePolicyPayload,
+  UpdateProviderContractConfigPayload,
 } from '@/types/contract';
 import { translateApiMessage } from '@/utils/apiError';
 import { tokenStorage } from '@/utils/storage';
@@ -170,4 +177,59 @@ export const contractApi = {
 
     return { base64, filename, sha256, blob };
   },
+
+  getProviderCurrentPolicy: () =>
+    httpClient.get<never, CurrentPolicyResponse>(
+      '/api/contracts/provider/policy/current',
+    ),
+
+  getProviderPolicyVersions: () =>
+    httpClient.get<never, ProviderContractPolicyVersion[]>(
+      '/api/contracts/provider/policy/versions',
+    ),
+
+  saveProviderPolicyDraft: (payload: SavePolicyPayload) =>
+    httpClient.post<never, ProviderContractPolicyVersion>(
+      '/api/contracts/provider/policy/draft',
+      payload,
+    ),
+
+  submitProviderPolicy: (payload?: SavePolicyPayload) =>
+    httpClient.post<never, ProviderContractPolicyVersion>(
+      '/api/contracts/provider/policy/submit',
+      payload ?? {},
+    ),
+
+  getProviderMechanism: () =>
+    httpClient.get<never, ProviderMechanismResponse>(
+      '/api/contracts/provider/mechanism',
+    ),
+
+  getProviderAcceptance: () =>
+    httpClient.get<never, ProviderAcceptanceStatusResponse>(
+      '/api/contracts/provider/acceptance',
+    ),
+
+  acceptProviderMechanism: (mechanismHash: string) =>
+    httpClient.post<never, { acceptanceId: string; reused: boolean }>(
+      '/api/contracts/provider/acceptance',
+      { mechanismHash },
+    ),
+
+  revokeProviderAcceptance: () =>
+    httpClient.post<never, { revoked: boolean; alreadyRevoked: boolean }>(
+      '/api/contracts/provider/acceptance/revoke',
+      {},
+    ),
+
+  getProviderConfig: () =>
+    httpClient.get<never, ProviderContractConfig>(
+      '/api/contracts/provider/config',
+    ),
+
+  updateProviderConfig: (payload: UpdateProviderContractConfigPayload) =>
+    httpClient.put<never, ProviderContractConfig>(
+      '/api/contracts/provider/config',
+      payload,
+    ),
 };

@@ -106,4 +106,42 @@ describe('formatNotification', () => {
     expect(info.category).toBe('WEATHER');
     expect(info.actionRequired).toBe(false);
   });
+
+  it('formats CUSTOMER_RETURN_REQUESTED and preserves local-sync rental banner copy with targetRole', () => {
+    const returnNotif = formatNotification(
+      makeNotification({
+        title: 'Cập nhật trả đồ',
+        content: 'Đơn #VH-RET9 khách hẹn trả áo và gửi ảnh kiểm chứng',
+        metadata: {
+          bookingId: 'bk-ret-9',
+          bookingCode: 'VH-RET9',
+          newStatus: 'RETURN_PENDING',
+          targetRole: 'provider',
+        },
+      }),
+    );
+    expect(returnNotif.category).toBe('RETURN');
+    expect(returnNotif.title).toBe('Khách hàng đã gửi yêu cầu trả đồ');
+    expect(returnNotif.targetRole).toBe('provider');
+    expect(returnNotif.actionRequired).toBe(true);
+
+    const localSyncNotif = formatNotification(
+      makeNotification({
+        _id: 'local-sync-handover-1',
+        title: 'Đã có ảnh bàn giao #VH-HV1',
+        content: 'Tiệm vừa tải ảnh bàn giao cổ phục. Vui lòng kiểm tra và xác nhận đã nhận áo.',
+        metadata: {
+          bookingId: 'bk-hv',
+          bookingCode: 'VH-HV1',
+          stage: 'HANDOVER_AWAITING_CUSTOMER',
+          targetRole: 'customer',
+        },
+      }),
+    );
+    expect(localSyncNotif.category).toBe('HANDOVER');
+    expect(localSyncNotif.title).toBe('Đã có ảnh bàn giao #VH-HV1');
+    expect(localSyncNotif.content).toContain('Tiệm vừa tải ảnh bàn giao cổ phục');
+    expect(localSyncNotif.targetRole).toBe('customer');
+    expect(localSyncNotif.actionRequired).toBe(true);
+  });
 });

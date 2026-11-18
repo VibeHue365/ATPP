@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   View,
   Text,
   StyleSheet,
@@ -10,21 +12,43 @@ import {
   ActivityIndicator,
   Switch,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { router, type Href } from 'expo-router';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { providerApi } from '@/apis/providerApi';
 import { TagoLocationPicker } from '@/components/map/TagoLocationPicker';
+import { ProviderContractSetupPanel } from '@/components/provider/contracts/ProviderContractSetupPanel';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { FontFamily } from '@/constants/theme';
 import type { ProviderProfile } from '@/types/provider';
+import { getApiErrorMessage } from '@/utils/apiError';
 import { detectCityFromText, resolveEntityCoords } from '@/utils/geo';
-import { getMediaUrl } from '@/utils/media';
+import { prepareImageUploadPart } from '@/utils/imageUpload';
+import {
+  getMediaUrl,
+  resolveProviderCoverUri,
+  resolveProviderLogoUri,
+  resolveRenderableMediaUrl,
+} from '@/utils/media';
+import { setPendingPkgComboFormState } from '@/utils/providerFormBridge';
+import {
+  buildCleanProviderMediaUpdate,
+  buildCleanProviderUpdatePayload,
+} from '@/utils/providerProfile';
 
-export type StoreHubTab = 'SETTINGS' | 'VOUCHERS' | 'PACKAGES' | 'ANALYTICS';
+export type StoreHubTab =
+  | 'SETTINGS'
+  | 'CONTRACTS'
+  | 'VOUCHERS'
+  | 'PACKAGES'
+  | 'ANALYTICS';
 
 interface StoreManagementHubModalProps {
   visible: boolean;
+  asScreen?: boolean;
   initialTab?: StoreHubTab;
   profile: ProviderProfile | null;
   onClose: () => void;
@@ -33,11 +57,13 @@ interface StoreManagementHubModalProps {
 
 export function StoreManagementHubModal({
   visible,
+  asScreen = false,
   initialTab = 'SETTINGS',
   profile,
   onClose,
   onUpdated,
 }: StoreManagementHubModalProps) {
+  const { user } = useAuth();
   const { show } = useToast();
   const [activeTab, setActiveTab] = useState<StoreHubTab>(initialTab);
   const [loading, setLoading] = useState(false);
@@ -53,6 +79,8 @@ export function StoreManagementHubModal({
   const [serviceRadiusKm, setServiceRadiusKm] = useState<number>(25);
   const [logoUrl, setLogoUrl] = useState('');
   const [coverUrl, setCoverUrl] = useState('');
+  const [logoFailed, setLogoFailed] = useState(false);
+  const [coverFailed, setCoverFailed] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
 
   // 2. Vouchers, Campaigns & Combos State
@@ -70,18 +98,11 @@ export function StoreManagementHubModal({
   const [campaignPercent, setCampaignPercent] = useState('15');
 
   const [combos, setCombos] = useState<any[]>([]);
-  const [showNewCombo, setShowNewCombo] = useState(false);
-  const [comboName, setComboName] = useState('');
-  const [comboDiscount, setComboDiscount] = useState('20');
   const [comboProducts, setComboProducts] = useState<any[]>([]);
 
   // 3. Packages & Portfolio State
   const [packages, setPackages] = useState<any[]>([]);
   const [portfolios, setPortfolios] = useState<any[]>([]);
-  const [showNewPkg, setShowNewPkg] = useState(false);
-  const [pkgTitle, setPkgTitle] = useState('');
-  const [pkgPrice, setPkgPrice] = useState('1200000');
-  const [pkgDuration, setPkgDuration] = useState('120');
 
   const [showNewPortfolio, setShowNewPortfolio] = useState(false);
   const [portfolioTitle, setPortfolioTitle] = useState('');
@@ -95,8 +116,12 @@ export function StoreManagementHubModal({
     if (visible) {
       setActiveTab(initialTab);
       setBusinessName(profile?.businessName || profile?.brandName || '');
-      setDescription((profile as any)?.description || '');
-      setContactPhone((profile as any)?.contactPhone || '');
+      setDescription(
+        profile?.policies?.rentalPolicy || (profile as any)?.description || '',
+      );
+      setContactPhone(
+        profile?.contact?.phone || (profile as any)?.contactPhone || '',
+      );
       setAddressLine(profile?.address?.addressLine || '');
       const resolved = resolveEntityCoords(profile || { address: { city: 'Huế' } });
       setStoreLat(resolved.lat);
@@ -104,8 +129,10 @@ export function StoreManagementHubModal({
       setServiceRadiusKm(
         Number((profile as any)?.photographySettings?.serviceRadiusKm) || 25,
       );
-      setLogoUrl((profile as any)?.media?.logoUrl || '');
-      setCoverUrl((profile as any)?.media?.coverUrl || '');
+      setLogoUrl(resolveProviderLogoUri(profile) || '');
+      setCoverUrl(resolveProviderCoverUri(profile) || '');
+      setLogoFailed(false);
+      setCoverFailed(false);
       void fetchTabContent(initialTab);
     }
   }, [visible, initialTab, profile]);
@@ -174,36 +201,60 @@ export function StoreManagementHubModal({
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      quality: 0.8,
+      allowsEditing: true,
+      aspect: target === 'LOGO' ? [1, 1] : [16, 9],
+      quality: 0.85,
     });
     if (result.canceled || !result.assets?.[0]) return;
     const asset = result.assets[0];
 
     setUploadingMedia(true);
     try {
-      const formData = new FormData();
-      formData.append(
-        'images',
-        (asset.file ?? {
-          uri: asset.uri,
-          name: asset.fileName ?? `${target.toLowerCase()}.jpg`,
-          type: asset.mimeType ?? 'image/jpeg',
-        }) as unknown as Blob,
+      const part = await prepareImageUploadPart(
+        asset,
+        `${target.toLowerCase()}.jpg`,
       );
-      const uploaded = await providerApi.uploadImages(formData);
-      const url = uploaded?.urls?.[0];
-      if (url) {
-        if (target === 'LOGO') setLogoUrl(url);
-        else setCoverUrl(url);
-        show(
-          target === 'LOGO'
-            ? 'Đã tải lên Logo cửa hàng mới!'
-            : 'Đã tải lên Ảnh bìa cửa hàng mới!',
-          'success',
-        );
+      let url: string | undefined;
+      try {
+        const coverFd = new FormData();
+        coverFd.append('file', part);
+        const uploaded = await providerApi.uploadCoverImage(coverFd);
+        url = uploaded?.url;
+      } catch {
+        const imagesFd = new FormData();
+        imagesFd.append('images', part);
+        const uploaded = await providerApi.uploadImages(imagesFd);
+        url = uploaded?.urls?.[0];
       }
-    } catch {
-      show('Không thể tải ảnh lên, vui lòng thử lại', 'error');
+
+      if (!url) {
+        show('Không thể tải ảnh lên, vui lòng thử lại', 'error');
+        return;
+      }
+
+      const nextLogo = target === 'LOGO' ? url : logoUrl;
+      const nextCover = target === 'COVER' ? url : coverUrl;
+      if (target === 'LOGO') {
+        setLogoUrl(url);
+        setLogoFailed(false);
+      } else {
+        setCoverUrl(url);
+        setCoverFailed(false);
+      }
+
+      // Persist immediately to Backend so shop avatar/cover updates live even without scrolling to Save
+      await providerApi.updateProfile(
+        buildCleanProviderMediaUpdate(profile, nextLogo, nextCover),
+      );
+      onUpdated();
+      show(
+        target === 'LOGO'
+          ? 'Đã cập nhật Logo cửa hàng mới!'
+          : 'Đã cập nhật Ảnh bìa cửa hàng mới!',
+        'success',
+      );
+    } catch (e: any) {
+      show(getApiErrorMessage(e, 'Không thể tải ảnh lên, vui lòng thử lại'), 'error');
     } finally {
       setUploadingMedia(false);
     }
@@ -218,33 +269,25 @@ export function StoreManagementHubModal({
     setSaving(true);
     try {
       const detectedCity = detectCityFromText(addressLine);
-      await providerApi.updateProfile({
-        businessName: businessName.trim(),
-        description: description.trim(),
-        contactPhone: contactPhone.trim(),
-        address: {
-          ...(profile?.address || {}),
-          addressLine: addressLine.trim(),
-          city: profile?.address?.city || detectedCity.name,
-          geo: {
-            type: 'Point',
-            coordinates: [storeLng, storeLat],
-          },
-        },
-        photographySettings: {
-          ...((profile as any)?.photographySettings || {}),
-          serviceRadiusKm,
-        },
-        media: {
-          ...((profile as any)?.media || {}),
-          logoUrl: logoUrl || (profile as any)?.media?.logoUrl,
-          coverUrl: coverUrl || (profile as any)?.media?.coverUrl,
-        },
-      } as any);
+      const payload = buildCleanProviderUpdatePayload({
+        profile,
+        businessName,
+        contactPhone,
+        addressLine,
+        city: detectedCity.name,
+        storeLat,
+        storeLng,
+        serviceRadiusKm,
+        logoUrl,
+        coverUrl,
+        rentalPolicy: description,
+        fallbackEmail: user?.email,
+      });
+      await providerApi.updateProfile(payload);
       show('Đã cập nhật hồ sơ, tọa độ Bản đồ & bán kính phục vụ thành công!', 'success');
       onUpdated();
     } catch (e: any) {
-      show(e?.response?.data?.message || 'Lỗi khi lưu cài đặt cửa hàng', 'error');
+      show(getApiErrorMessage(e, 'Lỗi khi lưu cài đặt cửa hàng'), 'error');
     } finally {
       setSaving(false);
     }
@@ -345,84 +388,14 @@ export function StoreManagementHubModal({
     }
   };
 
-  const handleCreateCombo = async () => {
-    if (!comboName.trim()) {
-      show('Vui lòng nhập tên gói Combo', 'error');
-      return;
-    }
-    const firstProdId = comboProducts[0]?._id;
-    const firstPkgId = packages[0]?._id;
-    if (!firstProdId || !firstPkgId) {
-      show('Cần có ít nhất 1 mẫu Áo dài và 1 Gói chụp ảnh để ghép Combo', 'error');
-      return;
-    }
-    setSaving(true);
-    try {
-      const now = new Date();
-      const nextMonth = new Date();
-      nextMonth.setDate(now.getDate() + 30);
-      await providerApi.createCombo({
-        name: comboName.trim(),
-        description: 'Gói Combo thuê cổ phục + chụp ảnh ngoại cảnh Huế',
-        productId: firstProdId,
-        photographyPackageId: firstPkgId,
-        discountPercent: Number(comboDiscount) || 20,
-        validFrom: now.toISOString(),
-        validTo: nextMonth.toISOString(),
-        maxUsage: 20,
-        aoDaiQuantity: 1,
-        shootPeopleCount: 1,
-      });
-      show('Đã tạo Gói Combo ưu đãi mới!', 'success');
-      setShowNewCombo(false);
-      setComboName('');
-      void fetchTabContent('VOUCHERS');
-    } catch (e: any) {
-      show(e?.response?.data?.message || 'Không thể tạo Combo', 'error');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleDeleteCombo = async (id: string) => {
     try {
       await providerApi.deleteCombo(id);
       show('Đã xóa gói Combo!', 'success');
       void fetchTabContent('VOUCHERS');
+      onUpdated();
     } catch {
       show('Không thể xóa gói Combo', 'error');
-    }
-  };
-
-  // Create Photography Package
-  const handleCreatePackage = async () => {
-    if (!pkgTitle.trim()) {
-      show('Vui lòng nhập tên gói chụp', 'error');
-      return;
-    }
-    setSaving(true);
-    try {
-      const durHours = Math.max(0.5, Number((Number(pkgDuration || 120) / 60).toFixed(1)));
-      await providerApi.createPhotographyPackage({
-        name: pkgTitle.trim(),
-        price: Number(pkgPrice) || 1200000,
-        durationHours: durHours,
-        includedDurationMinutes: Number(pkgDuration) || 120,
-        editedPhotosCount: 25,
-        rawPhotosCount: 100,
-        deliveryDays: 3,
-        maxPeople: 2,
-        status: 'ACTIVE',
-      });
-      show('Đã thêm gói chụp ảnh mới!', 'success');
-      setShowNewPkg(false);
-      setPkgTitle('');
-      void fetchTabContent('PACKAGES');
-      onUpdated();
-    } catch (e: any) {
-      show(e?.response?.data?.message || 'Không thể tạo gói chụp', 'error');
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -442,23 +415,20 @@ export function StoreManagementHubModal({
     setUploadingMedia(true);
     try {
       const formData = new FormData();
-      res.assets.forEach((asset, idx) => {
-        formData.append(
-          'images',
-          (asset.file ?? {
-            uri: asset.uri,
-            name: asset.fileName ?? `portfolio_${idx}.jpg`,
-            type: asset.mimeType ?? 'image/jpeg',
-          }) as unknown as Blob,
+      for (let idx = 0; idx < res.assets.length; idx += 1) {
+        const part = await prepareImageUploadPart(
+          res.assets[idx],
+          `portfolio_${idx}.jpg`,
         );
-      });
+        formData.append('images', part);
+      }
       const uploaded = await providerApi.uploadImages(formData);
       if (uploaded?.urls?.length) {
         setPortfolioImages((prev) => [...prev, ...uploaded.urls]);
         show(`Đã tải lên ${uploaded.urls.length} ảnh vào Album!`, 'success');
       }
-    } catch {
-      show('Không thể tải ảnh Album, vui lòng thử lại', 'error');
+    } catch (e: any) {
+      show(getApiErrorMessage(e, 'Không thể tải ảnh Album, vui lòng thử lại'), 'error');
     } finally {
       setUploadingMedia(false);
     }
@@ -497,34 +467,38 @@ export function StoreManagementHubModal({
     }
   };
 
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-
-        <View style={styles.sheet}>
-          <View style={styles.handle} />
-
-          {/* Header */}
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.eyebrow}>QUẢN TRỊ CỬA HÀNG TÀGO</Text>
-              <Text style={styles.title}>Thiết lập & Dịch vụ Đối tác</Text>
-            </View>
-            <Pressable style={styles.closeBtn} onPress={onClose}>
-              <Ionicons name="close" size={20} color="#1B1C1C" />
-            </Pressable>
+  const content = (
+    <SafeAreaView style={styles.screenRoot} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Pressable style={styles.backBtn} onPress={onClose} hitSlop={8}>
+            <Ionicons name="arrow-back" size={20} color="#1B1C1C" />
+          </Pressable>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.eyebrow}>QUẢN TRỊ CỬA HÀNG TÀGO</Text>
+            <Text style={styles.title}>Thiết lập & Dịch vụ Đối tác</Text>
           </View>
+          <Pressable style={styles.closeBtn} onPress={onClose}>
+            <Ionicons name="close" size={20} color="#1B1C1C" />
+          </Pressable>
+        </View>
 
-          {/* 4 Navigation Tabs */}
+        {/* 5 Fixed Navigation Tabs (never compressed by body height) */}
+        <View style={styles.tabsBarWrap}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            style={styles.tabsScroll}
             contentContainerStyle={styles.tabsRow}
           >
             {(
               [
                 { key: 'SETTINGS', label: 'Hồ sơ tiệm', icon: 'storefront-outline' },
+                { key: 'CONTRACTS', label: 'Hợp đồng V2', icon: 'document-text-outline' },
                 { key: 'VOUCHERS', label: 'Mã giảm giá', icon: 'pricetag-outline' },
                 { key: 'PACKAGES', label: 'Gói chụp & Album', icon: 'camera-outline' },
                 { key: 'ANALYTICS', label: 'Báo cáo doanh thu', icon: 'stats-chart-outline' },
@@ -549,8 +523,9 @@ export function StoreManagementHubModal({
               );
             })}
           </ScrollView>
+        </View>
 
-          {/* Body */}
+        {/* Body */}
           {loading ? (
             <View style={styles.loadingBox}>
               <ActivityIndicator size="large" color="#BA0049" />
@@ -572,11 +547,12 @@ export function StoreManagementHubModal({
                       onPress={() => void handlePickStoreMedia('LOGO')}
                       disabled={uploadingMedia}
                     >
-                      {logoUrl ? (
+                      {!logoFailed && resolveRenderableMediaUrl(logoUrl) ? (
                         <Image
-                          source={{ uri: getMediaUrl(logoUrl) }}
+                          source={{ uri: resolveRenderableMediaUrl(logoUrl) }}
                           style={styles.mediaPreviewImg}
                           contentFit="cover"
+                          onError={() => setLogoFailed(true)}
                         />
                       ) : (
                         <Ionicons name="person-circle-outline" size={26} color="#BA0049" />
@@ -589,11 +565,12 @@ export function StoreManagementHubModal({
                       onPress={() => void handlePickStoreMedia('COVER')}
                       disabled={uploadingMedia}
                     >
-                      {coverUrl ? (
+                      {!coverFailed && resolveRenderableMediaUrl(coverUrl) ? (
                         <Image
-                          source={{ uri: getMediaUrl(coverUrl) }}
+                          source={{ uri: resolveRenderableMediaUrl(coverUrl) }}
                           style={styles.mediaPreviewImg}
                           contentFit="cover"
+                          onError={() => setCoverFailed(true)}
                         />
                       ) : (
                         <Ionicons name="image-outline" size={24} color="#BA0049" />
@@ -667,13 +644,13 @@ export function StoreManagementHubModal({
                     })}
                   </View>
 
-                  <Text style={styles.label}>Giới thiệu cửa hàng</Text>
+                  <Text style={styles.label}>Giới thiệu & Chính sách cho thuê cửa hàng</Text>
                   <TextInput
                     style={[styles.input, styles.textArea]}
                     value={description}
                     onChangeText={setDescription}
                     multiline
-                    placeholder="Mô tả phong cách cổ phục, dịch vụ makeup, chụp ảnh..."
+                    placeholder="Mô tả phong cách cổ phục, dịch vụ makeup, lưu ý thuê áo dài..."
                   />
 
                   <Pressable
@@ -879,44 +856,24 @@ export function StoreManagementHubModal({
                     </Text>
                     <Pressable
                       style={styles.addSmallBtn}
-                      onPress={() => setShowNewCombo(!showNewCombo)}
+                      onPress={() => {
+                        setPendingPkgComboFormState({
+                          mode: 'COMBO',
+                          editingItem: null,
+                          products: comboProducts,
+                          packages,
+                          onSaved: () => {
+                            void fetchTabContent('VOUCHERS');
+                            onUpdated();
+                          },
+                        });
+                        router.push('/provider/package-combo-form?mode=COMBO' as Href);
+                      }}
                     >
-                      <Ionicons
-                        name={showNewCombo ? 'remove' : 'add'}
-                        size={16}
-                        color="#BA0049"
-                      />
-                      <Text style={styles.addSmallBtnText}>
-                        {showNewCombo ? 'Đóng' : 'Tạo Combo'}
-                      </Text>
+                      <Ionicons name="add" size={16} color="#BA0049" />
+                      <Text style={styles.addSmallBtnText}>Tạo Combo</Text>
                     </Pressable>
                   </View>
-
-                  {showNewCombo && (
-                    <View style={styles.createCard}>
-                      <Text style={styles.label}>Tên Gói Combo *</Text>
-                      <TextInput
-                        style={styles.input}
-                        value={comboName}
-                        onChangeText={setComboName}
-                        placeholder="VD: Combo Nhật Bình + Chụp Đại Nội Huế"
-                      />
-                      <Text style={styles.label}>Ưu đãi giảm giá Combo (%)</Text>
-                      <TextInput
-                        style={styles.input}
-                        value={comboDiscount}
-                        onChangeText={setComboDiscount}
-                        keyboardType="numeric"
-                      />
-                      <Pressable
-                        style={styles.primarySaveBtn}
-                        disabled={saving}
-                        onPress={handleCreateCombo}
-                      >
-                        <Text style={styles.primarySaveBtnText}>Tạo Gói Combo</Text>
-                      </Pressable>
-                    </View>
-                  )}
 
                   {combos.map((cb) => (
                     <View key={cb._id} style={styles.itemRowCard}>
@@ -949,57 +906,24 @@ export function StoreManagementHubModal({
                     </Text>
                     <Pressable
                       style={styles.addSmallBtn}
-                      onPress={() => setShowNewPkg(!showNewPkg)}
+                      onPress={() => {
+                        setPendingPkgComboFormState({
+                          mode: 'PACKAGE',
+                          editingItem: null,
+                          products: comboProducts,
+                          packages,
+                          onSaved: () => {
+                            void fetchTabContent('PACKAGES');
+                            onUpdated();
+                          },
+                        });
+                        router.push('/provider/package-combo-form?mode=PACKAGE' as Href);
+                      }}
                     >
-                      <Ionicons
-                        name={showNewPkg ? 'remove' : 'add'}
-                        size={16}
-                        color="#BA0049"
-                      />
-                      <Text style={styles.addSmallBtnText}>
-                        {showNewPkg ? 'Đóng' : 'Thêm gói chụp'}
-                      </Text>
+                      <Ionicons name="add" size={16} color="#BA0049" />
+                      <Text style={styles.addSmallBtnText}>Thêm gói chụp</Text>
                     </Pressable>
                   </View>
-
-                  {showNewPkg && (
-                    <View style={styles.createCard}>
-                      <Text style={styles.label}>Tên gói chụp ngoại cảnh / Studio *</Text>
-                      <TextInput
-                        style={styles.input}
-                        value={pkgTitle}
-                        onChangeText={setPkgTitle}
-                        placeholder="VD: Gói Chụp Hoàng Thành Huế (2 Giờ)"
-                      />
-                      <View style={styles.twoCol}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.label}>Giá trọn gói (đ)</Text>
-                          <TextInput
-                            style={styles.input}
-                            value={pkgPrice}
-                            onChangeText={setPkgPrice}
-                            keyboardType="numeric"
-                          />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.label}>Thời lượng (phút)</Text>
-                          <TextInput
-                            style={styles.input}
-                            value={pkgDuration}
-                            onChangeText={setPkgDuration}
-                            keyboardType="numeric"
-                          />
-                        </View>
-                      </View>
-                      <Pressable
-                        style={styles.primarySaveBtn}
-                        disabled={saving}
-                        onPress={handleCreatePackage}
-                      >
-                        <Text style={styles.primarySaveBtnText}>Tạo gói chụp</Text>
-                      </Pressable>
-                    </View>
-                  )}
 
                   {packages.length === 0 ? (
                     <View style={styles.emptyBox}>
@@ -1083,6 +1007,7 @@ export function StoreManagementHubModal({
                         <ScrollView
                           horizontal
                           showsHorizontalScrollIndicator={false}
+                          style={{ flexGrow: 0, flexShrink: 0 }}
                           contentContainerStyle={{ gap: 8 }}
                         >
                           {portfolioImages.map((u, idx) => (
@@ -1158,43 +1083,55 @@ export function StoreManagementHubModal({
                   </View>
                 </View>
               )}
+
+              {/* TAB 5: CONTRACTS V2 */}
+              {activeTab === 'CONTRACTS' && (
+                <ProviderContractSetupPanel
+                  visible={visible && activeTab === 'CONTRACTS'}
+                  defaultPhone={contactPhone || (profile as any)?.contactPhone || ''}
+                  onChanged={onUpdated}
+                />
+              )}
             </ScrollView>
           )}
-        </View>
-      </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+
+  if (asScreen) {
+    return content;
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      {content}
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
+  screenRoot: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    maxHeight: '88%',
-    paddingBottom: 24,
-  },
-  handle: {
-    width: 42,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: '#E2E8F0',
-    alignSelf: 'center',
-    marginTop: 10,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    gap: 10,
+    paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
+    flexShrink: 0,
+  },
+  backBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F5F3F3',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   eyebrow: {
     fontSize: 10,
@@ -1215,15 +1152,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  tabsBarWrap: {
+    flexShrink: 0,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  tabsScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   tabsRow: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     gap: 8,
+    alignItems: 'center',
   },
   tabPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexShrink: 0,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 99,
@@ -1245,11 +1194,13 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bodyBold,
   },
   loadingBox: {
+    flex: 1,
     padding: 48,
     alignItems: 'center',
     justifyContent: 'center',
   },
   body: {
+    flex: 1,
     paddingHorizontal: 20,
   },
   bodyContent: {
