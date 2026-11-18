@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, type CSSProperties } from 'react';
 import Swal from 'sweetalert2';
 import {
   Search,
@@ -20,9 +20,9 @@ import {
   Check,
   ExternalLink,
   Plus,
-  Star,
 } from 'lucide-react';
 import { PrivateEvidenceImage } from '../../../components/common/PrivateEvidenceImage';
+import { RentalEvidenceImage } from '../../rentals/components/RentalEvidenceImage';
 import { API_BASE_URL } from '../../../config/env';
 import { adminDisputesApi } from '../api/adminDisputesApi';
 import { useDisputes } from '../hooks/useDisputes';
@@ -50,6 +50,46 @@ const evidenceUrl = (reference: string) =>
     ? reference
     : `${API_BASE_URL}${reference}`;
 
+// New rental lifecycle uploads are UUID file IDs.  Older return requests keep
+// their upload URL (or a dispute private reference) directly in the booking.
+// Only UUIDs can be fetched through the rental-evidence endpoint.
+const isRentalEvidenceFileId = (reference: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(reference);
+
+type EvidenceSource = 'BEFORE' | 'AFTER' | 'DAMAGE' | 'OTHER';
+
+type EvidenceEntry = {
+  id: string;
+  reference: string;
+  source: EvidenceSource;
+  label: string;
+  rental?: { bookingId: string; itemId: string };
+};
+
+function EvidenceImage({ entry, alt, style }: { entry: EvidenceEntry; alt: string; style?: CSSProperties }) {
+  if (entry.rental) {
+    return (
+      <RentalEvidenceImage
+        bookingId={entry.rental.bookingId}
+        itemId={entry.rental.itemId}
+        fileId={entry.reference}
+        alt={alt}
+        asLink={false}
+        style={style}
+      />
+    );
+  }
+
+  return (
+    <PrivateEvidenceImage
+      reference={entry.reference}
+      legacyUrl={evidenceUrl(entry.reference)}
+      alt={alt}
+      imageStyle={style}
+    />
+  );
+}
+
 export function DisputesPanel() {
   const { error, items, loading, refresh, setError } = useDisputes();
 
@@ -65,6 +105,23 @@ export function DisputesPanel() {
   const [compensationAmount, setCompensationAmount] = useState(0);
   const [sendNotifications, setSendNotifications] = useState(true);
   const [isResolving, setIsResolving] = useState(false);
+  // Form errors belong to the active drawer, not the page-level data loader.
+  const [resolutionError, setResolutionError] = useState<string | null>(null);
+
+  const { calculatedCompensation, calculatedRefund } = useMemo(() => {
+    if (!selected) return { calculatedCompensation: 0, calculatedRefund: 0 };
+    const dep = getDepositTotal(selected);
+    const claimed = Math.min(selected.requestedAmount || dep, dep);
+
+    if (decision === 'CUSTOMER_RIGHT') {
+      return { calculatedCompensation: 0, calculatedRefund: dep };
+    }
+    if (decision === 'SHOP_RIGHT') {
+      return { calculatedCompensation: claimed, calculatedRefund: Math.max(dep - claimed, 0) };
+    }
+    // SPLIT
+    return { calculatedCompensation: compensationAmount, calculatedRefund: refundAmount };
+  }, [selected, decision, refundAmount, compensationAmount]);
 
   // Tabs & filters state
   const [statusTab, setStatusTab] = useState<'PENDING' | 'NEGOTIATING' | 'RESOLVED' | 'ALL'>('PENDING');
@@ -272,17 +329,19 @@ export function DisputesPanel() {
   const handleSelectDispute = (dispute: Dispute) => {
     setSelected(dispute);
     setIsDetailOpen(true);
-    setError(null);
-    setNotes('');
+    setResolutionError(null);
+    setNotes(dispute.adminNotes || '');
     setDecision('SHOP_RIGHT');
     const deposit = getDepositTotal(dispute);
-    setRefundAmount(Math.round(deposit / 2));
-    setCompensationAmount(Math.round(deposit / 2));
+    const half = Math.round(deposit / 2);
+    setRefundAmount(half);
+    setCompensationAmount(deposit - half);
   };
 
   const handleCloseDetail = () => {
     setIsDetailOpen(false);
     setSelected(null);
+    setResolutionError(null);
   };
 
   // Dock Sequential Navigation
@@ -305,23 +364,41 @@ export function DisputesPanel() {
 
   // Submit Resolution
   const handleResolve = async () => {
-    if (!selected?.bookingId?._id) {
-      setError('Không xác định được booking để xử lý.');
+    if (!selected) return;
+    const bookingId = typeof selected.bookingId === 'object' ? (selected.bookingId as any)?._id : selected.bookingId;
+    if (!bookingId) {
+      setDockSubTab('OVERVIEW');
+      setResolutionError('Không xác định được đơn hàng để xử lý.');
       return;
     }
 
     const trimmedNotes = notes.trim();
     if (!trimmedNotes) {
-      setError('Vui lòng nhập ghi chú phán quyết bắt buộc.');
+      setDockSubTab('OVERVIEW');
+      setResolutionError('Vui lòng nhập ghi chú phán quyết bắt buộc.');
+      await Swal.fire({
+        title: 'Thiếu thông tin bắt buộc',
+        text: 'Vui lòng nhập ghi chú căn cứ phán quyết trước khi xác nhận.',
+        icon: 'warning',
+        confirmButtonColor: '#881337',
+        confirmButtonText: 'Đã hiểu',
+      });
       return;
     }
 
     const depositTotal = getDepositTotal(selected);
     const splitTotal = refundAmount + compensationAmount;
     if (decision === 'SPLIT' && splitTotal > depositTotal) {
-      setError(
-        `Tổng khoản hoàn và bồi thường (${formatCurrency(splitTotal)}) không được vượt quá số tiền ký quỹ (${formatCurrency(depositTotal)}).`
-      );
+      setDockSubTab('OVERVIEW');
+      const limitMsg = `Tổng khoản hoàn và bồi thường (${formatCurrency(splitTotal)}) không được vượt quá số tiền ký quỹ (${formatCurrency(depositTotal)}).`;
+      setResolutionError(limitMsg);
+      await Swal.fire({
+        title: 'Vượt quá hạn mức ký quỹ',
+        text: limitMsg,
+        icon: 'warning',
+        confirmButtonColor: '#881337',
+        confirmButtonText: 'Đã hiểu',
+      });
       return;
     }
 
@@ -335,8 +412,8 @@ export function DisputesPanel() {
       decision === 'SPLIT'
         ? `${decisionLabels[decision]}: Hoàn khách ${formatCurrency(refundAmount)}, bồi thường đối tác ${formatCurrency(compensationAmount)}.`
         : decision === 'SHOP_RIGHT'
-          ? `Xác nhận ${decisionLabels[decision]}: Hoàn trả 100% tiền cọc và thanh toán cho Đối tác.`
-          : `Xác nhận ${decisionLabels[decision]}: Hoàn trả 100% cọc và bồi hoàn cho Khách hàng.`;
+          ? `Xác nhận ${decisionLabels[decision]}: Khấu trừ ${formatCurrency(calculatedCompensation)} bồi thường cho Đối tác, hoàn lại ${formatCurrency(calculatedRefund)} tiền cọc cho Khách hàng.`
+          : `Xác nhận ${decisionLabels[decision]}: Hoàn trả 100% cọc (${formatCurrency(calculatedRefund)}) cho Khách hàng, bác bỏ yêu cầu bồi thường.`;
 
     const result = await Swal.fire({
       title: 'Xác nhận phán quyết tranh chấp?',
@@ -352,10 +429,11 @@ export function DisputesPanel() {
     if (!result.isConfirmed) return;
 
     setIsResolving(true);
-    setError(null);
+    setResolutionError(null);
     try {
-      await adminDisputesApi.resolve(selected.bookingId._id, payload);
+      await adminDisputesApi.resolve(bookingId, payload);
       await refresh();
+      handleCloseDetail();
       await Swal.fire({
         title: 'Phán quyết thành công!',
         text: 'Hệ thống đã giải ngân ký quỹ và gửi thông báo tới các bên liên quan.',
@@ -363,7 +441,15 @@ export function DisputesPanel() {
         confirmButtonColor: '#059669',
       });
     } catch (err: any) {
-      setError(err?.message || 'Không thể xử lý tranh chấp.');
+      setDockSubTab('OVERVIEW');
+      const errMsg = err?.message || 'Không thể xử lý tranh chấp.';
+      setResolutionError(errMsg);
+      await Swal.fire({
+        title: 'Thao tác không thành công',
+        text: errMsg,
+        icon: 'error',
+        confirmButtonColor: '#be123c',
+      });
     } finally {
       setIsResolving(false);
     }
@@ -392,25 +478,60 @@ export function DisputesPanel() {
   };
 
   // Selected item evidence extracts
-  const evidencePhotos = useMemo(() => {
+  const evidenceEntries = useMemo<EvidenceEntry[]>(() => {
     if (!selected) return [];
-    const direct = selected.evidencePhotos || [];
-    const fromBooking =
-      (selected.bookingId as any)?.evidencePhotos ||
-      (selected.bookingId as any)?.disputeEvidencePhotos ||
-      [];
-    const delivered = selected.bookingId?.deliveredPhotos || [];
-    return Array.from(new Set([...direct, ...fromBooking, ...delivered]));
+    const booking = selected.bookingId as any;
+    const item = typeof selected.bookingItemId === 'object' ? selected.bookingItemId as any : null;
+    const bookingId = booking?._id?.toString?.() || booking?._id || '';
+    const itemId = item?._id?.toString?.() || item?._id || '';
+    const entries: EvidenceEntry[] = [];
+    const seen = new Set<string>();
+    const add = (reference: unknown, source: EvidenceSource, label: string, rental = false) => {
+      if (typeof reference !== 'string' || !reference.trim()) return;
+      const key = `${rental ? 'rental' : 'direct'}:${reference}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      entries.push({
+        id: key,
+        reference,
+        source,
+        label,
+        rental: rental && bookingId && itemId ? { bookingId, itemId } : undefined,
+      });
+    };
+
+    const fulfillment = item?.rentalFulfillment;
+    fulfillment?.pickupEvidence?.files?.forEach((file: any) =>
+      add(file?.fileId, 'BEFORE', 'Shop bàn giao', true),
+    );
+    fulfillment?.customerReturnEvidence?.files?.forEach((fileId: string) =>
+      add(fileId, 'AFTER', 'Khách trả đồ', isRentalEvidenceFileId(fileId)),
+    );
+    fulfillment?.returnEvidence?.files?.forEach((file: any) =>
+      add(file?.fileId, 'AFTER', 'Shop nhận lại', true),
+    );
+
+    [...(booking?.deliveredPhotos || []), ...(booking?.handoverPhotos || [])].forEach((ref: string) =>
+      add(ref, 'BEFORE', 'Ảnh bàn giao'),
+    );
+    (selected.evidencePhotos || []).forEach((ref) =>
+      add(ref, 'DAMAGE', 'Bằng chứng phía Shop'),
+    );
+    (selected.customerEvidencePhotos || []).forEach((ref) =>
+      add(ref, 'DAMAGE', 'Bằng chứng phía Khách'),
+    );
+    (booking?.disputeEvidencePhotos || booking?.evidencePhotos || []).forEach((ref: string) =>
+      add(ref, 'DAMAGE', 'Bằng chứng khiếu nại'),
+    );
+
+    return entries;
   }, [selected]);
 
-  const beforePhoto =
-    selected?.bookingId?.deliveredPhotos?.[0] ||
-    (selected as any)?.beforePhoto ||
-    'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=600&auto=format&fit=crop&q=80';
-
-  const afterPhoto =
-    evidencePhotos[0] ||
-    'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=600&auto=format&fit=crop&q=80';
+  const evidencePhotos = evidenceEntries.map((entry) => entry.reference);
+  const filteredEvidence = evidenceEntries.filter((entry) => entry.source === evidenceSubFilter);
+  const beforeEvidence = evidenceEntries.find((entry) => entry.source === 'BEFORE');
+  const afterEvidence = evidenceEntries.find((entry) => entry.source === 'AFTER')
+    || evidenceEntries.find((entry) => entry.source === 'DAMAGE');
 
   return (
     <div className="df-shell">
@@ -639,11 +760,30 @@ export function DisputesPanel() {
             fontSize: '13px',
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'space-between',
             gap: '8px',
           }}
         >
-          <AlertCircle size={16} />
-          <span>{error}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertCircle size={16} />
+            <span>{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            title="Đóng thông báo"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              color: '#be123c',
+              padding: '2px',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            <X size={15} />
+          </button>
         </div>
       )}
 
@@ -1025,7 +1165,7 @@ export function DisputesPanel() {
                       className={`df-subfilter-btn ${evidenceSubFilter === 'DAMAGE' ? 'active' : ''}`}
                       onClick={() => setEvidenceSubFilter('DAMAGE')}
                     >
-                      Ảnh hư hỏng ({evidencePhotos.length || 1})
+                      Ảnh hư hỏng ({evidenceEntries.filter((entry) => entry.source === 'DAMAGE').length})
                     </button>
                     <button
                       type="button"
@@ -1038,36 +1178,19 @@ export function DisputesPanel() {
 
                   {/* Evidence Gallery Strip */}
                   <div className="df-evidence-gallery">
-                    {evidencePhotos.length > 0 ? (
-                      evidencePhotos.map((ref, idx) => (
+                    {filteredEvidence.length > 0 ? (
+                      filteredEvidence.map((entry, idx) => (
                         <div
-                          key={ref + idx}
+                          key={entry.id}
                           className="df-gallery-thumb-item"
                           onClick={() => setShowComparisonModal(true)}
+                          title={entry.label}
                         >
-                          <PrivateEvidenceImage
-                            reference={ref}
-                            legacyUrl={evidenceUrl(ref)}
-                            alt={`Bằng chứng ${idx + 1}`}
-                            imageStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
+                          <EvidenceImage entry={entry} alt={`${entry.label} ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         </div>
                       ))
                     ) : (
-                      <>
-                        <div
-                          className="df-gallery-thumb-item"
-                          onClick={() => setShowComparisonModal(true)}
-                        >
-                          <img src={beforePhoto} alt="Trước khi thuê" />
-                        </div>
-                        <div
-                          className="df-gallery-thumb-item"
-                          onClick={() => setShowComparisonModal(true)}
-                        >
-                          <img src={afterPhoto} alt="Sau khi trả" />
-                        </div>
-                      </>
+                      <span className="df-empty-state">Chưa có ảnh thuộc nhóm này</span>
                     )}
 
                     <button
@@ -1099,19 +1222,25 @@ export function DisputesPanel() {
                       <div className="df-comp-item">
                         <span className="df-comp-label">Trước khi thuê (Giao đồ)</span>
                         <div className="df-comp-img-wrap">
-                          <img src={beforePhoto} alt="Trước khi thuê" />
+                          {beforeEvidence ? <EvidenceImage entry={beforeEvidence} alt="Trước khi thuê" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span>Chưa có ảnh bàn giao</span>}
                         </div>
-                        <span className="df-comp-meta">Đồng kiểm lúc giao 14:00</span>
+                        <span className="df-comp-meta">
+                          {selected.bookingId?.rentalStartDate
+                            ? `Bàn giao theo lịch: ${new Date(selected.bookingId.rentalStartDate).toLocaleDateString('vi-VN')}`
+                            : 'Đồng kiểm lúc giao'}
+                        </span>
                       </div>
 
                       {/* After */}
                       <div className="df-comp-item">
                         <span className="df-comp-label">Sau khi trả (Khiếu nại)</span>
                         <div className="df-comp-img-wrap">
-                          <img src={afterPhoto} alt="Sau khi trả" />
-                          <div className="df-comp-marker" title="Vị trí ghi nhận sự cố" />
+                          {afterEvidence ? <EvidenceImage entry={afterEvidence} alt="Sau khi trả" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span>Chưa có ảnh trả đồ / sự cố</span>}
+                          {afterEvidence?.source === 'DAMAGE' && <div className="df-comp-marker" title="Vị trí ghi nhận sự cố" />}
                         </div>
-                        <span className="df-comp-meta">Ghi nhận rách tà áo 17:30</span>
+                        <span className="df-comp-meta">
+                          {selected.description ? `Sự cố: ${selected.description}` : 'Ghi nhận hư hại lúc nhận lại đồ'}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1128,17 +1257,25 @@ export function DisputesPanel() {
                       </div>
 
                       <div className="df-order-summary-item">
-                        <img
-                          src={beforePhoto}
-                          alt="product"
-                          className="df-order-thumb"
-                        />
+                        {beforeEvidence ? (
+                          <EvidenceImage entry={beforeEvidence} alt="Ảnh sản phẩm bàn giao" style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '6px' }} />
+                        ) : (
+                          <div className="df-order-thumb" aria-label="Chưa có ảnh sản phẩm" />
+                        )}
                         <div>
                           <div className="df-order-item-title">{getItemName(selected)}</div>
                           <div className="df-order-item-sub">
-                            {getServiceType(selected) === 'RENTAL'
-                              ? 'Thuê 3 ngày · Size M'
-                              : 'Gói chụp 2 giờ'}
+                            {getServiceType(selected) === 'RENTAL' ? (
+                              <span>
+                                {selected.bookingItemId?.size ? `Size: ${selected.bookingItemId.size}` : 'Tiêu chuẩn'}
+                                {selected.bookingItemId?.color ? ` · Màu: ${selected.bookingItemId.color}` : ''}
+                                {selected.bookingId?.rentalStartDate && selected.bookingId?.rentalEndDate ? (
+                                  ` · ${Math.max(1, Math.round((new Date(selected.bookingId.rentalEndDate).getTime() - new Date(selected.bookingId.rentalStartDate).getTime()) / (1000 * 60 * 60 * 24)))} ngày`
+                                ) : ' · Thuê trang phục'}
+                              </span>
+                            ) : (
+                              'Gói dịch vụ chụp ảnh'
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1174,7 +1311,9 @@ export function DisputesPanel() {
                         <div className="df-party-info">
                           <span className="df-party-label">Khách hàng ({getCustomerCode(selected)})</span>
                           <span className="df-party-text">{getCustomerName(selected)}</span>
-                          <span className="df-party-sub">Lịch sử: 0 khiếu nại trước đây</span>
+                          <span className="df-party-sub">
+                            {selected.openedBy?.phone || selected.bookingId?.customerId?.phone || selected.bookingId?.customerId?.phoneNumber || 'Tài khoản khách hàng'}
+                          </span>
                         </div>
                       </div>
 
@@ -1190,7 +1329,7 @@ export function DisputesPanel() {
                           <span className="df-party-label">Đối tác ({getProviderCode(selected)})</span>
                           <span className="df-party-text">{getProviderName(selected)}</span>
                           <span className="df-party-sub">
-                            Đánh giá: 4.9 <Star size={10} style={{ display: 'inline', fill: '#f59e0b', color: '#f59e0b' }} /> (128 đơn)
+                            {selected.reportedBy?.phone || 'Đối tác cung cấp dịch vụ'}
                           </span>
                         </div>
                       </div>
@@ -1232,17 +1371,27 @@ export function DisputesPanel() {
                           borderRadius: '8px',
                           padding: '12px 14px',
                           display: 'flex',
-                          alignItems: 'center',
+                          alignItems: 'flex-start',
                           gap: '10px',
                           fontSize: '12.5px',
                         }}
                       >
-                        <CheckCircle2 size={18} style={{ color: '#059669', flexShrink: 0 }} />
+                        <CheckCircle2 size={18} style={{ color: '#059669', flexShrink: 0, marginTop: '2px' }} />
                         <div>
                           <strong>Đơn khiếu nại này đã được phán quyết hoàn tất.</strong>
-                          <div style={{ fontSize: '11.5px', color: '#047857', marginTop: '2px' }}>
+                          <div style={{ fontSize: '11.5px', color: '#047857', marginTop: '4px' }}>
                             Số tiền ký quỹ đã được giải ngân theo đúng biên bản trọng tài.
                           </div>
+                          {selected.adminNotes && (
+                            <div style={{ marginTop: '8px', padding: '8px 10px', background: '#fff', borderRadius: '6px', border: '1px solid #d1fae5', color: '#064e3b' }}>
+                              <strong>Ghi chú phán quyết:</strong> {selected.adminNotes}
+                            </div>
+                          )}
+                          {selected.resolvedAt && (
+                            <div style={{ marginTop: '6px', fontSize: '11px', color: '#059669' }}>
+                              Thời gian: {new Date(selected.resolvedAt).toLocaleDateString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })}
+                            </div>
+                          )}
                         </div>
                       </div>
                     ) : (
@@ -1259,7 +1408,7 @@ export function DisputesPanel() {
                             </div>
                             <div className="df-choice-text">
                               <span className="df-choice-name">Đối tác đúng</span>
-                              <span className="df-choice-desc">Hoàn 100% cọc & thanh toán đối tác</span>
+                              <span className="df-choice-desc">Bồi thường Shop theo thiệt hại, hoàn cọc thừa (nếu có)</span>
                             </div>
                           </div>
 
@@ -1273,7 +1422,7 @@ export function DisputesPanel() {
                             </div>
                             <div className="df-choice-text">
                               <span className="df-choice-name">Khách hàng đúng</span>
-                              <span className="df-choice-desc">Hoàn 100% cọc & bồi hoàn khách</span>
+                              <span className="df-choice-desc">Bác bỏ đền bù, hoàn 100% cọc cho Khách hàng</span>
                             </div>
                           </div>
 
@@ -1292,6 +1441,30 @@ export function DisputesPanel() {
                           </div>
                         </div>
 
+                        {/* Financial Preview Box */}
+                        <div
+                          style={{
+                            background: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '8px',
+                            padding: '10px 14px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            fontSize: '12.5px',
+                            marginTop: '2px',
+                          }}
+                        >
+                          <div>
+                            <span style={{ color: '#64748b' }}>Bồi thường Shop: </span>
+                            <strong style={{ color: '#b91c1c' }}>{formatCurrency(calculatedCompensation)}</strong>
+                          </div>
+                          <div>
+                            <span style={{ color: '#64748b' }}>Hoàn cọc Khách: </span>
+                            <strong style={{ color: '#047857' }}>{formatCurrency(calculatedRefund)}</strong>
+                          </div>
+                        </div>
+
                         {/* Split Inputs (if SPLIT) */}
                         {decision === 'SPLIT' && (
                           <div className="df-split-inputs">
@@ -1301,7 +1474,11 @@ export function DisputesPanel() {
                                 type="number"
                                 className="df-split-input"
                                 value={refundAmount}
-                                onChange={(e) => setRefundAmount(Number(e.target.value))}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  setRefundAmount(val);
+                                  setCompensationAmount(Math.max(0, getDepositTotal(selected) - val));
+                                }}
                                 min={0}
                                 step={10000}
                               />
@@ -1312,10 +1489,59 @@ export function DisputesPanel() {
                                 type="number"
                                 className="df-split-input"
                                 value={compensationAmount}
-                                onChange={(e) => setCompensationAmount(Number(e.target.value))}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  setCompensationAmount(val);
+                                  setRefundAmount(Math.max(0, getDepositTotal(selected) - val));
+                                }}
                                 min={0}
                                 step={10000}
                               />
+                            </div>
+                            <div
+                              style={{
+                                gridColumn: 'span 2',
+                                display: 'flex',
+                                gap: '6px',
+                                flexWrap: 'wrap',
+                              }}
+                            >
+                              <button
+                                type="button"
+                                className="df-subfilter-btn"
+                                onClick={() => {
+                                  const dep = getDepositTotal(selected);
+                                  const half = Math.round(dep / 2);
+                                  setRefundAmount(half);
+                                  setCompensationAmount(dep - half);
+                                }}
+                              >
+                                Chia 50/50
+                              </button>
+                              <button
+                                type="button"
+                                className="df-subfilter-btn"
+                                onClick={() => {
+                                  const dep = getDepositTotal(selected);
+                                  const r = Math.round(dep * 0.7);
+                                  setRefundAmount(r);
+                                  setCompensationAmount(dep - r);
+                                }}
+                              >
+                                70% Khách - 30% Shop
+                              </button>
+                              <button
+                                type="button"
+                                className="df-subfilter-btn"
+                                onClick={() => {
+                                  const dep = getDepositTotal(selected);
+                                  const r = Math.round(dep * 0.3);
+                                  setRefundAmount(r);
+                                  setCompensationAmount(dep - r);
+                                }}
+                              >
+                                30% Khách - 70% Shop
+                              </button>
                             </div>
                             <div
                               style={{
@@ -1353,8 +1579,17 @@ export function DisputesPanel() {
                             className="df-decision-textarea"
                             placeholder="Nhập căn cứ xử lý dựa trên biên bản kiểm đồ, hình ảnh bàn giao..."
                             value={notes}
-                            onChange={(e) => setNotes(e.target.value)}
+                            onChange={(e) => {
+                              setNotes(e.target.value);
+                              if (resolutionError) setResolutionError(null);
+                            }}
                           />
+                          {resolutionError && (
+                            <p role="alert" style={{ margin: '7px 0 0', color: '#be123c', fontSize: '12px', fontWeight: 600 }}>
+                              <AlertCircle size={14} style={{ verticalAlign: '-2px', marginRight: '5px' }} />
+                              {resolutionError}
+                            </p>
+                          )}
                         </div>
 
                         {/* Checkbox send notifications */}
@@ -1376,31 +1611,8 @@ export function DisputesPanel() {
                           <span>Gửi email và thông báo trong ứng dụng cho cả hai bên</span>
                         </label>
 
-                        {/* Action buttons */}
-                        <div className="df-dock-actions">
-                          <button
-                            type="button"
-                            className="df-btn-draft"
-                            onClick={handleSaveDraft}
-                          >
-                            Lưu nháp
-                          </button>
-                          <button
-                            type="button"
-                            className="df-btn-confirm"
-                            disabled={isResolving}
-                            onClick={() => void handleResolve()}
-                          >
-                            {isResolving ? (
-                              'Đang thực thi phán quyết...'
-                            ) : (
-                              <>
-                                <CheckCircle2 size={15} />
-                                <span>Xác nhận phán quyết</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
+                        {/* Các thao tác được gom ở thanh cố định cuối drawer để
+                            tránh hiển thị hai nút có cùng chức năng. */}
                       </>
                     )}
                   </div>
@@ -1440,10 +1652,10 @@ export function DisputesPanel() {
                   )}
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                    {evidencePhotos.length > 0 ? (
-                      evidencePhotos.map((ref, idx) => (
+                    {evidenceEntries.length > 0 ? (
+                      evidenceEntries.map((entry, idx) => (
                         <div
-                          key={ref + idx}
+                          key={entry.id}
                           style={{
                             height: '140px',
                             borderRadius: '8px',
@@ -1453,49 +1665,14 @@ export function DisputesPanel() {
                           }}
                           onClick={() => setShowComparisonModal(true)}
                         >
-                          <PrivateEvidenceImage
-                            reference={ref}
-                            legacyUrl={evidenceUrl(ref)}
-                            alt={`Bằng chứng ${idx + 1}`}
-                            imageStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
+                          <EvidenceImage entry={entry} alt={`${entry.label} ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <span style={{ position: 'relative', display: 'block', marginTop: '-26px', padding: '4px 7px', color: '#fff', background: 'rgba(15, 23, 42, .72)', fontSize: '11px', fontWeight: 700 }}>
+                            {entry.label}
+                          </span>
                         </div>
                       ))
                     ) : (
-                      <>
-                        <div
-                          style={{
-                            height: '140px',
-                            borderRadius: '8px',
-                            overflow: 'hidden',
-                            border: '1px solid #e2e8f0',
-                            cursor: 'pointer',
-                          }}
-                          onClick={() => setShowComparisonModal(true)}
-                        >
-                          <img
-                            src={beforePhoto}
-                            alt="Trước khi thuê"
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        </div>
-                        <div
-                          style={{
-                            height: '140px',
-                            borderRadius: '8px',
-                            overflow: 'hidden',
-                            border: '1px solid #e2e8f0',
-                            cursor: 'pointer',
-                          }}
-                          onClick={() => setShowComparisonModal(true)}
-                        >
-                          <img
-                            src={afterPhoto}
-                            alt="Sau khi trả"
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        </div>
-                      </>
+                      <span className="df-empty-state">Chưa có ảnh bằng chứng</span>
                     )}
                   </div>
                 </div>
@@ -1505,47 +1682,71 @@ export function DisputesPanel() {
               {dockSubTab === 'DIALOGUE' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div className="df-dialogue-thread">
-                    {/* Customer msg */}
-                    <div className="df-dialogue-item">
-                      <div className="df-msg-avatar-fallback" style={{ background: '#e11d48' }}>
-                        KH
-                      </div>
-                      <div className="df-dialogue-bubble df-bubble-cust">
-                        <div className="df-bubble-meta">
-                          <span>{getCustomerName(selected)}</span>
-                          <span style={{ color: '#94a3b8' }}>14:02 Hôm qua</span>
-                        </div>
-                        Chào shop, khi tôi nhận áo đã thấy đường may ở tà áo bị sờn nhẹ, sau khi mặc chụp 1 tiếng thì bị rách thêm. Tôi muốn hoàn lại tiền cọc vì lỗi không phải hoàn toàn do tôi.
-                      </div>
-                    </div>
-
-                    {/* Partner msg */}
+                    {/* Shop Statement */}
                     <div className="df-dialogue-item is-partner">
                       <div className="df-msg-avatar-fallback" style={{ background: '#7c3aed' }}>
                         ĐT
                       </div>
                       <div className="df-dialogue-bubble df-bubble-partner">
                         <div className="df-bubble-meta">
-                          <span>{getProviderName(selected)}</span>
-                          <span style={{ color: '#a855f7' }}>14:35 Hôm qua</span>
+                          <span>{getProviderName(selected)} (Đối tác)</span>
+                          <span style={{ color: '#a855f7' }}>{formatRelativeTime(selected)}</span>
                         </div>
-                        Dạ shop có ảnh đồng kiểm lúc giao qua bưu tá áo hoàn toàn lành lặn không sờn rách ạ. Vết rách này kéo dài 10cm do giẫm phải guốc nhọn. Shop yêu cầu bồi thường theo đúng thỏa thuận ban đầu.
+                        <div>
+                          <strong>Báo cáo sự cố:</strong> {selected.description || 'Ghi nhận lỗi sau khi kiểm tra hiện vật trả lại.'}
+                        </div>
+                        <div style={{ marginTop: '6px', fontSize: '11.5px', color: '#6d28d9' }}>
+                          Yêu cầu bồi thường: <strong>{formatCurrency(selected.requestedAmount)}</strong> • Phương án: <strong>{selected.actionType || 'CLEANING'}</strong>
+                        </div>
+                        {selected.evidencePhotos && selected.evidencePhotos.length > 0 && (
+                          <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748b' }}>
+                            Đã đính kèm {selected.evidencePhotos.length} ảnh bằng chứng hư hại.
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    {/* Customer reply */}
+                    {/* Customer Statement */}
                     <div className="df-dialogue-item">
                       <div className="df-msg-avatar-fallback" style={{ background: '#e11d48' }}>
                         KH
                       </div>
                       <div className="df-dialogue-bubble df-bubble-cust">
                         <div className="df-bubble-meta">
-                          <span>{getCustomerName(selected)}</span>
-                          <span style={{ color: '#94a3b8' }}>15:10 Hôm qua</span>
+                          <span>{getCustomerName(selected)} (Khách hàng)</span>
+                          <span style={{ color: '#94a3b8' }}>{formatRelativeTime(selected)}</span>
                         </div>
-                        Tôi không giẫm guốc, tôi đề nghị Admin LUMÉ vào kiểm tra ảnh phóng to và phân định công tâm.
+                        <div>
+                          <strong>Ý kiến của khách hàng:</strong>{' '}
+                          {selected.customerReason || 'Khách hàng không đồng ý với yêu cầu đền bù của Shop và đề nghị Ban Quản trị LUMÉ phân định công tâm.'}
+                        </div>
+                        {selected.customerEvidencePhotos && selected.customerEvidencePhotos.length > 0 && (
+                          <div style={{ marginTop: '8px', fontSize: '11px', color: '#9f1239' }}>
+                            Đã đính kèm {selected.customerEvidencePhotos.length} ảnh đối chứng từ khách hàng.
+                          </div>
+                        )}
                       </div>
                     </div>
+
+                    {/* Admin Resolution if already resolved */}
+                    {isItemResolved(selected) && (selected.adminNotes || (selected as any).adminDecision) && (
+                      <div className="df-dialogue-item is-admin">
+                        <div className="df-msg-avatar-fallback" style={{ background: '#881337' }}>
+                          LUMÉ
+                        </div>
+                        <div className="df-dialogue-bubble df-bubble-admin">
+                          <div className="df-bubble-meta">
+                            <span>Admin Trọng tài LUMÉ (Phán quyết chính thức)</span>
+                            <span style={{ color: '#fda4af' }}>
+                              {selected.resolvedAt ? new Date(selected.resolvedAt).toLocaleDateString('vi-VN') : 'Đã phán quyết'}
+                            </span>
+                          </div>
+                          <div style={{ fontWeight: 600 }}>
+                            Căn cứ phán quyết: {selected.adminNotes || 'Hồ sơ đã được phán quyết và giải ngân thành công theo quy chế trọng tài.'}
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Admin custom messages */}
                     {customMessages.map((msg, i) => (
@@ -1569,7 +1770,7 @@ export function DisputesPanel() {
                     <input
                       type="text"
                       className="df-dialogue-input"
-                      placeholder="Gửi lời nhắn trọng tài vào cuộc trao đổi..."
+                      placeholder="Ghi chú nội bộ hoặc lời nhắn trọng tài..."
                       value={dialogueInput}
                       onChange={(e) => setDialogueInput(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleSendDialogue()}
@@ -1580,7 +1781,7 @@ export function DisputesPanel() {
                       onClick={handleSendDialogue}
                     >
                       <Send size={13} />
-                      <span>Gửi</span>
+                      <span>Thêm</span>
                     </button>
                   </div>
                 </div>
@@ -1592,46 +1793,71 @@ export function DisputesPanel() {
                   <div className="df-timeline-item">
                     <div className="df-timeline-dot" />
                     <div className="df-timeline-title">
-                      Đơn khiếu nại được tạo
-                      <span className="df-timeline-time">14:02 18/03/2025</span>
+                      Đơn hàng được khởi tạo #{getBookingCode(selected)}
+                      <span className="df-timeline-time">
+                        {selected.bookingId?.createdAt
+                          ? new Date(selected.bookingId.createdAt).toLocaleDateString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })
+                          : 'Đã xác nhận'}
+                      </span>
                     </div>
                     <div className="df-timeline-desc">
-                      Khách hàng {getCustomerName(selected)} gửi khiếu nại yêu cầu bồi hoàn cọc sau khi đối tác lập biên bản sự cố.
+                      Khách hàng {getCustomerName(selected)} đặt thuê {getItemName(selected)} với giá trị {formatCurrency(selected.bookingId?.pricingSummary?.grandTotal || 0)}.
                     </div>
                   </div>
 
                   <div className="df-timeline-item">
                     <div className="df-timeline-dot" />
                     <div className="df-timeline-title">
-                      Hệ thống phong tỏa ký quỹ
-                      <span className="df-timeline-time">14:03 18/03/2025</span>
+                      Ký quỹ Escrow bảo đảm
+                      <span className="df-timeline-time">Tự động phong tỏa</span>
                     </div>
                     <div className="df-timeline-desc">
-                      Khoản tiền cọc {formatCurrency(getDepositTotal(selected))} được giữ trong Escrow an toàn của LUMÉ.
+                      Khoản tiền cọc {formatCurrency(getDepositTotal(selected))} được giữ an toàn tại ví ký quỹ trung gian của nền tảng.
                     </div>
                   </div>
 
                   <div className="df-timeline-item">
                     <div className="df-timeline-dot" />
                     <div className="df-timeline-title">
-                      Đối tác gửi ảnh đối chứng
-                      <span className="df-timeline-time">14:35 18/03/2025</span>
+                      Shop báo cáo sự cố & lập biên bản
+                      <span className="df-timeline-time">
+                        {selected.createdAt
+                          ? new Date(selected.createdAt).toLocaleDateString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })
+                          : 'Ghi nhận sau trả đồ'}
+                      </span>
                     </div>
                     <div className="df-timeline-desc">
-                      {getProviderName(selected)} đã tải lên 2 ảnh lúc bàn giao đơn hàng qua hệ thống.
+                      {getProviderName(selected)} lập yêu cầu bồi thường {formatCurrency(selected.requestedAmount)}: "{selected.description || 'Sự cố phát sinh'}".
                     </div>
                   </div>
 
                   <div className="df-timeline-item">
                     <div className="df-timeline-dot" />
                     <div className="df-timeline-title">
-                      Admin mở giám định hồ sơ
-                      <span className="df-timeline-time">Hôm nay</span>
+                      Chuyển trạng thái sang Trọng tài giải quyết
+                      <span className="df-timeline-time">Đang đối soát</span>
                     </div>
                     <div className="df-timeline-desc">
-                      Hồ sơ đang trong quy trình giám sát và so sánh ảnh hư hỏng để đưa ra phán quyết cuối cùng.
+                      {selected.customerReason
+                        ? `Khách hàng phản hồi: "${selected.customerReason}"`
+                        : 'Khách hàng không chấp nhận phương án và yêu cầu Admin phân định.'}
                     </div>
                   </div>
+
+                  {isItemResolved(selected) && (
+                    <div className="df-timeline-item">
+                      <div className="df-timeline-dot" style={{ background: '#059669', borderColor: '#a7f3d0' }} />
+                      <div className="df-timeline-title" style={{ color: '#065f46' }}>
+                        Phán quyết hoàn tất
+                        <span className="df-timeline-time">
+                          {selected.resolvedAt ? new Date(selected.resolvedAt).toLocaleDateString('vi-VN') : 'Đã giải quyết'}
+                        </span>
+                      </div>
+                      <div className="df-timeline-desc">
+                        Căn cứ: {selected.adminNotes || 'Đã tất toán và giải ngân khoản ký quỹ theo phán quyết trọng tài.'}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1641,25 +1867,27 @@ export function DisputesPanel() {
                   {/* Khách hàng box */}
                   <div className="df-history-box">
                     <div className="df-history-box-title">
-                      <span>Lịch sử Khách hàng: {getCustomerName(selected)}</span>
-                      <span style={{ fontSize: '11px', color: '#16a34a' }}>Uy tín cao</span>
+                      <span>Khách hàng: {getCustomerName(selected)}</span>
+                      <span style={{ fontSize: '11px', color: '#16a34a' }}>Hồ sơ hợp lệ</span>
                     </div>
                     <div className="df-history-grid">
                       <div className="df-hist-stat">
-                        <div className="df-hist-stat-val">8</div>
-                        <div className="df-hist-stat-label">Đơn hoàn tất</div>
+                        <div className="df-hist-stat-val" style={{ fontSize: '14px' }}>
+                          {getCustomerCode(selected)}
+                        </div>
+                        <div className="df-hist-stat-label">Mã khách hàng</div>
                       </div>
                       <div className="df-hist-stat">
-                        <div className="df-hist-stat-val" style={{ color: '#e11d48' }}>
-                          1
+                        <div className="df-hist-stat-val" style={{ fontSize: '13px', color: '#2563eb' }}>
+                          {selected.openedBy?.phone || selected.bookingId?.customerId?.phone || 'Đã xác thực'}
                         </div>
-                        <div className="df-hist-stat-label">Khiếu nại</div>
+                        <div className="df-hist-stat-label">Số điện thoại</div>
                       </div>
                       <div className="df-hist-stat">
-                        <div className="df-hist-stat-val" style={{ color: '#16a34a' }}>
-                          100%
+                        <div className="df-hist-stat-val" style={{ fontSize: '13px', color: '#16a34a' }}>
+                          Đã thanh toán
                         </div>
-                        <div className="df-hist-stat-label">Tỷ lệ thắng</div>
+                        <div className="df-hist-stat-label">Trạng thái thanh toán</div>
                       </div>
                     </div>
                   </div>
@@ -1667,24 +1895,39 @@ export function DisputesPanel() {
                   {/* Đối tác box */}
                   <div className="df-history-box">
                     <div className="df-history-box-title">
-                      <span>Lịch sử Đối tác: {getProviderName(selected)}</span>
+                      <span>Đối tác: {getProviderName(selected)}</span>
                       <span style={{ fontSize: '11px', color: '#2563eb' }}>Đối tác xác thực</span>
                     </div>
                     <div className="df-history-grid">
                       <div className="df-hist-stat">
-                        <div className="df-hist-stat-val">128</div>
-                        <div className="df-hist-stat-label">Đơn phục vụ</div>
-                      </div>
-                      <div className="df-hist-stat">
-                        <div className="df-hist-stat-val" style={{ color: '#d97706' }}>
-                          2
+                        <div className="df-hist-stat-val" style={{ fontSize: '14px' }}>
+                          {getProviderCode(selected)}
                         </div>
-                        <div className="df-hist-stat-label">Tranh chấp</div>
+                        <div className="df-hist-stat-label">Mã đối tác</div>
                       </div>
                       <div className="df-hist-stat">
-                        <div className="df-hist-stat-val">4.9 ⭐</div>
-                        <div className="df-hist-stat-label">Đánh giá trung bình</div>
+                        <div className="df-hist-stat-val" style={{ fontSize: '13px', color: '#d97706' }}>
+                          {selected.actionType || 'CHO_THUE'}
+                        </div>
+                        <div className="df-hist-stat-label">Loại dịch vụ</div>
                       </div>
+                      <div className="df-hist-stat">
+                        <div className="df-hist-stat-val" style={{ fontSize: '13px', color: '#16a34a' }}>
+                          Hoạt động
+                        </div>
+                        <div className="df-hist-stat-label">Trạng thái cửa hàng</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Ký quỹ Escrow Box */}
+                  <div className="df-history-box" style={{ gridColumn: 'span 2' }}>
+                    <div className="df-history-box-title">
+                      <span>Hợp đồng Ký quỹ VibeHue Escrow #{getBookingCode(selected)}</span>
+                      <span style={{ fontSize: '11px', color: '#059669' }}>Bảo chứng an toàn</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#64748b', lineHeight: '1.6', marginTop: '6px' }}>
+                      Tiền cọc <strong>{formatCurrency(getDepositTotal(selected))}</strong> được phong tỏa độc lập trong Escrow. Mọi quyết định giải ngân được thực thi trực tiếp bởi Admin Trọng tài và tự động cập nhật vào ví đối tác & hoàn trả tài khoản khách hàng.
                     </div>
                   </div>
                 </div>
@@ -1766,13 +2009,17 @@ export function DisputesPanel() {
                 <div className="df-modal-comp-item">
                   <div className="df-modal-comp-label">
                     <span>1. Trước khi thuê (Ảnh giao đồ của đối tác)</span>
-                    <span style={{ color: '#64748b', fontSize: '11px' }}>14:00 15/03/2025</span>
+                    <span style={{ color: '#64748b', fontSize: '11px' }}>
+                      {selected.bookingId?.rentalStartDate
+                        ? `Lịch giao: ${new Date(selected.bookingId.rentalStartDate).toLocaleDateString('vi-VN')}`
+                        : 'Lúc bàn giao'}
+                    </span>
                   </div>
                   <div className="df-modal-img-holder">
-                    <img src={beforePhoto} alt="Trước khi thuê" />
+                    {beforeEvidence ? <EvidenceImage entry={beforeEvidence} alt="Trước khi thuê" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span>Chưa có ảnh bàn giao</span>}
                     <div className="df-modal-annotation-tag">
                       <CheckCircle2 size={13} color="#22c55e" />
-                      <span>Tình trạng nguyên vẹn</span>
+                      <span>Biên bản đồng kiểm bàn giao</span>
                     </div>
                   </div>
                 </div>
@@ -1781,10 +2028,14 @@ export function DisputesPanel() {
                 <div className="df-modal-comp-item">
                   <div className="df-modal-comp-label">
                     <span>2. Sau khi trả (Ảnh ghi nhận sự cố khiếu nại)</span>
-                    <span style={{ color: '#e11d48', fontSize: '11px' }}>17:30 18/03/2025</span>
+                    <span style={{ color: '#e11d48', fontSize: '11px' }}>
+                      {selected.createdAt
+                        ? new Date(selected.createdAt).toLocaleDateString('vi-VN')
+                        : 'Lúc nhận lại đồ'}
+                    </span>
                   </div>
                   <div className="df-modal-img-holder">
-                    <img src={afterPhoto} alt="Sau khi trả" />
+                    {afterEvidence ? <EvidenceImage entry={afterEvidence} alt="Sau khi trả" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span>Chưa có ảnh trả đồ / sự cố</span>}
                     <div
                       className="df-comp-marker"
                       style={{ width: '40px', height: '40px', top: '45%', left: '50%' }}
@@ -1794,7 +2045,7 @@ export function DisputesPanel() {
                       style={{ background: 'rgba(190, 18, 60, 0.9)' }}
                     >
                       <AlertCircle size={13} color="#fecdd3" />
-                      <span>Vết rách ghi nhận tại tà áo</span>
+                      <span>{selected.description || 'Vị trí ghi nhận sự cố'}</span>
                     </div>
                   </div>
                 </div>
@@ -1810,7 +2061,12 @@ export function DisputesPanel() {
                   color: '#334155',
                 }}
               >
-                <strong>Nhận định giám định:</strong> Đối chiếu hình ảnh bàn giao và lúc trả cho thấy vết rách mới xuất hiện tại gấu áo bên phải. Độ dài vết rách khoảng 8-10cm không có dấu hiệu mục tự nhiên.
+                <strong>Hồ sơ khiếu nại thực tế:</strong> Shop báo cáo: "{selected.description || 'Sự cố hư hại sau khi trả đồ'}" — Yêu cầu bồi thường {formatCurrency(selected.requestedAmount)}.
+                {selected.customerReason && (
+                  <div style={{ marginTop: '6px', color: '#b91c1c' }}>
+                    <strong>Ý kiến khách hàng:</strong> "{selected.customerReason}"
+                  </div>
+                )}
               </div>
             </div>
           </div>

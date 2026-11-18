@@ -38,6 +38,8 @@ export interface Order {
     description: string;
     evidencePhotos: string[];
   } | null;
+  incident?: any;
+  dispute?: any;
   cancellation?: {
     cancelledBy?: any;
     reason?: string;

@@ -4,13 +4,15 @@ import { ArrowLeft, Headphones, RotateCcw } from 'lucide-react';
 interface RentalDetailHeaderProps {
   onBack: () => void;
   onOpenSupport: () => void;
-  onOpenRescheduleOrExtend: () => void;
+  onOpenReschedule?: () => void;
+  canReschedule?: boolean;
 }
 
 export const RentalDetailHeader: React.FC<RentalDetailHeaderProps> = ({
   onBack,
   onOpenSupport,
-  onOpenRescheduleOrExtend
+  onOpenReschedule,
+  canReschedule = true
 }) => {
   return (
     <div
@@ -96,31 +98,33 @@ export const RentalDetailHeader: React.FC<RentalDetailHeaderProps> = ({
             <span>Hỗ trợ</span>
           </button>
 
-          {/* Extend / Reschedule Button */}
-          <button
-            type="button"
-            onClick={onOpenRescheduleOrExtend}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '9px 18px',
-              borderRadius: '10px',
-              backgroundColor: '#8E1B2E',
-              border: 'none',
-              color: '#FFFFFF',
-              fontSize: '13px',
-              fontWeight: 750,
-              cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(139, 30, 45, 0.25)',
-              transition: 'background-color 0.15s'
-            }}
-            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#721824')}
-            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#8E1B2E')}
-          >
-            <RotateCcw size={15} />
-            <span>Đổi hoặc gia hạn</span>
-          </button>
+          {/* Reschedule Button: chỉ hiển thị trước khi nhận đồ (CONFIRMED / DEPOSIT_PAID) */}
+          {canReschedule && onOpenReschedule && (
+            <button
+              type="button"
+              onClick={onOpenReschedule}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '9px 18px',
+                borderRadius: '10px',
+                backgroundColor: '#8E1B2E',
+                border: 'none',
+                color: '#FFFFFF',
+                fontSize: '13px',
+                fontWeight: 750,
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(139, 30, 45, 0.25)',
+                transition: 'background-color 0.15s'
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#721824')}
+              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#8E1B2E')}
+            >
+              <RotateCcw size={15} />
+              <span>Đổi lịch hẹn</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

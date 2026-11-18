@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
+  KeyboardAvoidingView,
+  Platform,
   View,
   Text,
   StyleSheet,
@@ -8,16 +10,16 @@ import {
   ActivityIndicator,
   RefreshControl,
   Linking,
-  Alert,
   Modal,
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { router, type Href } from 'expo-router';
+import { router, useFocusEffect, type Href } from 'expo-router';
 import { providerApi } from '@/apis/providerApi';
 import { useToast } from '@/contexts/ToastContext';
+import { useNotifications } from '@/contexts/NotificationContext';
 import { FontFamily } from '@/constants/theme';
 import { TagoAlert } from '@/components/ui/TagoAlertModal';
 import { TagoMapView, type MapMarkerItem } from '@/components/map/TagoMapView';
@@ -31,13 +33,30 @@ import {
   type LatLng,
 } from '@/utils/geo';
 import { getMediaUrl } from '@/utils/media';
-import { OrderDetailModal } from '@/components/provider/orders/OrderDetailModal';
+import { openOrderCustomerChat } from '@/utils/chatNavigation';
+import {
+  getRentalItems,
+  isPhotographyItem,
+  resolveBookingDisplayState,
+  type RentalStageKey,
+  type StatusTone,
+} from '@/utils/rentalState';
+import {
+  OrderDetailModal,
+  type ProviderRentalActionType,
+} from '@/components/provider/orders/OrderDetailModal';
 import {
   ProviderOrderWorkflowModal,
   type ProviderWorkflowMode,
 } from '@/components/provider/orders/ProviderOrderWorkflowModal';
 
 type ScheduleFilterType = 'ALL' | 'PICKUP' | 'RETURN' | 'PHOTOSHOOT';
+
+function toVnDayKey(input: Date | string | number): string {
+  const d = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(d.getTime())) return '';
+  return new Date(d.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
 
 interface UnifiedTimelineItem {
   id: string;
@@ -54,16 +73,21 @@ interface UnifiedTimelineItem {
   coords: LatLng;
   productImage?: string | null;
   status: string;
+  stage?: RentalStageKey;
+  stageLabel?: string;
+  stageTone?: StatusTone;
   depositAmount: number;
   rawOrder?: any;
 }
 
 export default function ProviderSchedulesScreen() {
   const { show } = useToast();
+  const { bookingSyncVersion, bumpBookingSync } = useNotifications();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [overviewSchedules, setOverviewSchedules] = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
+  const [bookingsLoaded, setBookingsLoaded] = useState(false);
 
   const [typeFilter, setTypeFilter] = useState<ScheduleFilterType>('ALL');
   const [selectedDayKey, setSelectedDayKey] = useState<string>('ALL_DAYS');
@@ -74,6 +98,7 @@ export default function ProviderSchedulesScreen() {
   const [navOrder, setNavOrder] = useState<any | null>(null);
   const [providerProfile, setProviderProfile] = useState<any | null>(null);
   const [workflowMode, setWorkflowMode] = useState<ProviderWorkflowMode>(null);
+  const [workflowItemId, setWorkflowItemId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [blockedDates, setBlockedDates] = useState<string[]>([]);
 
@@ -97,11 +122,19 @@ export default function ProviderSchedulesScreen() {
         providerApi.getMe(),
       ]);
 
-      if (overRes.status === 'fulfilled' && overRes.value?.todaySchedules) {
-        setOverviewSchedules(overRes.value.todaySchedules);
+      if (overRes.status === 'fulfilled' && overRes.value) {
+        const upcoming =
+          overRes.value.upcomingSchedules || overRes.value.todaySchedules || [];
+        setOverviewSchedules(Array.isArray(upcoming) ? upcoming : []);
       }
       if (bookRes.status === 'fulfilled' && Array.isArray(bookRes.value)) {
         setBookings(bookRes.value);
+        setBookingsLoaded(true);
+        setSelectedOrder((prev: any) =>
+          prev?._id
+            ? bookRes.value.find((b: any) => b._id === prev._id) ?? prev
+            : prev,
+        );
       }
       if (meRes.status === 'fulfilled' && meRes.value) {
         setProviderProfile(meRes.value);
@@ -109,7 +142,8 @@ export default function ProviderSchedulesScreen() {
       if (schedRes.status === 'fulfilled' && Array.isArray(schedRes.value)) {
         const blocked = schedRes.value
           .filter((s: any) => s.isAvailable === false && s.date)
-          .map((s: any) => new Date(s.date).toISOString().slice(0, 10));
+          .map((s: any) => toVnDayKey(s.date))
+          .filter(Boolean);
         setBlockedDates(blocked);
       }
     } catch {
@@ -124,6 +158,19 @@ export default function ProviderSchedulesScreen() {
     void loadScheduleData();
   }, [loadScheduleData]);
 
+  useEffect(() => {
+    if (bookingSyncVersion > 0) {
+      void loadScheduleData();
+    }
+  }, [bookingSyncVersion, loadScheduleData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadScheduleData();
+      return undefined;
+    }, [loadScheduleData]),
+  );
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     void loadScheduleData();
@@ -133,9 +180,24 @@ export default function ProviderSchedulesScreen() {
   const timelineItems: UnifiedTimelineItem[] = useMemo(() => {
     const list: UnifiedTimelineItem[] = [];
     const seenIds = new Set<string>();
+    const bookingById = new Map<string, any>();
+    const hiddenBookingStatuses = new Set([
+      'DRAFT',
+      'PENDING_PAYMENT',
+      'CANCELLED',
+      'COMPLETED',
+      'REFUNDED',
+      'PARTIALLY_REFUNDED',
+    ]);
 
     bookings.forEach((b) => {
-      if (b.status === 'CANCELLED' || b.status === 'COMPLETED') return;
+      if (b?._id) bookingById.set(String(b._id), b);
+      const upperStatus = String(b.status || '').toUpperCase();
+      if (hiddenBookingStatuses.has(upperStatus)) {
+        return;
+      }
+
+      const display = resolveBookingDisplayState(b, 'provider');
       const code =
         b.bookingCode || (b._id ? `#${b._id.slice(-6).toUpperCase()}` : '#BK');
       const custName =
@@ -144,61 +206,107 @@ export default function ProviderSchedulesScreen() {
         'Khách hàng TàGo';
       const custPhone =
         b.customerId?.auth?.phone || b.contactInfo?.phone || '';
-      const firstItem = b.items?.[0];
+
+      const rentalItems = getRentalItems(b, true);
+      const firstRentalItem: any = rentalItems[0];
+      const firstPhotoItem: any = (Array.isArray(b.items) ? b.items : []).find((it: any) =>
+        isPhotographyItem(it),
+      );
+      const primaryItem: any = firstRentalItem || firstPhotoItem || b.items?.[0];
+
       const itemTitle =
-        firstItem?.name ||
-        firstItem?.productName ||
-        firstItem?.productId?.name ||
-        firstItem?.photographyPackageId?.title ||
-        firstItem?.photographyPackageId?.name ||
+        primaryItem?.name ||
+        primaryItem?.productName ||
+        primaryItem?.productId?.name ||
+        primaryItem?.photographyPackageId?.title ||
+        primaryItem?.photographyPackageId?.name ||
         b.packageTitle ||
         'Thuê Cổ Phục Áo Dài Huế';
       const itemSize =
-        firstItem?.selectedSize || firstItem?.size
-          ? ` (Size ${firstItem?.selectedSize || firstItem?.size})`
+        primaryItem?.selectedSize || primaryItem?.size
+          ? ` (Size ${primaryItem?.selectedSize || primaryItem?.size})`
           : '';
       const rawImg =
-        firstItem?.productId?.images?.[0] ||
-        firstItem?.photographyPackageId?.images?.[0] ||
-        firstItem?.images?.[0] ||
-        firstItem?.imageUrl ||
-        firstItem?.image ||
-        firstItem?.product?.images?.[0] ||
+        primaryItem?.productId?.images?.[0] ||
+        primaryItem?.photographyPackageId?.images?.[0] ||
+        primaryItem?.images?.[0] ||
+        primaryItem?.imageUrl ||
+        primaryItem?.image ||
+        primaryItem?.product?.images?.[0] ||
         null;
+
+      const rentalDeposit = rentalItems.reduce(
+        (sum: number, it: any) => sum + Number(it.depositAmount || 0) * Number(it.quantity || 1),
+        0,
+      );
       const deposit =
-        b.pricingSummary?.depositTotal ||
-        b.pricing?.totalDeposit ||
-        b.depositAmount ||
-        firstItem?.depositAmount ||
-        0;
+        rentalDeposit > 0
+          ? rentalDeposit
+          : Number(b.pricingSummary?.depositTotal ?? b.depositAmount ?? 0);
+
+      const photoSched =
+        b.photoshootSchedule ||
+        (Array.isArray(b.schedules)
+          ? b.schedules.find(
+              (s: any) =>
+                s?.scheduleType === 'PHOTOSHOOT' &&
+                s?.status !== 'CANCELLED' &&
+                s?.status !== 'EXPIRED',
+            )
+          : null);
 
       const startRaw =
-        firstItem?.rentalPeriod?.startDate ||
-        firstItem?.startDate ||
+        firstRentalItem?.rentalFrom ||
+        firstRentalItem?.rentalPeriod?.startDate ||
+        firstRentalItem?.startDate ||
+        firstPhotoItem?.shootDate ||
+        photoSched?.startsAt ||
+        photoSched?.scheduledDate ||
         b.startDate ||
         b.createdAt;
       const endRaw =
-        firstItem?.rentalPeriod?.endDate ||
-        firstItem?.endDate ||
+        firstRentalItem?.rentalTo ||
+        firstRentalItem?.rentalPeriod?.endDate ||
+        firstRentalItem?.endDate ||
+        photoSched?.endsAt ||
         b.endDate ||
         startRaw;
 
       const startDateObj = startRaw ? new Date(startRaw) : new Date();
       const endDateObj = endRaw ? new Date(endRaw) : new Date();
 
-      const startDayKey = startDateObj.toISOString().slice(0, 10);
-      const endDayKey = endDateObj.toISOString().slice(0, 10);
+      const startDayKey = toVnDayKey(startDateObj);
+      const endDayKey = toVnDayKey(endDateObj);
+      const photoDayKey =
+        photoSched?.providerLocalDate ||
+        toVnDayKey(
+          firstPhotoItem?.shootDate ||
+            photoSched?.startsAt ||
+            photoSched?.scheduledDate ||
+            startDateObj,
+        );
+
+      const shootTimeLabel =
+        firstPhotoItem?.shootTimeSlot ||
+        photoSched?.timeSlot ||
+        (photoSched?.startsAt
+          ? new Date(photoSched.startsAt).toLocaleTimeString('vi-VN', {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            })
+          : '15:00');
 
       const shootSnap =
         b.photoshootSchedule?.locationSnapshot ||
-        firstItem?.shootLocationSnapshot ||
-        firstItem?.pickupReturnLocationSnapshot ||
+        firstPhotoItem?.shootLocationSnapshot ||
+        firstRentalItem?.pickupReturnLocationSnapshot ||
         b.location;
       const addrText =
         shootSnap?.addressLine ||
         shootSnap?.address ||
-        firstItem?.shootLocation ||
-        firstItem?.providerAddress ||
+        firstPhotoItem?.shootLocation ||
+        firstRentalItem?.providerAddress ||
         'Đại Nội Huế (Hoàng Thành), TP. Huế';
       const resolvedCoords = resolveEntityCoords({
         id: b._id,
@@ -206,113 +314,166 @@ export default function ProviderSchedulesScreen() {
         address: { addressLine: addrText },
       });
 
-      if (b.bookingType === 'PHOTOGRAPHY') {
-        const id = `photo-${b._id}`;
-        seenIds.add(id);
+      if (display.isPhotoshootOnly || (display.isCombo && photoSched)) {
+        const photoTitle =
+          firstPhotoItem?.name ||
+          firstPhotoItem?.photographyPackageId?.title ||
+          firstPhotoItem?.photographyPackageId?.name ||
+          itemTitle;
+        const photoId = `photo-${b._id}`;
+        seenIds.add(photoId);
         list.push({
-          id,
+          id: photoId,
           bookingId: b._id,
           bookingCode: code,
           type: 'PHOTOSHOOT',
-          timeLabel: '15:00',
-          dateStr: startDayKey,
-          dateDisplay: startDateObj.toLocaleDateString('vi-VN'),
+          timeLabel: shootTimeLabel,
+          dateStr: photoDayKey || startDayKey,
+          dateDisplay: new Date(
+            firstPhotoItem?.shootDate || photoSched?.startsAt || startDateObj,
+          ).toLocaleDateString('vi-VN'),
           customerName: custName,
           customerPhone: custPhone,
-          serviceTitle: `${itemTitle}${itemSize}`,
+          serviceTitle: photoTitle,
           locationAddress: addrText,
           coords: resolvedCoords,
-          productImage: rawImg,
+          productImage:
+            firstPhotoItem?.photographyPackageId?.images?.[0] || rawImg,
           status: b.status || 'CONFIRMED',
-          depositAmount: deposit,
+          stage: display.stage,
+          stageLabel: display.shortLabel,
+          stageTone: display.tone,
+          depositAmount: display.isPhotoshootOnly ? 0 : deposit,
           rawOrder: b,
         });
-      } else if (
-        b.status === 'PICKED_UP' ||
-        b.status === 'IN_PROGRESS' ||
-        b.status === 'RETURN_PENDING' ||
-        b.status === 'RETURNED'
-      ) {
-        // Return event (for currently rented or return pending orders)
-        const returnId = `return-${b._id}`;
-        seenIds.add(returnId);
-        list.push({
-          id: returnId,
-          bookingId: b._id,
-          bookingCode: code,
-          type: 'RETURN',
-          timeLabel: '17:30',
-          dateStr: endDayKey,
-          dateDisplay: endDateObj.toLocaleDateString('vi-VN'),
-          customerName: custName,
-          customerPhone: custPhone,
-          serviceTitle: `Trả đồ & Hoàn cọc: ${itemTitle}${itemSize}`,
-          locationAddress: addrText,
-          coords: resolvedCoords,
-          productImage: rawImg,
-          status: b.status || 'PICKED_UP',
-          depositAmount: deposit,
-          rawOrder: b,
-        });
-      } else {
-        // Pickup event (for DEPOSIT_PAID, CONFIRMED, PICKUP_PENDING)
-        const pickupId = `pickup-${b._id}`;
-        seenIds.add(pickupId);
-        list.push({
-          id: pickupId,
-          bookingId: b._id,
-          bookingCode: code,
-          type: 'PICKUP',
-          timeLabel: '09:00',
-          dateStr: startDayKey,
-          dateDisplay: startDateObj.toLocaleDateString('vi-VN'),
-          customerName: custName,
-          customerPhone: custPhone,
-          serviceTitle: `Nhận đồ: ${itemTitle}${itemSize}`,
-          locationAddress: addrText,
-          coords: resolvedCoords,
-          productImage: rawImg,
-          status: b.status || 'CONFIRMED',
-          depositAmount: deposit,
-          rawOrder: b,
-        });
+      }
+
+      if (!display.isPhotoshootOnly) {
+        const isReturnPhase = [
+          'IN_RENTAL',
+          'CUSTOMER_RETURN_REQUESTED',
+          'INCIDENT_PENDING_CUSTOMER',
+          'RETURNED_NEEDS_INSPECTION',
+          'CLEANING_AFTER_REFUND',
+          'DISPUTED',
+        ].includes(display.stage);
+
+        if (isReturnPhase) {
+          const returnId = `return-${b._id}`;
+          seenIds.add(returnId);
+          list.push({
+            id: returnId,
+            bookingId: b._id,
+            bookingCode: code,
+            type: 'RETURN',
+            timeLabel: '17:30',
+            dateStr: endDayKey,
+            dateDisplay: endDateObj.toLocaleDateString('vi-VN'),
+            customerName: custName,
+            customerPhone: custPhone,
+            serviceTitle: `Trả đồ & Hoàn cọc: ${itemTitle}${itemSize}`,
+            locationAddress: addrText,
+            coords: resolvedCoords,
+            productImage: rawImg,
+            status: b.status || 'PICKED_UP',
+            stage: display.stage,
+            stageLabel: display.shortLabel,
+            stageTone: display.tone,
+            depositAmount: deposit,
+            rawOrder: b,
+          });
+        } else {
+          const pickupId = `pickup-${b._id}`;
+          seenIds.add(pickupId);
+          list.push({
+            id: pickupId,
+            bookingId: b._id,
+            bookingCode: code,
+            type: 'PICKUP',
+            timeLabel: '09:00',
+            dateStr: startDayKey,
+            dateDisplay: startDateObj.toLocaleDateString('vi-VN'),
+            customerName: custName,
+            customerPhone: custPhone,
+            serviceTitle: `Nhận đồ: ${itemTitle}${itemSize}`,
+            locationAddress: addrText,
+            coords: resolvedCoords,
+            productImage: rawImg,
+            status: b.status || 'CONFIRMED',
+            stage: display.stage,
+            stageLabel: display.shortLabel,
+            stageTone: display.tone,
+            depositAmount: deposit,
+            rawOrder: b,
+          });
+        }
       }
     });
 
     overviewSchedules.forEach((s, idx) => {
       const id = s.id || `sched-${idx}`;
-      if (!seenIds.has(id)) {
+      const bId = String(s.bookingId || '');
+      const matchedOrder = bId ? bookingById.get(bId) : undefined;
+      if (bId && matchedOrder) {
+        const matchedStatus = String(matchedOrder.status || '').toUpperCase();
+        if (hiddenBookingStatuses.has(matchedStatus)) {
+          return;
+        }
+      }
+      // If `bookings` loaded cleanly and this overview schedule still references an unknown/closed booking, skip orphan card
+      if (bId && !matchedOrder && bookingsLoaded) {
+        return;
+      }
+      const itemType = s.type || 'PHOTOSHOOT';
+      const alreadyHasBooking =
+        bId && list.some((it) => it.bookingId === bId && it.type === itemType);
+      if (!seenIds.has(id) && !alreadyHasBooking) {
         const dt = s.startsAt ? new Date(s.startsAt) : new Date();
         const addrText =
-          s.locationAddress || s.locationName || 'Cung An Định, TP. Huế';
+          s.locationAddress || s.locationName || 'Địa điểm theo đơn hàng';
         const resolvedCoords = resolveEntityCoords({
           id,
           address: { addressLine: addrText },
         });
+        const display = matchedOrder
+          ? resolveBookingDisplayState(matchedOrder, 'provider')
+          : null;
         list.push({
           id,
-          bookingId: s.bookingId || '',
-          bookingCode: s.bookingCode || '#VH',
-          type: s.type || 'PHOTOSHOOT',
-          timeLabel: s.timeLabel || '14:30',
-          dateStr: dt.toISOString().slice(0, 10),
+          bookingId: bId,
+          bookingCode: s.bookingCode || matchedOrder?.bookingCode || '#VH',
+          type: itemType,
+          timeLabel: s.timeLabel || 'Theo lịch hẹn',
+          dateStr: s.providerLocalDate || toVnDayKey(dt),
           dateDisplay: dt.toLocaleDateString('vi-VN'),
-          customerName: s.customer?.name || 'Khách hàng',
-          customerPhone: s.customer?.phone || '',
-          serviceTitle: s.serviceName || 'Lịch hẹn tại tiệm',
+          customerName:
+            matchedOrder?.customerId?.profile?.fullName ||
+            matchedOrder?.contactInfo?.fullName ||
+            s.customer?.name ||
+            'Khách hàng TàGo',
+          customerPhone:
+            matchedOrder?.customerId?.auth?.phone ||
+            matchedOrder?.contactInfo?.phone ||
+            s.customer?.phone ||
+            '',
+          serviceTitle: s.serviceName || 'Lịch hẹn dịch vụ TàGo',
           locationAddress: addrText,
           coords: resolvedCoords,
           productImage: s.customer?.avatarUrl || null,
-          status: s.status || 'CONFIRMED',
+          status: matchedOrder?.status || s.status || 'CONFIRMED',
+          stage: display?.stage,
+          stageLabel: display?.shortLabel,
+          stageTone: display?.tone,
           depositAmount: 0,
+          rawOrder: matchedOrder,
         });
       }
     });
 
     return list;
-  }, [bookings, overviewSchedules]);
+  }, [bookings, bookingsLoaded, overviewSchedules]);
 
-  // Build 7-day strip around today + unique dates from bookings
+  // Build 7-day strip around today (Asia/Ho_Chi_Minh)
   const dayPills = useMemo(() => {
     const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
     const result: Array<{
@@ -324,14 +485,14 @@ export default function ProviderSchedulesScreen() {
 
     const today = new Date();
     for (let i = -1; i <= 5; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() + i);
-      const key = d.toISOString().slice(0, 10);
+      const d = new Date(today.getTime() + i * 86400000);
+      const key = toVnDayKey(d);
+      const vnDate = new Date(d.getTime() + 7 * 60 * 60 * 1000);
       const count = timelineItems.filter((it) => it.dateStr === key).length;
       result.push({
         key,
-        dayLabel: i === 0 ? 'Hôm nay' : dayNames[d.getDay()],
-        dateNum: `${d.getDate()}/${d.getMonth() + 1}`,
+        dayLabel: i === 0 ? 'Hôm nay' : dayNames[vnDate.getUTCDay()],
+        dateNum: `${vnDate.getUTCDate()}/${vnDate.getUTCMonth() + 1}`,
         count,
       });
     }
@@ -350,16 +511,125 @@ export default function ProviderSchedulesScreen() {
     });
   }, [timelineItems, selectedDayKey, typeFilter]);
 
+  const handleOpenDetail = (order: any) => {
+    setSelectedOrder(order);
+    setDetailVisible(true);
+    if (order?._id) {
+      void providerApi
+        .getBookingDetail(order._id)
+        .then((detail) => {
+          if (detail?._id === order._id) {
+            setSelectedOrder((prev: any) =>
+              prev?._id === detail._id
+                ? { ...prev, ...detail, incident: prev.incident ?? detail.activeIncident }
+                : prev,
+            );
+          }
+        })
+        .catch(() => undefined);
+    }
+  };
+
   const handleStatusUpdate = async (order: any, nextStatus: string, note?: string) => {
     if (!order?._id) return;
     setActionLoading(true);
     try {
       await providerApi.updateBookingStatus(order._id, nextStatus, { note });
+      bumpBookingSync(order._id);
       show(`Đã cập nhật lịch hẹn đơn #${order.bookingCode || ''}!`, 'success');
       setDetailVisible(false);
       void loadScheduleData();
     } catch (e: any) {
-      show(e?.response?.data?.message || 'Không thể cập nhật trạng thái', 'error');
+      const msg = e?.response?.data?.message || 'Không thể cập nhật trạng thái';
+      show(Array.isArray(msg) ? msg[0] : msg, 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRentalAction = async (
+    order: any,
+    action: ProviderRentalActionType,
+    itemId?: string,
+  ) => {
+    if (!order?._id) return;
+    const myRentalItems = getRentalItems(order, true);
+    const targetItem =
+      (itemId ? myRentalItems.find((it) => it._id === itemId) : undefined) ||
+      myRentalItems[0];
+
+    if (!targetItem?._id) {
+      show('Không tìm thấy sản phẩm cổ phục thuộc quyền shop', 'error');
+      return;
+    }
+
+    if (action === 'HANDOVER') {
+      setDetailVisible(false);
+      setSelectedOrder(order);
+      setWorkflowItemId(targetItem._id);
+      setWorkflowMode('HANDOVER');
+      return;
+    }
+
+    if (action === 'REPORT_INCIDENT') {
+      setDetailVisible(false);
+      setSelectedOrder(order);
+      setWorkflowItemId(targetItem._id);
+      setWorkflowMode('REPORT_INCIDENT');
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      if (action === 'READY') {
+        const targets = itemId
+          ? [targetItem]
+          : myRentalItems.filter(
+              (it) => !it.rentalFulfillment?.status || it.rentalFulfillment.status === 'PENDING',
+            );
+        for (const it of targets.length ? targets : [targetItem]) {
+          await providerApi.markRentalReady(order._id, it._id);
+        }
+        show('Đã xác nhận soạn xong áo! Hãy tải ảnh bàn giao.', 'success');
+      } else if (action === 'RETURNED') {
+        const targets = itemId
+          ? [targetItem]
+          : myRentalItems.filter(
+              (it) => it.rentalFulfillment?.status === 'CUSTOMER_RETURN_REQUESTED',
+            );
+        for (const it of targets.length ? targets : [targetItem]) {
+          await providerApi.markReturned(order._id, it._id, {
+            note: 'Cửa hàng xác nhận đã nhận lại cổ phục từ khách.',
+          });
+        }
+        show('Đã xác nhận nhận lại áo! Hãy kiểm tra & hoàn cọc.', 'success');
+      } else if (action === 'CONFIRM_NO_INCIDENT') {
+        const targets = itemId
+          ? [targetItem]
+          : myRentalItems.filter((it) => it.rentalFulfillment?.status === 'RETURNED');
+        for (const it of targets.length ? targets : [targetItem]) {
+          await providerApi.confirmNoIncident(
+            order._id,
+            it._id,
+            'Đã kiểm tra đồ nguyên vẹn & giải ngân hoàn cọc',
+          );
+        }
+        show('Đã xác nhận không sự cố & hoàn cọc Escrow!', 'success');
+      } else if (action === 'CLEANING_COMPLETED') {
+        const targets = itemId
+          ? [targetItem]
+          : myRentalItems.filter((it) => it.rentalFulfillment?.status === 'RETURNED');
+        for (const it of targets.length ? targets : [targetItem]) {
+          await providerApi.markCleaningCompleted(order._id, it._id);
+        }
+        show('Đã hoàn tất giặt ủi & mở khóa kho!', 'success');
+      }
+      bumpBookingSync(order._id);
+      setDetailVisible(false);
+      void loadScheduleData();
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || 'Không thể xử lý thao tác thuê đồ';
+      show(Array.isArray(msg) ? msg[0] : msg, 'error');
     } finally {
       setActionLoading(false);
     }
@@ -402,9 +672,7 @@ export default function ProviderSchedulesScreen() {
 
   const handleConfirmBlockDate = async () => {
     const targetDay =
-      selectedDayKey === 'ALL_DAYS'
-        ? new Date().toISOString().slice(0, 10)
-        : selectedDayKey;
+      selectedDayKey === 'ALL_DAYS' ? toVnDayKey(new Date()) : selectedDayKey;
     const isBlocked = blockedDates.includes(targetDay);
 
     setSavingScheduleConfig(true);
@@ -432,53 +700,159 @@ export default function ProviderSchedulesScreen() {
     }
   };
 
-  const handleQuickTimelineAction = (item: UnifiedTimelineItem) => {
+  const handleQuickTimelineAction = async (item: UnifiedTimelineItem) => {
     if (!item.rawOrder) {
-      router.push('/provider/qr-scanner' as Href);
+      if (item.bookingId) {
+        setActionLoading(true);
+        try {
+          const detail = await providerApi.getBookingDetail(item.bookingId);
+          if (detail?._id) {
+            setSelectedOrder(detail);
+            setDetailVisible(true);
+            return;
+          }
+        } catch {
+          // Fall through to gentle notice below
+        } finally {
+          setActionLoading(false);
+        }
+      }
+      show('Không tìm thấy thông tin đơn hàng để xử lý thủ công', 'info');
       return;
     }
-    const s = item.status;
-    setSelectedOrder(item.rawOrder);
 
-    if (item.type === 'PICKUP' && (s === 'CONFIRMED' || s === 'DEPOSIT_PAID')) {
-      setWorkflowMode('HANDOVER');
-    } else if (item.type === 'RETURN' && s === 'PICKED_UP') {
+    const order = item.rawOrder;
+    const display = resolveBookingDisplayState(order, 'provider');
+    const stage = display.stage;
+    const firstRental = getRentalItems(order, true)[0];
+
+    setSelectedOrder(order);
+
+    if (stage === 'DEPOSIT_PAID') {
       TagoAlert.alert(
-        'Xác nhận đã trả đồ',
-        `Khách ${item.customerName} đã mang trả cổ phục tại quầy?`,
+        'Xác nhận nhận lịch hẹn',
+        `Bạn đồng ý tiếp nhận lịch hẹn ${item.bookingCode} từ khách ${item.customerName}?\nSau khi xác nhận mới có thể bắt đầu ca chụp hoặc soạn cổ phục.`,
+        [
+          { text: 'Đóng', style: 'cancel' },
+          {
+            text: 'Từ chối lịch',
+            style: 'destructive',
+            onPress: () => {
+              setWorkflowItemId(null);
+              setWorkflowMode('CANCEL_ORDER');
+            },
+          },
+          {
+            text: 'Xác nhận nhận lịch',
+            onPress: () =>
+              void handleStatusUpdate(
+                order,
+                'CONFIRMED',
+                display.isPhotoshootOnly
+                  ? 'Đã chấp nhận lịch chụp'
+                  : 'Đã xác nhận đơn và chuẩn bị cổ phục',
+              ),
+          },
+        ],
+      );
+      return;
+    }
+
+    if (stage === 'PREPARING') {
+      if (item.type === 'PHOTOSHOOT' && !display.isCombo) {
+        TagoAlert.alert(
+          'Bắt đầu ca chụp',
+          `Xác nhận bắt đầu buổi chụp cho khách ${item.customerName}?`,
+          [
+            { text: 'Đóng', style: 'cancel' },
+            {
+              text: 'Bắt đầu ngay',
+              onPress: () => void handleStatusUpdate(order, 'IN_PROGRESS', 'Bắt đầu ca chụp'),
+            },
+          ],
+        );
+      } else {
+        void handleRentalAction(order, 'READY', firstRental?._id);
+      }
+      return;
+    }
+
+    if (stage === 'READY_NEEDS_HANDOVER_PHOTOS') {
+      setWorkflowItemId(firstRental?._id || null);
+      setWorkflowMode('HANDOVER');
+      return;
+    }
+
+    if (stage === 'CUSTOMER_RETURN_REQUESTED') {
+      TagoAlert.alert(
+        'Xác nhận đã nhận trả đồ',
+        `Khách ${item.customerName} đã giao lại cổ phục tại quầy?`,
         [
           { text: 'Hủy', style: 'cancel' },
           {
             text: 'Đã nhận trả đồ',
-            onPress: () =>
-              handleStatusUpdate(
-                item.rawOrder,
-                'RETURNED',
-                'Khách đã trả trang phục tại quầy',
-              ),
+            onPress: () => void handleRentalAction(order, 'RETURNED', firstRental?._id),
           },
         ],
       );
-    } else if (s === 'RETURNED') {
+      return;
+    }
+
+    if (stage === 'RETURNED_NEEDS_INSPECTION') {
       TagoAlert.alert(
-        'Hoàn thành & Hoàn cọc',
-        `Xác nhận hoàn cọc và đóng đơn cho khách ${item.customerName}?`,
+        'Kiểm tra & Hoàn cọc Escrow',
+        `Xác nhận áo nguyên vẹn và giải ngân hoàn cọc cho khách ${item.customerName}?`,
         [
           { text: 'Hủy', style: 'cancel' },
           {
-            text: 'Hoàn thành đơn',
+            text: 'Hoàn cọc ngay',
             onPress: () =>
-              handleStatusUpdate(
-                item.rawOrder,
-                'COMPLETED',
-                'Đã kiểm nhận đồ nguyên vẹn & hoàn cọc',
-              ),
+              void handleRentalAction(order, 'CONFIRM_NO_INCIDENT', firstRental?._id),
           },
         ],
       );
-    } else {
-      setDetailVisible(true);
+      return;
     }
+
+    if (stage === 'CLEANING_AFTER_REFUND') {
+      TagoAlert.alert(
+        'Hoàn tất giặt ủi & Nhập kho',
+        'Xác nhận cổ phục đã giặt ủi xong và sẵn sàng mở kho cho thuê lại?',
+        [
+          { text: 'Hủy', style: 'cancel' },
+          {
+            text: 'Hoàn tất giặt ủi',
+            onPress: () =>
+              void handleRentalAction(order, 'CLEANING_COMPLETED', firstRental?._id),
+          },
+        ],
+      );
+      return;
+    }
+
+    if (stage === 'IN_PROGRESS' || stage === 'AWAITING_REVIEW') {
+      setWorkflowItemId(null);
+      setWorkflowMode('DELIVER_PHOTOS');
+      return;
+    }
+
+    if (stage === 'COMBO_PHOTOS_APPROVED') {
+      TagoAlert.alert(
+        'Hoàn tất đơn hàng',
+        'Ảnh đã được khách duyệt xong. Xác nhận hoàn tất toàn bộ đơn hàng?',
+        [
+          { text: 'Hủy', style: 'cancel' },
+          {
+            text: 'Hoàn tất đơn',
+            onPress: () =>
+              void handleStatusUpdate(order, 'COMPLETED', 'Đã hoàn tất toàn bộ dịch vụ'),
+          },
+        ],
+      );
+      return;
+    }
+
+    handleOpenDetail(order);
   };
 
   const providerOrigin = useMemo(
@@ -790,6 +1164,45 @@ export default function ProviderSchedulesScreen() {
                   ? 'Hẹn trả & Hoàn cọc'
                   : 'Ca chụp ngoại cảnh';
 
+              const toneStyle =
+                item.stageTone === 'success'
+                  ? { bg: '#ECFDF5', text: '#047857' }
+                  : item.stageTone === 'warning'
+                    ? { bg: '#FEF3C7', text: '#B45309' }
+                    : item.stageTone === 'error'
+                      ? { bg: '#FEE2E2', text: '#B91C1C' }
+                      : item.stageTone === 'info'
+                        ? { bg: '#E0F2FE', text: '#0369A1' }
+                        : { bg: '#F5F5F4', text: '#57534E' };
+              const actionButtonLabel =
+                item.stage === 'DEPOSIT_PAID'
+                  ? 'Xác nhận lịch'
+                  : item.stage === 'PREPARING'
+                    ? item.type === 'PHOTOSHOOT'
+                      ? 'Bắt đầu chụp'
+                      : 'Soạn xong áo'
+                    : item.stage === 'READY_NEEDS_HANDOVER_PHOTOS'
+                      ? 'Bàn giao (Ảnh)'
+                      : item.stage === 'HANDOVER_AWAITING_CUSTOMER'
+                        ? 'Chờ khách xác nhận'
+                        : item.stage === 'IN_RENTAL'
+                          ? 'Đang thuê'
+                          : item.stage === 'CUSTOMER_RETURN_REQUESTED'
+                            ? 'Nhận trả đồ'
+                            : item.stage === 'RETURNED_NEEDS_INSPECTION'
+                              ? 'Hoàn cọc Escrow'
+                              : item.stage === 'CLEANING_AFTER_REFUND'
+                                ? 'Xong giặt ủi'
+                                : item.stage === 'INCIDENT_PENDING_CUSTOMER' ||
+                                    item.stage === 'DISPUTED'
+                                  ? 'Xem sự cố'
+                                  : item.stage === 'IN_PROGRESS' ||
+                                      item.stage === 'AWAITING_REVIEW'
+                                    ? 'Trả file ảnh'
+                                    : item.stage === 'COMBO_PHOTOS_APPROVED'
+                                      ? 'Hoàn tất đơn'
+                                      : 'Xem chi tiết';
+
               return (
                 <View key={item.id} style={styles.timelineRow}>
                   {/* Left Time Column */}
@@ -802,12 +1215,23 @@ export default function ProviderSchedulesScreen() {
                   {/* Right Schedule Detail Card */}
                   <View style={styles.card}>
                     <View style={styles.cardTopRow}>
-                      <View
-                        style={[styles.typeBadge, { backgroundColor: typeBadgeBg }]}
-                      >
-                        <Text style={[styles.typeBadgeText, { color: typeBadgeColor }]}>
-                          {typeLabel}
-                        </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 }}>
+                        <View
+                          style={[styles.typeBadge, { backgroundColor: typeBadgeBg }]}
+                        >
+                          <Text style={[styles.typeBadgeText, { color: typeBadgeColor }]}>
+                            {typeLabel}
+                          </Text>
+                        </View>
+                        {item.stageLabel ? (
+                          <View
+                            style={[styles.stagePill, { backgroundColor: toneStyle.bg }]}
+                          >
+                            <Text style={[styles.stagePillText, { color: toneStyle.text }]}>
+                              {item.stageLabel}
+                            </Text>
+                          </View>
+                        ) : null}
                       </View>
                       <Text style={styles.bookingCodeText}>{item.bookingCode}</Text>
                     </View>
@@ -896,10 +1320,7 @@ export default function ProviderSchedulesScreen() {
                         {item.rawOrder && (
                           <Pressable
                             style={styles.detailOutlineBtn}
-                            onPress={() => {
-                              setSelectedOrder(item.rawOrder);
-                              setDetailVisible(true);
-                            }}
+                            onPress={() => handleOpenDetail(item.rawOrder)}
                           >
                             <Text style={styles.detailOutlineText} numberOfLines={1}>
                               Chi tiết
@@ -908,27 +1329,32 @@ export default function ProviderSchedulesScreen() {
                         )}
                       </View>
 
-                      <Pressable
-                        style={styles.primaryBtn}
-                        onPress={() => handleQuickTimelineAction(item)}
-                      >
-                        <Text style={styles.primaryBtnText} numberOfLines={1}>
-                          {isPickup &&
-                          (item.status === 'CONFIRMED' || item.status === 'DEPOSIT_PAID')
-                            ? 'Bàn giao đồ'
-                            : isPickup && item.status === 'PICKUP_PENDING'
-                              ? 'Chờ duyệt'
-                              : isReturn &&
-                                  (item.status === 'PICKED_UP' || item.status === 'IN_PROGRESS')
-                                ? 'Nhận trả đồ'
-                                : isReturn &&
-                                    (item.status === 'RETURNED' ||
-                                      item.status === 'RETURN_PENDING')
-                                  ? 'Hoàn cọc'
-                                  : 'Xử lý lịch'}
-                        </Text>
-                        <Ionicons name="arrow-forward" size={13} color="#FFFFFF" />
-                      </Pressable>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
+                        {item.stage === 'DEPOSIT_PAID' && item.rawOrder ? (
+                          <Pressable
+                            style={styles.rejectOutlineBtn}
+                            onPress={() => {
+                              setSelectedOrder(item.rawOrder);
+                              setWorkflowItemId(null);
+                              setWorkflowMode('CANCEL_ORDER');
+                            }}
+                          >
+                            <Text style={styles.rejectOutlineText} numberOfLines={1}>
+                              Từ chối
+                            </Text>
+                          </Pressable>
+                        ) : null}
+
+                        <Pressable
+                          style={styles.primaryBtn}
+                          onPress={() => void handleQuickTimelineAction(item)}
+                        >
+                          <Text style={styles.primaryBtnText} numberOfLines={1}>
+                            {actionButtonLabel}
+                          </Text>
+                          <Ionicons name="arrow-forward" size={13} color="#FFFFFF" />
+                        </Pressable>
+                      </View>
                     </View>
                   </View>
                 </View>
@@ -944,16 +1370,19 @@ export default function ProviderSchedulesScreen() {
         order={selectedOrder}
         actionLoading={actionLoading}
         onAction={(order, nextStatus) => handleStatusUpdate(order, nextStatus)}
-        onOpenWorkflowModal={(order, mode) => {
+        onRentalAction={handleRentalAction}
+        onOpenWorkflowModal={(order, mode, itemId) => {
           setDetailVisible(false);
           setSelectedOrder(order);
+          setWorkflowItemId(itemId || null);
           setWorkflowMode(mode);
         }}
         onOpenChat={() => {
           setDetailVisible(false);
-          router.push('/chat' as Href);
+          void openOrderCustomerChat(selectedOrder);
         }}
         onOpenNavigationMap={(order) => {
+          setDetailVisible(false);
           setNavOrder(order);
           setNavModalVisible(true);
         }}
@@ -964,12 +1393,38 @@ export default function ProviderSchedulesScreen() {
         onClose={() => setNavModalVisible(false)}
         order={navOrder}
         providerProfile={providerProfile}
-        onOpenChat={() => router.push('/chat' as Href)}
+        requiresConfirmation={
+          navOrder
+            ? resolveBookingDisplayState(navOrder, 'provider').stage === 'DEPOSIT_PAID'
+            : false
+        }
+        canStartSession={
+          navOrder
+            ? ['PREPARING', 'IN_RENTAL'].includes(
+                resolveBookingDisplayState(navOrder, 'provider').stage,
+              )
+            : false
+        }
+        onConfirmBooking={() => {
+          if (navOrder) {
+            void handleStatusUpdate(navOrder, 'CONFIRMED', 'Đã xác nhận nhận lịch chụp');
+          }
+        }}
+        onOpenChat={(ord) => void openOrderCustomerChat(ord || navOrder)}
         onStartSession={(bookingId) => {
+          const target = navOrder || (bookingId ? bookings.find((b) => b._id === bookingId) : null);
+          if (target) {
+            const st = resolveBookingDisplayState(target, 'provider').stage;
+            if (st === 'DEPOSIT_PAID') {
+              void handleStatusUpdate(target, 'CONFIRMED', 'Đã xác nhận nhận lịch chụp');
+              return;
+            }
+          }
           if (bookingId) {
             void providerApi
               .startSession(bookingId)
               .then(() => {
+                bumpBookingSync(bookingId);
                 show('Đã bắt đầu ca chụp thành công!', 'success');
                 void loadScheduleData();
               })
@@ -982,9 +1437,16 @@ export default function ProviderSchedulesScreen() {
         visible={workflowMode !== null}
         mode={workflowMode}
         order={selectedOrder}
-        onClose={() => setWorkflowMode(null)}
-        onSuccess={() => {
+        targetItemId={workflowItemId}
+        onClose={() => {
           setWorkflowMode(null);
+          setWorkflowItemId(null);
+        }}
+        onSuccess={() => {
+          const updatedId = selectedOrder?._id;
+          setWorkflowMode(null);
+          setWorkflowItemId(null);
+          bumpBookingSync(updatedId);
           void loadScheduleData();
         }}
       />
@@ -1172,7 +1634,7 @@ export default function ProviderSchedulesScreen() {
         animationType="fade"
         onRequestClose={() => setBlockModalVisible(false)}
       >
-        <View
+        <KeyboardAvoidingView
           style={{
             flex: 1,
             backgroundColor: 'rgba(15, 23, 42, 0.5)',
@@ -1180,6 +1642,7 @@ export default function ProviderSchedulesScreen() {
             justifyContent: 'center',
             padding: 20,
           }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <Pressable
             style={StyleSheet.absoluteFill}
@@ -1303,7 +1766,7 @@ export default function ProviderSchedulesScreen() {
               </Pressable>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -1542,6 +2005,15 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: FontFamily.bodyBold,
   },
+  stagePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 99,
+  },
+  stagePillText: {
+    fontSize: 10,
+    fontFamily: FontFamily.bodyBold,
+  },
   bookingCodeText: {
     fontSize: 11,
     fontFamily: FontFamily.bodyBold,
@@ -1627,6 +2099,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: FontFamily.bodySemiBold,
     color: '#5F5E5E',
+  },
+  rejectOutlineBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 99,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
+  },
+  rejectOutlineText: {
+    fontSize: 11,
+    fontFamily: FontFamily.bodyBold,
+    color: '#DC2626',
   },
   primaryBtn: {
     flexDirection: 'row',

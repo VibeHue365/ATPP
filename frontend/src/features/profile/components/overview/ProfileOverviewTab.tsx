@@ -25,6 +25,7 @@ interface ProfileOverviewTabProps {
   onViewAllSchedule: () => void;
   onViewAllOrders: () => void;
   onViewBookingDetails: (booking: any) => void;
+  onContinuePayment: (bookingId: string) => void;
   onExplore: () => void;
 }
 
@@ -40,6 +41,7 @@ export const ProfileOverviewTab: React.FC<ProfileOverviewTabProps> = ({
   onViewAllSchedule,
   onViewAllOrders,
   onViewBookingDetails,
+  onContinuePayment,
   onExplore
 }) => {
   return (
@@ -68,6 +70,7 @@ export const ProfileOverviewTab: React.FC<ProfileOverviewTabProps> = ({
           orders={recentOrders}
           onViewAll={onViewAllOrders}
           onViewDetails={onViewBookingDetails}
+          onContinuePayment={onContinuePayment}
         />
 
         {/* Column 3: Chi tiêu trong năm */}

@@ -71,9 +71,17 @@ export const BookingContractsSection: React.FC<BookingContractsSectionProps> = (
       } catch (err: unknown) {
         console.error('Failed to list contracts for booking:', err);
         if (isMounted) {
-          const apiErr = err as { status?: number; message?: string };
-          // If 404 or empty list, handle gracefully
-          if (apiErr.status === 404) {
+          const apiErr = err as { status?: number; message?: string; response?: { status?: number } };
+          const status = apiErr.status || apiErr.response?.status;
+          const msg = (apiErr.message || '').toLowerCase();
+          // If 404, empty, contract not found, or hideWhenEmpty is enabled for embedded view, handle gracefully
+          if (
+            status === 404 ||
+            msg.includes('404') ||
+            msg.includes('not found') ||
+            msg.includes('contract_not_found') ||
+            hideWhenEmpty
+          ) {
             setContracts([]);
             onContractsLoaded?.([]);
           } else {

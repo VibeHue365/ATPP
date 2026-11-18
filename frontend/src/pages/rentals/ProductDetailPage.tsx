@@ -62,6 +62,14 @@ import { ProductMobileStickyBar } from './product-detail/components/ProductMobil
 
 import './product-detail/ProductDetailPage.css';
 
+const formatLocalDate = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+const dateFromKey = (dateStr: string) => {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
 export const ProductDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -102,6 +110,10 @@ export const ProductDetailPage: React.FC = () => {
   const [busyDates, setBusyDates] = useState<string[]>([]);
   const [busySlots, setBusySlots] = useState<{ date: string; timeSlot: string }[]>([]);
   const [variantBookedDates, setVariantBookedDates] = useState<Record<string, string[]>>({});
+  const [variantUnavailableDates, setVariantUnavailableDates] = useState<Record<string, string[]>>({});
+  const [variantBookedSlots, setVariantBookedSlots] = useState<
+    Record<string, Array<{ date: string; timeSlot: string; purpose?: 'RENTAL' | 'TURNAROUND' }>>
+  >({});
   const [providerScheduleInfo, setProviderScheduleInfo] = useState<ProviderScheduleInfo | null>(null);
 
   // Description tab
@@ -163,20 +175,45 @@ export const ProductDetailPage: React.FC = () => {
 
         // Load busy dates/slots
         let loadedBookedDates: string[] = [];
+        let loadedBusyData: {
+          bookedDates: string[];
+          bookedSlots: { date: string; timeSlot: string }[];
+          variantBookedDates?: Record<string, string[]>;
+          variantUnavailableDates?: Record<string, string[]>;
+          variantBookedSlots?: Record<
+            string,
+            Array<{ date: string; timeSlot: string; purpose?: 'RENTAL' | 'TURNAROUND' }>
+          >;
+          workingDays?: number[];
+          offDays?: string[];
+          hasSchedule?: boolean;
+        } | null = null;
         try {
           const busyData = await httpClient.get<{
             bookedDates: string[];
             bookedSlots: { date: string; timeSlot: string }[];
             variantBookedDates?: Record<string, string[]>;
+            variantUnavailableDates?: Record<string, string[]>;
+            variantBookedSlots?: Record<
+              string,
+              Array<{ date: string; timeSlot: string; purpose?: 'RENTAL' | 'TURNAROUND' }>
+            >;
             workingDays?: number[];
             offDays?: string[];
             hasSchedule?: boolean;
           }>(`/api/bookings/busy-dates/product/${id}`);
+          loadedBusyData = busyData;
           loadedBookedDates = busyData.bookedDates || [];
           setBusyDates(loadedBookedDates);
           setBusySlots(busyData.bookedSlots || []);
           if (busyData.variantBookedDates) {
             setVariantBookedDates(busyData.variantBookedDates);
+          }
+          if (busyData.variantUnavailableDates) {
+            setVariantUnavailableDates(busyData.variantUnavailableDates);
+          }
+          if (busyData.variantBookedSlots) {
+            setVariantBookedSlots(busyData.variantBookedSlots);
           }
           if (busyData.hasSchedule !== undefined) {
             setProviderScheduleInfo({
@@ -216,7 +253,49 @@ export const ProductDetailPage: React.FC = () => {
           }
         }
 
-        // Search first available 3-day range
+        // Search first available 3-day range. This must use the same calendar
+        // constraints as a customer click, including provider working/off days.
+        const initialBusyDates = new Set<string>(loadedBookedDates);
+        (loadedBusyData?.bookedSlots || []).forEach((s) => {
+          if (s.date) initialBusyDates.add(s.date);
+        });
+        if (loadedBusyData?.variantBookedDates) {
+          Object.values(loadedBusyData.variantBookedDates).forEach((dates) => {
+            dates.forEach((d) => initialBusyDates.add(d));
+          });
+        }
+        if (loadedBusyData?.variantUnavailableDates) {
+          Object.values(loadedBusyData.variantUnavailableDates).forEach((dates) => {
+            dates.forEach((d) => initialBusyDates.add(d));
+          });
+        }
+        if (loadedBusyData?.variantBookedSlots) {
+          Object.values(loadedBusyData.variantBookedSlots).forEach((slots) => {
+            slots.forEach((s) => {
+              if (s.date) initialBusyDates.add(s.date);
+            });
+          });
+        }
+
+        const initialSchedule = loadedBusyData?.hasSchedule === undefined
+          ? null
+          : {
+              hasSchedule: loadedBusyData.hasSchedule,
+              workingDays: loadedBusyData.workingDays || [],
+              offDays: loadedBusyData.offDays || [],
+            };
+        const isInitiallyUnavailable = (dateStr: string) => {
+          if (initialBusyDates.has(dateStr)) return true;
+          if (!initialSchedule) return false;
+          if (!initialSchedule.hasSchedule) return true;
+          const weekday = dateFromKey(dateStr).getDay();
+          return (
+            (initialSchedule.workingDays.length > 0 &&
+              !initialSchedule.workingDays.includes(weekday)) ||
+            initialSchedule.offDays.includes(dateStr)
+          );
+        };
+
         let foundRange = false;
         let startDateVal = '';
         let endDateVal = '';
@@ -225,17 +304,17 @@ export const ProductDetailPage: React.FC = () => {
         for (let offset = 0; offset < maxSearchDays; offset++) {
           const checkStart = new Date();
           checkStart.setDate(checkStart.getDate() + 1 + offset);
-          const startStr = checkStart.toISOString().split('T')[0];
+          const startStr = formatLocalDate(checkStart);
 
           const checkEnd = new Date(checkStart);
           checkEnd.setDate(checkEnd.getDate() + 2);
-          const endStr = checkEnd.toISOString().split('T')[0];
+          const endStr = formatLocalDate(checkEnd);
 
           let hasBusy = false;
           const temp = new Date(checkStart);
           while (temp <= checkEnd) {
-            const tempStr = temp.toISOString().split('T')[0];
-            if (loadedBookedDates.includes(tempStr)) {
+            const tempStr = formatLocalDate(temp);
+            if (isInitiallyUnavailable(tempStr)) {
               hasBusy = true;
               break;
             }
@@ -259,9 +338,9 @@ export const ProductDetailPage: React.FC = () => {
           tomorrow.setDate(tomorrow.getDate() + 1);
           const nextDay = new Date();
           nextDay.setDate(nextDay.getDate() + 3);
-          setStartDate(tomorrow.toISOString().split('T')[0]);
-          setEndDate(nextDay.toISOString().split('T')[0]);
-          setSingleDate(tomorrow.toISOString().split('T')[0]);
+          setStartDate(formatLocalDate(tomorrow));
+          setEndDate(formatLocalDate(nextDay));
+          setSingleDate(formatLocalDate(tomorrow));
         }
       } catch (err: any) {
         console.error('Lỗi lấy chi tiết sản phẩm:', err);
@@ -273,6 +352,54 @@ export const ProductDetailPage: React.FC = () => {
 
     fetchProductDetails();
   }, [id]);
+
+  // Refresh the availability snapshot whenever the active variant changes.
+  // The initial product request can finish before the preferred size/color is
+  // applied, which otherwise leaves the calendar showing stale selectable days.
+  useEffect(() => {
+    if (!id || !selectedSize || !selectedColor) return;
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const busyData = await httpClient.get<{
+          bookedDates: string[];
+          bookedSlots: { date: string; timeSlot: string }[];
+          variantBookedDates?: Record<string, string[]>;
+          variantUnavailableDates?: Record<string, string[]>;
+          variantBookedSlots?: Record<
+            string,
+            Array<{ date: string; timeSlot: string; purpose?: 'RENTAL' | 'TURNAROUND' }>
+          >;
+          workingDays?: number[];
+          offDays?: string[];
+          hasSchedule?: boolean;
+        }>(`/api/bookings/busy-dates/product/${id}`, { signal: controller.signal });
+
+        setBusyDates(busyData.bookedDates || []);
+        setBusySlots(busyData.bookedSlots || []);
+        setVariantBookedDates(busyData.variantBookedDates || {});
+        setVariantUnavailableDates(busyData.variantUnavailableDates || {});
+        setVariantBookedSlots(busyData.variantBookedSlots || {});
+        if (busyData.hasSchedule !== undefined) {
+          setProviderScheduleInfo({
+            hasSchedule: busyData.hasSchedule,
+            workingDays: busyData.workingDays || [],
+            offDays: busyData.offDays || [],
+          });
+        }
+      } catch (error: any) {
+        if (error?.cause?.name !== 'AbortError' && error?.name !== 'AbortError') {
+          console.warn('Không thể làm mới lịch bận theo biến thể:', error);
+        }
+      }
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [id, selectedSize, selectedColor]);
 
   // Load suggested photographers from DB (same city or top rated)
   useEffect(() => {
@@ -461,16 +588,117 @@ export const ProductDetailPage: React.FC = () => {
       if (variantBookedDates[key]) {
         combined = Array.from(new Set([...combined, ...variantBookedDates[key]]));
       }
+      if (variantUnavailableDates[key]) {
+        combined = Array.from(new Set([...combined, ...variantUnavailableDates[key]]));
+      }
     }
     return combined;
-  }, [selectedSize, selectedColor, variantBookedDates, busyDates]);
+  }, [selectedSize, selectedColor, variantBookedDates, variantUnavailableDates, busyDates]);
+
+  // Set of dates that have ANY hourly booking for the active variant (or product)
+  const hourlyBookedDates = useMemo(() => {
+    const dates = new Set<string>();
+    const variantKey = selectedSize && selectedColor
+      ? `${selectedSize.trim().toUpperCase()}_${normalizeCol(selectedColor)}`
+      : null;
+
+    const hasVariantSlots = variantBookedSlots && Object.keys(variantBookedSlots).length > 0;
+
+    if (variantKey) {
+      if (hasVariantSlots) {
+        if (variantBookedSlots[variantKey]) {
+          variantBookedSlots[variantKey].forEach((s) => {
+            if (s.date) dates.add(s.date);
+          });
+        }
+      } else {
+        busySlots.forEach((s) => {
+          if (s.date) dates.add(s.date);
+        });
+      }
+    } else {
+      if (hasVariantSlots) {
+        Object.values(variantBookedSlots).forEach((slots) => {
+          slots.forEach((s) => {
+            if (s.date) dates.add(s.date);
+          });
+        });
+      }
+      busySlots.forEach((s) => {
+        if (s.date) dates.add(s.date);
+      });
+    }
+
+    return dates;
+  }, [selectedSize, selectedColor, variantBookedSlots, busySlots]);
+
+  // When in DAILY mode, any date with hourly bookings is also unavailable for full-day rental
+  const effectiveBusyDates = useMemo(() => {
+    if (rentalMode === 'DAILY') {
+      const combined = new Set([...activeBusyDates, ...hourlyBookedDates]);
+      return Array.from(combined);
+    }
+    return activeBusyDates;
+  }, [rentalMode, activeBusyDates, hourlyBookedDates]);
+
+  // calendarDays only contains the month currently on screen.  Range
+  // selection must nevertheless validate every date between the first and
+  // second click, including dates in another month; otherwise a busy date can
+  // be skipped and only be rejected later at checkout.
+  const isDailyDateUnavailable = (dateStr: string) => {
+    if (effectiveBusyDates.includes(dateStr)) return true;
+
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    if (dateStr < todayStr) return true;
+
+    if (!providerScheduleInfo) return false;
+    if (!providerScheduleInfo.hasSchedule) return true;
+
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const weekday = new Date(year, month - 1, day).getDay();
+    return (
+      (providerScheduleInfo.workingDays.length > 0 &&
+        !providerScheduleInfo.workingDays.includes(weekday)) ||
+      providerScheduleInfo.offDays.includes(dateStr)
+    );
+  };
+
+  const isVariantUnavailable = (size: string, color: string) => {
+    const key = `${size.trim().toUpperCase()}_${normalizeCol(color)}`;
+    const dates = variantUnavailableDates[key];
+    return Array.isArray(dates) && dates.length > 0;
+  };
 
   const bookedSlotsOnSelectedDate = useMemo(() => {
     if (!singleDate) return [];
-    return busySlots
+    const variantKey = selectedSize && selectedColor
+      ? `${selectedSize.trim().toUpperCase()}_${normalizeCol(selectedColor)}`
+      : null;
+
+    if (variantKey && variantBookedDates[variantKey]?.includes(singleDate)) {
+      return ['00:00-23:59'];
+    }
+
+    const hasVariantSlots = variantBookedSlots && Object.keys(variantBookedSlots).length > 0;
+    let relevantSlots: Array<{ date: string; timeSlot: string }> = [];
+
+    if (variantKey) {
+      if (hasVariantSlots) {
+        relevantSlots = variantBookedSlots[variantKey] || [];
+      } else {
+        relevantSlots = busySlots;
+      }
+    } else {
+      relevantSlots = busySlots;
+    }
+
+    const filtered = relevantSlots
       .filter((s) => s.date === singleDate)
       .map((s) => s.timeSlot);
-  }, [singleDate, busySlots]);
+
+    return Array.from(new Set(filtered));
+  }, [singleDate, busySlots, variantBookedSlots, variantBookedDates, selectedSize, selectedColor]);
 
   // Calendar Days calculation
   const calendarDays = useMemo(() => {
@@ -499,7 +727,7 @@ export const ProductDetailPage: React.FC = () => {
       const dateObj = new Date(yNum, mNum - 1, dNum);
       const dayOfWeek = dateObj.getDay();
 
-      let isAvailable = !activeBusyDates.includes(dateStr) && dateStr >= todayStr;
+      let isAvailable = !effectiveBusyDates.includes(dateStr) && dateStr >= todayStr;
 
       if (providerScheduleInfo) {
         if (!providerScheduleInfo.hasSchedule) {
@@ -535,7 +763,26 @@ export const ProductDetailPage: React.FC = () => {
       });
     }
     return days;
-  }, [calendarDate, activeBusyDates, rentalMode, providerScheduleInfo]);
+  }, [calendarDate, effectiveBusyDates, rentalMode, providerScheduleInfo]);
+
+  // Availability is checked against the exact variant, date range and
+  // quantity. If that authoritative check says the current selection is no
+  // longer possible (for example another booking just took the last item),
+  // clear the stale selection immediately instead of leaving actionable
+  // buttons visible with an invalid range. Do not mark the *entire* range as
+  // busy here: the API result does not identify one exact date, and doing so
+  // previously greyed out dates that were actually still rentable.
+  useEffect(() => {
+    if (availability.state !== 'unavailable') return;
+    if (rentalMode === 'DAILY') {
+      setStartDate('');
+      setEndDate('');
+    } else {
+      setSingleDate('');
+      setStartDate('');
+      setEndDate('');
+    }
+  }, [availability.state, rentalMode, startDate, endDate, singleDate]);
 
   const startSlotIndex = useMemo(() => {
     return productSlots.findIndex((s) => s.start === startTime);
@@ -545,13 +792,13 @@ export const ProductDetailPage: React.FC = () => {
     return productSlots.findIndex((s) => s.end === endTime);
   }, [endTime]);
 
-  // Auto-select first available slot when date changes
+  // Auto-select first available slot when date changes or if current slot becomes busy
   useEffect(() => {
     if (rentalMode !== 'HOURLY' || !singleDate) return;
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-    const firstAvailableIndex = productSlots.findIndex((block) => {
+    const isSlotAvailable = (block: { start: string; end: string }) => {
       const isBusy = bookedSlotsOnSelectedDate.some((bookedSlot) =>
         isTimeSlotOverlap(`${block.start}-${block.end}`, bookedSlot),
       );
@@ -565,13 +812,25 @@ export const ProductDetailPage: React.FC = () => {
           );
         })();
       return !isBusy && !isPast;
-    });
+    };
 
-    if (firstAvailableIndex !== -1) {
-      setStartTime(productSlots[firstAvailableIndex].start);
-      setEndTime(productSlots[firstAvailableIndex].end);
+    const firstAvailableIndex = productSlots.findIndex(isSlotAvailable);
+
+    const isCurrentValid =
+      startTime &&
+      endTime &&
+      isSlotAvailable({ start: startTime, end: endTime });
+
+    if (!isCurrentValid) {
+      if (firstAvailableIndex !== -1) {
+        setStartTime(productSlots[firstAvailableIndex].start);
+        setEndTime(productSlots[firstAvailableIndex].end);
+      } else {
+        setStartTime('');
+        setEndTime('');
+      }
     }
-  }, [singleDate, bookedSlotsOnSelectedDate, rentalMode]);
+  }, [singleDate, bookedSlotsOnSelectedDate, rentalMode, startTime, endTime]);
 
   const handleSlotClick = (i: number) => {
     const block = productSlots[i];
@@ -643,14 +902,73 @@ export const ProductDetailPage: React.FC = () => {
     });
   }, [rentalMode, selectedTimeSlot, bookedSlotsOnSelectedDate]);
 
+  // Auto-adjust DAILY rental dates if selected range overlaps with newly effective busy dates
+  useEffect(() => {
+    if (rentalMode !== 'DAILY' || !startDate) return;
+
+    let hasConflict = false;
+    const start = dateFromKey(startDate);
+    const end = endDate ? dateFromKey(endDate) : dateFromKey(startDate);
+    const cur = new Date(start);
+    while (cur <= end) {
+      const curStr = formatLocalDate(cur);
+      if (isDailyDateUnavailable(curStr)) {
+        hasConflict = true;
+        break;
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    if (hasConflict) {
+      let found = false;
+      const today = new Date();
+      for (let offset = 0; offset < 60; offset++) {
+        const checkStart = new Date(today);
+        checkStart.setDate(today.getDate() + 1 + offset);
+        const startStr = formatLocalDate(checkStart);
+
+        const checkEnd = new Date(checkStart);
+        checkEnd.setDate(checkEnd.getDate() + 2);
+        const endStr = formatLocalDate(checkEnd);
+
+        let hasBusy = false;
+        const temp = new Date(checkStart);
+        while (temp <= checkEnd) {
+          const tempStr = formatLocalDate(temp);
+          if (isDailyDateUnavailable(tempStr)) {
+            hasBusy = true;
+            break;
+          }
+          temp.setDate(temp.getDate() + 1);
+        }
+
+        if (!hasBusy) {
+          setStartDate(startStr);
+          setEndDate(endStr);
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        setStartDate('');
+        setEndDate('');
+      }
+    }
+  }, [rentalMode, effectiveBusyDates, providerScheduleInfo, startDate, endDate]);
+
   const handleCalendarDayClick = (dateStr: string) => {
+    const selectedDay = calendarDays.find((day) => day.dateStr === dateStr);
+    if (!selectedDay || !selectedDay.isAvailable) {
+      return;
+    }
     if (rentalMode === 'HOURLY') {
       setSingleDate(dateStr);
       setStartDate(dateStr);
       setEndDate(dateStr);
     } else {
-      if (busyDates.includes(dateStr)) {
-        toast.error('Ngày này đã bị đặt lịch!');
+      if (effectiveBusyDates.includes(dateStr)) {
+        toast.error('Ngày này đã có lịch thuê!');
         return;
       }
       if (!startDate || (startDate && endDate)) {
@@ -661,15 +979,21 @@ export const ProductDetailPage: React.FC = () => {
           setStartDate(dateStr);
           setEndDate('');
         } else {
-          const hasUnavailable = calendarDays.some(
-            (d) =>
-              !d.isEmpty &&
-              !d.isAvailable &&
-              d.dateStr >= startDate &&
-              d.dateStr <= dateStr,
-          );
-          if (hasUnavailable) {
-            toast.error('Khoảng thời gian chọn chứa ngày đã bị đặt!');
+          const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+          const [endYear, endMonth, endDay] = dateStr.split('-').map(Number);
+          const cursor = new Date(startYear, startMonth - 1, startDay);
+          const end = new Date(endYear, endMonth - 1, endDay);
+          let unavailableDate = '';
+          while (cursor <= end) {
+            const current = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`;
+            if (isDailyDateUnavailable(current)) {
+              unavailableDate = current;
+              break;
+            }
+            cursor.setDate(cursor.getDate() + 1);
+          }
+          if (unavailableDate) {
+            toast.error(`Khoảng thời gian chọn có ngày không khả dụng (${unavailableDate}).`);
             return;
           }
           setEndDate(dateStr);
@@ -714,7 +1038,7 @@ export const ProductDetailPage: React.FC = () => {
     try {
       setLoadingReviews(true);
       const res: any = await httpClient.get(`/reviews/item/${id}`);
-      setRealReviews(res || []);
+      setRealReviews(Array.isArray(res) ? res : Array.isArray(res?.reviews) ? res.reviews : []);
     } catch (e) {
       console.error('Lỗi tải đánh giá sản phẩm:', e);
     } finally {
@@ -968,6 +1292,17 @@ export const ProductDetailPage: React.FC = () => {
       if (endDate < startDate) {
         toast.error('Ngày trả đồ không thể trước ngày nhận đồ.');
         return false;
+      }
+      const start = dateFromKey(startDate);
+      const end = dateFromKey(endDate);
+      const cur = new Date(start);
+      while (cur <= end) {
+        const curStr = formatLocalDate(cur);
+        if (isDailyDateUnavailable(curStr)) {
+          toast.error(`Ngày ${curStr} không khả dụng. Vui lòng chọn khoảng thời gian khác.`);
+          return false;
+        }
+        cur.setDate(cur.getDate() + 1);
       }
     } else {
       if (!singleDate) {
@@ -1246,6 +1581,7 @@ export const ProductDetailPage: React.FC = () => {
               selectedColor={selectedColor}
               onSelectColor={setSelectedColor}
               selectedSize={selectedSize}
+              isVariantUnavailable={isVariantUnavailable}
               onSelectSize={setSelectedSize}
               rentalMode={rentalMode}
               onChangeRentalMode={setRentalMode}

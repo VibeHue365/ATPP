@@ -3,10 +3,11 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/restrict-template-expressions */
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { InventorySlotLeaseService } from './inventory-slot-lease.service';
 import {
   BookingSchedule,
   BookingScheduleDocument,
@@ -54,7 +55,23 @@ export class BookingsSchedulerService {
     private readonly notificationsService: NotificationsService,
     private readonly photographyHoldService: PhotographyHoldService,
     private readonly bookingStatusService: BookingStatusService,
-  ) { }
+    @Optional()
+    private readonly slotLeaseService?: InventorySlotLeaseService,
+  ) {}
+
+  @Cron(CronExpression.EVERY_MINUTE)
+  async expireHoldLeases() {
+    try {
+      if (this.slotLeaseService) {
+        const expiredCount = await this.slotLeaseService.expireHoldLeases();
+        if (expiredCount > 0) {
+          this.logger.log(`Expired ${expiredCount} slot lease hold(s).`);
+        }
+      }
+    } catch (error) {
+      this.logger.error('Unable to expire slot lease holds.', error);
+    }
+  }
 
   @Cron(CronExpression.EVERY_MINUTE)
   async expirePhotographyHolds() {
@@ -128,49 +145,13 @@ export class BookingsSchedulerService {
   }
 
   /**
-   * Auto-complete rental bookings in RETURNED status after 24 hours if customer hasn't confirmed yet.
-   * Protects providers from unreleased escrow funds.
+   * Auto-complete rental bookings in RETURNED status after 24 hours.
+   * NOTE: Disabled for rentals: Rental bookings require explicit inspection & deposit settlement
+   * by Provider/Customer/Admin and cannot be auto-completed by cron timer.
    */
   @Cron(CronExpression.EVERY_HOUR)
   async autoCompleteReturnedRentals() {
-    this.logger.log('Running auto-complete for RETURNED rental bookings...');
-    const deadline = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-    try {
-      const candidates = await this.bookingModel
-        .find({
-          status: BookingStatus.Returned,
-          $or: [
-            { returnedAt: { $lte: deadline } },
-            { returnedAt: null, updatedAt: { $lte: deadline } },
-          ],
-        })
-        .select('_id bookingCode')
-        .lean();
-
-      if (candidates.length === 0) return;
-      this.logger.log(
-        `Found ${candidates.length} RETURNED rental booking(s) past 24h window to auto-complete.`,
-      );
-
-      for (const candidate of candidates) {
-        try {
-          await this.bookingStatusService.completeBooking(
-            candidate._id.toString(),
-          );
-          this.logger.log(
-            `Auto-completed returned rental booking ${candidate.bookingCode} after 24h window.`,
-          );
-        } catch (err) {
-          this.logger.error(
-            `Failed to auto-complete returned rental booking ${candidate.bookingCode}:`,
-            err,
-          );
-        }
-      }
-    } catch (err) {
-      this.logger.error('Auto-complete returned rentals cron job failed:', err);
-    }
+    this.logger.log('Skipping auto-complete for rental bookings (requires manual handover & deposit settlement inspection).');
   }
 
   /**
@@ -245,37 +226,12 @@ export class BookingsSchedulerService {
 
   /**
    * Auto-unlock maintenance items (LOCKED status) after 48 hours.
-   * Runs every hour.
+   * NOTE: Disabled: LOCKED maintenance items must only be unlocked via manual action with audit note,
+   * not automatically by cron timer.
    */
   @Cron(CronExpression.EVERY_HOUR)
   async autoUnlockMaintenanceItems() {
-    this.logger.log('Running auto-unlock for maintenance items...');
-    try {
-      const inventoryItemModel = this.bookingModel.db.model('InventoryItem');
-      const lockedItems = await inventoryItemModel.find({
-        conditionStatus: 'LOCKED',
-        notes: { $regex: /^LOCKED_UNTIL_/ },
-      });
-
-      const now = new Date();
-      for (const item of lockedItems) {
-        const notesStr = item.notes || '';
-        const match = notesStr.match(/^LOCKED_UNTIL_([^:]+):/);
-        if (match && match[1]) {
-          const lockedUntil = new Date(match[1]);
-          if (now >= lockedUntil) {
-            item.conditionStatus = 'GOOD';
-            item.notes = 'Tự động mở khóa sau 48 giờ bảo trì.';
-            await item.save();
-            this.logger.log(
-              `Auto-unlocked inventory item SKU ${item.sku} after maintenance.`,
-            );
-          }
-        }
-      }
-    } catch (err) {
-      this.logger.error('Failed to auto-unlock maintenance items:', err);
-    }
+    this.logger.log('Skipping auto-unlock for LOCKED items: unlocking requires provider/admin action with audit note.');
   }
 
   @Cron(CronExpression.EVERY_5_MINUTES)
@@ -846,10 +802,23 @@ export class BookingsSchedulerService {
         .find({
           status: { $in: [BookingStatus.Confirmed, BookingStatus.DepositPaid] },
         })
-        .select('_id bookingCode customerId providerIds status statusTimeline')
+        .select(
+          '_id bookingCode customerId providerIds status statusTimeline hasPendingWeatherAction disputeDeferredUntil',
+        )
         .lean();
 
       for (const booking of pendingBookings) {
+        // PR 3 Financial Guard: Hoãn auto-dispute nếu đơn có cờ thời tiết hoặc đang trong thời gian hoãn
+        if (
+          booking.hasPendingWeatherAction ||
+          (booking.disputeDeferredUntil &&
+            now < new Date(booking.disputeDeferredUntil))
+        ) {
+          this.logger.log(
+            `Skipping auto-dispute for booking ${booking.bookingCode} due to active weather action or dispute deferral.`,
+          );
+          continue;
+        }
         const photoItem = await this.bookingItemModel.findOne({
           bookingId: booking._id,
           itemType: BookingItemType.PhotographyPackage,

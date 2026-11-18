@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,14 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { ProviderProfile, ProviderPerformance } from '@/types/provider';
+import { resolveProviderAvatarUri } from '@/utils/media';
 
 interface StoreProfileHeaderCardProps {
   profile: ProviderProfile | null;
   performance?: ProviderPerformance | null;
   isOnline: boolean;
   onToggleOnline: () => void;
+  onPressAvatar?: () => void;
 }
 
 const DEFAULT_STORE_IMAGE =
@@ -25,7 +27,10 @@ export function StoreProfileHeaderCard({
   performance,
   isOnline,
   onToggleOnline,
+  onPressAvatar,
 }: StoreProfileHeaderCardProps) {
+  const [imageFailed, setImageFailed] = useState(false);
+
   const storeName =
     profile?.businessName || profile?.brandName || 'LUMÉ Flagship Cố Đô';
   const addressText =
@@ -46,27 +51,37 @@ export function StoreProfileHeaderCard({
     profile?.rating?.reviewCount ??
     340;
 
+  const resolvedAvatarUri = resolveProviderAvatarUri(profile);
+  useEffect(() => {
+    setImageFailed(false);
+  }, [resolvedAvatarUri]);
+
   const storeImageUri =
-    profile?.media?.coverUrl ||
-    profile?.media?.logoUrl ||
-    profile?.avatarUrl ||
-    profile?.coverUrl ||
-    DEFAULT_STORE_IMAGE;
+    (!imageFailed && resolvedAvatarUri) || DEFAULT_STORE_IMAGE;
 
   return (
     <View style={styles.card}>
       {/* Top Info Row */}
       <View style={styles.topRow}>
-        <View style={styles.avatarContainer}>
+        <Pressable
+          style={styles.avatarContainer}
+          onPress={onPressAvatar}
+          disabled={!onPressAvatar}
+          accessibilityRole={onPressAvatar ? 'button' : undefined}
+          accessibilityLabel={
+            onPressAvatar ? 'Chỉnh sửa ảnh đại diện cửa hàng' : undefined
+          }
+        >
           <Image
             source={{ uri: storeImageUri }}
             style={styles.avatarImage}
             resizeMode="cover"
+            onError={() => setImageFailed(true)}
           />
           <View style={styles.verifiedBadge}>
             <MaterialIcons name="verified" size={11} color="#FFFFFF" />
           </View>
-        </View>
+        </Pressable>
 
         <View style={styles.infoCol}>
           <View style={styles.titleRow}>

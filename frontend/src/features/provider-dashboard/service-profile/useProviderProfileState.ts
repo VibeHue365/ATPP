@@ -15,10 +15,11 @@ export function useProviderProfileState() {
   const [baseLongitude, setBaseLongitude] = useState('');
   const [serviceRadiusKm, setServiceRadiusKm] = useState('');
   const [useBusinessAddressForPickup, setUseBusinessAddressForPickup] = useState(true);
+  const [turnaroundSlots, setTurnaroundSlots] = useState<number>(1);
   const [pickupAddressLine, setPickupAddressLine] = useState('');
   const [pickupLatitude, setPickupLatitude] = useState('');
   const [pickupLongitude, setPickupLongitude] = useState('');
-  const [profileSection, setProfileSection] = useState<'business' | 'location' | 'policy'>('business');
+  const [profileSection, setProfileSection] = useState<'business' | 'location' | 'rental' | 'policy'>('business');
   const [coverUrl, setCoverUrl] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
@@ -27,7 +28,7 @@ export function useProviderProfileState() {
     cancellationRefundRules, setCancellationRefundRules, cancellationAdditionalNotes,
     setCancellationAdditionalNotes, comboDiscountPercent, setComboDiscountPercent, baseLatitude,
     setBaseLatitude, baseLongitude, setBaseLongitude, serviceRadiusKm, setServiceRadiusKm,
-    useBusinessAddressForPickup, setUseBusinessAddressForPickup, pickupAddressLine, setPickupAddressLine,
+    useBusinessAddressForPickup, setUseBusinessAddressForPickup, turnaroundSlots, setTurnaroundSlots, pickupAddressLine, setPickupAddressLine,
     pickupLatitude, setPickupLatitude, pickupLongitude, setPickupLongitude, profileSection,
     setProfileSection, coverUrl, setCoverUrl, isSavingProfile, setIsSavingProfile,
   };

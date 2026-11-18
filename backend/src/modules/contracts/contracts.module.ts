@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { SystemPoliciesModule } from '../system-policies/system-policies.module';
 import { StorageModule } from '../storage/storage.module';
+import { AuthModule } from '../auth/auth.module';
 import { CONTRACTS_V2_ENABLED } from './contracts.constants';
 import { ContractPolicyService } from './contract-policy.service';
 import { ContractSnapshotService } from './contract-snapshot.service';
@@ -48,6 +49,7 @@ import {
 } from './schemas/provider-contract-config-audit.schema';
 import { ProviderContractConfigService } from './provider-contract-config.service';
 import { ContractTierEvaluator } from './contract-tier-evaluator';
+import { ContractSignedEmailService } from './contract-signed-email.service';
 
 export const contractModels = MongooseModule.forFeature([
   { name: DigitalContract.name, schema: DigitalContractSchema },
@@ -72,7 +74,7 @@ export const contractModels = MongooseModule.forFeature([
 ]);
 
 @Module({
-  imports: [contractModels, SystemPoliciesModule, StorageModule],
+  imports: [contractModels, SystemPoliciesModule, StorageModule, AuthModule],
   controllers: [ContractsController, PublicContractsController],
   providers: [
     ContractPolicyService,
@@ -89,6 +91,7 @@ export const contractModels = MongooseModule.forFeature([
     ContractMechanismService,
     ContractCheckoutGuard,
     ContractEvidenceService,
+    ContractSignedEmailService,
     {
       provide: CONTRACTS_V2_ENABLED,
       inject: [ConfigService],

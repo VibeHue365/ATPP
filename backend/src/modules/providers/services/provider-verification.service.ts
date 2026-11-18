@@ -368,7 +368,7 @@ export class ProviderVerificationService {
       throw new BadRequestException('Document file is required');
     }
 
-    return this.withUploadLock(`${id}:${documentType}`, async () => {
+    return this.withUploadLock(id, async () => {
       const verification = await this.loadOwnedEditableVerification(actor, id);
       if (!verification.consent?.accepted) {
         throw new BadRequestException('Consent not accepted');
@@ -1545,13 +1545,43 @@ export class ProviderVerificationService {
     buffer: Buffer,
   ): { width: number; height: number } | null {
     let offset = 2;
-    while (offset < buffer.length) {
+    while (offset + 3 < buffer.length) {
       if (buffer[offset] !== 0xff) {
         return null;
       }
+      while (offset + 1 < buffer.length && buffer[offset + 1] === 0xff) {
+        offset += 1;
+      }
+      if (offset + 1 >= buffer.length) {
+        return null;
+      }
       const marker = buffer[offset + 1];
+      if (
+        marker === 0x00 ||
+        marker === 0x01 ||
+        marker === 0xd8 ||
+        marker === 0xd9 ||
+        (marker >= 0xd0 && marker <= 0xd7)
+      ) {
+        offset += 2;
+        continue;
+      }
+      if (offset + 4 > buffer.length) {
+        return null;
+      }
       const length = buffer.readUInt16BE(offset + 2);
-      if (marker >= 0xc0 && marker <= 0xc3) {
+      if (length < 2) {
+        return null;
+      }
+      const isSof =
+        (marker >= 0xc0 && marker <= 0xc3) ||
+        (marker >= 0xc5 && marker <= 0xc7) ||
+        (marker >= 0xc9 && marker <= 0xcb) ||
+        (marker >= 0xcd && marker <= 0xcf);
+      if (isSof) {
+        if (offset + 9 > buffer.length) {
+          return null;
+        }
         return {
           height: buffer.readUInt16BE(offset + 5),
           width: buffer.readUInt16BE(offset + 7),

@@ -3,7 +3,9 @@ import { Image } from 'expo-image';
 import { type Href, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -35,6 +37,7 @@ import {
   resolveHourlyRate,
 } from '@/utils/campaignPricing';
 import { getMediaUrl } from '@/utils/media';
+import { buildLoginHref } from '@/utils/navigation';
 
 const money = (n: number) => new Intl.NumberFormat('vi-VN').format(n) + 'đ';
 
@@ -209,7 +212,7 @@ export default function ProductDetail() {
 
   const favorite = async () => {
     if (!isAuthenticated) {
-      router.push('/(auth)/login' as Href);
+      router.push(buildLoginHref(`/product/${product._id}`));
       return;
     }
     try {
@@ -790,7 +793,10 @@ export default function ProductDetail() {
         animationType="slide"
         onRequestClose={() => setSizeModalOpen(false)}
       >
-        <View style={s.modalBackdrop}>
+        <KeyboardAvoidingView
+          style={s.modalBackdrop}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={s.modalSheet}>
             <View style={s.modalHeader}>
               <View>
@@ -802,7 +808,11 @@ export default function ProductDetail() {
               </Pressable>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 14 }}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ gap: 14 }}
+            >
               <View style={s.measureGrid}>
                 <View style={s.measureField}>
                   <Text style={s.measureLabel}>CHIỀU CAO (CM) *</Text>
@@ -898,7 +908,7 @@ export default function ProductDetail() {
               </View>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

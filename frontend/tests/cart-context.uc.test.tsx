@@ -41,8 +41,8 @@ beforeEach(() => {
   auth.user = null;
 });
 
-describe('UC-34 Add To Cart (NgocL)', () => {
-  it('UT-34 UTCID02 merges a photography package with the same date and time slot', () => {
+describe('UC-33 Add To Cart (NgocL)', () => {
+  it('UT-33 UTCID02 merges a photography package with the same date and time slot', () => {
     const { result } = renderCart();
 
     act(() => result.current.addToCart(photography));
@@ -52,7 +52,7 @@ describe('UC-34 Add To Cart (NgocL)', () => {
     expect(result.current.cart[0].quantity).toBe(2);
   });
 
-  it('UT-34 UTCID03 keeps a different size as a separate cart line', () => {
+  it('UT-33 UTCID03 keeps a different size as a separate cart line', () => {
     const { result } = renderCart();
 
     act(() => result.current.addToCart(product));
@@ -61,7 +61,7 @@ describe('UC-34 Add To Cart (NgocL)', () => {
     expect(result.current.cart.map((item) => item.size)).toEqual(['M', 'L']);
   });
 
-  it('UT-34 UTCID04 adds the requested quantity and defaults an invalid quantity to 1', () => {
+  it('UT-33 UTCID04 adds the requested quantity and defaults an invalid quantity to 1', () => {
     const { result } = renderCart();
 
     act(() => result.current.addToCart({ ...product, quantity: 3 }));
@@ -70,7 +70,7 @@ describe('UC-34 Add To Cart (NgocL)', () => {
     expect(result.current.cart.map((item) => item.quantity)).toEqual([3, 1]);
   });
 
-  it('UT-34 UTCID05 persists the guest cart in local storage', () => {
+  it('UT-33 UTCID05 persists the guest cart in local storage', () => {
     const { result } = renderCart();
 
     act(() => result.current.addToCart(product));
@@ -79,7 +79,7 @@ describe('UC-34 Add To Cart (NgocL)', () => {
     expect(saved).toEqual([expect.objectContaining({ productId: 'product-1', quantity: 1 })]);
   });
 
-  it('UT-34 UTCID06 merges the guest cart into the signed-in user cart', () => {
+  it('UT-33 UTCID06 merges the guest cart into the signed-in user cart', () => {
     localStorage.setItem('vh_cart_user-1', JSON.stringify([{ ...product, id: 'u1', quantity: 1 }]));
     localStorage.setItem('vh_cart_guest', JSON.stringify([
       { ...product, id: 'g1', quantity: 2 },
@@ -96,7 +96,7 @@ describe('UC-34 Add To Cart (NgocL)', () => {
     expect(localStorage.getItem('vh_cart_guest')).toBeNull();
   });
 
-  it('UT-34 UTCID07 normalizes items saved by older screens', () => {
+  it('UT-33 UTCID07 normalizes items saved by older screens', () => {
     localStorage.setItem('vh_cart_guest', JSON.stringify([
       { id: 'old', itemType: 'PRODUCT', productId: 'product-9', quantity: 1, selectedSize: 'S', selectedColor: 'WHITE', start_date: '2026-11-01', end_date: '2026-11-02' },
     ]));
@@ -106,7 +106,7 @@ describe('UC-34 Add To Cart (NgocL)', () => {
     expect(result.current.cart[0]).toMatchObject({ size: 'S', color: 'WHITE', rentalFrom: '2026-11-01', rentalTo: '2026-11-02' });
   });
 
-  it('UT-34 UTCID08 starts with an empty cart when stored data is corrupted', () => {
+  it('UT-33 UTCID08 starts with an empty cart when stored data is corrupted', () => {
     localStorage.setItem('vh_cart_guest', '{not-json');
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
@@ -115,14 +115,14 @@ describe('UC-34 Add To Cart (NgocL)', () => {
     expect(result.current.cart).toEqual([]);
   });
 
-  it('UT-34 UTCID09 requires the cart provider', () => {
+  it('UT-33 UTCID09 requires the cart provider', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     expect(() => renderHook(() => useCart())).toThrow('useCart must be used within a CartProvider');
   });
 
-  // Known defect UT-DEF-34-01: addToCart mutates the previous cart item inside the state updater.
-  it.fails('UT-34 UTCID10 adds exactly one unit per click in React StrictMode', () => {
+  // Known defect UT-DEF-33-01: addToCart mutates the previous cart item inside the state updater.
+  it.fails('UT-33 UTCID10 adds exactly one unit per click in React StrictMode', () => {
     const { result } = renderCart(true);
 
     act(() => result.current.addToCart(product));
@@ -132,8 +132,8 @@ describe('UC-34 Add To Cart (NgocL)', () => {
   });
 });
 
-describe('UC-35 Delete Item (NgocL)', () => {
-  it('UT-35 UTCID02 ignores an unknown item id', () => {
+describe('UC-34 Delete Item (NgocL)', () => {
+  it('UT-34 UTCID02 ignores an unknown item id', () => {
     const { result } = renderCart();
     act(() => result.current.addToCart(product));
 
@@ -142,7 +142,7 @@ describe('UC-35 Delete Item (NgocL)', () => {
     expect(result.current.cart).toHaveLength(1);
   });
 
-  it('UT-35 UTCID03 removes only the selected line', () => {
+  it('UT-34 UTCID03 removes only the selected line', () => {
     const { result } = renderCart();
     act(() => result.current.addToCart(product));
     act(() => result.current.addToCart(photography));
@@ -152,7 +152,7 @@ describe('UC-35 Delete Item (NgocL)', () => {
     expect(result.current.cart.map((item) => item.itemType)).toEqual(['PHOTOGRAPHY_PACKAGE']);
   });
 
-  it('UT-35 UTCID04 stores an empty cart after clearing', () => {
+  it('UT-34 UTCID04 stores an empty cart after clearing', () => {
     const { result } = renderCart();
     act(() => result.current.addToCart(product));
 
@@ -161,7 +161,7 @@ describe('UC-35 Delete Item (NgocL)', () => {
     expect(JSON.parse(localStorage.getItem('vh_cart_guest') ?? 'null')).toEqual([]);
   });
 
-  it('UT-35 UTCID05 creates a fresh line with quantity 1 after a removed item is added again', () => {
+  it('UT-34 UTCID05 creates a fresh line with quantity 1 after a removed item is added again', () => {
     const { result } = renderCart();
     act(() => result.current.addToCart({ ...product, quantity: 4 }));
     act(() => result.current.removeFromCart(result.current.cart[0].id));
@@ -172,8 +172,8 @@ describe('UC-35 Delete Item (NgocL)', () => {
   });
 });
 
-describe('UC-36 Edit Cart Item (NgocL)', () => {
-  it('UT-36 UTCID03 changes the rental start date of an Ao Dai and the shoot date of a package', () => {
+describe('UC-35 Edit Cart Item (NgocL)', () => {
+  it('UT-35 UTCID03 changes the rental start date of an Ao Dai and the shoot date of a package', () => {
     const { result } = renderCart();
     act(() => result.current.addToCart(product));
     act(() => result.current.addToCart(photography));
@@ -186,7 +186,7 @@ describe('UC-36 Edit Cart Item (NgocL)', () => {
     expect(result.current.cart[1].shootDate).toBe('2026-11-16');
   });
 
-  it('UT-36 UTCID04 splits an hourly rental time slot into start and end times', () => {
+  it('UT-35 UTCID04 splits an hourly rental time slot into start and end times', () => {
     const { result } = renderCart();
     act(() => result.current.addToCart({ ...product, rentalType: 'HOURLY' }));
 
@@ -195,7 +195,7 @@ describe('UC-36 Edit Cart Item (NgocL)', () => {
     expect(result.current.cart[0]).toMatchObject({ startTime: '09:00', endTime: '11:00' });
   });
 
-  it('UT-36 UTCID05 stores a photography time slot unchanged', () => {
+  it('UT-35 UTCID05 stores a photography time slot unchanged', () => {
     const { result } = renderCart();
     act(() => result.current.addToCart(photography));
 
@@ -204,7 +204,7 @@ describe('UC-36 Edit Cart Item (NgocL)', () => {
     expect(result.current.cart[0].shootTimeSlot).toBe('14:00-16:00');
   });
 
-  it('UT-36 UTCID06 ignores a negative quantity', () => {
+  it('UT-35 UTCID06 ignores a negative quantity', () => {
     const { result } = renderCart();
     act(() => result.current.addToCart({ ...product, quantity: 2 }));
 
@@ -213,7 +213,7 @@ describe('UC-36 Edit Cart Item (NgocL)', () => {
     expect(result.current.cart[0].quantity).toBe(2);
   });
 
-  it('UT-36 UTCID07 edits only the targeted cart line', () => {
+  it('UT-35 UTCID07 edits only the targeted cart line', () => {
     const { result } = renderCart();
     act(() => result.current.addToCart(product));
     act(() => result.current.addToCart({ ...product, productId: 'product-2' }));
@@ -223,7 +223,7 @@ describe('UC-36 Edit Cart Item (NgocL)', () => {
     expect(result.current.cart.map((item) => item.color)).toEqual(['RED', 'PINK']);
   });
 
-  it('UT-36 UTCID08 leaves the end time empty for a slot without an end', () => {
+  it('UT-35 UTCID08 leaves the end time empty for a slot without an end', () => {
     const { result } = renderCart();
     act(() => result.current.addToCart({ ...product, rentalType: 'HOURLY' }));
 

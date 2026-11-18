@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   DimensionValue,
   Linking,
   Platform,
@@ -10,6 +9,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
+import { TagoAlert, type TagoAlertButton } from '@/components/ui/TagoAlertModal';
 import { Colors, Radius } from '@/constants/theme';
 import { describeGpsFailure, getDeviceGpsLocation } from '@/services/userLocation';
 
@@ -623,18 +623,19 @@ export function TagoMapView({
       }
       // Không còn lấy tâm bản đồ làm vị trí người dùng — báo rõ lý do cho người dùng
       const info = describeGpsFailure(gps.reason);
-      const buttons: Array<{ text: string; style?: 'cancel'; onPress?: () => void }> = [
+      const buttons: TagoAlertButton[] = [
         { text: 'Đóng', style: 'cancel' },
       ];
       if (gps.reason === 'denied' || gps.reason === 'services_off') {
         buttons.push({
           text: 'Mở Cài đặt',
+          style: 'default',
           onPress: () => {
             void Linking.openSettings();
           },
         });
       }
-      Alert.alert(info.title, info.message, buttons);
+      TagoAlert.alert(info.title, info.message, buttons);
     } finally {
       locatingRef.current = false;
       webViewRef.current?.injectJavaScript(

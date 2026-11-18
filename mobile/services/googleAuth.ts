@@ -1,7 +1,28 @@
+import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { NativeModules, Platform } from 'react-native';
+import { TagoAlert } from '@/components/ui/TagoAlertModal';
+import type { SessionUser } from '@/types/auth';
+import { getApiErrorMessage } from '@/utils/apiError';
 
 WebBrowser.maybeCompleteAuthSession();
+
+export type GoogleOAuthPreflightReason = 'MISSING_ADB_REVERSE' | 'BACKEND_DOWN';
+
+export class GoogleOAuthPreflightError extends Error {
+  readonly reason: GoogleOAuthPreflightReason;
+
+  constructor(reason: GoogleOAuthPreflightReason, message: string) {
+    super(message);
+    this.name = 'GoogleOAuthPreflightError';
+    this.reason = reason;
+  }
+}
+
+export type GoogleUnifiedSignInResult =
+  | { status: 'success'; user: SessionUser }
+  | { status: 'cancelled' }
+  | { status: 'browser_opened' };
 
 /**
  * Kiểm tra xem module native RNGoogleSignin có thực sự tồn tại trong binary hiện tại không.
@@ -80,4 +101,150 @@ export function configureGoogleSignIn(): void {
   } catch (err) {
     console.warn('[GoogleAuth] Lỗi khi cấu hình Google Sign-In:', err);
   }
+}
+
+export function resolveGoogleBrowserOAuthTarget(): {
+  browserApiUrl: string;
+  fallbackApiUrl?: string;
+} {
+  const rawApiUrl = (
+    process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'
+  )
+    .trim()
+    .replace(/\/+$/, '');
+
+  if (
+    Platform.OS === 'android' &&
+    (rawApiUrl.includes('10.0.2.2') || rawApiUrl.includes('127.0.0.1'))
+  ) {
+    return {
+      browserApiUrl: rawApiUrl
+        .replace('10.0.2.2', 'localhost')
+        .replace('127.0.0.1', 'localhost'),
+      fallbackApiUrl: rawApiUrl,
+    };
+  }
+
+  return { browserApiUrl: rawApiUrl };
+}
+
+export async function pingOAuthEndpoint(
+  url: string,
+  timeoutMs = 1500,
+): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    await fetch(url, { method: 'GET', signal: controller.signal });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export function extractOAuthCallbackParams(url: string): {
+  code?: string;
+  error?: string;
+} {
+  try {
+    const parsed = Linking.parse(url);
+    const code =
+      typeof parsed.queryParams?.code === 'string'
+        ? parsed.queryParams.code
+        : undefined;
+    const error =
+      typeof parsed.queryParams?.error === 'string'
+        ? parsed.queryParams.error
+        : undefined;
+    return { code, error };
+  } catch {
+    return {};
+  }
+}
+
+export async function signInWithGoogleUnified(params: {
+  loginWithGoogle: (idToken: string) => Promise<SessionUser>;
+  loginWithOAuthCode: (code: string) => Promise<SessionUser>;
+}): Promise<GoogleUnifiedSignInResult> {
+  const googleModule = getGoogleSigninModule();
+  if (googleModule) {
+    try {
+      const { GoogleSignin } = googleModule;
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const signInResult = await GoogleSignin.signIn();
+      const idToken = signInResult.data?.idToken;
+      if (!idToken) {
+        throw new Error('Không nhận được mã xác thực từ Google.');
+      }
+      const user = await params.loginWithGoogle(idToken);
+      return { status: 'success', user };
+    } catch (cause: any) {
+      if (cause?.code === 'SIGN_IN_CANCELLED' || cause?.code === 12501) {
+        return { status: 'cancelled' };
+      }
+      throw cause;
+    }
+  }
+
+  const { browserApiUrl, fallbackApiUrl } = resolveGoogleBrowserOAuthTarget();
+
+  if (Platform.OS === 'android') {
+    const reachable = await pingOAuthEndpoint(browserApiUrl);
+    if (!reachable) {
+      const fallbackReachable = fallbackApiUrl
+        ? await pingOAuthEndpoint(fallbackApiUrl)
+        : false;
+
+      if (fallbackReachable) {
+        throw new GoogleOAuthPreflightError(
+          'MISSING_ADB_REVERSE',
+          `Máy ảo Android chưa mở cầu nối tới ${browserApiUrl}.\n\nHãy chạy lệnh \`npm run reverse\` (hoặc \`adb reverse tcp:3000 tcp:3000\`) trong thư mục mobile rồi thử lại, hoặc dùng Development Build để đăng nhập Google trực tiếp.`,
+        );
+      }
+
+      throw new GoogleOAuthPreflightError(
+        'BACKEND_DOWN',
+        `Không thể kết nối tới Backend (${browserApiUrl}). Hãy kiểm tra server Backend cổng 3000 đang chạy và bật \`npm run reverse\` nếu dùng máy ảo Android.`,
+      );
+    }
+  }
+
+  const redirectUri = Linking.createURL('/oauth/callback');
+  const authUrl = `${browserApiUrl}/auth/google?redirect_uri=${encodeURIComponent(redirectUri)}`;
+
+  const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+  if (result.type === 'success' && result.url) {
+    const { code, error } = extractOAuthCallbackParams(result.url);
+    if (error) {
+      throw new Error('Đăng nhập Google thất bại hoặc bị hủy.');
+    }
+    if (code) {
+      const user = await params.loginWithOAuthCode(code);
+      return { status: 'success', user };
+    }
+  }
+
+  if (result.type === 'cancel' || result.type === 'dismiss') {
+    return { status: 'cancelled' };
+  }
+
+  return { status: 'browser_opened' };
+}
+
+export function presentGoogleAuthError(
+  cause: unknown,
+  fallbackMessage: string,
+): string {
+  if (cause instanceof GoogleOAuthPreflightError) {
+    TagoAlert.alert(
+      'Chưa kết nối được Google OAuth',
+      cause.message,
+      [{ text: 'Đã hiểu', style: 'default' }],
+      { eyebrow: 'KẾT NỐI GOOGLE OAUTH', icon: 'wifi-outline' },
+    );
+    return cause.message.replace(/\n+/g, ' ');
+  }
+  return getApiErrorMessage(cause, fallbackMessage);
 }

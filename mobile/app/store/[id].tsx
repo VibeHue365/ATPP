@@ -28,6 +28,7 @@ import { useProviderStore } from '@/hooks/useProviderStore';
 import type { Product } from '@/types/product';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { formatCampaignRange, isSurchargeCampaign } from '@/utils/campaignPricing';
+import { buildLoginHref } from '@/utils/navigation';
 import {
   detectCityFromText,
   estimateDriveMinutes,
@@ -36,7 +37,10 @@ import {
   openExternalDirections,
   resolveEntityCoords,
 } from '@/utils/geo';
-import { getMediaUrl } from '@/utils/media';
+import {
+  resolveProviderCoverUri,
+  resolveProviderLogoUri,
+} from '@/utils/media';
 
 type SortMode = 'featured' | 'price_asc' | 'price_desc' | 'rating_desc';
 const PAGE_SIZE = 8;
@@ -165,7 +169,7 @@ export default function ProviderStoreScreen() {
 
   const openChat = async () => {
     if (!isAuthenticated) {
-      router.push('/(auth)/login' as Href);
+      router.push(buildLoginHref(`/store/${store._id}`));
       return;
     }
     if (!store.userId) {
@@ -214,8 +218,8 @@ export default function ProviderStoreScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />
         }>
         <View style={s.cover}>
-          {store.media?.coverUrl ? (
-            <Image source={getMediaUrl(store.media.coverUrl)} style={s.coverImage} contentFit="cover" />
+          {resolveProviderCoverUri(store) ? (
+            <Image source={resolveProviderCoverUri(store)} style={s.coverImage} contentFit="cover" />
           ) : (
             <View style={s.coverFallback}>
               <Ionicons name="storefront-outline" size={46} color="#FFD9E2" />
@@ -225,8 +229,8 @@ export default function ProviderStoreScreen() {
 
         <View style={s.profile}>
           <View style={s.logo}>
-            {store.media?.logoUrl ? (
-              <Image source={getMediaUrl(store.media.logoUrl)} style={s.logoImage} contentFit="cover" />
+            {resolveProviderLogoUri(store) ? (
+              <Image source={resolveProviderLogoUri(store)} style={s.logoImage} contentFit="cover" />
             ) : (
               <Ionicons name="storefront" size={30} color={Colors.primary} />
             )}

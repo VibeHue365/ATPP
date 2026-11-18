@@ -439,4 +439,40 @@ describe('UC-62 Manage Schedule (HoangLVM)', () => {
       service.updateSpecificDateSchedule(userId, '2026-11-02', true, []),
     ).rejects.toThrow(new NotFoundException('Provider profile not found'));
   });
+
+  it('unwraps Mongoose media subdocuments cleanly without copying $__parent or _id on updateProfile', async () => {
+    const subdocLikeMedia = {
+      $__parent: {},
+      $__: {},
+      _doc: {},
+      toObject: () => ({
+        _id: new Types.ObjectId(),
+        logoUrl: '/avatar_co_phong.svg',
+        coverUrl: 'https://res.cloudinary.com/demo/hong1.jpg',
+        images: ['a.jpg'],
+      }),
+    };
+    const { service, providersRepository } = createService({
+      provider: {
+        _id: providerId,
+        address: { addressLine: '12 Le Loi' },
+        media: subdocLikeMedia,
+        rentalSettings: {},
+        photographySettings: {},
+      },
+    });
+
+    await service.updateProfile(userId, {
+      media: { logoUrl: 'https://res.cloudinary.com/demo/new_logo.jpg' },
+    });
+
+    const [, updatePayload] = providersRepository.update.mock.calls[0];
+    expect(updatePayload.media).toEqual({
+      logoUrl: 'https://res.cloudinary.com/demo/new_logo.jpg',
+      coverUrl: 'https://res.cloudinary.com/demo/hong1.jpg',
+      images: ['a.jpg'],
+    });
+    expect(updatePayload.media).not.toHaveProperty('$__parent');
+    expect(updatePayload.media).not.toHaveProperty('_id');
+  });
 });

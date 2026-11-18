@@ -44,19 +44,13 @@ export const useNotifications = () => {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    let isMounted = true;
     if (isAuthenticated) {
-      httpClient.request<NotificationItem[]>('/notifications')
-        .then((data) => {
-          if (isMounted) setNotifications(Array.isArray(data) ? data : []);
-        })
-        .catch((e: unknown) => {
-          console.error('Failed to fetch notifications', e);
-        });
+      // Use the single fetch path below. The previous implementation performed
+      // an immediate request and then started polling, doubling every mount.
+      void fetchNotifications();
     }
     const interval = setInterval(fetchNotifications, 30000);
     return () => {
-      isMounted = false;
       clearInterval(interval);
     };
   }, [isAuthenticated, fetchNotifications]);

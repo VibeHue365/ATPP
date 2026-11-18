@@ -31,6 +31,7 @@ type OrdersPanelProps = Pick<ReturnType<typeof useProviderOrderState>,
   resolveRescheduleRequest: (order: Order, item: any, approved: boolean) => Promise<void>;
   changeOrderStatus: (_id: string, apiStatus: string) => Promise<void>;
   onOpenChat: () => void;
+  fetchOrders?: (silent?: boolean, force?: boolean) => Promise<void>;
 };
 
 export function OrdersPanel({
@@ -61,6 +62,7 @@ export function OrdersPanel({
   activePage,
   setActivePage,
   onOpenChat,
+  fetchOrders,
 }: OrdersPanelProps) {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<{ top: number; right: number; bottom: number; left: number } | null>(null);
@@ -76,10 +78,10 @@ export function OrdersPanel({
     return orders.find((o) => o._id === actionMenuId) || null;
   }, [orders, actionMenuId]);
 
-  const handleSelectOrder = (order: Order) => {
+  const handleSelectOrder = React.useCallback((order: Order) => {
     setSelectedOrder(order);
     setSelectedBookingId(order._id);
-  };
+  }, [setSelectedBookingId]);
 
   const handleOpenActionMenu = (e: React.MouseEvent, order: Order) => {
     e.stopPropagation();
@@ -174,7 +176,12 @@ export function OrdersPanel({
             changeOrderStatus={changeOrderStatus}
             onOpenIncidentReport={handleOpenIncidentReport}
             onOpenChat={onOpenChat}
+            onOpenFulfillmentModal={(bookingId) => {
+              setSelectedBookingId(bookingId);
+              setIsDetailModalOpen(true);
+            }}
             toast={toast}
+            fetchOrders={fetchOrders}
           />
         )}
       </div>

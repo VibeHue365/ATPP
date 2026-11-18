@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { type Href, router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import {
+  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -13,54 +14,26 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RequireAuth } from '@/components/auth/RequireAuth';
 import { ListPagination } from '@/components/ui/ListPagination';
-import { EmptyState, ErrorState, LoadingState } from '@/components/ui/ScreenState';
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+} from '@/components/ui/ScreenState';
 import { Colors, FontFamily, Shadow } from '@/constants/theme';
+import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/contexts/NotificationContext';
 import type { NotificationItem } from '@/types/notification';
+import {
+  formatNotification,
+  type FormattedNotification,
+} from '@/utils/notificationFormatter';
+import { openNotificationData } from '@/utils/notificationNavigation';
+import {
+  getCurrentPortalMode,
+  isPartnerPortalUser,
+} from '@/utils/navigation';
 
-type Filter = 'ALL' | 'UNREAD' | 'ACTION' | 'BOOKING';
-const config: Record<
-  string,
-  { icon: keyof typeof Ionicons.glyphMap; color: string; bg: string; label: string }
-> = {
-  PAYMENT: {
-    icon: 'card-outline',
-    color: Colors.primary,
-    bg: '#FFF0F3',
-    label: 'THANH TOÁN',
-  },
-  BOOKING: {
-    icon: 'calendar-outline',
-    color: Colors.primary,
-    bg: '#FFF0F3',
-    label: 'LỊCH HẸN',
-  },
-  HANDOVER: {
-    icon: 'bag-handle-outline',
-    color: Colors.warning,
-    bg: '#FFFBEB',
-    label: 'BÀN GIAO ĐỒ',
-  },
-  REFUND: {
-    icon: 'return-down-back-outline',
-    color: Colors.success,
-    bg: '#EDF9F2',
-    label: 'HOÀN TIỀN CỌC',
-  },
-  DISPUTE: {
-    icon: 'alert-circle-outline',
-    color: Colors.error,
-    bg: '#FDECEE',
-    label: 'HỖ TRỢ / XỬ LÝ',
-  },
-  SYSTEM: {
-    icon: 'notifications-outline',
-    color: '#5F5E5E',
-    bg: '#F5F3F3',
-    label: 'HỆ THỐNG',
-  },
-};
-const actionTypes = new Set(['PAYMENT', 'HANDOVER', 'DISPUTE']);
+type Filter = 'ALL' | 'UNREAD' | 'ACTION' | 'RENTAL' | 'PAYMENT';
 
 export default function Screen() {
   return (
@@ -71,45 +44,87 @@ export default function Screen() {
 }
 
 function Notifications() {
-  const { notifications, unreadCount, loading, error, reload, markRead, markAllRead } =
-    useNotifications();
+  const { user } = useAuth();
+  const {
+    notifications,
+    unreadCount,
+    loading,
+    error,
+    osPermissionStatus,
+    requestOsPermission,
+    reload,
+    markRead,
+    markAllRead,
+  } = useNotifications();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<Filter>('ALL');
   const [page, setPage] = useState(1);
 
+  useFocusEffect(
+    useCallback(() => {
+      void reload(true);
+      return undefined;
+    }, [reload]),
+  );
+
+  const enriched = useMemo(
+    () =>
+      notifications.map((raw) => ({
+        raw,
+        formatted: formatNotification(raw),
+      })),
+    [notifications],
+  );
+
   const items = useMemo(
     () =>
-      notifications.filter((n) => {
-        const text = `${n.title} ${n.content}`.toLowerCase();
-        if (q && !text.includes(q.toLowerCase())) return false;
-        if (filter === 'UNREAD') return !n.isRead;
-        if (filter === 'ACTION') return actionTypes.has(n.type);
-        if (filter === 'BOOKING') return n.type === 'BOOKING';
+      enriched.filter(({ raw, formatted }) => {
+        const text =
+          `${formatted.title} ${formatted.content} ${formatted.categoryLabel} ${raw.title} ${raw.content}`.toLowerCase();
+        if (q.trim() && !text.includes(q.trim().toLowerCase())) return false;
+        if (filter === 'UNREAD') return !raw.isRead;
+        if (filter === 'ACTION') return formatted.actionRequired;
+        if (filter === 'RENTAL') {
+          return ['CONTRACT', 'HANDOVER', 'RETURN', 'BOOKING', 'WEATHER'].includes(
+            formatted.category,
+          );
+        }
+        if (filter === 'PAYMENT') {
+          return ['PAYMENT', 'REFUND', 'DISPUTE'].includes(formatted.category);
+        }
         return true;
       }),
-    [notifications, q, filter]
+    [enriched, q, filter],
   );
 
   const totalPages = Math.max(1, Math.ceil(items.length / 10));
   const safePage = Math.min(page, totalPages);
   const visible = items.slice((safePage - 1) * 10, safePage * 10);
 
-  const open = async (item: NotificationItem) => {
-    if (!item.isRead) await markRead(item._id);
-    const meta = item.metadata ?? {};
-    const nested =
-      typeof meta.booking === 'object' && meta.booking !== null
-        ? (meta.booking as Record<string, unknown>)
-        : {};
-    const bookingId = String(meta.bookingId ?? nested._id ?? '');
-    const paymentCode = String(meta.paymentCode ?? meta.code ?? '');
-    if (paymentCode)
-      router.push({ pathname: '/payment/result', params: { code: paymentCode } } as unknown as Href);
-    else if (bookingId) router.push(`/booking/${bookingId}` as Href);
+  const open = async (raw: NotificationItem, formatted: FormattedNotification) => {
+    if (!raw.isRead) {
+      await markRead(raw._id).catch(() => {});
+    }
+
+    const portal = getCurrentPortalMode();
+    const isProviderContext =
+      portal === 'provider' || (portal !== 'customer' && isPartnerPortalUser(user));
+
+    openNotificationData(
+      {
+        ...(raw.metadata ?? {}),
+        bookingId: formatted.bookingId,
+        contractId: formatted.contractId,
+        paymentCode: formatted.paymentCode,
+        targetRole: formatted.targetRole,
+      },
+      { isProviderPortal: isProviderContext },
+    );
   };
 
-  if (loading && !notifications.length)
+  if (loading && !notifications.length) {
     return <LoadingState label="Đang tải trung tâm thông báo..." />;
+  }
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -138,10 +153,39 @@ function Notifications() {
 
       <ScrollView
         refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={reload} tintColor={Colors.primary} />
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={() => void reload(false)}
+            tintColor={Colors.primary}
+          />
         }
         contentContainerStyle={s.content}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+      >
+        {(osPermissionStatus === 'denied' || osPermissionStatus === 'undetermined') && (
+          <Pressable
+            style={s.permBanner}
+            onPress={() => {
+              if (osPermissionStatus === 'denied') {
+                void Linking.openSettings();
+              } else {
+                void requestOsPermission();
+              }
+            }}
+          >
+            <View style={s.permIcon}>
+              <Ionicons name="notifications-off-outline" size={18} color="#B45309" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.permTitle}>Thông báo trên điện thoại đang tắt</Text>
+              <Text style={s.permSub}>
+                Chạm để bật thông báo bàn giao, trả đồ và hoàn cọc ngay trên thanh trạng thái.
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#B45309" />
+          </Pressable>
+        )}
+
         <View style={s.search}>
           <Ionicons name="search-outline" size={18} color="#8F8E8E" />
           <TextInput
@@ -150,7 +194,7 @@ function Notifications() {
               setQ(value);
               setPage(1);
             }}
-            placeholder="Tìm theo mã vé, tên cổ phục, nội dung..."
+            placeholder="Tìm theo mã vé, hợp đồng, bàn giao đồ..."
             placeholderTextColor="#8F8E8E"
             style={s.input}
           />
@@ -164,13 +208,15 @@ function Notifications() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={s.filters}>
+          contentContainerStyle={s.filters}
+        >
           {(
             [
               ['ALL', `Tất cả (${notifications.length})`],
               ['UNREAD', `Chưa đọc (${unreadCount})`],
               ['ACTION', 'Cần xử lý'],
-              ['BOOKING', 'Lịch hẹn'],
+              ['RENTAL', 'Thuê đồ & Hợp đồng'],
+              ['PAYMENT', 'Thanh toán & Cọc'],
             ] as [Filter, string][]
           ).map(([key, label]) => (
             <Pressable
@@ -179,47 +225,81 @@ function Notifications() {
                 setFilter(key);
                 setPage(1);
               }}
-              style={[s.chip, filter === key && s.chipOn]}>
-              <Text style={[s.chipText, filter === key && s.chipTextOn]}>{label}</Text>
+              style={[s.chip, filter === key && s.chipOn]}
+            >
+              <Text style={[s.chipText, filter === key && s.chipTextOn]}>
+                {label}
+              </Text>
             </Pressable>
           ))}
         </ScrollView>
 
         {error ? (
-          <ErrorState message={error} onRetry={reload} />
+          <ErrorState message={error} onRetry={() => void reload(false)} />
         ) : visible.length === 0 ? (
           <EmptyState
             title="Chưa có thông báo mới"
-            message="Mọi cập nhật về trạng thái giữ đồ, bàn giao cổ phục, hoàn trả tiền cọc và bàn giao ảnh chụp sẽ hiển thị tại đây."
+            message="Mọi cập nhật về hợp đồng điện tử, bàn giao cổ phục, hoàn trả tiền cọc và bàn giao ảnh chụp sẽ hiển thị tại đây."
           />
         ) : (
           <View style={s.list}>
-            {visible.map((item) => (
-              <NotificationCard key={item._id} item={item} onPress={() => void open(item)} />
+            {visible.map(({ raw, formatted }) => (
+              <NotificationCard
+                key={raw._id}
+                raw={raw}
+                formatted={formatted}
+                onPress={() => void open(raw, formatted)}
+              />
             ))}
           </View>
         )}
-        <ListPagination page={safePage} totalPages={totalPages} onChange={setPage} />
+        <ListPagination
+          page={safePage}
+          totalPages={totalPages}
+          onChange={setPage}
+        />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function NotificationCard({ item, onPress }: { item: NotificationItem; onPress: () => void }) {
-  const c = config[item.type] ?? config.SYSTEM;
+function NotificationCard({
+  raw,
+  formatted,
+  onPress,
+}: {
+  raw: NotificationItem;
+  formatted: FormattedNotification;
+  onPress: () => void;
+}) {
   return (
-    <Pressable onPress={onPress} style={[s.card, !item.isRead && s.unread]}>
-      <View style={[s.icon, { backgroundColor: c.bg }]}>
-        <Ionicons name={c.icon} size={21} color={c.color} />
+    <Pressable onPress={onPress} style={[s.card, !raw.isRead && s.unread]}>
+      <View style={[s.icon, { backgroundColor: formatted.bg }]}>
+        <Ionicons name={formatted.icon} size={21} color={formatted.color} />
       </View>
       <View style={{ flex: 1 }}>
         <View style={s.cardTop}>
-          <Text style={[s.type, { color: c.color }]}>{c.label}</Text>
-          <Text style={s.time}>{formatTime(item.createdAt)}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={[s.type, { color: formatted.color }]}>
+              {formatted.categoryLabel}
+            </Text>
+            {formatted.actionRequired && (
+              <View style={s.actionPill}>
+                <Text style={s.actionPillText}>CẦN XÁC NHẬN</Text>
+              </View>
+            )}
+          </View>
+          <Text style={s.time}>{formatTime(raw.createdAt)}</Text>
         </View>
-        <Text style={s.cardTitle}>{item.title}</Text>
-        <Text style={s.body}>{item.content}</Text>
-        {!item.isRead && <Text style={s.action}>Xem chi tiết ›</Text>}
+        <Text style={s.cardTitle}>{formatted.title}</Text>
+        <Text style={s.body}>{formatted.content}</Text>
+        <Text style={s.action}>
+          {formatted.bookingId
+            ? 'Mở chi tiết đơn & hợp đồng ›'
+            : formatted.contractId
+              ? 'Mở hợp đồng điện tử ›'
+              : 'Xem chi tiết ›'}
+        </Text>
       </View>
     </Pressable>
   );
@@ -289,6 +369,36 @@ const s = StyleSheet.create({
     color: Colors.primary,
   },
   content: { padding: 16, paddingBottom: 38, gap: 14 },
+  permBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  permIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  permTitle: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 12,
+    color: '#92400E',
+  },
+  permSub: {
+    fontFamily: FontFamily.body,
+    fontSize: 10.5,
+    color: '#B45309',
+    marginTop: 2,
+    lineHeight: 15,
+  },
   search: {
     height: 46,
     borderRadius: 14,
@@ -337,8 +447,21 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
+  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
   type: { fontFamily: FontFamily.bodyBold, fontSize: 9.5, letterSpacing: 0.5 },
+  actionPill: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+  },
+  actionPillText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 8,
+    color: '#B45309',
+  },
   time: { fontFamily: FontFamily.body, fontSize: 10.5, color: '#8F8E8E' },
   cardTitle: {
     fontFamily: FontFamily.bodyBold,

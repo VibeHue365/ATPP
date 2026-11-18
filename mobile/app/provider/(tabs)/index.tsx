@@ -6,17 +6,24 @@ import {
   StyleSheet,
   RefreshControl,
   ActivityIndicator,
-  Alert,
   Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { router, type Href } from 'expo-router';
+import { router, useFocusEffect, type Href } from 'expo-router';
+import { chatApi } from '@/apis/chatApi';
 import { providerApi } from '@/apis/providerApi';
 import { useToast } from '@/contexts/ToastContext';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { FontFamily } from '@/constants/theme';
 import { TagoAlert } from '@/components/ui/TagoAlertModal';
+import { appStorage } from '@/utils/storage';
+import { openOrderCustomerChat } from '@/utils/chatNavigation';
+import {
+  getRentalItems,
+  isPhotographyItem,
+  resolveBookingDisplayState,
+} from '@/utils/rentalState';
 import type {
   ProviderProfile,
   ProviderOverviewResponse,
@@ -35,18 +42,24 @@ import { InventoryProgressCard } from '@/components/provider/InventoryProgressCa
 import { ReputationIncidentCard } from '@/components/provider/ReputationIncidentCard';
 import { ProviderReviewsTrustModal } from '@/components/provider/ProviderReviewsTrustModal';
 import { OrderCard } from '@/components/provider/orders/OrderCard';
-import { OrderDetailModal } from '@/components/provider/orders/OrderDetailModal';
+import {
+  OrderDetailModal,
+  type ProviderRentalActionType,
+} from '@/components/provider/orders/OrderDetailModal';
 import { EscrowRefundModal } from '@/components/provider/orders/EscrowRefundModal';
 import {
   ProviderOrderWorkflowModal,
   type ProviderWorkflowMode,
 } from '@/components/provider/orders/ProviderOrderWorkflowModal';
-import { AddProductModal } from '@/components/provider/store/AddProductModal';
+import { setPendingProductFormState } from '@/utils/providerFormBridge';
 import { ProviderJobNavigationModal } from '@/components/provider/ProviderJobNavigationModal';
+
+const PROVIDER_ONLINE_PREF_KEY = 'vh_provider_online_display';
 
 export default function ProviderDashboardScreen() {
   const { show } = useToast();
-  const { unreadCount } = useNotifications();
+  const { unreadCount, bookingSyncVersion, bumpBookingSync, pushLocalBanner } =
+    useNotifications();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -57,6 +70,7 @@ export default function ProviderDashboardScreen() {
   const [walletData, setWalletData] = useState<ProviderWalletResponse | null>(null);
   const [inventoryItems, setInventoryItems] = useState<InventorySummaryItem[] | null>(null);
   const [bookings, setBookings] = useState<any[]>([]);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
 
   // Filter states
   const [filterCategory, setFilterCategory] = useState<FilterCategory>('ALL');
@@ -67,7 +81,7 @@ export default function ProviderDashboardScreen() {
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [refundModalVisible, setRefundModalVisible] = useState(false);
   const [workflowMode, setWorkflowMode] = useState<ProviderWorkflowMode>(null);
-  const [addProductModalVisible, setAddProductModalVisible] = useState(false);
+  const [workflowItemId, setWorkflowItemId] = useState<string | null>(null);
   const [reviewsTrustModalVisible, setReviewsTrustModalVisible] = useState(false);
   const [navModalVisible, setNavModalVisible] = useState(false);
   const [navOrder, setNavOrder] = useState<any | null>(null);
@@ -82,17 +96,24 @@ export default function ProviderDashboardScreen() {
   // Load real data from all backend endpoints
   const fetchAllData = useCallback(async () => {
     try {
-      const [profRes, overRes, walletRes, invRes, bookRes] = await Promise.allSettled([
-        providerApi.getMe(),
-        providerApi.getOverview(),
-        providerApi.getWallet(),
-        providerApi.getInventorySummary(),
-        providerApi.getBookings(),
-      ]);
+      const [profRes, overRes, walletRes, invRes, bookRes, chatRes, onlinePref] =
+        await Promise.allSettled([
+          providerApi.getMe(),
+          providerApi.getOverview(),
+          providerApi.getWallet(),
+          providerApi.getInventorySummary(),
+          providerApi.getBookings(),
+          chatApi.rooms(),
+          appStorage.get(PROVIDER_ONLINE_PREF_KEY),
+        ]);
 
       if (profRes.status === 'fulfilled' && profRes.value) {
         setProfile(profRes.value);
-        setIsOnline(profRes.value.isAcceptingBookings ?? true);
+        if (onlinePref.status === 'fulfilled' && onlinePref.value !== null) {
+          setIsOnline(onlinePref.value !== '0');
+        } else {
+          setIsOnline(profRes.value.isAcceptingBookings ?? true);
+        }
       }
 
       if (overRes.status === 'fulfilled' && overRes.value) {
@@ -107,29 +128,49 @@ export default function ProviderDashboardScreen() {
         setInventoryItems(invRes.value);
       }
 
+      if (chatRes.status === 'fulfilled' && Array.isArray(chatRes.value)) {
+        const totalUnread = chatRes.value.reduce(
+          (sum, room) => sum + Number(room.unreadCount || 0),
+          0,
+        );
+        setUnreadChatCount(totalUnread);
+      }
+
       if (bookRes.status === 'fulfilled' && Array.isArray(bookRes.value)) {
         setBookings(bookRes.value);
+        setSelectedOrder((prev: any) =>
+          prev?._id
+            ? bookRes.value.find((b: any) => b._id === prev._id) ?? prev
+            : prev,
+        );
 
-        // Check if any booking schedule has an active location change request
+        let foundWeather: WeatherLocationChangeAlert | null = null;
         for (const b of bookRes.value) {
-          const photoshootSchedule = b?.photoshootSchedule;
+          const photoshootSchedule =
+            b?.photoshootSchedule ||
+            b?.schedules?.find((s: any) => s.scheduleType === 'PHOTOSHOOT');
           if (
             photoshootSchedule?.locationChangeRequest &&
             photoshootSchedule.locationChangeRequest.status === 'PENDING'
           ) {
-            setWeatherAlert({
+            foundWeather = {
               bookingId: b._id,
               scheduleId: photoshootSchedule._id,
-              currentLocationName: b.location?.address || 'Cung An Định',
+              currentLocationName:
+                b.location?.address ||
+                photoshootSchedule.locationAddress ||
+                'Điểm chụp tại Huế',
               suggestedLocation:
+                photoshootSchedule.locationChangeRequest.requestedLocation?.address ||
                 photoshootSchedule.locationChangeRequest.address ||
-                'Cung Diên Thọ hoặc Chụp trong Studio',
-              rainStopDuration: 'Trời ngớt sau 40p',
+                'Điểm chụp thay thế trong mái vòm / Studio',
+              rainStopDuration: 'Đề xuất đổi điểm chụp do thời tiết',
               status: 'PENDING',
-            });
+            };
             break;
           }
         }
+        setWeatherAlert(foundWeather);
       }
     } catch {
       show('Không thể tải mới dữ liệu đối tác', 'error');
@@ -143,25 +184,35 @@ export default function ProviderDashboardScreen() {
     void fetchAllData();
   }, [fetchAllData]);
 
+  useEffect(() => {
+    if (bookingSyncVersion > 0) {
+      void fetchAllData();
+    }
+  }, [bookingSyncVersion, fetchAllData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void fetchAllData();
+      return undefined;
+    }, [fetchAllData]),
+  );
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     void fetchAllData();
   }, [fetchAllData]);
 
-  // Online/Offline switch
+  // Toggle store availability locally without triggering forbidden field errors
   const handleToggleOnline = async () => {
     const nextState = !isOnline;
     setIsOnline(nextState);
-    try {
-      await providerApi.updateProfile({ isAcceptingBookings: nextState });
-      show(
-        nextState ? 'Đã bật trạng thái nhận đơn trực tiếp' : 'Đã tạm nghỉ nhận đơn mới',
-        'success',
-      );
-    } catch {
-      setIsOnline(!nextState);
-      show('Lỗi khi cập nhật trạng thái', 'error');
-    }
+    await appStorage.set(PROVIDER_ONLINE_PREF_KEY, nextState ? '1' : '0');
+    show(
+      nextState
+        ? 'Đã bật hiển thị sẵn sàng nhận đơn & lịch chụp'
+        : 'Đã tạm ẩn trạng thái nhận đơn trên ứng dụng',
+      'success',
+    );
   };
 
   // Switch to customer mode
@@ -219,8 +270,40 @@ export default function ProviderDashboardScreen() {
     );
   };
 
-  // Start photoshoot session
+  // Start photoshoot session (guarded so DEPOSIT_PAID must be confirmed first)
   const handleStartSession = async (bookingId?: string) => {
+    if (!bookingId) {
+      show('Không tìm thấy mã đơn ca chụp để cập nhật', 'error');
+      return;
+    }
+    const matched = bookings.find((b) => b._id === bookingId);
+    if (matched) {
+      const stage = resolveBookingDisplayState(matched, 'provider').stage;
+      if (stage === 'PENDING_PAYMENT' || stage === 'DRAFT') {
+        show('Đơn hàng này khách chưa thanh toán cọc, chưa thể xác nhận hoặc bắt đầu.', 'info');
+        return;
+      }
+      if (stage === 'DEPOSIT_PAID') {
+        TagoAlert.alert(
+          'Cần xác nhận nhận lịch trước',
+          'Khách đã thanh toán cọc nhưng bạn chưa xác nhận nhận lịch này. Bạn muốn xác nhận nhận lịch ngay?',
+          [
+            { text: 'Đóng', style: 'cancel' },
+            {
+              text: 'Xác nhận nhận lịch',
+              onPress: () =>
+                void handleStatusChange(
+                  matched,
+                  'CONFIRMED',
+                  'Đã xác nhận nhận lịch chụp',
+                ),
+            },
+          ],
+        );
+        return;
+      }
+    }
+
     TagoAlert.alert(
       'Bắt đầu ca chụp',
       'Bạn đang gặp khách và sẵn sàng bắt đầu ca chụp ảnh?',
@@ -230,16 +313,14 @@ export default function ProviderDashboardScreen() {
           text: 'Bắt đầu ngay',
           style: 'default',
           onPress: async () => {
-            if (bookingId) {
-              try {
-                await providerApi.startSession(bookingId);
-                show('Đã bắt đầu ca chụp thành công!', 'success');
-                void fetchAllData();
-              } catch {
-                show('Không thể cập nhật trạng thái ca chụp', 'error');
-              }
-            } else {
-              show('Ca chụp đã được kích hoạt thành công!', 'success');
+            try {
+              await providerApi.startSession(bookingId);
+              bumpBookingSync(bookingId);
+              show('Đã bắt đầu ca chụp thành công!', 'success');
+              void fetchAllData();
+            } catch (e: any) {
+              const msg = e?.response?.data?.message || 'Không thể cập nhật trạng thái ca chụp';
+              show(Array.isArray(msg) ? msg[0] : msg, 'error');
             }
           },
         },
@@ -247,122 +328,213 @@ export default function ProviderDashboardScreen() {
     );
   };
 
-  // Withdraw money
+  // Show transparent wallet reconciliation guidance instead of a simulated withdrawal
   const handleWithdraw = () => {
     const available = walletData?.wallet?.availableBalance ?? 0;
     TagoAlert.alert(
-      'Rút doanh thu về tài khoản',
-      `Số dư khả dụng: ${available.toLocaleString('vi-VN')} đ.\n\nTiền sẽ được chuyển thẳng về tài khoản ngân hàng đã liên kết trong vòng 30 phút. Bạn có muốn tiếp tục?`,
-      [
-        { text: 'Để sau', style: 'cancel' },
-        {
-          text: 'Xác nhận rút',
-          style: 'default',
-          onPress: () => {
-            show('Yêu cầu rút tiền đã được gửi tới hệ thống TàGo', 'success');
-          },
-        },
-      ],
+      'Đối soát & Rút doanh thu ví TàGo',
+      `Số dư khả dụng hiện tại: ${available.toLocaleString('vi-VN')} đ.\nTiền cọc Escrow đang tạm giữ: ${escrowHeldAmount.toLocaleString('vi-VN')} đ.\n\nKhoản doanh thu khả dụng được hệ thống TàGo tổng hợp đối soát định kỳ về tài khoản ngân hàng đã liên kết. Nếu cần đối soát sớm, vui lòng liên hệ TàGo Care.`,
+      [{ text: 'Đã hiểu', style: 'default' }],
     );
   };
 
-  // Order Management Actions right on Home screen (100% synced with Web)
+  // Order Management Actions right on Home screen (100% synced with RentalFulfillment + Photoshoot)
   const handleStatusChange = async (order: any, nextStatus: string, note?: string) => {
     setActionLoading(true);
     try {
       await providerApi.updateBookingStatus(order._id, nextStatus, { note });
+      bumpBookingSync(order._id);
       show(`Đã cập nhật trạng thái đơn #${order.bookingCode || ''}!`, 'success');
       setDetailModalVisible(false);
       void fetchAllData();
     } catch (e: any) {
       const msg = e?.response?.data?.message || 'Không thể cập nhật trạng thái đơn hàng';
-      show(msg, 'error');
+      show(Array.isArray(msg) ? msg[0] : msg, 'error');
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handlePressPrimaryOrderAction = (order: any) => {
-    const s = order.status || 'CONFIRMED';
-    const type = order.bookingType || 'PRODUCT';
+  const handleRentalAction = async (
+    order: any,
+    action: ProviderRentalActionType,
+    itemId?: string,
+  ) => {
+    const myRentalItems = getRentalItems(order, true);
+    const targetItem =
+      (itemId ? myRentalItems.find((it) => it._id === itemId) : null) ??
+      myRentalItems[0];
+    const resolvedItemId = targetItem?._id;
 
-    setSelectedOrder(order);
+    if (action === 'HANDOVER' || action === 'REPORT_INCIDENT') {
+      setDetailModalVisible(false);
+      setSelectedOrder(order);
+      setWorkflowItemId(resolvedItemId || null);
+      setWorkflowMode(action === 'HANDOVER' ? 'HANDOVER' : 'REPORT_INCIDENT');
+      return;
+    }
 
-    if (s === 'RETURNED') {
+    if (!resolvedItemId) {
+      show('Không tìm thấy sản phẩm thuê trong đơn để thao tác', 'error');
+      return;
+    }
+
+    if (action === 'CONFIRM_NO_INCIDENT') {
+      setDetailModalVisible(false);
+      setSelectedOrder(order);
+      setWorkflowItemId(resolvedItemId);
       setRefundModalVisible(true);
       return;
     }
 
-    if (type === 'PRODUCT' && (s === 'DEPOSIT_PAID' || s === 'CONFIRMED')) {
+    setActionLoading(true);
+    try {
+      if (action === 'READY') {
+        const targets = itemId
+          ? [targetItem]
+          : myRentalItems.filter(
+              (it) => !it.rentalFulfillment?.status || it.rentalFulfillment.status === 'PENDING',
+            );
+        for (const it of targets.length ? targets : [targetItem]) {
+          await providerApi.markRentalReady(order._id, it._id);
+        }
+        show('Đã soạn xong áo! Hãy tải ảnh hiện trạng để bàn giao.', 'success');
+      } else if (action === 'RETURNED') {
+        const targets = itemId
+          ? [targetItem]
+          : myRentalItems.filter(
+              (it) => it.rentalFulfillment?.status === 'CUSTOMER_RETURN_REQUESTED',
+            );
+        for (const it of targets.length ? targets : [targetItem]) {
+          await providerApi.markReturned(order._id, it._id, {
+            note: 'Cửa hàng xác nhận đã nhận lại cổ phục từ khách.',
+          });
+        }
+        show('Đã xác nhận nhận lại áo! Hãy kiểm tra & hoàn cọc.', 'success');
+      } else if (action === 'CLEANING_COMPLETED') {
+        const targets = itemId
+          ? [targetItem]
+          : myRentalItems.filter((it) => it.rentalFulfillment?.status === 'RETURNED');
+        for (const it of targets.length ? targets : [targetItem]) {
+          await providerApi.markCleaningCompleted(order._id, it._id);
+        }
+        show('Đã hoàn tất giặt ủi & mở khóa kho!', 'success');
+      }
+      bumpBookingSync(order._id);
+      setDetailModalVisible(false);
+      void fetchAllData();
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || 'Không thể thực hiện thao tác thuê đồ';
+      show(Array.isArray(msg) ? msg[0] : msg, 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleOpenOrderDetail = (order: any) => {
+    setSelectedOrder(order);
+    setDetailModalVisible(true);
+    if (order?._id) {
+      void providerApi
+        .getBookingDetail(order._id)
+        .then((detail) => {
+          if (detail?._id === order._id) {
+            setSelectedOrder((prev: any) =>
+              prev?._id === detail._id
+                ? { ...prev, ...detail, incident: prev.incident ?? detail.activeIncident }
+                : prev,
+            );
+          }
+        })
+        .catch(() => undefined);
+    }
+  };
+
+  const handlePressPrimaryOrderAction = (order: any) => {
+    const display = resolveBookingDisplayState(order, 'provider');
+    const stage = display.stage;
+    const isPhotoOnly = display.isPhotoshootOnly;
+
+    setSelectedOrder(order);
+
+    if (stage === 'DEPOSIT_PAID') {
+      void handleStatusChange(
+        order,
+        'CONFIRMED',
+        isPhotoOnly
+          ? 'Đã chấp nhận lịch chụp'
+          : 'Đã xác nhận đơn và bắt đầu chuẩn bị cổ phục',
+      );
+      return;
+    }
+
+    if (stage === 'PREPARING') {
+      if (isPhotoOnly) {
+        TagoAlert.alert(
+          'Bắt đầu buổi chụp',
+          'Xác nhận bắt đầu ca chụp ảnh cho khách hàng?',
+          [
+            { text: 'Hủy', style: 'cancel' },
+            {
+              text: 'Bắt đầu ngay',
+              onPress: () =>
+                void handleStatusChange(order, 'IN_PROGRESS', 'Bắt đầu buổi chụp'),
+            },
+          ],
+        );
+      } else {
+        void handleRentalAction(order, 'READY');
+      }
+      return;
+    }
+
+    if (stage === 'READY_NEEDS_HANDOVER_PHOTOS') {
+      const target = getRentalItems(order, true).find(
+        (it) => it.rentalFulfillment?.status === 'READY_FOR_PICKUP',
+      );
+      setWorkflowItemId(target?._id || null);
       setWorkflowMode('HANDOVER');
       return;
     }
 
-    if (
-      (type === 'PHOTOGRAPHY' || type === 'COMBO') &&
-      s === 'DEPOSIT_PAID'
-    ) {
-      TagoAlert.alert(
-        'Chấp nhận lịch chụp',
-        `Xác nhận nhận lịch chụp cho khách ${
-          order.customerId?.profile?.fullName || order.contactInfo?.fullName || 'khách hàng'
-        }?`,
-        [
-          { text: 'Hủy', style: 'cancel' },
-          {
-            text: 'Chấp nhận',
-            onPress: () => handleStatusChange(order, 'CONFIRMED', 'Chấp nhận lịch chụp'),
-          },
-        ],
-      );
+    if (stage === 'IN_RENTAL' && display.isCombo && !order.photosApproved) {
+      void handleStatusChange(order, 'IN_PROGRESS', 'Bắt đầu buổi chụp Combo');
       return;
     }
 
-    if (
-      (type === 'PHOTOGRAPHY' || type === 'COMBO') &&
-      s === 'CONFIRMED'
-    ) {
-      TagoAlert.alert(
-        'Bắt đầu buổi chụp',
-        'Xác nhận bắt đầu ca chụp ảnh cho khách hàng?',
-        [
-          { text: 'Hủy', style: 'cancel' },
-          {
-            text: 'Bắt đầu ngay',
-            onPress: () => handleStatusChange(order, 'IN_PROGRESS', 'Bắt đầu buổi chụp'),
-          },
-        ],
-      );
-      return;
-    }
-
-    if (
-      (type === 'PHOTOGRAPHY' || type === 'COMBO') &&
-      s === 'IN_PROGRESS'
-    ) {
+    if (stage === 'IN_PROGRESS') {
+      setWorkflowItemId(null);
       setWorkflowMode('DELIVER_PHOTOS');
       return;
     }
 
-    if (
-      (type === 'PRODUCT' && s === 'PICKED_UP') ||
-      (type === 'COMBO' && s === 'COMBO_PHOTOS_APPROVED')
-    ) {
+    if (stage === 'CUSTOMER_RETURN_REQUESTED') {
       TagoAlert.alert(
-        'Xác nhận đã trả đồ',
-        'Khách hàng đã trả trang phục nguyên vẹn tại quầy?',
+        'Xác nhận đã nhận lại cổ phục',
+        'Khách hàng đã mang áo trả lại tại tiệm? Chuyển sang kiểm tra để giải phóng tiền cọc.',
         [
           { text: 'Hủy', style: 'cancel' },
           {
-            text: 'Đã nhận trả đồ',
-            onPress: () => handleStatusChange(order, 'RETURNED', 'Khách đã trả trang phục'),
+            text: 'Xác nhận đã nhận lại',
+            onPress: () => void handleRentalAction(order, 'RETURNED'),
           },
         ],
       );
       return;
     }
 
-    setDetailModalVisible(true);
+    if (stage === 'RETURNED_NEEDS_INSPECTION') {
+      setWorkflowItemId(null);
+      setRefundModalVisible(true);
+      return;
+    }
+
+    if (stage === 'CLEANING_AFTER_REFUND') {
+      void handleRentalAction(order, 'CLEANING_COMPLETED');
+      return;
+    }
+
+    handleOpenOrderDetail(order);
   };
 
   const handlePressSecondaryOrderAction = (
@@ -371,10 +543,20 @@ export default function ProviderDashboardScreen() {
   ) => {
     setSelectedOrder(order);
     if (action === 'INCIDENT') {
+      const target = getRentalItems(order, true)[0];
+      setWorkflowItemId(target?._id || null);
       setWorkflowMode('REPORT_INCIDENT');
     } else if (action === 'CANCEL') {
+      setWorkflowItemId(null);
       setWorkflowMode('CANCEL_ORDER');
     } else if (action === 'RESCHEDULE_APPROVE' || action === 'RESCHEDULE_REJECT') {
+      const pendingItem = order.items?.find(
+        (it: any) => it?.rescheduleRequest?.status === 'PENDING',
+      );
+      if (!pendingItem?._id) {
+        show('Không tìm thấy item yêu cầu đổi lịch', 'error');
+        return;
+      }
       const approved = action === 'RESCHEDULE_APPROVE';
       TagoAlert.alert(
         approved ? 'Chấp nhận dời lịch' : 'Từ chối dời lịch',
@@ -388,7 +570,13 @@ export default function ProviderDashboardScreen() {
             style: approved ? 'default' : 'destructive',
             onPress: async () => {
               try {
-                await providerApi.resolveReschedule(order._id, approved);
+                await providerApi.resolveReschedule(order._id, pendingItem._id, {
+                  approved,
+                  note: approved
+                    ? 'Đối tác chấp thuận đổi lịch thuê'
+                    : 'Đối tác từ chối đổi lịch do trùng lịch',
+                });
+                bumpBookingSync(order._id);
                 show(
                   approved ? 'Đã chấp nhận yêu cầu dời lịch!' : 'Đã từ chối yêu cầu dời lịch',
                   'success',
@@ -411,104 +599,302 @@ export default function ProviderDashboardScreen() {
     if (!selectedOrder) return;
     setActionLoading(true);
     try {
-      await providerApi.updateBookingStatus(selectedOrder._id, 'COMPLETED', {
-        note: 'Đã kiểm tra áo nguyên vẹn & giải ngân tiền cọc Escrow',
+      const myRentalItems = getRentalItems(selectedOrder, true);
+      const targets = workflowItemId
+        ? myRentalItems.filter((it) => it._id === workflowItemId)
+        : myRentalItems.filter((it) => it.rentalFulfillment?.status === 'RETURNED');
+      const finalTargets = targets.length > 0 ? targets : myRentalItems;
+
+      if (finalTargets.length === 0) {
+        show('Không tìm thấy áo dài thuê để hoàn cọc', 'error');
+        setActionLoading(false);
+        return;
+      }
+
+      for (const it of finalTargets) {
+        await providerApi.confirmNoIncident(
+          selectedOrder._id,
+          it._id,
+          'Đã kiểm tra áo nguyên vẹn & giải ngân tiền cọc Escrow',
+        );
+      }
+      bumpBookingSync(selectedOrder._id);
+      pushLocalBanner({
+        title: `Đã hoàn cọc Escrow #${selectedOrder.bookingCode || ''}`,
+        content: 'Cọc Escrow đã được giải phóng, trang phục đang chờ hoàn tất giặt ủi.',
+        type: 'ESCROW_RELEASED',
+        metadata: {
+          bookingId: selectedOrder._id,
+          bookingCode: selectedOrder.bookingCode,
+          status: 'RETURNED',
+          stage: 'CLEANING_AFTER_REFUND',
+          targetRole: 'provider',
+        },
       });
-      show('Đã hoàn cọc và hoàn tất đơn hàng thành công!', 'success');
+      show('Đã xác nhận không sự cố & hoàn cọc Escrow!', 'success');
       setRefundModalVisible(false);
+      setWorkflowItemId(null);
       setSelectedOrder(null);
       void fetchAllData();
     } catch (e: any) {
-      show(e?.response?.data?.message || 'Lỗi khi giải ngân tiền cọc', 'error');
+      const msg = e?.response?.data?.message || 'Lỗi khi giải ngân tiền cọc';
+      show(Array.isArray(msg) ? msg[0] : msg, 'error');
     } finally {
       setActionLoading(false);
     }
   };
 
-  // Filter & sort active/manageable bookings by operational urgency
+  // Single consistent active bookings source & task counters
+  const activeOrders = useMemo(() => {
+    return bookings.filter(
+      (b) =>
+        !['COMPLETED', 'CANCELLED', 'REFUNDED', 'PARTIALLY_REFUNDED'].includes(
+          String(b.status || '').toUpperCase(),
+        ),
+    );
+  }, [bookings]);
+
+  const dashboardCounts = useMemo(() => {
+    let rentalTotal = 0;
+    let photoTotal = 0;
+    let prepareCount = 0;
+    let activeRentalsCount = 0;
+    let returnsDueCount = 0;
+    let shootActiveCount = 0;
+    let incidentCount = 0;
+
+    for (const b of activeOrders) {
+      const display = resolveBookingDisplayState(b, 'provider');
+      const s = display.stage;
+      if (!display.isPhotoshootOnly) rentalTotal += 1;
+      if (display.isPhotoshootOnly || display.isCombo) photoTotal += 1;
+
+      if (
+        !display.isPhotoshootOnly &&
+        ['DEPOSIT_PAID', 'PREPARING', 'READY_NEEDS_HANDOVER_PHOTOS', 'HANDOVER_AWAITING_CUSTOMER'].includes(
+          s,
+        )
+      ) {
+        prepareCount += 1;
+      }
+      if (s === 'IN_RENTAL') activeRentalsCount += 1;
+      if (
+        [
+          'CUSTOMER_RETURN_REQUESTED',
+          'INCIDENT_PENDING_CUSTOMER',
+          'RETURNED_NEEDS_INSPECTION',
+          'CLEANING_AFTER_REFUND',
+          'DISPUTED',
+        ].includes(s)
+      ) {
+        returnsDueCount += 1;
+      }
+      if (display.isPhotoshootOnly || display.isCombo) {
+        shootActiveCount += 1;
+      }
+      if (s === 'INCIDENT_PENDING_CUSTOMER' || s === 'DISPUTED') {
+        incidentCount += 1;
+      }
+    }
+
+    return {
+      allTotal: activeOrders.length,
+      rentalTotal,
+      photoTotal,
+      prepareCount,
+      activeRentalsCount,
+      returnsDueCount,
+      shootActiveCount,
+      incidentCount,
+    };
+  }, [activeOrders]);
+
+  // Filter & sort active/manageable bookings identically to the counts above
   const actionableBookings = useMemo(() => {
-    const getStatusPriority = (status?: string): number => {
-      switch (status) {
-        case 'RETURN_PENDING':
-        case 'RETURNED':
-          return 1; // Ưu tiên 1: Chờ kiểm đồ & hoàn cọc Escrow
-        case 'PICKUP_PENDING':
-        case 'CONFIRMED':
-        case 'PENDING':
-          return 2; // Ưu tiên 2: Cần chuẩn bị & bàn giao áo cho khách
-        case 'PICKED_UP':
+    const getStatusPriority = (order: any): number => {
+      const stage = resolveBookingDisplayState(order, 'provider').stage;
+      switch (stage) {
+        case 'DISPUTED':
+        case 'INCIDENT_PENDING_CUSTOMER':
+        case 'CUSTOMER_RETURN_REQUESTED':
+        case 'RETURNED_NEEDS_INSPECTION':
+          return 1;
+        case 'CLEANING_AFTER_REFUND':
+        case 'DEPOSIT_PAID':
+        case 'PREPARING':
+        case 'READY_NEEDS_HANDOVER_PHOTOS':
+          return 2;
+        case 'HANDOVER_AWAITING_CUSTOMER':
+        case 'IN_RENTAL':
         case 'IN_PROGRESS':
-          return 3; // Ưu tiên 3: Khách đang thuê / đang chụp
+        case 'AWAITING_REVIEW':
+        case 'COMBO_PHOTOS_APPROVED':
+          return 3;
         default:
           return 4;
       }
     };
 
-    return bookings
+    return activeOrders
       .filter((b) => {
-        const s = b.status || 'CONFIRMED';
-        const isPhoto = b.bookingType === 'PHOTOGRAPHY';
+        const display = resolveBookingDisplayState(b, 'provider');
+        const stage = display.stage;
 
-        // Loại bỏ các đơn Đã hoàn tất (COMPLETED) và Đã hủy (CANCELLED) khỏi mục "Đơn cần quản lý" hôm nay
-        if (s === 'COMPLETED' || s === 'CANCELLED') return false;
+        if (filterCategory === 'PHOTOSHOOT' && !display.isPhotoshootOnly && !display.isCombo) {
+          return false;
+        }
+        if (filterCategory === 'RENTAL' && display.isPhotoshootOnly) {
+          return false;
+        }
 
-        // Category filter
-        if (filterCategory === 'PHOTOSHOOT' && !isPhoto) return false;
-        if (filterCategory === 'RENTAL' && isPhoto) return false;
-
-        // Task filter
         if (activeTaskFilter === 'PREPARE_CLOTHES') {
-          return s === 'CONFIRMED' || s === 'PICKUP_PENDING' || s === 'PENDING';
+          return (
+            !display.isPhotoshootOnly &&
+            [
+              'DEPOSIT_PAID',
+              'PREPARING',
+              'READY_NEEDS_HANDOVER_PHOTOS',
+              'HANDOVER_AWAITING_CUSTOMER',
+            ].includes(stage)
+          );
         }
         if (activeTaskFilter === 'PICKUP_TODAY') {
-          return s === 'PICKED_UP' || s === 'IN_PROGRESS';
+          return stage === 'IN_RENTAL';
         }
         if (activeTaskFilter === 'RETURN_DUE') {
-          return s === 'RETURN_PENDING' || s === 'RETURNED';
+          return [
+            'CUSTOMER_RETURN_REQUESTED',
+            'INCIDENT_PENDING_CUSTOMER',
+            'RETURNED_NEEDS_INSPECTION',
+            'CLEANING_AFTER_REFUND',
+            'DISPUTED',
+          ].includes(stage);
         }
         if (activeTaskFilter === 'SHOOT_TODAY') {
-          return isPhoto;
+          return display.isPhotoshootOnly || display.isCombo;
         }
 
         return true;
       })
       .sort((a, b) => {
-        const prioDiff = getStatusPriority(a.status) - getStatusPriority(b.status);
+        const prioDiff = getStatusPriority(a) - getStatusPriority(b);
         if (prioDiff !== 0) return prioDiff;
 
-        // Nếu cùng mức ưu tiên, sắp xếp theo hạn trả/nhận gần nhất lên trước
         const dateA = new Date(
-          a.items?.[0]?.rentalPeriod?.endDate ||
-            a.items?.[0]?.startDate ||
+          a.items?.[0]?.rentalTo ||
+            a.items?.[0]?.shootDate ||
+            a.items?.[0]?.rentalFrom ||
             a.updatedAt ||
             a.createdAt ||
             0,
         ).getTime();
         const dateB = new Date(
-          b.items?.[0]?.rentalPeriod?.endDate ||
-            b.items?.[0]?.startDate ||
+          b.items?.[0]?.rentalTo ||
+            b.items?.[0]?.shootDate ||
+            b.items?.[0]?.rentalFrom ||
             b.updatedAt ||
             b.createdAt ||
             0,
         ).getTime();
         return dateA - dateB;
       });
-  }, [bookings, filterCategory, activeTaskFilter]);
+  }, [activeOrders, filterCategory, activeTaskFilter]);
 
   const escrowHeldAmount = useMemo(() => {
-    return bookings.reduce((sum, b) => {
-      const s = b.status || '';
-      if (s === 'PICKED_UP' || s === 'IN_PROGRESS' || s === 'RETURN_PENDING' || s === 'RETURNED') {
+    return activeOrders.reduce((sum, b) => {
+      const stage = resolveBookingDisplayState(b, 'provider').stage;
+      if (
+        [
+          'HANDOVER_AWAITING_CUSTOMER',
+          'IN_RENTAL',
+          'CUSTOMER_RETURN_REQUESTED',
+          'INCIDENT_PENDING_CUSTOMER',
+          'RETURNED_NEEDS_INSPECTION',
+          'DISPUTED',
+          'IN_PROGRESS',
+          'AWAITING_REVIEW',
+          'COMBO_PHOTOS_APPROVED',
+        ].includes(stage)
+      ) {
         const dep =
-          b.pricing?.totalDeposit ||
-          b.depositAmount ||
-          b.items?.[0]?.depositAmount ||
-          0;
+          b.pricingSummary?.depositTotal ??
+          b.depositAmount ??
+          (Array.isArray(b.items)
+            ? b.items.reduce(
+                (s: number, it: any) =>
+                  s + (isPhotographyItem(it) ? 0 : (it.depositAmount ?? 0) * (it.quantity ?? 1)),
+                0,
+              )
+            : 0);
         return sum + Number(dep || 0);
       }
       return sum;
     }, 0);
-  }, [bookings]);
+  }, [activeOrders]);
+
+  const nextSessionState = useMemo(() => {
+    const candidates = [
+      ...(overview?.upcomingSchedules || []),
+      ...(overview?.todaySchedules || []),
+    ];
+    for (const candidate of candidates) {
+      const matchedOrder = bookings.find(
+        (b) => b._id === candidate.bookingId || b._id === candidate.id,
+      );
+      if (matchedOrder) {
+        const st = String(matchedOrder.status || '').toUpperCase();
+        if (
+          [
+            'DRAFT',
+            'PENDING_PAYMENT',
+            'IN_PROGRESS',
+            'AWAITING_REVIEW',
+            'COMBO_PHOTOS_APPROVED',
+            'COMPLETED',
+            'CANCELLED',
+            'REFUNDED',
+            'PARTIALLY_REFUNDED',
+          ].includes(st)
+        ) {
+          continue;
+        }
+        const display = resolveBookingDisplayState(matchedOrder, 'provider');
+        const phone =
+          matchedOrder.customerId?.auth?.phone ||
+          matchedOrder.contactInfo?.phone ||
+          candidate.customer?.phone;
+        const enrichedSession = {
+          ...candidate,
+          customer: {
+            ...candidate.customer,
+            phone: phone || undefined,
+          },
+        };
+        return {
+          session: enrichedSession,
+          matchedOrder,
+          requiresConfirmation: display.stage === 'DEPOSIT_PAID',
+          canStartSession:
+            display.stage === 'PREPARING' ||
+            (display.stage === 'IN_RENTAL' && display.isCombo),
+        };
+      }
+      if (!candidate.bookingId) {
+        return {
+          session: candidate,
+          matchedOrder: null,
+          requiresConfirmation: false,
+          canStartSession: false,
+        };
+      }
+    }
+    return {
+      session: null,
+      matchedOrder: null,
+      requiresConfirmation: false,
+      canStartSession: false,
+    };
+  }, [overview?.upcomingSchedules, overview?.todaySchedules, bookings]);
 
   if (loading && !profile) {
     return (
@@ -517,13 +903,26 @@ export default function ProviderDashboardScreen() {
       </View>
     );
   }
-
-  const nextSession = overview?.todaySchedules?.[0] || null;
+  const nextSession = nextSessionState.session;
+  const navTargetOrder = navOrder || nextSessionState.matchedOrder;
+  const navTargetStage = navTargetOrder
+    ? resolveBookingDisplayState(navTargetOrder, 'provider').stage
+    : null;
+  const isShopVerified = Boolean(
+    profile?.isVerified ||
+      profile?.verificationStatus === 'APPROVED' ||
+      profile?.status === 'APPROVED',
+  );
   const refundOrderAmount =
-    selectedOrder?.pricing?.totalDeposit ||
-    selectedOrder?.depositAmount ||
-    selectedOrder?.items?.[0]?.depositAmount ||
-    500000;
+    selectedOrder?.pricingSummary?.depositTotal ??
+    selectedOrder?.depositAmount ??
+    (Array.isArray(selectedOrder?.items)
+      ? selectedOrder.items.reduce(
+          (sum: number, it: any) =>
+            sum + (isPhotographyItem(it) ? 0 : (it.depositAmount ?? 0) * (it.quantity ?? 1)),
+          0,
+        )
+      : 0);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -531,7 +930,7 @@ export default function ProviderDashboardScreen() {
       <ProviderHeader
         profile={profile}
         unreadNotificationsCount={unreadCount}
-        unreadChatCount={1}
+        unreadChatCount={unreadChatCount}
         isOnline={isOnline}
         onToggleOnline={handleToggleOnline}
         onSwitchToCustomer={handleSwitchToCustomer}
@@ -575,7 +974,13 @@ export default function ProviderDashboardScreen() {
 
           <Pressable
             style={({ pressed }) => [styles.quickActionItem, pressed && styles.quickPressed]}
-            onPress={() => setAddProductModalVisible(true)}
+            onPress={() => {
+              setPendingProductFormState({
+                editingProduct: null,
+                onSaved: () => void fetchAllData(),
+              });
+              router.push('/provider/product-form' as Href);
+            }}
           >
             <View style={[styles.quickIconBox, { backgroundColor: '#FFF0F3' }]}>
               <Ionicons name="add-circle-outline" size={21} color="#BA0049" />
@@ -589,11 +994,20 @@ export default function ProviderDashboardScreen() {
             style={({ pressed }) => [styles.quickActionItem, pressed && styles.quickPressed]}
             onPress={() => router.push('/provider/orders' as Href)}
           >
-            <View style={[styles.quickIconBox, { backgroundColor: '#F5F3F3' }]}>
-              <Ionicons name="receipt-outline" size={19} color="#1B1C1C" />
+            <View style={styles.quickIconWrap}>
+              <View style={[styles.quickIconBox, { backgroundColor: '#F5F3F3' }]}>
+                <Ionicons name="receipt-outline" size={19} color="#1B1C1C" />
+              </View>
+              {activeOrders.length > 0 && (
+                <View style={styles.quickCountBadge}>
+                  <Text style={styles.quickCountBadgeText}>
+                    {activeOrders.length > 99 ? '99+' : activeOrders.length}
+                  </Text>
+                </View>
+              )}
             </View>
             <Text style={styles.quickActionLabel} numberOfLines={1}>
-              Đơn hàng ({bookings.length})
+              Đơn hàng
             </Text>
           </Pressable>
 
@@ -617,17 +1031,20 @@ export default function ProviderDashboardScreen() {
             setFilterCategory(cat);
             setActiveTaskFilter('ALL');
           }}
-          allCount={
-            (overview?.kpis?.todaySchedulesCount ?? 0) +
-            (overview?.kpis?.activeRentalsCount ?? bookings.length)
-          }
-          photoshootCount={overview?.kpis?.todaySchedulesCount ?? 0}
-          rentalCount={overview?.kpis?.activeRentalsCount ?? bookings.length}
+          allCount={dashboardCounts.allTotal}
+          photoshootCount={dashboardCounts.photoTotal}
+          rentalCount={dashboardCounts.rentalTotal}
         />
 
         {/* 5. Today's Tasks Bento Grid (4 Cards - Interactive Filter) */}
         <DailyTasksGrid
           kpis={overview?.kpis}
+          counts={{
+            prepareCount: dashboardCounts.prepareCount,
+            activeRentalsCount: dashboardCounts.activeRentalsCount,
+            returnsDueCount: dashboardCounts.returnsDueCount,
+            todaySchedulesCount: dashboardCounts.shootActiveCount,
+          }}
           activeTask={activeTaskFilter}
           onPressTask={(type) => {
             setActiveTaskFilter(type);
@@ -644,7 +1061,18 @@ export default function ProviderDashboardScreen() {
         {(filterCategory === 'ALL' || filterCategory === 'PHOTOSHOOT') && nextSession && (
           <NextSessionHeroCard
             session={nextSession}
-            onStartSession={() => handleStartSession(nextSession?.bookingId)}
+            requiresConfirmation={nextSessionState.requiresConfirmation}
+            canStartSession={nextSessionState.canStartSession}
+            onConfirmBooking={() => {
+              if (nextSessionState.matchedOrder) {
+                void handleStatusChange(
+                  nextSessionState.matchedOrder,
+                  'CONFIRMED',
+                  'Đã xác nhận nhận lịch chụp',
+                );
+              }
+            }}
+            onStartSession={() => void handleStartSession(nextSession?.bookingId)}
             onOpenMap={() => {
               const matchingOrder = bookings.find(
                 (b) => b._id === nextSession?.bookingId || b._id === nextSession?.id,
@@ -668,7 +1096,7 @@ export default function ProviderDashboardScreen() {
               style={styles.seeAllOrdersBtn}
               onPress={() => router.push('/provider/orders' as Href)}
             >
-              <Text style={styles.seeAllOrdersText}>Tất cả đơn</Text>
+              <Text style={styles.seeAllOrdersText}>Tất cả đơn ({bookings.length})</Text>
               <Ionicons name="chevron-forward" size={13} color="#BA0049" />
             </Pressable>
           </View>
@@ -689,15 +1117,24 @@ export default function ProviderDashboardScreen() {
                 <OrderCard
                   key={order._id || idx}
                   order={order}
-                  onPressDetail={(o) => {
-                    setSelectedOrder(o);
-                    setDetailModalVisible(true);
-                  }}
+                  onPressDetail={(o) => handleOpenOrderDetail(o)}
                   onPressPrimaryAction={handlePressPrimaryOrderAction}
                   onPressSecondaryAction={handlePressSecondaryOrderAction}
-                  onOpenChat={() => router.push('/chat' as Href)}
+                  onOpenChat={() => void openOrderCustomerChat(order)}
                 />
               ))}
+
+              {actionableBookings.length > 3 && (
+                <Pressable
+                  style={({ pressed }) => [styles.moreOrdersBtn, pressed && { opacity: 0.85 }]}
+                  onPress={() => router.push('/provider/orders' as Href)}
+                >
+                  <Text style={styles.moreOrdersText}>
+                    Xem thêm {actionableBookings.length - 3} đơn đang hoạt động
+                  </Text>
+                  <Ionicons name="arrow-forward" size={14} color="#BA0049" />
+                </Pressable>
+              )}
             </View>
           )}
         </View>
@@ -719,8 +1156,12 @@ export default function ProviderDashboardScreen() {
         {/* 10. Reputation & Incident Card */}
         <ReputationIncidentCard
           rating={overview?.performance?.averageRating ?? 5.0}
-          badgeText="Chuẩn đối tác TàGo"
-          incidentText="Chưa ghi nhận sự cố hay khiếu nại"
+          badgeText={isShopVerified ? 'Chuẩn đối tác TàGo' : 'Đang hoàn thiện xác minh'}
+          incidentText={
+            dashboardCounts.incidentCount > 0
+              ? `Có ${dashboardCounts.incidentCount} đơn đang có sự cố cần theo dõi`
+              : 'Chưa ghi nhận sự cố hay khiếu nại'
+          }
           onPressDetail={() => setReviewsTrustModalVisible(true)}
         />
       </ScrollView>
@@ -732,19 +1173,22 @@ export default function ProviderDashboardScreen() {
         order={selectedOrder}
         actionLoading={actionLoading}
         onAction={(order, nextStatus) => handleStatusChange(order, nextStatus)}
-        onOpenWorkflowModal={(order, mode) => {
+        onRentalAction={handleRentalAction}
+        onOpenWorkflowModal={(order, mode, itemId) => {
           setDetailModalVisible(false);
           setSelectedOrder(order);
+          setWorkflowItemId(itemId || null);
           setWorkflowMode(mode);
         }}
         onRefundEscrow={(order) => {
           setDetailModalVisible(false);
           setSelectedOrder(order);
+          setWorkflowItemId(null);
           setRefundModalVisible(true);
         }}
         onOpenChat={() => {
           setDetailModalVisible(false);
-          router.push('/chat' as Href);
+          void openOrderCustomerChat(selectedOrder);
         }}
         onOpenNavigationMap={(order) => {
           setNavOrder(order);
@@ -760,8 +1204,23 @@ export default function ProviderDashboardScreen() {
         order={navOrder}
         providerProfile={profile}
         weatherAlert={weatherAlert}
+        requiresConfirmation={navTargetStage === 'DEPOSIT_PAID'}
+        canStartSession={
+          navTargetStage === 'PREPARING' ||
+          (navTargetStage === 'IN_RENTAL' &&
+            Boolean(navTargetOrder?.items?.some(isPhotographyItem)))
+        }
+        onConfirmBooking={() => {
+          if (navTargetOrder) {
+            void handleStatusChange(
+              navTargetOrder,
+              'CONFIRMED',
+              'Đã xác nhận nhận lịch chụp',
+            );
+          }
+        }}
         onStartSession={(bId) => handleStartSession(bId)}
-        onOpenChat={() => router.push('/chat' as Href)}
+        onOpenChat={(ord) => void openOrderCustomerChat(ord || navTargetOrder)}
         onResolveLocationChange={async (approved) => {
           const targetBookingId = navOrder?._id || weatherAlert?.bookingId;
           const targetScheduleId =
@@ -792,9 +1251,16 @@ export default function ProviderDashboardScreen() {
         visible={workflowMode !== null}
         mode={workflowMode}
         order={selectedOrder}
-        onClose={() => setWorkflowMode(null)}
-        onSuccess={() => {
+        targetItemId={workflowItemId}
+        onClose={() => {
           setWorkflowMode(null);
+          setWorkflowItemId(null);
+        }}
+        onSuccess={() => {
+          const updatedId = selectedOrder?._id;
+          setWorkflowMode(null);
+          setWorkflowItemId(null);
+          bumpBookingSync(updatedId);
           void fetchAllData();
         }}
       />
@@ -815,16 +1281,6 @@ export default function ProviderDashboardScreen() {
         }
         amount={refundOrderAmount}
         loading={actionLoading}
-      />
-
-      {/* Quick Add Product Modal */}
-      <AddProductModal
-        visible={addProductModalVisible}
-        onClose={() => setAddProductModalVisible(false)}
-        onCreated={() => {
-          setAddProductModalVisible(false);
-          void fetchAllData();
-        }}
       />
 
       {/* Provider Reviews Reply & Customer Trust Score Modal */}
@@ -880,6 +1336,9 @@ const styles = StyleSheet.create({
     opacity: 0.85,
     transform: [{ scale: 0.97 }],
   },
+  quickIconWrap: {
+    position: 'relative',
+  },
   quickIconBox: {
     width: 38,
     height: 38,
@@ -887,10 +1346,47 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  quickCountBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -8,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    borderRadius: 9,
+    backgroundColor: '#BA0049',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  quickCountBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontFamily: FontFamily.bodyBold,
+  },
   quickActionLabel: {
     fontSize: 11,
     fontFamily: FontFamily.bodyBold,
     color: '#1B1C1C',
+  },
+  moreOrdersBtn: {
+    marginTop: 2,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: '#FFF0F5',
+    borderWidth: 1,
+    borderColor: '#FAD1E0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  moreOrdersText: {
+    fontSize: 12,
+    fontFamily: FontFamily.bodyBold,
+    color: '#BA0049',
   },
   liveOrdersSection: {
     marginBottom: 14,

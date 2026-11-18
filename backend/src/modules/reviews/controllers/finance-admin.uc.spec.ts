@@ -97,14 +97,14 @@ describe('Finance, review and Admin direct use-case contracts', () => {
     const service = { getAllCustomers: jest.fn().mockResolvedValue({ items: [], total: 0 }) };
     const controller = new AdminStatsController(service as any);
     await controller.getCustomers(admin, 1, 10);
-    expect(service.getAllCustomers).toHaveBeenCalledWith(1, 10);
+    expect(service.getAllCustomers).toHaveBeenCalledWith(1, 10, undefined);
   });
 
   it('UC-69 returns provider/shop analytics to Admin', async () => {
     const service = { getAllProviders: jest.fn().mockResolvedValue({ items: [{ capabilities: ['AO_DAI_RENTAL'] }], total: 1 }) };
     const controller = new AdminStatsController(service as any);
     await controller.getProviders(admin, 1, 10);
-    expect(service.getAllProviders).toHaveBeenCalledWith(1, 10);
+    expect(service.getAllProviders).toHaveBeenCalledWith(1, 10, undefined);
   });
 
   it('UC-70 exposes photographer totals in the platform dashboard', async () => {

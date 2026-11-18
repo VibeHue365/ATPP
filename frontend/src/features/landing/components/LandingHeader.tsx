@@ -133,9 +133,13 @@ export const LandingHeader: React.FC = () => {
     if (n.metadata?.url) {
       navigate(n.metadata.url);
     } else if (n.metadata?.bookingId) {
-      navigate(`/dashboard/profile?tab=rentals&bookingId=${n.metadata.bookingId}`);
+      // Open the profile overview so the booking detail modal (and its
+      // "Tiếp tục thanh toán" action) can be opened from the notification.
+      // `rentals` is not a valid ProfilePage tab and previously left users on
+      // the overview without any way to resume payment.
+      navigate(`${ROUTES.PROFILE}?tab=overview&bookingId=${encodeURIComponent(String(n.metadata.bookingId))}`);
     } else if (n.type === 'BOOKING' || n.type === 'HANDOVER') {
-      navigate('/dashboard/profile?tab=rentals');
+      navigate(`${ROUTES.PROFILE}?tab=schedule&category=rental`);
     }
   };
 

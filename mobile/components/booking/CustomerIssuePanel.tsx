@@ -17,7 +17,7 @@ import { getMediaUrl } from '@/utils/media';
 type IssueType='DAMAGE'|'REJECT';
 const money=(value=0)=>new Intl.NumberFormat('vi-VN').format(value)+'đ';
 
-export function CustomerIssuePanel({booking,onSuccess}:{booking:Booking;onSuccess:()=>Promise<void>}){
+export function CustomerIssuePanel({booking,onSuccess,onIncidentChange}:{booking:Booking;onSuccess:()=>Promise<void>;onIncidentChange?:(incident:BookingIncident|null)=>void}){
   const {show}=useToast();
   const [incident,setIncident]=useState<BookingIncident|null>(null);
   const [type,setType]=useState<IssueType|null>(null);
@@ -27,7 +27,7 @@ export function CustomerIssuePanel({booking,onSuccess}:{booking:Booking;onSucces
   const rental=booking.items.some(item=>item.itemType==='PRODUCT');
   const canInspect=rental&&booking.status==='PICKUP_PENDING';
 
-  useEffect(()=>{let active=true;if(!rental)return;bookingApi.incident(booking._id).then(value=>{if(active)setIncident(value)}).catch(error=>{if(active&&!(error instanceof AxiosError&&error.response?.status===404))setIncident(null)});return()=>{active=false}},[booking._id,rental]);
+  useEffect(()=>{let active=true;if(!rental){onIncidentChange?.(null);return;}bookingApi.incident(booking._id).then(value=>{if(active){setIncident(value);onIncidentChange?.(value)}}).catch(error=>{if(active&&!(error instanceof AxiosError&&error.response?.status===404)){setIncident(null);onIncidentChange?.(null)}});return()=>{active=false}},[booking._id,booking.status,rental,onIncidentChange]);
 
   const pick=async()=>{const permission=await ImagePicker.requestMediaLibraryPermissionsAsync();if(!permission.granted){show('Cần quyền truy cập thư viện ảnh','error');return}const result=await ImagePicker.launchImageLibraryAsync({mediaTypes:['images'],allowsMultipleSelection:true,selectionLimit:5,quality:.8});if(result.canceled)return;setSaving(true);try{const urls:string[]=[];for(const asset of result.assets){const body=new FormData();body.append('file',asset.file??({uri:asset.uri,name:asset.fileName??`evidence-${Date.now()}.jpg`,type:asset.mimeType??'image/jpeg'} as unknown as Blob));const uploaded=await bookingApi.uploadEvidence(body);urls.push(uploaded.url)}setPhotos(current=>[...current,...urls].slice(0,5));show('Đã tải ảnh bằng chứng','success')}catch(error){show(getApiErrorMessage(error,'Không thể tải ảnh bằng chứng'),'error')}finally{setSaving(false)}};
   const submit=async()=>{if(!type||!description.trim()){show('Vui lòng mô tả tình trạng trang phục','error');return}if(!photos.length){show('Cần ít nhất một ảnh bằng chứng','error');return}setSaving(true);try{if(type==='DAMAGE')await bookingApi.reportRentalDamage(booking._id,description.trim(),photos);else await bookingApi.rejectRentalHandover(booking._id,description.trim(),photos);setType(null);setDescription('');setPhotos([]);show(type==='DAMAGE'?'Đã ghi nhận lỗi trang phục':'Đã gửi yêu cầu từ chối nhận áo','success');await onSuccess()}catch(error){show(getApiErrorMessage(error,'Không thể gửi báo cáo'),'error')}finally{setSaving(false)}};

@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { BookingStatus } from '../../bookings/schemas/booking.schema';
+import { BookingStatus, BookingType } from '../../bookings/schemas/booking.schema';
 import { PaymentPurpose, PaymentStatus } from '../schemas/payment.schema';
 import { PaymentsService } from './payments.service';
 
@@ -44,18 +44,23 @@ function createService(
   const refundPaymentModel = {
     findOne: jest.fn().mockReturnValue({ exec: () => Promise.resolve(null) }),
   };
+  const bookingDoc =
+    options.booking === undefined
+      ? {
+          _id: new Types.ObjectId(),
+          bookingCode: 'BK-2026',
+          customerId,
+          status: BookingStatus.PendingPayment,
+          pricingSummary: { amountDueNow: 350000, grandTotal: 900000 },
+          paymentSummary: { totalPaid: 350000 },
+        }
+      : options.booking;
   const bookingModel = {
-    findById: jest.fn().mockResolvedValue(
-      options.booking === undefined
-        ? {
-            _id: new Types.ObjectId(),
-            bookingCode: 'BK-2026',
-            customerId,
-            status: BookingStatus.PendingPayment,
-            pricingSummary: { amountDueNow: 350000, grandTotal: 900000 },
-            paymentSummary: { totalPaid: 350000 },
-          }
-        : options.booking,
+    // Awaited directly or through .lean() (the contract check reads it lean).
+    findById: jest.fn(() =>
+      Object.assign(Promise.resolve(bookingDoc), {
+        lean: () => Promise.resolve(bookingDoc),
+      }),
     ),
     find: jest.fn().mockImplementation(() => {
       const result = options.bookings ?? [];
@@ -262,6 +267,7 @@ describe('UC-49 Online Payment (HoangLVM)', () => {
       bookingId: {
         _id: bookingObjId,
         bookingCode: 'BK-SIM-01',
+        bookingType: BookingType.AoDaiRental,
         customerId,
         status: BookingStatus.PendingPayment,
         contractFlowVersion: 2,
@@ -281,6 +287,7 @@ describe('UC-49 Online Payment (HoangLVM)', () => {
       paymentStatus: PaymentStatus.Pending,
       bookingId: bookingObjId.toString(),
       bookingCode: 'BK-SIM-01',
+      bookingType: BookingType.AoDaiRental,
       bookingStatus: BookingStatus.PendingPayment,
       bookingPaymentStatus: PaymentStatus.Pending,
       confirmed: false,
@@ -444,7 +451,7 @@ describe('UC-48 View Transaction (HoangLVM)', () => {
     ).not.toHaveBeenCalled();
   });
 
-  it('UT-48 UTCID07 creates the missing deposit refund of a returned booking while listing transactions', async () => {
+  it('UT-48 UTCID07 keeps getTransactions strictly read-only and does not trigger refundDeposit for returned bookings', async () => {
     const booking = {
       _id: new Types.ObjectId(),
       bookingCode: 'BK-RET',
@@ -456,11 +463,19 @@ describe('UC-48 View Transaction (HoangLVM)', () => {
         grandTotal: 700000,
       },
     };
-    const { service, refundDeposit } = createService({ bookings: [booking] });
+    const { service, paymentsRepository, refundDeposit } = createService({
+      bookings: [booking],
+    });
 
-    await service.getTransactions(customerId.toString(), ['CUSTOMER']);
+    const result = await service.getTransactions(customerId.toString(), [
+      'CUSTOMER',
+    ]);
 
-    expect(refundDeposit).toHaveBeenCalledWith(booking._id.toString(), 200000);
+    expect(paymentsRepository.findByBookingIds).toHaveBeenCalledWith([
+      booking._id,
+    ]);
+    expect(refundDeposit).not.toHaveBeenCalled();
+    expect(result).toEqual([{ bookingId: booking._id }]);
   });
 
   it('UT-48 UTCID08 rejects a malformed user id', async () => {
@@ -470,5 +485,40 @@ describe('UC-48 View Transaction (HoangLVM)', () => {
       service.getTransactions('user-1', ['CUSTOMER']),
     ).rejects.toThrow();
     expect(bookingModel.find).not.toHaveBeenCalled();
+  });
+
+  it('UT-48 UTCID09 calling getTransactions repeatedly does not create payments, does not invoke refundDeposit, and causes no booking mutations', async () => {
+    const booking = {
+      _id: new Types.ObjectId(),
+      bookingCode: 'BK-REPEAT',
+      status: 'RETURNED',
+      bookingType: 'PRODUCT',
+      pricingSummary: {
+        depositTotal: 200000,
+        subTotal: 500000,
+        grandTotal: 700000,
+      },
+    };
+    const bookingSnapshot = JSON.stringify(booking);
+    const { service, paymentsRepository, bookingModel, refundDeposit } =
+      createService({ bookings: [booking] });
+
+    // Call repeatedly 3 times
+    const res1 = await service.getTransactions(customerId.toString(), [
+      'CUSTOMER',
+    ]);
+    const res2 = await service.getTransactions(customerId.toString(), [
+      'CUSTOMER',
+    ]);
+    const res3 = await service.getTransactions(customerId.toString(), [
+      'CUSTOMER',
+    ]);
+
+    expect(res1).toEqual(res2);
+    expect(res2).toEqual(res3);
+    expect(refundDeposit).not.toHaveBeenCalled();
+    expect(paymentsRepository.createPayment).not.toHaveBeenCalled();
+    expect(bookingModel.db.model).not.toHaveBeenCalledWith('Payment');
+    expect(JSON.stringify(booking)).toBe(bookingSnapshot);
   });
 });

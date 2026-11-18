@@ -69,9 +69,21 @@ export function useProviderOverview(): UseProviderOverviewResult {
   const { socket, isConnected } = useSocket();
   const abortControllerRef = useRef<AbortController | null>(null);
   const debounceTimerRef = useRef<number | null>(null);
+  const requestStartedAtRef = useRef(0);
+  const dataRef = useRef<ProviderOverviewResponse | null>(null);
+
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
 
   const fetchOverview = useCallback(
     async (silent = false) => {
+      // Socket, focus and visibility events can arrive together. Avoid starting
+      // another identical request during the same short window.
+      const now = Date.now();
+      if (now - requestStartedAtRef.current < 750) return;
+      requestStartedAtRef.current = now;
+
       // Cancel previous in-flight request if any
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -80,7 +92,7 @@ export function useProviderOverview(): UseProviderOverviewResult {
       abortControllerRef.current = controller;
 
       if (!silent) {
-        if (!data) {
+        if (!dataRef.current) {
           setIsLoading(true);
         } else {
           setIsRefreshing(true);
@@ -111,7 +123,7 @@ export function useProviderOverview(): UseProviderOverviewResult {
         setIsRefreshing(false);
       }
     },
-    [period, service, selectedMonth, data],
+    [period, service, selectedMonth],
   );
 
   // Fetch when period, service, or selectedMonth changes

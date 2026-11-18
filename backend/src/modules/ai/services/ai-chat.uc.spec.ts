@@ -17,10 +17,10 @@ function offline() {
   return createService();
 }
 
-describe('UC-32 AI Chat Recommendation (HoangLVM)', () => {
+describe('UC-31 AI Chat Recommendation (HoangLVM)', () => {
   afterEach(() => jest.restoreAllMocks());
 
-  it('UT-32 UTCID02 maps the AI service answer and fills missing fields with defaults', async () => {
+  it('UT-31 UTCID02 maps the AI service answer and fills missing fields with defaults', async () => {
     jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,
       json: async () => ({ answer: 'Nên chọn lụa tơ tằm', category: 'fabric' }),
@@ -40,7 +40,7 @@ describe('UC-32 AI Chat Recommendation (HoangLVM)', () => {
     });
   });
 
-  it('UT-32 UTCID03 falls back to offline answers when the AI service returns HTTP 500', async () => {
+  it('UT-31 UTCID03 falls back to offline answers when the AI service returns HTTP 500', async () => {
     jest
       .spyOn(global, 'fetch')
       .mockResolvedValue({ ok: false, status: 500 } as Response);
@@ -51,14 +51,14 @@ describe('UC-32 AI Chat Recommendation (HoangLVM)', () => {
     });
   });
 
-  it('UT-32 UTCID04 falls back to offline answers when the AI service is unreachable', async () => {
+  it('UT-31 UTCID04 falls back to offline answers when the AI service is unreachable', async () => {
     await expect(offline().chat('xin chào')).resolves.toMatchObject({
       source: 'offline_fallback',
       confidence: 0.8,
     });
   });
 
-  it('UT-32 UTCID05 recommends size M for 158 cm, 50 kg and a 66 cm waist', async () => {
+  it('UT-31 UTCID05 recommends size M for 158 cm, 50 kg and a 66 cm waist', async () => {
     const result = await offline().chat(
       'Tư vấn size: chiều cao 158, cân nặng 50, vòng eo 66',
     );
@@ -67,7 +67,7 @@ describe('UC-32 AI Chat Recommendation (HoangLVM)', () => {
     expect(result.answer).toContain('Size M');
   });
 
-  it('UT-32 UTCID06 moves up to size XL at the 168 cm and 60 kg boundaries', async () => {
+  it('UT-31 UTCID06 moves up to size XL at the 168 cm and 60 kg boundaries', async () => {
     await expect(
       offline().chat('size cho chiều cao 168 cân nặng 50 eo 60'),
     ).resolves.toMatchObject({
@@ -80,19 +80,19 @@ describe('UC-32 AI Chat Recommendation (HoangLVM)', () => {
     });
   });
 
-  it('UT-32 UTCID07 advises custom tailoring for measurements above the size chart', async () => {
+  it('UT-31 UTCID07 advises custom tailoring for measurements above the size chart', async () => {
     const result = await offline().chat('size cho chiều cao 165 cân nặng 90');
 
     expect(result.answer).toContain('vượt quá bảng size may sẵn');
   });
 
-  it('UT-32 UTCID08 answers fabric questions offline', async () => {
+  it('UT-31 UTCID08 answers fabric questions offline', async () => {
     await expect(
       offline().chat('Chất liệu nào mặc mùa hè?'),
     ).resolves.toMatchObject({ category: 'fabric' });
   });
 
-  it('UT-32 UTCID09 answers rental price questions offline', async () => {
+  it('UT-31 UTCID09 answers rental price questions offline', async () => {
     await expect(
       offline().chat('Giá thuê bao nhiêu tiền?'),
     ).resolves.toMatchObject({
@@ -101,7 +101,7 @@ describe('UC-32 AI Chat Recommendation (HoangLVM)', () => {
     });
   });
 
-  it('UT-32 UTCID10 URL-encodes the question sent to the AI service', async () => {
+  it('UT-31 UTCID10 URL-encodes the question sent to the AI service', async () => {
     const fetchMock = jest
       .spyOn(global, 'fetch')
       .mockResolvedValue({
@@ -116,7 +116,7 @@ describe('UC-32 AI Chat Recommendation (HoangLVM)', () => {
     );
   });
 
-  it('UT-32 UTCID11 rejects an empty chat message', async () => {
+  it('UT-31 UTCID11 rejects an empty chat message', async () => {
     const errors = await validate(
       plainToInstance(ChatRequestDto, { message: '' }),
     );
@@ -124,9 +124,9 @@ describe('UC-32 AI Chat Recommendation (HoangLVM)', () => {
     expect(errors.map((error) => error.property)).toEqual(['message']);
   });
 
-  // Known defect UT-DEF-32-01: the collar keyword "co" also matches words such as "combo".
+  // Known defect UT-DEF-31-01: the collar keyword "co" also matches words such as "combo".
   it.failing(
-    'UT-32 UTCID12 answers a combo price question with pricing information',
+    'UT-31 UTCID12 answers a combo price question with pricing information',
     async () => {
       await expect(
         offline().chat('Áo dài combo giá bao nhiêu?'),

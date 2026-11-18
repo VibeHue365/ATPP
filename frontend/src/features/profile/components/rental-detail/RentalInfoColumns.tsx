@@ -179,17 +179,17 @@ export const RentalInfoColumns: React.FC<RentalInfoColumnsProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#7D736B' }}>
               <span>Giá thuê</span>
-              <span style={{ color: '#231F20', fontWeight: 600 }}>{rentalPrice.toLocaleString('vi-VN')}đ</span>
+              <span style={{ color: '#231F20', fontWeight: 600 }}>{(rentalPrice || 0).toLocaleString('vi-VN')}đ</span>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#7D736B' }}>
               <span>Phí vệ sinh</span>
-              <span style={{ color: '#231F20', fontWeight: 600 }}>{cleaningFee.toLocaleString('vi-VN')}đ</span>
+              <span style={{ color: '#231F20', fontWeight: 600 }}>{(cleaningFee || 0).toLocaleString('vi-VN')}đ</span>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#7D736B' }}>
               <span>Tiền cọc (Đã thanh toán)</span>
-              <span style={{ color: '#231F20', fontWeight: 600 }}>{depositFee.toLocaleString('vi-VN')}đ</span>
+              <span style={{ color: '#231F20', fontWeight: 600 }}>{(depositFee || 0).toLocaleString('vi-VN')}đ</span>
             </div>
 
             <div style={{ borderTop: '1px dashed #ECE5DB', margin: '4px 0' }} />
@@ -197,7 +197,7 @@ export const RentalInfoColumns: React.FC<RentalInfoColumnsProps> = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#231F20' }}>Tổng thanh toán</span>
               <span style={{ fontSize: '18px', fontWeight: 900, color: '#8E1B2E' }}>
-                {totalPrice.toLocaleString('vi-VN')}đ
+                {(totalPrice || 0).toLocaleString('vi-VN')}đ
               </span>
             </div>
 

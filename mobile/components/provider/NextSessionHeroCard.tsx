@@ -3,27 +3,37 @@ import { View, Text, StyleSheet, Pressable, Linking } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import type { ProviderScheduleItem } from '@/types/provider';
+import { useToast } from '@/contexts/ToastContext';
 
 interface NextSessionHeroCardProps {
   session?: ProviderScheduleItem | null;
+  requiresConfirmation?: boolean;
+  canStartSession?: boolean;
+  actionLabel?: string;
+  onConfirmBooking?: () => void;
   onStartSession?: () => void;
   onOpenMap?: () => void;
 }
 
 export function NextSessionHeroCard({
   session,
+  requiresConfirmation = false,
+  canStartSession = true,
+  actionLabel,
+  onConfirmBooking,
   onStartSession,
   onOpenMap,
 }: NextSessionHeroCardProps) {
-  const customerName = session?.customer?.name || 'Nguyễn Thảo Vy';
-  const customerPhone = session?.customer?.phone || '0912.345.678';
-  const timeLabel = session?.timeLabel || '⏱ Còn 45m · 14:30 Chiều nay';
-  const photographer = session?.photographerName || 'Hoàng Nam';
-  const packageName = session?.packageTitle || session?.serviceName || 'Gói Cung Đình Huế Hoàng Gia (2h)';
-  const locationName = session?.locationName || 'Cung An Định';
+  const { show } = useToast();
+  const customerName = session?.customer?.name || 'Khách hàng TàGo';
+  const customerPhone = session?.customer?.phone?.trim() || '';
+  const timeLabel = session?.timeLabel || 'Lịch hẹn sắp tới';
+  const photographer = session?.photographerName || 'Ekip studio';
+  const packageName = session?.packageTitle || session?.serviceName || 'Lịch hẹn dịch vụ TàGo';
+  const locationName = session?.locationName || 'Địa điểm hẹn';
   const fullAddress =
-    session?.locationAddress || 'Cung An Định, 179 Phan Đình Phùng, TP. Huế';
-  const guestCount = session?.guestCount || 3;
+    session?.locationAddress || 'Địa điểm theo thỏa thuận đơn hàng';
+  const guestCount = session?.guestCount;
 
   const handleOpenMap = () => {
     if (onOpenMap) {
@@ -36,7 +46,27 @@ export function NextSessionHeroCard({
   };
 
   const handleCall = () => {
-    void Linking.openURL(`tel:${customerPhone.replace(/[^0-9+]/g, '')}`);
+    const cleanPhone = customerPhone.replace(/[^0-9+]/g, '');
+    if (!cleanPhone) {
+      show('Khách hàng chưa cập nhật số điện thoại liên hệ', 'info');
+      return;
+    }
+    void Linking.openURL(`tel:${cleanPhone}`);
+  };
+
+  const resolvedBtnLabel =
+    actionLabel ||
+    (requiresConfirmation ? 'Xác nhận nhận lịch' : 'Bắt đầu ca chụp');
+  const handlePrimaryPress = () => {
+    if (requiresConfirmation && onConfirmBooking) {
+      onConfirmBooking();
+      return;
+    }
+    if (canStartSession && onStartSession) {
+      onStartSession();
+      return;
+    }
+    handleOpenMap();
   };
 
   return (
@@ -80,16 +110,20 @@ export function NextSessionHeroCard({
               <Text style={styles.customerName} numberOfLines={1}>
                 {customerName}
               </Text>
-              <View style={styles.vipBadge}>
-                <Ionicons name="star" size={10} color="#B45309" />
-                <Text style={styles.vipBadgeText}>VIP ({guestCount} khách)</Text>
-              </View>
+              {guestCount ? (
+                <View style={styles.vipBadge}>
+                  <Ionicons name="people-outline" size={10} color="#B45309" />
+                  <Text style={styles.vipBadgeText}>{guestCount} khách</Text>
+                </View>
+              ) : null}
             </View>
 
-            <View style={styles.phoneRow}>
-              <Ionicons name="call-outline" size={13} color="#64748B" />
-              <Text style={styles.phoneText}>{customerPhone}</Text>
-            </View>
+            {customerPhone ? (
+              <View style={styles.phoneRow}>
+                <Ionicons name="call-outline" size={13} color="#64748B" />
+                <Text style={styles.phoneText}>{customerPhone}</Text>
+              </View>
+            ) : null}
 
             <View style={styles.packagePill}>
               <MaterialIcons name="auto-awesome" size={13} color="#5B0114" />
@@ -126,7 +160,11 @@ export function NextSessionHeroCard({
           </Pressable>
 
           <Pressable
-            style={({ pressed }) => [styles.squareIconBtn, pressed && styles.btnPressed]}
+            style={({ pressed }) => [
+              styles.squareIconBtn,
+              !customerPhone && { opacity: 0.45 },
+              pressed && styles.btnPressed,
+            ]}
             onPress={handleCall}
             accessibilityLabel="Gọi khách"
           >
@@ -135,10 +173,20 @@ export function NextSessionHeroCard({
 
           <Pressable
             style={({ pressed }) => [styles.primaryActionBtn, pressed && styles.btnPressed]}
-            onPress={onStartSession}
+            onPress={handlePrimaryPress}
           >
-            <Ionicons name="play-circle-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.primaryActionBtnText}>Bắt đầu ca chụp</Text>
+            <Ionicons
+              name={
+                requiresConfirmation
+                  ? 'checkmark-circle-outline'
+                  : canStartSession
+                    ? 'play-circle-outline'
+                    : 'map-outline'
+              }
+              size={20}
+              color="#FFFFFF"
+            />
+            <Text style={styles.primaryActionBtnText}>{resolvedBtnLabel}</Text>
           </Pressable>
         </View>
       </View>

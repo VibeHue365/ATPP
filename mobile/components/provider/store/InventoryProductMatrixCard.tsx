@@ -42,6 +42,7 @@ interface InventoryProductMatrixCardProps {
   product: EnrichedInventoryProduct;
   onPressChipDetails: (product: EnrichedInventoryProduct) => void;
   onToggleRentalActive: (product: EnrichedInventoryProduct) => void;
+  onEditProduct?: (product: EnrichedInventoryProduct) => void;
 }
 
 function formatVnd(amount: number): string {
@@ -52,7 +53,16 @@ export function InventoryProductMatrixCard({
   product,
   onPressChipDetails,
   onToggleRentalActive,
+  onEditProduct,
 }: InventoryProductMatrixCardProps) {
+  const replacementVal =
+    typeof product.rawProduct?.replacementValue === 'number' &&
+    product.rawProduct.replacementValue > 0
+      ? product.rawProduct.replacementValue
+      : null;
+  const modStatus = String(
+    product.rawProduct?.moderationStatus || '',
+  ).toUpperCase();
   return (
     <View style={styles.card}>
       {/* Top Row: Thumbnail + Details */}
@@ -151,6 +161,25 @@ export function InventoryProductMatrixCard({
               Cọc: {formatVnd(product.depositAmount)}
             </Text>
           </View>
+
+          {/* Replacement Value & Moderation Row */}
+          <View style={styles.contractMetaRow}>
+            <Text style={styles.replacementText} numberOfLines={1}>
+              {replacementVal
+                ? `Bồi hoàn: ${formatVnd(replacementVal)}`
+                : 'Chưa đặt giá trị bồi hoàn'}
+            </Text>
+            {modStatus === 'PENDING_REVIEW' && (
+              <View style={styles.modPendingPill}>
+                <Text style={styles.modPendingText}>Chờ duyệt</Text>
+              </View>
+            )}
+            {modStatus === 'REJECTED' && (
+              <View style={styles.modRejectedPill}>
+                <Text style={styles.modRejectedText}>Từ chối duyệt</Text>
+              </View>
+            )}
+          </View>
         </View>
       </View>
 
@@ -158,13 +187,26 @@ export function InventoryProductMatrixCard({
       <View style={styles.bottomRow}>
         <View style={styles.rfidLeft}>
           <MaterialIcons name="nfc" size={16} color="#BA0049" />
-          <Text style={styles.rfidCountText}>{product.totalChips} chip RFID:</Text>
+          <Text style={styles.rfidCountText}>{product.totalChips} chip:</Text>
           <View style={styles.rfidCodeBadge}>
             <Text style={styles.rfidCodeText}>{product.rfidPrefix}...</Text>
           </View>
         </View>
 
         <View style={styles.rfidRight}>
+          {onEditProduct && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.editProductBtn,
+                pressed && styles.pressed,
+              ]}
+              onPress={() => onEditProduct(product)}
+            >
+              <MaterialIcons name="edit" size={13} color="#BA0049" />
+              <Text style={styles.editProductBtnText}>Sửa</Text>
+            </Pressable>
+          )}
+
           <Pressable
             style={({ pressed }) => [
               styles.chipDetailBtn,
@@ -173,7 +215,7 @@ export function InventoryProductMatrixCard({
             onPress={() => onPressChipDetails(product)}
           >
             <MaterialIcons name="tune" size={13} color="#1B1C1C" />
-            <Text style={styles.chipDetailBtnText}>Chi tiết chip</Text>
+            <Text style={styles.chipDetailBtnText}>Chip</Text>
           </Pressable>
 
           <Pressable
@@ -355,6 +397,41 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_500Medium',
     color: '#5B3F43',
   },
+  contractMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+    marginTop: 4,
+  },
+  replacementText: {
+    flex: 1,
+    fontSize: 10.5,
+    fontFamily: 'Inter_500Medium',
+    color: '#64748B',
+  },
+  modPendingPill: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 99,
+  },
+  modPendingText: {
+    fontSize: 9.5,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#92400E',
+  },
+  modRejectedPill: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 99,
+  },
+  modRejectedText: {
+    fontSize: 9.5,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#991B1B',
+  },
   bottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -388,7 +465,24 @@ const styles = StyleSheet.create({
   rfidRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 6,
+  },
+  editProductBtn: {
+    height: 28,
+    paddingHorizontal: 9,
+    borderRadius: 99,
+    backgroundColor: '#FFF1F5',
+    borderWidth: 1,
+    borderColor: '#FECDD3',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+  },
+  editProductBtnText: {
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#BA0049',
   },
   chipDetailBtn: {
     height: 28,

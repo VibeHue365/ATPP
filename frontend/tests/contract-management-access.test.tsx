@@ -30,6 +30,7 @@ vi.mock('../src/services/contractService', () => ({
     submitConsent: vi.fn(),
     getProviderMechanism: vi.fn(),
     getProviderAcceptanceStatus: vi.fn(),
+    getMyContracts: vi.fn().mockResolvedValue([]),
   },
 }));
 

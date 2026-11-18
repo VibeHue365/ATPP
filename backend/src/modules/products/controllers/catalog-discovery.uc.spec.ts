@@ -7,7 +7,8 @@ import { ComboPromotionController } from './combo-promotion.controller';
 describe('Catalog, discovery and AI direct use-case contracts', () => {
   const provider = { sub: 'provider-1', email: 'shop@example.com', roles: ['PROVIDER'] } as any;
 
-  const productController = (service: any) => new ProductsController(service, {} as any, {} as any, {} as any);
+  const analytics = { trackSearch: jest.fn().mockResolvedValue(undefined) };
+  const productController = (service: any) => new ProductsController(service, {} as any, {} as any, {} as any, analytics as any);
   const customer = { sub: 'customer-1', email: 'customer@example.com', roles: ['CUSTOMER'] } as any;
   const aiController = (service: any) => {
     const rateLimit = { assertRateLimit: jest.fn().mockResolvedValue(undefined) };
@@ -39,7 +40,7 @@ describe('Catalog, discovery and AI direct use-case contracts', () => {
   it('UC-22 sends Ao Dai search, color, size, location and rating filters', async () => {
     const service = { getActiveProductsPage: jest.fn().mockResolvedValue({ items: [], total: 0 }) };
     const controller = productController(service);
-    await controller.getAll('lụa đỏ', undefined, undefined, '4', 'red,pink', 'M,L', undefined, undefined, undefined, undefined, undefined, 'Hue', 'AO_DAI', '2', '12', 'rating_desc');
+    await controller.getAll('lụa đỏ', undefined, undefined, '4', 'red,pink', 'M,L', undefined, undefined, undefined, undefined, undefined, 'Hue', 'AO_DAI', undefined, undefined, undefined, '2', '12', 'rating_desc');
     expect(service.getActiveProductsPage).toHaveBeenCalledWith(expect.objectContaining({ search: 'lụa đỏ', minRating: 4, colors: ['red', 'pink'], sizes: ['M', 'L'], providerLocation: 'Hue', productTypes: ['AO_DAI'] }), 2, 12, 'rating_desc');
   });
 
@@ -57,14 +58,14 @@ describe('Catalog, discovery and AI direct use-case contracts', () => {
     await expect(controller.findConcepts()).resolves.toEqual([{ code: 'VINTAGE', name: 'Vintage' }]);
   });
 
-  it('UC-28 returns active provider combo candidates', async () => {
+  it('UC-27 returns active provider combo candidates', async () => {
     const service = { findActivePublic: jest.fn().mockResolvedValue([{ id: 'combo-1', discountPercent: 10 }]) };
     const controller = new ComboPromotionController(service as any, {} as any);
     await expect(controller.getPublicCombos()).resolves.toEqual([{ id: 'combo-1', discountPercent: 10 }]);
     expect(service.findActivePublic).toHaveBeenCalledTimes(1);
   });
 
-  it('UC-30 submits an image to the visual-match service', async () => {
+  it('UC-29 submits an image to the visual-match service', async () => {
     const service = { visualMatch: jest.fn().mockResolvedValue([{ productId: 'product-1', score: 0.91 }]) };
     const rateLimit = { assertRateLimit: jest.fn().mockResolvedValue(undefined), ipKey: jest.fn() };
     const products = { getActiveProductsPage: jest.fn().mockResolvedValue({ data: [{ _id: 'product-1' }] }) };
@@ -75,7 +76,7 @@ describe('Catalog, discovery and AI direct use-case contracts', () => {
     expect(service.visualMatch).toHaveBeenCalledWith(payload);
   });
 
-  it('UC-30 supports image-assisted chat with product recommendations', async () => {
+  it('UC-29 supports image-assisted chat with product recommendations', async () => {
     const service = { chatWithImage: jest.fn().mockResolvedValue({ answer: 'Mẫu tương tự', recommended_products: ['product-1'] }) };
     const { controller, rateLimit } = aiController(service);
     await controller.chatWithImage(customer, { message: 'Tìm áo tương tự', image_base64: 'base64-image', mime_type: 'image/png' } as any);
@@ -83,7 +84,7 @@ describe('Catalog, discovery and AI direct use-case contracts', () => {
     expect(service.chatWithImage).toHaveBeenCalledWith('Tìm áo tương tự', 'base64-image', 'image/png');
   });
 
-  it('UC-31 requests recommendation using budget and concept context', async () => {
+  it('UC-30 requests recommendation using budget and concept context', async () => {
     const service = { contextRecommend: jest.fn().mockResolvedValue({ suggested_products: ['product-1'] }) };
     const { controller, rateLimit } = aiController(service);
     const payload = { budget: 1500000, location_context: 'Huế', concept: 'cổ điển' };
@@ -92,7 +93,7 @@ describe('Catalog, discovery and AI direct use-case contracts', () => {
     expect(service.contextRecommend).toHaveBeenCalledWith(payload);
   });
 
-  it('UC-32 sends consultation questions to the AI chatbot service', async () => {
+  it('UC-31 sends consultation questions to the AI chatbot service', async () => {
     const service = { chat: jest.fn().mockResolvedValue({ answer: 'Tiền cọc được hoàn sau đối soát.' }) };
     const { controller, rateLimit } = aiController(service);
     await controller.chat(customer, { message: 'Chính sách hoàn cọc thế nào?' } as any);

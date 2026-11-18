@@ -63,7 +63,10 @@ export class GoogleAuthGuard extends AuthGuard('google') {
   getAuthenticateOptions(context: ExecutionContext): Record<string, string> {
     const request = context.switchToHttp().getRequest<GoogleOAuthRequest>();
 
-    return request.oauthState ? { state: request.oauthState } : {};
+    return {
+      ...(request.oauthState ? { state: request.oauthState } : {}),
+      prompt: 'select_account',
+    };
   }
 
   private isCallbackRequest(request: GoogleOAuthRequest): boolean {

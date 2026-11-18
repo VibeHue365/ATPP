@@ -41,7 +41,11 @@ function createService(photographers: Row[]) {
   return { service, providerModel };
 }
 
-afterEach(() => jest.restoreAllMocks());
+afterEach(() => {
+  jest.restoreAllMocks();
+  // The public photographer list is cached between calls; each test needs its own data.
+  PhotographersService.clearPublicCache();
+});
 
 describe('UC-23 Search Photographer (DaiBLL)', () => {
   it('UT-23 UTCID01 matches the keyword against name, city and concept without diacritics', async () => {
@@ -223,8 +227,7 @@ describe('UC-23 Search Photographer (DaiBLL)', () => {
     },
   );
 
-  // Known defect UT-DEF-23-02: user-facing error messages in the service are mis-encoded.
-  it.failing(
+  it(
     'UT-23 UTCID12 returns a readable Vietnamese message for a malformed id',
     async () => {
       const { service } = createService([]);

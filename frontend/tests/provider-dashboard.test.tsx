@@ -26,6 +26,7 @@ vi.mock('../src/components/common/BookingDetailModal', () => ({ BookingDetailMod
 vi.mock('../src/features/photography-packages/components/PhotographyPackageManager', () => ({ PhotographyPackageManager: () => <div>Photography package manager</div> }));
 vi.mock('../src/features/photographers/components/PhotographyLocationPicker', () => ({ PhotographyLocationPicker: () => <div>Location picker</div> }));
 vi.mock('../src/features/photographers/components/PortfolioItemFormModal', () => ({ PortfolioItemFormModal: () => null }));
+vi.mock('../src/features/provider-dashboard/size-chart/SizeChartEditor', () => ({ SizeChartEditor: () => <div>Size chart editor</div> }));
 vi.mock('../src/features/smart-tagging/components/SmartTagEditor', () => ({ SmartTagEditor: ({ onActiveTagsChange }: { onActiveTagsChange: (tags: string[]) => void }) => <button onClick={() => onActiveTagsChange(['TRUYEN_THONG'])}>Select fixture tag</button> }));
 vi.mock('../src/pages/notifications/NotificationsPage', () => ({ NotificationsPage: () => <div>Notifications page</div> }));
 vi.mock('../src/components/common/PrivateEvidenceImage', () => ({ PrivateEvidenceImage: () => <div>Private evidence</div> }));
@@ -81,7 +82,11 @@ const sampleBooking = {
 };
 
 async function settle() {
-  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  await act(async () => {
+    // Dashboard panels are lazy-loaded; wait for their chunks before the next assertion.
+    await vi.dynamicImportSettled();
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
 }
 
 beforeEach(() => {
@@ -172,22 +177,36 @@ describe('Provider dashboard behavior', () => {
         return { view, query };
       }
 
-      it('creates one hidden draft, updates it on back/next, and removes it on cancel', async () => {
-        const { query } = await openProductWizard();
+      // Step 2: the first "Tiếp tục" saves the variants as a hidden draft and stays for the size chart;
+      // once the chart is confirmed, the next "Tiếp tục" updates the draft and opens the tag step.
+      async function goToTagStep(query: ReturnType<typeof within>) {
+        mocks.responses['/products/my-listings/created-test/size-chart'] = {
+          sizes: ['S'], sizeChart: { status: 'CONFIRMED', rows: [{ size: 'S' }] },
+        };
         fireEvent.click(query.getByRole('button', { name: 'Tiếp tục', exact: true }));
         await settle();
         fireEvent.click(query.getByRole('button', { name: 'S', exact: true }));
         fireEvent.click(query.getByRole('button', { name: 'Đỏ', exact: true }));
         fireEvent.click(query.getByRole('button', { name: 'Tiếp tục', exact: true }));
         await settle();
+        fireEvent.click(query.getByRole('button', { name: 'Tiếp tục', exact: true }));
+        await settle();
+      }
+      const draftPatches = () => mocks.requests.filter(r => r.method === 'PATCH' && r.path === '/products/created-test');
+
+      it('creates one hidden draft, updates it on back/next, and removes it on cancel', async () => {
+        const { query } = await openProductWizard();
+        await goToTagStep(query);
         const created = mocks.requests.filter(r => r.method === 'POST' && r.path === '/products');
         expect(created).toHaveLength(1);
         expect(created[0].body).toMatchObject({ name: 'Áo dài kiểm thử', status: 'DRAFT', basePrice: 350000, depositAmount: 100000 });
+        expect(draftPatches()).toHaveLength(1);
         fireEvent.click(query.getByRole('button', { name: 'Quay lại', exact: true }));
+        await settle();
         fireEvent.click(query.getByRole('button', { name: 'Tiếp tục', exact: true }));
         await settle();
         expect(mocks.requests.filter(r => r.method === 'POST' && r.path === '/products')).toHaveLength(1);
-        expect(mocks.requests.some(r => r.method === 'PATCH' && r.path === '/products/created-test')).toBe(true);
+        expect(draftPatches()).toHaveLength(2);
         fireEvent.click(query.getByRole('button', { name: 'Hủy', exact: true }));
         await settle();
         expect(mocks.confirm).toHaveBeenCalled();
@@ -196,17 +215,12 @@ describe('Provider dashboard behavior', () => {
 
       it('requires a tag before publishing the draft and preserves the publish payload', async () => {
         const { query } = await openProductWizard();
-        fireEvent.click(query.getByRole('button', { name: 'Tiếp tục', exact: true }));
-        await settle();
-        fireEvent.click(query.getByRole('button', { name: 'S', exact: true }));
-        fireEvent.click(query.getByRole('button', { name: 'Đỏ', exact: true }));
-        fireEvent.click(query.getByRole('button', { name: 'Tiếp tục', exact: true }));
-        await settle();
+        await goToTagStep(query);
         expect((query.getByRole('button', { name: 'Đăng áo dài', exact: true }) as HTMLButtonElement).disabled).toBe(true);
         fireEvent.click(query.getByRole('button', { name: 'Select fixture tag' }));
         fireEvent.click(query.getByRole('button', { name: 'Đăng áo dài', exact: true }));
         await settle();
-        expect(mocks.requests.find(r => r.method === 'PATCH' && r.path === '/products/created-test')?.body)
+        expect(draftPatches().at(-1)?.body)
           .toMatchObject({ name: 'Áo dài kiểm thử', status: 'ACTIVE', style: 'traditional', images: ['/fixture-photo.jpg'] });
       });
 

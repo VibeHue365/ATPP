@@ -10,6 +10,7 @@ export enum NotificationType {
   Refund = 'REFUND',
   Dispute = 'DISPUTE',
   System = 'SYSTEM',
+  Weather = 'WEATHER',
 }
 
 @Schema({ collection: 'notifications', timestamps: true })

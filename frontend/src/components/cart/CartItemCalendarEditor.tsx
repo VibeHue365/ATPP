@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { CartItem } from '../../context/CartContext';
 import { httpClient } from '../../services/httpClient';
 import { formatSingleDate } from '../../utils/dateHelper';
+import { normalizeCol } from '../../pages/rentals/product-detail/utils/colorUtils';
 
 interface CartItemCalendarEditorProps {
   item: CartItem;
@@ -57,6 +58,9 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
   const [busyDates, setBusyDates] = useState<string[]>([]);
   const [busySlots, setBusySlots] = useState<{ date: string, timeSlot: string }[]>([]);
+  const [variantBookedSlots, setVariantBookedSlots] = useState<
+    Record<string, Array<{ date: string; timeSlot: string; purpose?: 'RENTAL' | 'TURNAROUND' }>>
+  >({});
 
   const editingItemType = item.rentalType || 'DAILY';
 
@@ -70,6 +74,7 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
       .then(res => {
         setBusyDates(res.bookedDates || []);
         setBusySlots(res.bookedSlots || []);
+        setVariantBookedSlots(res.variantBookedSlots || {});
       })
       .catch(err => {
         if (err.name !== 'AbortError') {
@@ -81,6 +86,51 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
       controller.abort();
     };
   }, [item.productId, item.id]);
+
+  // Set of dates that have hourly bookings
+  const hourlyBookedDates = useMemo(() => {
+    const dates = new Set<string>();
+    const variantKey = item.size && item.color
+      ? `${item.size.trim().toUpperCase()}_${normalizeCol(item.color)}`
+      : null;
+
+    const hasVariantSlots = variantBookedSlots && Object.keys(variantBookedSlots).length > 0;
+
+    if (variantKey) {
+      if (hasVariantSlots) {
+        if (variantBookedSlots[variantKey]) {
+          variantBookedSlots[variantKey].forEach((s) => {
+            if (s.date) dates.add(s.date);
+          });
+        }
+      } else {
+        busySlots.forEach((s) => {
+          if (s.date) dates.add(s.date);
+        });
+      }
+    } else {
+      if (hasVariantSlots) {
+        Object.values(variantBookedSlots).forEach((slots) => {
+          slots.forEach((s) => {
+            if (s.date) dates.add(s.date);
+          });
+        });
+      }
+      busySlots.forEach((s) => {
+        if (s.date) dates.add(s.date);
+      });
+    }
+
+    return dates;
+  }, [item.size, item.color, variantBookedSlots, busySlots]);
+
+  const effectiveBusyDates = useMemo(() => {
+    if (editingItemType === 'DAILY') {
+      const combined = new Set([...busyDates, ...hourlyBookedDates]);
+      return Array.from(combined);
+    }
+    return busyDates;
+  }, [editingItemType, busyDates, hourlyBookedDates]);
 
   // Calculate calendar days
   const calendarDays = useMemo(() => {
@@ -102,7 +152,7 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
       const dayOfWeek = new Date(dateStr).getDay();
       
-      let isAvailable = !busyDates.includes(dateStr) && dateStr >= todayStr;
+      let isAvailable = !effectiveBusyDates.includes(dateStr) && dateStr >= todayStr;
       if (editingItemType === 'HOURLY' && dateStr === todayStr) {
         const currentHour = today.getHours();
         const currentMinute = today.getMinutes();
@@ -122,13 +172,13 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
       });
     }
     return days;
-  }, [calendarDate, busyDates, editingItemType]);
+  }, [calendarDate, effectiveBusyDates, editingItemType]);
 
   const handleCalendarDayClick = (dateStr: string) => {
     if (editingItemType === 'HOURLY') {
       updateCartItemDates(item.id, dateStr, dateStr);
     } else {
-      if (busyDates.includes(dateStr)) {
+      if (effectiveBusyDates.includes(dateStr)) {
         toast.error('Ngày này đã bị đặt lịch!');
         return;
       }
@@ -141,11 +191,21 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
         if (dateStr < currentFrom) {
           updateCartItemDates(item.id, dateStr, '');
         } else {
-          const hasUnavailable = calendarDays.some(d => 
-            !d.isEmpty && !d.isAvailable && d.dateStr >= currentFrom && d.dateStr <= dateStr
-          );
-          if (hasUnavailable) {
-            toast.error('Khoảng thời gian chọn chứa ngày đã bị đặt!');
+          const [startYear, startMonth, startDay] = currentFrom.split('-').map(Number);
+          const [endYear, endMonth, endDay] = dateStr.split('-').map(Number);
+          const cursor = new Date(startYear, startMonth - 1, startDay);
+          const end = new Date(endYear, endMonth - 1, endDay);
+          let blockedDate = '';
+          while (cursor <= end) {
+            const current = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`;
+            if (effectiveBusyDates.includes(current)) {
+              blockedDate = current;
+              break;
+            }
+            cursor.setDate(cursor.getDate() + 1);
+          }
+          if (blockedDate) {
+            toast.error(`Khoảng thời gian chọn có ngày đã bị đặt (${blockedDate}).`);
             return;
           }
           updateCartItemDates(item.id, currentFrom, dateStr);
@@ -157,8 +217,29 @@ export const CartItemCalendarEditor: React.FC<CartItemCalendarEditorProps> = ({
   const bookedSlotsOnSelectedDate = useMemo(() => {
     const singleDate = item.rentalFrom || item.startDate || '';
     if (!singleDate) return [];
-    return busySlots.filter(s => s.date === singleDate).map(s => s.timeSlot);
-  }, [item.rentalFrom, item.startDate, busySlots]);
+    const variantKey = item.size && item.color
+      ? `${item.size.trim().toUpperCase()}_${normalizeCol(item.color)}`
+      : null;
+
+    const hasVariantSlots = variantBookedSlots && Object.keys(variantBookedSlots).length > 0;
+    let relevantSlots: Array<{ date: string; timeSlot: string }> = [];
+
+    if (variantKey) {
+      if (hasVariantSlots) {
+        relevantSlots = variantBookedSlots[variantKey] || [];
+      } else {
+        relevantSlots = busySlots;
+      }
+    } else {
+      relevantSlots = busySlots;
+    }
+
+    const filtered = relevantSlots
+      .filter((s) => s.date === singleDate)
+      .map((s) => s.timeSlot);
+
+    return Array.from(new Set(filtered));
+  }, [item.rentalFrom, item.startDate, item.size, item.color, busySlots, variantBookedSlots]);
 
   const startSlotIndex = useMemo(() => {
     const startTime = item.startTime || '07:00';

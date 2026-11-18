@@ -42,6 +42,13 @@ const SYSTEM_POLICIES = {
   PHOTOGRAPHY_CANCEL_PENALTY_RATE: 0.2,
 };
 import { BookingsRepository } from '../repositories/bookings.repository';
+import {
+  InventorySlotLease,
+  InventorySlotLeaseDocument,
+  SlotLeaseStatus,
+} from '../schemas/inventory-slot-lease.schema';
+import { InventorySlotLeaseService } from './inventory-slot-lease.service';
+import { Optional } from '@nestjs/common';
 import { pendingBookingExpiryFilter } from './booking-expiry-filter';
 import { freePaymentClaim, newPaymentClaim } from './payment-expiry-claim';
 
@@ -58,6 +65,10 @@ export class BookingStatusService {
     private readonly paymentsService: PaymentsService,
     private readonly promotionsService: PromotionsService,
     private readonly settlementCalc: SettlementCalculationService,
+    @InjectModel(InventorySlotLease.name)
+    private readonly leaseModel: Model<InventorySlotLeaseDocument>,
+    @Optional()
+    private readonly slotLeaseService?: InventorySlotLeaseService,
   ) {}
 
   async cleanupExpiredPendingBookings(
@@ -130,6 +141,32 @@ export class BookingStatusService {
               { $set: { status: ReservationStatus.Cancelled } },
             )
             .session(session);
+
+          if (this.slotLeaseService) {
+            await this.slotLeaseService.releaseBookingLeases(
+              booking._id,
+              'EXPIRED',
+              session,
+            );
+          } else if (this.leaseModel) {
+            await this.leaseModel
+              .updateMany(
+                {
+                  bookingId: booking._id,
+                  status: {
+                    $in: [SlotLeaseStatus.Temp, SlotLeaseStatus.Confirmed],
+                  },
+                },
+                {
+                  $set: {
+                    status: SlotLeaseStatus.Released,
+                    releasedAt: now,
+                    releaseReason: 'EXPIRED',
+                  },
+                },
+              )
+              .session(session);
+          }
           await this.promotionsService.releaseVoucher(booking._id, session);
         }
       }
@@ -583,6 +620,30 @@ export class BookingStatusService {
           { $set: { status: ReservationStatus.Cancelled } },
         )
         .session(session);
+
+      if (this.slotLeaseService) {
+        await this.slotLeaseService.releaseBookingLeases(
+          booking._id,
+          'CANCELLED',
+          session,
+        );
+      } else if (this.leaseModel) {
+        await this.leaseModel
+          .updateMany(
+            {
+              bookingId: booking._id,
+              status: { $in: [SlotLeaseStatus.Temp, SlotLeaseStatus.Confirmed] },
+            },
+            {
+              $set: {
+                status: SlotLeaseStatus.Released,
+                releasedAt: new Date(),
+                releaseReason: 'CANCELLED',
+              },
+            },
+          )
+          .session(session);
+      }
 
       // 5. Nhả voucher có điều kiện (Diff 2): chỉ nhả nếu hủy miễn phí (fullRefund)
       await this.promotionsService.releaseVoucher(

@@ -53,6 +53,9 @@ export default function ProviderLayout() {
           headerShown: false,
         }}
       />
+      <Stack.Screen name="store-hub" options={{ headerShown: false }} />
+      <Stack.Screen name="product-form" options={{ headerShown: false }} />
+      <Stack.Screen name="package-combo-form" options={{ headerShown: false }} />
     </Stack>
   );
 }

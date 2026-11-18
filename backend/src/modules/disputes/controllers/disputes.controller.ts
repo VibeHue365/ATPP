@@ -62,9 +62,9 @@ export class DisputesController {
     @CurrentUser() user: AuthUser,
     @UploadedFiles() files: Express.Multer.File[],
   ): Promise<{ urls: string[] }> {
-    if (!user.roles.some((role) => role.toUpperCase() === 'PROVIDER')) {
+    if (!user.roles.some((role) => ['PROVIDER', 'CUSTOMER', 'ADMIN'].includes(role.toUpperCase()))) {
       throw new ForbiddenException(
-        'Chỉ nhà cung cấp mới có quyền tải ảnh bằng chứng',
+        'Bạn không có quyền tải ảnh bằng chứng',
       );
     }
     if (!files?.length) {
@@ -159,8 +159,9 @@ export class DisputesController {
   async customerDisagree(
     @CurrentUser() user: AuthUser,
     @Param('id') incidentId: string,
+    @Body() body?: { reason?: string; evidencePhotos?: string[] },
   ) {
-    return this.disputesService.customerDisagreeIncident(incidentId, user.sub);
+    return this.disputesService.customerDisagreeIncident(incidentId, user.sub, body);
   }
 
   /** GET /api/disputes/admin/disputed - Admin lấy danh sách tranh chấp */

@@ -115,7 +115,7 @@ export class ProvidersService {
     const update: any = this.normalizeLocationUpdate(provider, dto);
     if (dto.media) {
       update.media = {
-        ...provider.media,
+        ...this.toPlainSubdoc(provider.media),
         ...dto.media,
       };
     }
@@ -127,15 +127,31 @@ export class ProvidersService {
     return updated;
   }
 
+  private toPlainSubdoc<T extends object>(value: T | null | undefined): Partial<T> {
+    if (!value) return {};
+    const raw =
+      typeof (value as { toObject?: () => unknown }).toObject === 'function'
+        ? ((value as { toObject: () => Record<string, unknown> }).toObject() as Record<
+            string,
+            unknown
+          >)
+        : (value as Record<string, unknown>);
+    const { _id: _ignoredId, ...clean } = raw;
+    return clean as Partial<T>;
+  }
+
   private normalizeLocationUpdate(
     provider: ProviderDocument,
     dto: UpdateProviderProfileDto,
   ): UpdateProviderProfileDto {
     const rentalSettings = dto.rentalSettings
-      ? { ...provider.rentalSettings, ...dto.rentalSettings }
+      ? { ...this.toPlainSubdoc(provider.rentalSettings), ...dto.rentalSettings }
       : undefined;
     const photographySettings = dto.photographySettings
-      ? { ...provider.photographySettings, ...dto.photographySettings }
+      ? {
+          ...this.toPlainSubdoc(provider.photographySettings),
+          ...dto.photographySettings,
+        }
       : undefined;
 
     this.assertGeoPoint(dto.address?.geo, 'address.geo');

@@ -14,6 +14,7 @@ import {
   InventoryReservation,
   ReservationStatus,
 } from '../../products/schemas/inventory-reservation.schema';
+import { InventorySlotLease, SlotLeaseStatus } from '../schemas/inventory-slot-lease.schema';
 import { Provider } from '../../providers/schemas/provider.schema';
 import { PaymentsService } from '../../payments/services/payments.service';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -39,11 +40,18 @@ describe('Bookings Service Unit Tests', () => {
   let mockBookingScheduleModel: any;
   let mockInventoryReservationModel: any;
   let mockProviderModel: any;
+  let mockLeaseModel: any;
 
   // Mock Repository
   let mockBookingsRepository: any;
 
   beforeEach(async () => {
+    mockLeaseModel = {
+      updateMany: jest.fn().mockImplementation(() => ({
+        session: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+      })),
+    };
+
     mockSession = {
       startTransaction: jest.fn(),
       commitTransaction: jest.fn(),
@@ -62,6 +70,7 @@ describe('Bookings Service Unit Tests', () => {
 
     mockBookingModel = {
       findById: jest.fn(),
+      findByIdAndUpdate: jest.fn().mockReturnValue({ session: jest.fn().mockResolvedValue({}) }),
       find: jest.fn(),
       updateMany: jest.fn(),
       db: mockDb,
@@ -240,6 +249,10 @@ describe('Bookings Service Unit Tests', () => {
         {
           provide: getModelToken(InventoryReservation.name),
           useValue: mockInventoryReservationModel as unknown,
+        },
+        {
+          provide: getModelToken(InventorySlotLease.name),
+          useValue: mockLeaseModel,
         },
         {
           provide: getModelToken(Provider.name),
@@ -431,6 +444,112 @@ describe('Bookings Service Unit Tests', () => {
           'Hủy lỗi',
         ),
       ).rejects.toThrow('Mongoose write error');
+
+      expect(mockSession.abortTransaction).toHaveBeenCalled();
+      expect(mockSession.commitTransaction).not.toHaveBeenCalled();
+    });
+
+    it('Test 4: should release inventory slot leases with the exact same session', async () => {
+      const mockBooking = {
+        _id: new Types.ObjectId(),
+        bookingCode: 'BK-LEASE-SESSION',
+        customerId: new Types.ObjectId(),
+        providerIds: [new Types.ObjectId()],
+        status: BookingStatus.PendingPayment,
+        pricingSummary: { grandTotal: 200000, subTotal: 200000 },
+        statusTimeline: [],
+        save: jest.fn().mockImplementation(function (this: any) {
+          return this;
+        }),
+      };
+
+      mockBookingModel.findById.mockReturnValue({
+        session: jest.fn().mockResolvedValue(mockBooking),
+      });
+
+      mockProviderModel.find.mockReturnValue({
+        session: jest.fn().mockResolvedValue([]),
+      });
+
+      mockBookingScheduleModel.updateMany.mockReturnValue({
+        session: jest.fn().mockResolvedValue({}),
+      });
+
+      mockInventoryReservationModel.updateMany.mockReturnValue({
+        session: jest.fn().mockResolvedValue({}),
+      });
+
+      const leaseSessionSpy = jest.fn().mockResolvedValue({ modifiedCount: 2 });
+      mockLeaseModel.updateMany.mockReturnValue({
+        session: leaseSessionSpy,
+      });
+
+      await bookingStatusService.cancelBooking(
+        mockBooking._id.toString(),
+        mockBooking.customerId.toString(),
+        [],
+        'Khách hàng hủy đơn có slot lease',
+      );
+
+      expect(mockLeaseModel.updateMany).toHaveBeenCalledWith(
+        {
+          bookingId: mockBooking._id,
+          status: { $in: [SlotLeaseStatus.Temp, SlotLeaseStatus.Confirmed] },
+        },
+        {
+          $set: {
+            status: SlotLeaseStatus.Released,
+            releasedAt: expect.any(Date),
+            releaseReason: 'CANCELLED',
+          },
+        },
+      );
+      expect(leaseSessionSpy).toHaveBeenCalledWith(mockSession);
+      expect(mockSession.commitTransaction).toHaveBeenCalled();
+    });
+
+    it('Test 5: should rollback transaction and propagate error when lease release fails', async () => {
+      const mockBooking = {
+        _id: new Types.ObjectId(),
+        bookingCode: 'BK-LEASE-FAIL',
+        customerId: new Types.ObjectId(),
+        providerIds: [new Types.ObjectId()],
+        status: BookingStatus.PendingPayment,
+        pricingSummary: { grandTotal: 200000, subTotal: 200000 },
+        statusTimeline: [],
+        save: jest.fn().mockImplementation(function (this: any) {
+          return this;
+        }),
+      };
+
+      mockBookingModel.findById.mockReturnValue({
+        session: jest.fn().mockResolvedValue(mockBooking),
+      });
+
+      mockProviderModel.find.mockReturnValue({
+        session: jest.fn().mockResolvedValue([]),
+      });
+
+      mockBookingScheduleModel.updateMany.mockReturnValue({
+        session: jest.fn().mockResolvedValue({}),
+      });
+
+      mockInventoryReservationModel.updateMany.mockReturnValue({
+        session: jest.fn().mockResolvedValue({}),
+      });
+
+      mockLeaseModel.updateMany.mockReturnValue({
+        session: jest.fn().mockRejectedValue(new Error('Lease release DB failure')),
+      });
+
+      await expect(
+        bookingStatusService.cancelBooking(
+          mockBooking._id.toString(),
+          mockBooking.customerId.toString(),
+          [],
+          'Hủy đơn lỗi lease',
+        ),
+      ).rejects.toThrow('Lease release DB failure');
 
       expect(mockSession.abortTransaction).toHaveBeenCalled();
       expect(mockSession.commitTransaction).not.toHaveBeenCalled();

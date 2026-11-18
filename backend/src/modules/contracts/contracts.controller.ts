@@ -18,6 +18,7 @@ import { ContractReadService } from './contract-read.service';
 import { ContractConsentService } from './contract-consent.service';
 import { ProviderContractApprovalService } from './provider-contract-approval.service';
 import { ContractEvidenceService } from './contract-evidence.service';
+import { ContractSignedEmailService } from './contract-signed-email.service';
 import { ProviderContractPolicyService } from './provider-contract-policy.service';
 import { ProviderContractConfigService } from './provider-contract-config.service';
 import {
@@ -41,6 +42,7 @@ export class ContractsController {
     private readonly providerPolicy: ProviderContractPolicyService,
     private readonly providerConfigService: ProviderContractConfigService,
     private readonly evidence: ContractEvidenceService,
+    private readonly signedEmail: ContractSignedEmailService,
   ) {}
 
   @Get('provider/config')
@@ -224,15 +226,24 @@ export class ContractsController {
   }
 
   @Post(':contractId/consents')
-  decide(
+  async decide(
     @CurrentUser() user: AuthUser,
     @Param('contractId') contractId: string,
     @Body() body: ContractConsentDto,
     @Req() request: Request,
   ) {
-    return this.consents.decide(user, contractId, body, {
+    const consent = await this.consents.decide(user, contractId, body, {
       ipAddress: request.ip ?? null,
       userAgent: request.get('user-agent') ?? null,
     });
+    const emailDelivery =
+      body.action === 'ACCEPT'
+        ? await this.signedEmail.sendAfterAcceptance(
+            user,
+            contractId,
+            body.contractVersionId,
+          )
+        : null;
+    return { ...consent, emailDelivery };
   }
 }

@@ -20,7 +20,10 @@
     "test:ci": "jest --runInBand --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "test:photography-holds:e2e": "jest --config ./test/jest-e2e.json --runInBand photography-hold.concurrency.e2e-spec.ts"
+    "test:photography-holds:e2e": "jest --config ./test/jest-e2e.json --runInBand photography-hold.concurrency.e2e-spec.ts",
+    "test:slot-leases:integration": "jest --config test/jest-slot-lease-integration.json --runInBand",
+    "backfill:slot-leases": "ts-node -T -r tsconfig-paths/register src/modules/bookings/scripts/backfill-slot-leases.ts",
+    "backfill:slot-leases:apply": "ts-node -T -r tsconfig-paths/register src/modules/bookings/scripts/backfill-slot-leases.ts --apply"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -97,6 +100,9 @@
     ],
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
+    "testPathIgnorePatterns": [
+      ".*integration\\.spec\\.ts$"
+    ],
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },

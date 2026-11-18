@@ -1,22 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import type { OrderFilterCounts, OrderFilterKey } from '@/utils/rentalState';
 
-export type OrderFilterKey =
-  | 'all'
-  | 'urgent'
-  | 'pickup'
-  | 'rented'
-  | 'refund'
-  | 'completed';
-
-export interface OrderFilterCounts {
-  all: number;
-  urgent: number;
-  pickup: number;
-  rented: number;
-  refund: number;
-  completed: number;
-}
+export type { OrderFilterCounts, OrderFilterKey };
 
 interface OrderFilterTabsProps {
   activeFilter: OrderFilterKey;
@@ -32,10 +18,11 @@ export function OrderFilterTabs({
   const tabs: Array<{ key: OrderFilterKey; label: string; count?: number; isUrgent?: boolean }> = [
     { key: 'all', label: 'Tất cả', count: counts.all },
     { key: 'urgent', label: 'Cần xử lý', count: counts.urgent, isUrgent: true },
-    { key: 'pickup', label: 'Chờ giao áo', count: counts.pickup },
-    { key: 'rented', label: 'Đang thuê', count: counts.rented },
-    { key: 'refund', label: 'Chờ hoàn cọc', count: counts.refund },
-    { key: 'completed', label: 'Hoàn tất', count: counts.completed },
+    { key: 'pickup', label: 'Chuẩn bị & Giao áo', count: counts.pickup },
+    { key: 'rented', label: 'Đang thuê / Chụp', count: counts.rented },
+    { key: 'refund', label: 'Trả đồ & Hoàn cọc', count: counts.refund },
+    { key: 'pending_payment', label: 'Chờ thanh toán', count: counts.pending_payment },
+    { key: 'completed', label: 'Hoàn tất / Hủy', count: counts.completed },
   ];
 
   return (

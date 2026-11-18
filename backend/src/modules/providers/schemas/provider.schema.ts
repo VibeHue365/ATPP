@@ -39,6 +39,11 @@ export interface GeoPoint {
 export interface ProviderRentalSettings {
   useBusinessAddressForPickup: boolean;
   pickupLocation?: ProviderAddress | null;
+  /**
+   * Turnaround time in 2-hour slots for inspection, cleaning and preparation after return.
+   * 0 = 0h, 1 = 2h (default), 2 = 4h, 3 = 6h.
+   */
+  turnaroundSlots?: number;
 }
 
 export interface ProviderPhotographySettings {
@@ -122,8 +127,11 @@ export class Provider {
   })
   address: ProviderAddress;
 
-  @Prop({ type: Object, default: { useBusinessAddressForPickup: true, pickupLocation: null } })
+  @Prop({ type: Object, default: { useBusinessAddressForPickup: true, pickupLocation: null, turnaroundSlots: 1 } })
   rentalSettings: ProviderRentalSettings;
+
+  @Prop({ type: Boolean, default: false })
+  useSlotLeases: boolean;
 
   @Prop({ type: Object, default: { serviceRadiusKm: null } })
   photographySettings: ProviderPhotographySettings;

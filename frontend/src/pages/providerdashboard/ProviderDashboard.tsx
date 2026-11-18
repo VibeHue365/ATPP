@@ -234,7 +234,7 @@ export const ProviderDashboard: React.FC = () => {
     cancellationRefundRules, setCancellationRefundRules, cancellationAdditionalNotes,
     setCancellationAdditionalNotes, comboDiscountPercent, setComboDiscountPercent, baseLatitude,
     setBaseLatitude, baseLongitude, setBaseLongitude, serviceRadiusKm, setServiceRadiusKm,
-    useBusinessAddressForPickup, setUseBusinessAddressForPickup, pickupAddressLine, setPickupAddressLine,
+    useBusinessAddressForPickup, setUseBusinessAddressForPickup, turnaroundSlots, setTurnaroundSlots, pickupAddressLine, setPickupAddressLine,
     pickupLatitude, setPickupLatitude, pickupLongitude, setPickupLongitude, profileSection,
     setProfileSection, isSavingProfile, setIsSavingProfile, coverUrl, setCoverUrl,
   } = useProviderProfileState();
@@ -321,6 +321,7 @@ export const ProviderDashboard: React.FC = () => {
     setBaseLongitude,
     setServiceRadiusKm,
     setUseBusinessAddressForPickup,
+    setTurnaroundSlots,
     setPickupAddressLine,
     setPickupLatitude,
     setPickupLongitude,
@@ -358,6 +359,7 @@ export const ProviderDashboard: React.FC = () => {
     baseLatitude,
     baseLongitude,
     useBusinessAddressForPickup,
+    turnaroundSlots,
     pickupAddressLine,
     pickupLatitude,
     pickupLongitude,
@@ -430,7 +432,7 @@ export const ProviderDashboard: React.FC = () => {
 
   const {
     fetchInventoryData, handleRemoveVariant, handleDeleteInventoryItem, handleCreateInventoryItem,
-    handleUpdateInventoryItem, handleAdjustVariantQuantity,
+    handleUpdateInventoryItem, handleQuickUpdateStatus, handleAdjustVariantQuantity,
   } = createInventoryActions({
     setIsLoadingInventory,
     invPage,
@@ -728,6 +730,21 @@ export const ProviderDashboard: React.FC = () => {
     return () => { socket.off('booking_updated', handler); };
   }, [socket]);
 
+  // Auto-refresh when tab becomes visible or focused (e.g. user switched from Customer tab)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchOrdersRef.current(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleVisibility);
+    };
+  }, []);
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => setDebouncedProdSearch(prodSearch.trim()), 300);
     return () => window.clearTimeout(timeoutId);
@@ -815,7 +832,7 @@ export const ProviderDashboard: React.FC = () => {
       .reduce((sum, o) => sum + (o.totalAmount ?? 0), 0);
   }, [orders]);
 
-  const renderInventoryView = () => <InventoryPanel {...{ inventorySummary, invSummaryPage, invSearch, setInvSearch, invStatusFilter, setInvStatusFilter, invConditionFilter, setInvConditionFilter, invSortBy, setInvSortBy, isLoadingInventory, variantBusy, setVariantEditRow, setVariantEditQty, handleRemoveVariant, setInvSummaryPage, inventoryItems, setEditInvItem, setEditInvStatus, setEditInvCondition, setEditInvNotes, setIsEditInventoryOpen, handleDeleteInventoryItem, invTotal, invLimit, invPage, setInvPage }} />;
+  const renderInventoryView = () => <InventoryPanel {...{ inventorySummary, invSummaryPage, invSearch, setInvSearch, invStatusFilter, setInvStatusFilter, invConditionFilter, setInvConditionFilter, invSortBy, setInvSortBy, isLoadingInventory, variantBusy, setVariantEditRow, setVariantEditQty, handleRemoveVariant, setInvSummaryPage, inventoryItems, setEditInvItem, setEditInvStatus, setEditInvCondition, setEditInvNotes, setIsEditInventoryOpen, handleDeleteInventoryItem, handleQuickUpdateStatus, invTotal, invLimit, invPage, setInvPage }} />;
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: 'var(--font-body)', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-light-bg)' }}>
@@ -861,7 +878,7 @@ export const ProviderDashboard: React.FC = () => {
         )}
 
         {currentView === 'orders' && (
-          <OrdersPanel {...{ toast, tabs, setOrderTab, orderTab, hasAodaiCapability, hasPhotographyCapability, orders, setBookingTypeFilter, bookingTypeFilter, monthlyRevenue, loadingOrders, filteredOrders, setSelectedBookingId, setIsDetailModalOpen, setActionMenuId, actionMenuId, resolveRescheduleRequest, changeOrderStatus, setReportingOrder, setSelectedItemId, setIncidentDesc, setIncidentPhotos, setIncidentAmount, setIncidentActionType, activePage, setActivePage }} onOpenChat={() => setCurrentView('chat')} />
+          <OrdersPanel {...{ toast, tabs, setOrderTab, orderTab, hasAodaiCapability, hasPhotographyCapability, orders, setBookingTypeFilter, bookingTypeFilter, monthlyRevenue, loadingOrders, filteredOrders, setSelectedBookingId, setIsDetailModalOpen, setActionMenuId, actionMenuId, resolveRescheduleRequest, changeOrderStatus, setReportingOrder, setSelectedItemId, setIncidentDesc, setIncidentPhotos, setIncidentAmount, setIncidentActionType, activePage, setActivePage, fetchOrders }} onOpenChat={() => setCurrentView('chat')} />
         )}
 
         {currentView === 'rental-operations' && (
@@ -872,7 +889,7 @@ export const ProviderDashboard: React.FC = () => {
         )}
 
         {currentView === 'profile' && (
-          <ServiceProfilePanel {...{ profileHasUnsavedChanges, isLoadingProvider, handleUpdateProfile, profileSection, setProfileSection, businessName, setBusinessName, phone, setPhone, city, setCity, baseLatitude, baseLongitude, addressLine, setAddressLine, setBaseLatitude, setBaseLongitude, hasPhotographyCapability, serviceRadiusKm, setServiceRadiusKm, hasAodaiCapability, useBusinessAddressForPickup, setUseBusinessAddressForPickup, pickupLatitude, pickupLongitude, pickupAddressLine, setPickupAddressLine, setPickupLatitude, setPickupLongitude, setCancellationRefundRules, cancellationRefundRules, cancellationAdditionalNotes, setCancellationAdditionalNotes, cancellationPolicySummary, isSavingProfile, coverUrl, setCoverUrl }} />
+          <ServiceProfilePanel {...{ profileHasUnsavedChanges, isLoadingProvider, handleUpdateProfile, profileSection, setProfileSection, businessName, setBusinessName, phone, setPhone, city, setCity, baseLatitude, baseLongitude, addressLine, setAddressLine, setBaseLatitude, setBaseLongitude, hasPhotographyCapability, serviceRadiusKm, setServiceRadiusKm, hasAodaiCapability, useBusinessAddressForPickup, setUseBusinessAddressForPickup, turnaroundSlots, setTurnaroundSlots, pickupLatitude, pickupLongitude, pickupAddressLine, setPickupAddressLine, setPickupLatitude, setPickupLongitude, setCancellationRefundRules, cancellationRefundRules, cancellationAdditionalNotes, setCancellationAdditionalNotes, cancellationPolicySummary, isSavingProfile, coverUrl, setCoverUrl }} />
         )}
 
         {hasPhotographyCapability && currentView === 'photography-packages' && (

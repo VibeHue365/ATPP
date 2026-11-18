@@ -43,7 +43,7 @@ export const getOrderGroup = (status: string): string => {
   }
   if ([
     'ĐÃ ĐẶT CỌC', 'ĐANG THỰC HIỆN', 'CHỜ NHẬN ĐỒ', 'ĐANG THUÊ',
-    'CHỜ KHÁCH DUYỆT SỰ CỐ', 'ĐÃ TRẢ ĐỒ', 'TRANH CHẤP', 'ĐANG XỬ LÝ',
+    'CHỜ KHÁCH DUYỆT SỰ CỐ', 'CHỜ KIỂM TRA ĐỒ', 'ĐÃ TRẢ ĐỒ', 'TRANH CHẤP', 'ĐANG XỬ LÝ',
     'DEPOSIT_PAID', 'CONFIRMED', 'PICKUP_PENDING', 'PICKED_UP',
     'RETURN_PENDING', 'RETURNED', 'DISPUTED'
   ].includes(s)) {
@@ -64,7 +64,7 @@ export const statusBadgeStyle = (status: string): React.CSSProperties => {
     letterSpacing: '0.05em', color: 'white', whiteSpace: 'nowrap',
   };
   if (status === 'HOÀN THÀNH') return { ...base, backgroundColor: '#2e7d32' };
-  if (status === 'CHỜ KHÁCH DUYỆT SỰ CỐ') return { ...base, backgroundColor: '#ed6c02' };
+  if (status === 'CHỜ KHÁCH DUYỆT SỰ CỐ' || status === 'CHỜ KIỂM TRA ĐỒ') return { ...base, backgroundColor: '#ed6c02' };
   if (status === 'TRANH CHẤP') return { ...base, backgroundColor: '#d32f2f' };
   if (status === 'ĐÃ HỦY') return { ...base, backgroundColor: '#757575' };
   if (status === 'CHỜ XỬ LÝ') return { ...base, backgroundColor: 'var(--color-primary)' };

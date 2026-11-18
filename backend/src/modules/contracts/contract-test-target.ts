@@ -1,3 +1,5 @@
+import { assertSafeTestMongoUri } from '../bookings/services/mongo-test-safety-guard';
+
 /** A hard gate for integration tests with writes. No implicit application URI fallback. */
 export function contractTestTarget(): {
   uri: string;
@@ -10,6 +12,9 @@ export function contractTestTarget(): {
     throw new Error(
       'Both CONTRACT_TEST_MONGODB_URI and CONTRACT_TEST_DB_NAME are required',
     );
+  // Enforce global database safety guard
+  assertSafeTestMongoUri(uri);
+
   const parsed = new URL(uri);
   const uriDatabase = decodeURIComponent(parsed.pathname.replace(/^\//, ''));
   if (

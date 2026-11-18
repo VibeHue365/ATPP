@@ -11,6 +11,9 @@
       "supportsTablet": true
     },
     "android": {
+      "permissions": [
+        "POST_NOTIFICATIONS"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -53,6 +56,13 @@
           "locationWhenInUsePermission": "Cho phép LUMÉ dùng vị trí của bạn để tìm tiệm áo dài, studio gần nhất và chỉ đường chính xác.",
           "isAndroidBackgroundLocationEnabled": false,
           "isIosBackgroundLocationEnabled": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#7A2432",
+          "defaultChannel": "booking-updates"
         }
       ]
     ],

@@ -1,13 +1,14 @@
 import React from 'react';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { type Href, router } from 'expo-router';
+import { type Href, router, usePathname } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors, FontFamily, Radius, Shadow } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import type { Photographer } from '@/types/photographer';
 import { getMediaUrl } from '@/utils/media';
+import { buildLoginHref } from '@/utils/navigation';
 
 const formatVND = (value: number) => `${Math.round(value || 0).toLocaleString('vi-VN')}đ`;
 
@@ -21,6 +22,7 @@ export function PhotographyCard({
   const pack = photographer.defaultPackage ?? photographer.packages?.[0];
   const { isAuthenticated, isFavorite, toggleFavorite } = useAuth();
   const { show } = useToast();
+  const pathname = usePathname();
   const liked = isFavorite('PROVIDER', photographer._id);
 
   const go = () =>
@@ -31,7 +33,7 @@ export function PhotographyCard({
   const favorite = async (event: { stopPropagation: () => void }) => {
     event.stopPropagation();
     if (!isAuthenticated) {
-      router.push('/(auth)/login' as Href);
+      router.push(buildLoginHref(pathname));
       return;
     }
     try {

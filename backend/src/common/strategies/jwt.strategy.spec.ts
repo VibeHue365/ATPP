@@ -46,16 +46,25 @@ describe('JwtStrategy', () => {
         key === 'JWT_SECRET' ? 'unit-test-jwt-secret' : 'test',
       ),
     } as unknown as ConfigService;
+    // Session cache is empty, so every test goes through the database checks.
+    const redisService = {
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn().mockResolvedValue(undefined),
+      del: jest.fn().mockResolvedValue(undefined),
+      ...(overrides.redisService as object),
+    };
     return {
       strategy: new JwtStrategy(
         configService,
         authRepository as never,
         usersRepository as never,
         rolesService as never,
+        redisService as never,
       ),
       authRepository,
       usersRepository,
       rolesService,
+      redisService,
     };
   }
 

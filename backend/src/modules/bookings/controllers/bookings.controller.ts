@@ -26,6 +26,7 @@ import {
 } from '../services/bookings.service';
 import { IsString, IsNotEmpty } from 'class-validator';
 import { PublicMediaService } from '../../storage/services/public-media.service';
+import { SkipThrottle } from '@nestjs/throttler';
 
 export class CancelBookingDto {
   @IsString()
@@ -118,6 +119,7 @@ export class BookingsController {
 
   /** GET /bookings/provider hoặc GET /api/bookings/provider */
   @Get('provider')
+  @SkipThrottle({ default: true })
   async getProvider(
     @CurrentUser() user: AuthUser,
   ): Promise<Record<string, any>[]> {
@@ -356,6 +358,22 @@ export class BookingsController {
       user.sub,
       body.reason,
       body.evidencePhotos,
+    );
+  }
+
+  @Post(':id/customer-return')
+  async customerReturn(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+    @Body() body?: { note?: string; evidencePhotos?: string[]; bookingItemId?: string; itemId?: string },
+  ) {
+    return this.bookingsService.customerReturn(
+      id,
+      user.sub,
+      user.roles,
+      body?.note,
+      body?.evidencePhotos,
+      body?.bookingItemId || body?.itemId,
     );
   }
 }

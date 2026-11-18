@@ -32,6 +32,7 @@ import type {
   PhotographerPackageCategory,
 } from '@/types/photographer';
 import { comboOriginalPrice, comboPublishedPrice, type ComboDeal } from '@/types/combo';
+import { buildLoginHref } from '@/utils/navigation';
 
 const formatVND = (value: number) => `${Math.round(value || 0).toLocaleString('vi-VN')}đ`;
 
@@ -39,6 +40,8 @@ interface LiveWeatherState {
   tempC: number;
   conditionLabel: string;
   goldenHourSlot: string;
+  isTomorrow: boolean;
+  targetDateLabel: string;
 }
 
 function mapWeatherCodeToVi(code: number): string {
@@ -60,6 +63,48 @@ function computeGoldenHourRange(sunsetIso?: string): string {
   return `${pad(startDate.getHours())}:${pad(startDate.getMinutes())} - ${pad(
     sunsetDate.getHours()
   )}:${pad(sunsetDate.getMinutes())}`;
+}
+
+function parseWeatherForecast(json: any): LiveWeatherState | null {
+  if (!json?.current && !json?.daily) return null;
+  const now = new Date();
+  const currentHour = now.getHours();
+  const todaySunsetStr = json?.daily?.sunset?.[0];
+  const todaySunsetDate = todaySunsetStr ? new Date(todaySunsetStr) : null;
+  // If evening/night (past 17:30 or past today's sunset or current hour >= 18), switch to tomorrow
+  const isNight =
+    currentHour >= 18 ||
+    Boolean(
+      todaySunsetDate &&
+        !Number.isNaN(todaySunsetDate.getTime()) &&
+        now.getTime() > todaySunsetDate.getTime()
+    );
+
+  if (isNight) {
+    const tomorrowSunsetStr = json?.daily?.sunset?.[1];
+    const tomorrowMax = json?.daily?.temperature_2m_max?.[1];
+    const tomorrowWeatherCode = json?.daily?.weather_code?.[1];
+    return {
+      tempC:
+        tomorrowMax != null
+          ? Math.round(Number(tomorrowMax))
+          : Math.round(Number(json?.current?.temperature_2m ?? 26)),
+      conditionLabel: mapWeatherCodeToVi(
+        Number(tomorrowWeatherCode ?? json?.current?.weather_code ?? 1)
+      ),
+      goldenHourSlot: computeGoldenHourRange(tomorrowSunsetStr || todaySunsetStr),
+      isTomorrow: true,
+      targetDateLabel: 'Ngày mai',
+    };
+  }
+
+  return {
+    tempC: Math.round(Number(json?.current?.temperature_2m ?? 27)),
+    conditionLabel: mapWeatherCodeToVi(Number(json?.current?.weather_code ?? 1)),
+    goldenHourSlot: computeGoldenHourRange(todaySunsetStr),
+    isTomorrow: false,
+    targetDateLabel: 'Hôm nay',
+  };
 }
 
 export default function CustomerHomeScreen() {
@@ -87,16 +132,13 @@ export default function CustomerHomeScreen() {
   // Dynamic weather re-fetch when destination changes
   useEffect(() => {
     let active = true;
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${destination.lat}&longitude=${destination.lng}&current=temperature_2m,weather_code&daily=sunset&timezone=Asia%2FHo_Chi_Minh`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${destination.lat}&longitude=${destination.lng}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,sunset,sunrise&timezone=Asia%2FHo_Chi_Minh`;
     fetch(url)
       .then((r) => r.json())
       .then((json) => {
-        if (!active || !json?.current) return;
-        setWeather({
-          tempC: Math.round(Number(json.current.temperature_2m ?? 27)),
-          conditionLabel: mapWeatherCodeToVi(Number(json.current.weather_code ?? 1)),
-          goldenHourSlot: computeGoldenHourRange(json?.daily?.sunset?.[0]),
-        });
+        if (!active) return;
+        const parsed = parseWeatherForecast(json);
+        if (parsed) setWeather(parsed);
       })
       .catch(() => {});
     return () => {
@@ -144,7 +186,8 @@ export default function CustomerHomeScreen() {
                   b.status === 'PICKUP_PENDING' ||
                   b.status === 'PICKED_UP' ||
                   b.status === 'IN_PROGRESS' ||
-                  b.status === 'DEPOSIT_PAID'
+                  b.status === 'DEPOSIT_PAID' ||
+                  b.status === 'PENDING_PAYMENT'
               ) ?? null
             );
           })
@@ -152,19 +195,10 @@ export default function CustomerHomeScreen() {
       : Promise.resolve(null);
 
     const fetchWeatherPromise = fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${destination.lat}&longitude=${destination.lng}&current=temperature_2m,weather_code&daily=sunset&timezone=Asia%2FHo_Chi_Minh`
+      `https://api.open-meteo.com/v1/forecast?latitude=${destination.lat}&longitude=${destination.lng}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,sunset,sunrise&timezone=Asia%2FHo_Chi_Minh`
     )
       .then((r) => r.json())
-      .then((json) => {
-        if (json?.current) {
-          return {
-            tempC: Math.round(Number(json.current.temperature_2m ?? 27)),
-            conditionLabel: mapWeatherCodeToVi(Number(json.current.weather_code ?? 1)),
-            goldenHourSlot: computeGoldenHourRange(json?.daily?.sunset?.[0]),
-          } as LiveWeatherState;
-        }
-        return null;
-      })
+      .then((json) => parseWeatherForecast(json))
       .catch(() => null);
 
     const [
@@ -222,7 +256,7 @@ export default function CustomerHomeScreen() {
   const handleToggleFavorite = async (productId: string) => {
     if (authLoading) return;
     if (!isAuthenticated) {
-      router.push('/(auth)/login');
+      router.push(buildLoginHref('/'));
       return;
     }
     try {
@@ -410,7 +444,7 @@ export default function CustomerHomeScreen() {
             onPress={() => {
               if (authLoading) return;
               if (isAuthenticated) router.push('/notifications');
-              else router.push('/(auth)/login');
+              else router.push(buildLoginHref('/notifications'));
             }}
           >
             <Ionicons name="notifications-outline" size={20} color="#1B1C1C" />
@@ -433,7 +467,7 @@ export default function CustomerHomeScreen() {
             onPress={() => {
               if (authLoading) return;
               if (isAuthenticated) router.push('/(tabs)/profile');
-              else router.push('/(auth)/login');
+              else router.push(buildLoginHref());
             }}
           >
             {getMediaUrl(user?.avatarUrl) ? (
@@ -476,12 +510,16 @@ export default function CustomerHomeScreen() {
                 <View style={styles.weatherInfoWrap}>
                   <View style={styles.weatherTitleRow}>
                     <Text style={styles.weatherTitle}>
-                      {`${destination.shortName} ${weather.tempC}°C · ${weather.conditionLabel}`}
+                      {weather.isTomorrow
+                        ? `${destination.shortName} · Dự báo ngày mai ${weather.tempC}°C · ${weather.conditionLabel}`
+                        : `${destination.shortName} ${weather.tempC}°C · ${weather.conditionLabel}`}
                     </Text>
                     <View style={styles.onlinePulseDot} />
                   </View>
                   <Text style={styles.weatherSubtitle} numberOfLines={1}>
-                    {`Khung giờ vàng hôm nay ${weather.goldenHourSlot} · Chạm xem gợi ý cổ phục`}
+                    {weather.isTomorrow
+                      ? `Giờ vàng ngày mai ${weather.goldenHourSlot} · Chạm xem điểm & trang phục đẹp`
+                      : `Khung giờ vàng hôm nay ${weather.goldenHourSlot} · Chạm xem gợi ý cổ phục`}
                   </Text>
                 </View>
               </View>
@@ -1626,6 +1664,10 @@ export default function CustomerHomeScreen() {
           conditionLabel={weather.conditionLabel}
           goldenHourSlot={weather.goldenHourSlot}
           heroSpot={destination.heroSpot}
+          isTomorrow={weather.isTomorrow}
+          targetDateLabel={weather.targetDateLabel}
+          suggestedProducts={products}
+          cityHighlights={destination.highlights}
         />
       )}
     </SafeAreaView>
