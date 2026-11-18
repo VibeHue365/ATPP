@@ -53,6 +53,27 @@ interface OrderDetailDrawerProps {
   fetchOrders?: (silent?: boolean, force?: boolean) => Promise<void>;
 }
 
+// BookingItem is persisted with `rentalFrom` / `rentalTo`.  Some older
+// responses used `rentalStartDate` / `rentalEndDate`, so read both shapes
+// while the provider UI is displaying historic bookings as well.
+const getRentalFrom = (item: any) =>
+  item?.rentalFrom || item?.rentalStartDate || item?.rentalFulfillment?.rentalFrom || null;
+
+const getRentalTo = (item: any) =>
+  item?.rentalTo || item?.rentalEndDate || item?.rentalFulfillment?.rentalTo || null;
+
+const formatBookingDate = (value: unknown) => {
+  if (!value) return null;
+  const date = new Date(value as string | number | Date);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'Asia/Ho_Chi_Minh',
+  }).format(date);
+};
+
 export function OrderDetailDrawer({
   order,
   orders,
@@ -173,6 +194,11 @@ export function OrderDetailDrawer({
   const isOrderCompleted = rawStatus === 'COMPLETED' || (order.status || '').toUpperCase() === 'HOÀN THÀNH' || (order.status || '').toUpperCase() === 'COMPLETED';
   const isCancelled = rawStatus === 'CANCELLED' || (order.status || '').toUpperCase() === 'ĐÃ HỦY' || (order.status || '').toUpperCase() === 'CANCELLED';
   const primaryItem = order.items?.[0];
+  const primaryRentalItem = order.items?.find((item: any) =>
+    item?.itemType === 'PRODUCT' || item?.productId || (!item?.itemType && !item?.photographyPackageId),
+  ) || primaryItem;
+  const rentalFrom = getRentalFrom(primaryRentalItem);
+  const rentalTo = getRentalTo(primaryRentalItem);
   const rf = primaryItem?.rentalFulfillment;
   const photoItem = order.items?.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId);
   const photoSchedule = (order.schedules || []).find((s: any) => s.scheduleType === 'PHOTOSHOOT');
@@ -782,7 +808,7 @@ export function OrderDetailDrawer({
 
     // Compute remaining time from real dates
     const primaryItem = order.items?.[0];
-    const targetDateStr = primaryItem?.rentalEndDate || order.endDate || primaryItem?.shootDate;
+    const targetDateStr = getRentalTo(primaryRentalItem) || order.endDate || primaryItem?.shootDate;
     let deadlineNum = 'Theo lịch';
     let deadlineColor = '#D97706';
     let deadlineTitle = 'Thời hạn dịch vụ';
@@ -1256,6 +1282,18 @@ export function OrderDetailDrawer({
               <span className="label">Ngày đặt:</span>
               <span className="val">{order.orderDate}</span>
             </div>
+            {rentalFrom && (
+              <div className="p-dh-item">
+                <span className="label">Ngày nhận đồ:</span>
+                <span className="val">{formatBookingDate(rentalFrom) || '—'}</span>
+              </div>
+            )}
+            {rentalTo && (
+              <div className="p-dh-item">
+                <span className="label">Ngày trả đồ:</span>
+                <span className="val">{formatBookingDate(rentalTo) || '—'}</span>
+              </div>
+            )}
             <div className="p-dh-item">
               <span className="label">Địa chỉ:</span>
               <span className="val">{order.pickupLocation || 'Tại cửa hàng'}</span>
@@ -1675,8 +1713,10 @@ export function OrderDetailDrawer({
                       <span className="info-val">
                         {(() => {
                           const primaryItem = order.items?.[0];
-                          if (primaryItem?.rentalStartDate && primaryItem?.rentalEndDate) {
-                            return `${new Date(primaryItem.rentalStartDate).toLocaleDateString('vi-VN')} → ${new Date(primaryItem.rentalEndDate).toLocaleDateString('vi-VN')}`;
+                          const startDate = getRentalFrom(primaryRentalItem);
+                          const endDate = getRentalTo(primaryRentalItem);
+                          if (startDate && endDate) {
+                            return `${formatBookingDate(startDate)} → ${formatBookingDate(endDate)}`;
                           }
                           if (primaryItem?.shootDate) {
                             return `${primaryItem.shootDate} (${primaryItem.timeSlot || 'Theo lịch'})`;
@@ -1743,6 +1783,8 @@ export function OrderDetailDrawer({
                       const itemImg = item.productId?.images?.[0] || item.photographyPackageId?.images?.[0] || (isProd ? traditionalAoDaiImg : photoPackageImg);
                       const linePrice = Number(item.subtotal || (item.unitPrice || item.price || 0) * (item.quantity || 1));
                       const depositAmt = Number(item.depositAmount || 0);
+                      const itemRentalFrom = getRentalFrom(item);
+                      const itemRentalTo = getRentalTo(item);
 
                       return (
                         <div key={item._id || idx} className="p-drawer-item-card" style={{ marginBottom: idx < order.items!.length - 1 ? '10px' : 0 }}>
@@ -1771,9 +1813,9 @@ export function OrderDetailDrawer({
                                 </>
                               )}
                             </div>
-                            {isProd && item.rentalStartDate && item.rentalEndDate && (
+                            {isProd && itemRentalFrom && itemRentalTo && (
                               <div style={{ fontSize: '11px', color: '#475569', marginTop: '3px' }}>
-                                Thời gian thuê: <strong>{new Date(item.rentalStartDate).toLocaleDateString('vi-VN')}</strong> → <strong>{new Date(item.rentalEndDate).toLocaleDateString('vi-VN')}</strong>
+                                Thời gian thuê: <strong>{formatBookingDate(itemRentalFrom)}</strong> → <strong>{formatBookingDate(itemRentalTo)}</strong>
                               </div>
                             )}
                           </div>

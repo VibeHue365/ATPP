@@ -11,6 +11,7 @@ import {
   SlotLeaseStatus,
 } from '../../bookings/schemas/inventory-slot-lease.schema';
 import { TimeSlotEngineService } from '../../bookings/services/time-slot-engine.service';
+import { buildReservationOverlapFilter } from '../../bookings/services/reservation-overlap-filter';
 
 @Injectable()
 export class ProductAvailabilityService {
@@ -104,14 +105,27 @@ export class ProductAvailabilityService {
         };
       }
 
+      // Check every requested date, not only the first and last one.  A range
+      // such as Mon–Fri must not be accepted if Wednesday is an off day and
+      // then rejected only when the booking is created.
+      const requestedDateKeys: string[] = [];
+      const requestedCursor = new Date(from);
+      const requestedEnd = new Date(to);
+      while (requestedCursor <= requestedEnd) {
+        requestedDateKeys.push(
+          requestedCursor.toLocaleDateString('en-CA', {
+            timeZone: 'Asia/Ho_Chi_Minh',
+          }),
+        );
+        requestedCursor.setDate(requestedCursor.getDate() + 1);
+      }
+
       // Check for off days
       const specificSchedules = schedules.filter((s) => s.scheduleType === ScheduleType.SpecificDate);
       const isOffDay = specificSchedules.some((s) =>
         s.offDays?.some((d) => {
           const offStr = new Date(d).toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
-          const fromStr = from.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
-          const toStr = to.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
-          return offStr === fromStr || offStr === toStr;
+          return requestedDateKeys.includes(offStr);
         }),
       );
 
@@ -129,9 +143,11 @@ export class ProductAvailabilityService {
       const recurringSchedules = schedules.filter((s) => s.scheduleType === ScheduleType.Recurring);
       if (recurringSchedules.length > 0) {
         const workingDays = new Set(recurringSchedules.map((s) => s.dayOfWeek));
-        const fromDay = from.getDay();
-        const toDay = to.getDay();
-        if (!workingDays.has(fromDay) || !workingDays.has(toDay)) {
+        const hasNonWorkingDay = requestedDateKeys.some((dateStr) => {
+          const [year, month, day] = dateStr.split('-').map(Number);
+          return !workingDays.has(new Date(year, month - 1, day).getDay());
+        });
+        if (hasNonWorkingDay) {
           return {
             available: false,
             availableQuantity: 0,
@@ -212,12 +228,18 @@ export class ProductAvailabilityService {
 
       bookedIds = new Set(busyLeases.map((l) => l.inventoryItemId.toString()));
     } else {
+      // Keep this exactly in sync with booking creation. In particular, an
+      // expired temporary reservation must not consume stock, whereas an
+      // unexpired one and every confirmed reservation must.
       const booked = await this.reservations
         .find({
           inventoryItemId: { $in: items.map((item) => item._id) },
-          status: { $in: [ReservationStatus.TempReserved, ReservationStatus.Confirmed] },
-          reservedFrom: { $lte: reservationTo },
-          reservedTo: { $gte: from },
+          ...buildReservationOverlapFilter(
+            from,
+            reservationTo,
+            rentalType === 'HOURLY',
+            new Date(),
+          ),
         })
         .select({ inventoryItemId: 1 })
         .lean()
@@ -228,7 +250,11 @@ export class ProductAvailabilityService {
       // Daily checkout also blocks confirmed/temporary slot leases (including
       // turnaround days). Mirror that rule here so the product page cannot say
       // "available" while booking creation later rejects the same dates.
-      if (useSlotLeases && rentalType !== 'HOURLY' && this.leaseModel) {
+      // Older bookings may have active daily/turnaround slot leases even when
+      // the provider no longer has useSlotLeases enabled. Checkout blocks
+      // those leases, therefore the public availability endpoint must block
+      // them too; otherwise a customer can add an invalid range to the cart.
+      if (rentalType !== 'HOURLY' && this.leaseModel) {
         const dateStrs: string[] = [];
         const cursor = new Date(from);
         const end = new Date(reservationTo);

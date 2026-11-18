@@ -297,7 +297,7 @@ export function createProductWizardActions({
       eventCategoryIds: prodEventCategoryIds,
       customTags: prodCustomTags,
     };
-    if (prodReplacementValue.trim() !== '') {
+    if (String(prodReplacementValue ?? '').trim() !== '') {
       payload.replacementValue = Math.round(Number(prodReplacementValue));
     } else if (editingProduct && editingProduct.replacementValue != null) {
       payload.replacementValue = null;
@@ -316,7 +316,7 @@ export function createProductWizardActions({
       toast.error('Giá cọc phải nhỏ hơn giá thuê');
       return false;
     }
-    if (prodReplacementValue.trim() !== '') {
+    if (String(prodReplacementValue ?? '').trim() !== '') {
       const repVal = Number(prodReplacementValue);
       if (isNaN(repVal) || repVal <= 0) {
         toast.error('Giá trị bồi hoàn phải là số dương lớn hơn 0');

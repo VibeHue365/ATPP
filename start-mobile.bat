@@ -11,6 +11,6 @@ timeout /t 6 /nobreak >nul
 echo ========================================================
 echo       DANG KHOI DONG METRO VA MO APP VIBEHUE...
 echo ========================================================
-cd /d "d:\VibeHue\mobile"
+cd /d "%~dp0mobile"
 call npm run android
 pause

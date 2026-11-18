@@ -304,12 +304,21 @@ export const CartPage: React.FC = () => {
         if (dateStr < currentFrom) {
           updateCartItemDates(editingItem.id, dateStr, '');
         } else {
-          const hasUnavailable = calendarDays.some(
-            (d) =>
-              !d.isEmpty && !d.isAvailable && d.dateStr >= currentFrom && d.dateStr <= dateStr,
-          );
-          if (hasUnavailable) {
-            toast.error('Khoảng thời gian chọn chứa ngày đã bị đặt!');
+          const [startYear, startMonth, startDay] = currentFrom.split('-').map(Number);
+          const [endYear, endMonth, endDay] = dateStr.split('-').map(Number);
+          const cursor = new Date(startYear, startMonth - 1, startDay);
+          const end = new Date(endYear, endMonth - 1, endDay);
+          let blockedDate = '';
+          while (cursor <= end) {
+            const current = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`;
+            if (effectiveBusyDates.includes(current)) {
+              blockedDate = current;
+              break;
+            }
+            cursor.setDate(cursor.getDate() + 1);
+          }
+          if (blockedDate) {
+            toast.error(`Khoảng thời gian chọn có ngày đã bị đặt (${blockedDate}).`);
             return;
           }
           updateCartItemDates(editingItem.id, currentFrom, dateStr);

@@ -308,6 +308,41 @@ describe('ProductAvailabilityService - Phase 1 Availability & Cleaning', () => {
     expect(mockLeaseModel.find).toHaveBeenCalled();
   });
 
+  it('blocks DAILY availability for an active lease even when useSlotLeases is now disabled', async () => {
+    const item1 = { _id: new Types.ObjectId(), status: 'AVAILABLE' };
+    mockInventory.find.mockReturnValue({
+      exec: jest.fn().mockResolvedValue([item1]),
+    });
+    // The default provider mock has useSlotLeases: false. A legacy active
+    // lease must still be honoured because booking creation checks it too.
+    mockLeaseModel.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue([{ inventoryItemId: item1._id }]),
+        }),
+      }),
+    });
+
+    const result = await service.check(
+      productId.toString(),
+      'M',
+      'RED',
+      '2026-08-01',
+      '2026-08-03',
+      1,
+      'DAILY',
+    );
+
+    expect(result.available).toBe(false);
+    expect(result.availableQuantity).toBe(0);
+    expect(mockLeaseModel.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inventoryItemId: { $in: [item1._id] },
+        dateStr: { $in: ['2026-08-01', '2026-08-02', '2026-08-03', '2026-08-04'] },
+      }),
+    );
+  });
+
   it('returns OFF_DAY if provider is scheduled off on the requested date', async () => {
     mockProviderSchedule.find.mockReturnValue({
       lean: jest.fn().mockReturnValue({
@@ -327,6 +362,26 @@ describe('ProductAvailabilityService - Phase 1 Availability & Cleaning', () => {
     expect(result.available).toBe(false);
     expect(result.reason).toBe('OFF_DAY');
     expect(result.message).toContain('Cửa hàng nghỉ làm việc');
+  });
+
+  it('returns OFF_DAY when an intermediate date in a DAILY range is an off day', async () => {
+    mockProviderSchedule.find.mockReturnValue({
+      lean: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue([
+          {
+            providerId,
+            capability: ScheduleCapability.AodaiRental,
+            scheduleType: ScheduleType.SpecificDate,
+            offDays: ['2026-08-02'],
+          },
+        ]),
+      }),
+    });
+
+    const result = await service.check(productId.toString(), 'M', 'RED', '2026-08-01', '2026-08-03', 1);
+
+    expect(result.available).toBe(false);
+    expect(result.reason).toBe('OFF_DAY');
   });
 
   describe('Turnaround Auto-Open Lifecycle Requirements (a, b, c, d, e)', () => {

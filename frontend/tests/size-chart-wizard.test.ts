@@ -10,6 +10,7 @@ function fixture(policy: number | undefined, isNew = false, wizardStep = 1, crea
   const values: Record<string, unknown> = {
     editingProduct: isNew ? null : { _id: 'p', sizeChartPolicyVersion: policy }, createdDraftId,
     prodName: 'Áo kiểm thử', prodCategoryId: 'c', prodBasePrice: '100', prodDepositAmount: '10',
+    prodReplacementValue: '',
     prodDescription: '', prodImages: ['/fixture.jpg'], prodColorImages: {}, prodVideos: [], prodStyle: 'traditional',
     prodOccasions: [], prodStyleCategoryIds: [], prodEventCategoryIds: [], prodCustomTags: [], prodStatus: 'DRAFT',
     variants: [], wizardStep, editInvSummary: [], categories: [], styleCategories: [], eventCategories: [], activeTagCodes: ['TRUYEN_THONG'],
