@@ -192,23 +192,23 @@ describe('HeritageScoringService', () => {
 
     it('should return true if POP >= 70% for OUTDOOR', () => {
       const metric = createBaseMetric({ precipitationProbability: 70 });
-      expect(service.isHourRedAlert(metric, HeritageSpotSpaceType.OUTDOOR)).toBe(
-        true,
-      );
+      expect(
+        service.isHourRedAlert(metric, HeritageSpotSpaceType.OUTDOOR),
+      ).toBe(true);
     });
 
     it('should return true if precipitation >= 2.0 mm/h for OUTDOOR', () => {
       const metric = createBaseMetric({ precipitationMm: 2.0 });
-      expect(service.isHourRedAlert(metric, HeritageSpotSpaceType.OUTDOOR)).toBe(
-        true,
-      );
+      expect(
+        service.isHourRedAlert(metric, HeritageSpotSpaceType.OUTDOOR),
+      ).toBe(true);
     });
 
     it('should return true if thunderstorm code 95-99 for OUTDOOR', () => {
       const metric = createBaseMetric({ weatherCode: 95 });
-      expect(service.isHourRedAlert(metric, HeritageSpotSpaceType.OUTDOOR)).toBe(
-        true,
-      );
+      expect(
+        service.isHourRedAlert(metric, HeritageSpotSpaceType.OUTDOOR),
+      ).toBe(true);
     });
 
     it('should return false when conditions are below Red Alert thresholds', () => {
@@ -217,9 +217,9 @@ describe('HeritageScoringService', () => {
         precipitationMm: 1.5,
         weatherCode: 61,
       });
-      expect(service.isHourRedAlert(metric, HeritageSpotSpaceType.OUTDOOR)).toBe(
-        false,
-      );
+      expect(
+        service.isHourRedAlert(metric, HeritageSpotSpaceType.OUTDOOR),
+      ).toBe(false);
     });
   });
 

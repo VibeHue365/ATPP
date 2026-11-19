@@ -356,7 +356,7 @@ export function RentalOperationsPanel({
             <div className="ro-safety-text">
               <h4>Quy tắc vận hành &amp; Ký quỹ an toàn</h4>
               <p>
-                Vui lòng kiểm tra kỹ hiện trạng áo dài và chụp ảnh minh chứng ở mỗi bước giao nhận. Tiền cọc được VibeHue giữ hộ và sẽ tự động hoàn trả cho khách sau khi đơn hoàn tất.
+                Vui lòng kiểm tra kỹ hiện trạng áo dài và chụp ảnh minh chứng ở mỗi bước giao nhận. Tiền cọc được TàGo giữ hộ và sẽ tự động hoàn trả cho khách sau khi đơn hoàn tất.
               </p>
             </div>
           </div>
@@ -507,8 +507,8 @@ export function RentalOperationsPanel({
                   const isCombo = order.bookingType === 'COMBO' || (order.items && order.items.length > 1);
                   const productName = typeof item.productId === 'object' ? item.productId?.name : item.name || order.productName || 'Áo dài';
                   const productImg = resolveProductImg(item);
-                  const size = item.size || 'M';
-                  const color = item.color || 'Trắng';
+                  const size = item.selectedSize || item.size || item.inventoryItem?.size || 'M';
+                  const color = item.selectedColor || item.color || item.inventoryItem?.color || 'Trắng';
 
                   const pickupDate = parseSafeDate(fulfillment.pickupDueAt || order.startDate);
                   const returnDate = parseSafeDate(fulfillment.returnDueAt || order.endDate);
@@ -1012,7 +1012,7 @@ export function RentalOperationsPanel({
                             {typeof it.productId === 'object' ? it.productId?.name : it.name || 'Áo dài'}
                           </strong>
                           <span style={{ fontSize: '11.5px', color: '#6B7280' }}>
-                            Size: {it.size || 'M'} · Màu: {it.color || 'Trắng'} · SKU: {it.sku || 'AD-001'}
+                            Size: {it.selectedSize || it.size || it.inventoryItem?.size || 'M'} · Màu: {it.selectedColor || it.color || it.inventoryItem?.color || 'Trắng'} · SKU: <strong style={{ color: '#8E1B2E', fontFamily: 'monospace' }}>{it.sku || it.inventoryItem?.sku || it.inventoryItemId?.sku || 'Chưa gán SKU'}</strong>
                           </span>
                         </div>
                       </div>
@@ -1059,7 +1059,7 @@ export function RentalOperationsPanel({
                       <strong>{(currentItem.order.depositTotal || 1400000).toLocaleString('vi-VN')}đ</strong>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #EBE4D8', paddingTop: '6px' }}>
-                      <span>Ký quỹ VibeHue:</span>
+                      <span>Ký quỹ TàGo:</span>
                       <span style={{ color: '#059669', fontWeight: 700 }}>Đã bảo đảm</span>
                     </div>
                   </div>
@@ -1194,7 +1194,7 @@ export function RentalOperationsPanel({
                 <strong>2. Kiểm tra khi nhận lại:</strong> Kiểm tra kỹ đường may, vết ố bẩn hoặc hư hỏng trước khi xác nhận đã nhận lại.
               </div>
               <div style={{ padding: '12px', background: '#FAF8F5', borderRadius: '8px', border: '1px solid #E8E2D5' }}>
-                <strong>3. Hoàn trả tiền cọc:</strong> Sau khi xác nhận nhận lại và hoàn tất đơn, hệ thống VibeHue Escrow sẽ tự động giải tỏa tiền cọc cho khách trong vòng 24h.
+                <strong>3. Hoàn trả tiền cọc:</strong> Sau khi xác nhận nhận lại và hoàn tất đơn, hệ thống TàGo Escrow sẽ tự động giải tỏa tiền cọc cho khách trong vòng 24h.
               </div>
             </div>
 

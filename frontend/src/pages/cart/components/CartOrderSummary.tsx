@@ -76,7 +76,7 @@ export const CartOrderSummary: React.FC<CartOrderSummaryProps> = ({
                     <Ticket size={18} />
                   </div>
                   <span style={{ fontSize: '13px', fontWeight: 600, color: '#5D4037' }}>
-                    VibeHue Voucher
+                    TàGo Voucher
                   </span>
                 </div>
                 <div
@@ -326,7 +326,7 @@ export const CartOrderSummary: React.FC<CartOrderSummaryProps> = ({
                 marginTop: '2px',
               }}
             >
-              <span>Trợ giá VibeHue</span>
+              <span>Trợ giá TàGo</span>
               <span style={{ fontWeight: 600 }}>
                 -{(totals.platformSubsidyAmount || 0).toLocaleString('vi-VN')}đ
               </span>

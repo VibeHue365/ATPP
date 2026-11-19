@@ -143,10 +143,34 @@ export function resolveDamageCompensationRules(
 ): ResolvedDamageCompensation {
   if (!policy) {
     return {
-      minorDamage: { tier: 'minorDamage', method: IncidentCompensationMethod.INCIDENT_NEGOTIATION, fixedFeeAmount: null, percentageOfAsset: null, conditionsAndEvidence: null },
-      moderateDamage: { tier: 'moderateDamage', method: IncidentCompensationMethod.INCIDENT_NEGOTIATION, fixedFeeAmount: null, percentageOfAsset: null, conditionsAndEvidence: null },
-      severeDamage: { tier: 'severeDamage', method: IncidentCompensationMethod.INCIDENT_NEGOTIATION, fixedFeeAmount: null, percentageOfAsset: null, conditionsAndEvidence: null },
-      totalLoss: { tier: 'totalLoss', method: IncidentCompensationMethod.INCIDENT_NEGOTIATION, fixedFeeAmount: null, percentageOfAsset: null, conditionsAndEvidence: null },
+      minorDamage: {
+        tier: 'minorDamage',
+        method: IncidentCompensationMethod.INCIDENT_NEGOTIATION,
+        fixedFeeAmount: null,
+        percentageOfAsset: null,
+        conditionsAndEvidence: null,
+      },
+      moderateDamage: {
+        tier: 'moderateDamage',
+        method: IncidentCompensationMethod.INCIDENT_NEGOTIATION,
+        fixedFeeAmount: null,
+        percentageOfAsset: null,
+        conditionsAndEvidence: null,
+      },
+      severeDamage: {
+        tier: 'severeDamage',
+        method: IncidentCompensationMethod.INCIDENT_NEGOTIATION,
+        fixedFeeAmount: null,
+        percentageOfAsset: null,
+        conditionsAndEvidence: null,
+      },
+      totalLoss: {
+        tier: 'totalLoss',
+        method: IncidentCompensationMethod.INCIDENT_NEGOTIATION,
+        fixedFeeAmount: null,
+        percentageOfAsset: null,
+        conditionsAndEvidence: null,
+      },
       incidentNotificationHours: null,
       disputeResolutionTerms: null,
       isLegacyV1: false,
@@ -164,34 +188,70 @@ export function resolveDamageCompensationRules(
   if (hasV2Tiers) {
     const minor: ResolvedDamageTier = {
       tier: 'minorDamage',
-      method: policy.minorDamage?.method || IncidentCompensationMethod.INCIDENT_NEGOTIATION,
-      fixedFeeAmount: typeof policy.minorDamage?.fixedFeeAmount === 'number' ? policy.minorDamage.fixedFeeAmount : null,
-      percentageOfAsset: typeof policy.minorDamage?.percentageOfAsset === 'number' ? policy.minorDamage.percentageOfAsset : null,
-      conditionsAndEvidence: policy.minorDamage?.conditionsAndEvidence?.trim() || null,
+      method:
+        policy.minorDamage?.method ||
+        IncidentCompensationMethod.INCIDENT_NEGOTIATION,
+      fixedFeeAmount:
+        typeof policy.minorDamage?.fixedFeeAmount === 'number'
+          ? policy.minorDamage.fixedFeeAmount
+          : null,
+      percentageOfAsset:
+        typeof policy.minorDamage?.percentageOfAsset === 'number'
+          ? policy.minorDamage.percentageOfAsset
+          : null,
+      conditionsAndEvidence:
+        policy.minorDamage?.conditionsAndEvidence?.trim() || null,
     };
 
     const moderate: ResolvedDamageTier = {
       tier: 'moderateDamage',
-      method: policy.moderateDamage?.method || IncidentCompensationMethod.INCIDENT_NEGOTIATION,
-      fixedFeeAmount: typeof policy.moderateDamage?.fixedFeeAmount === 'number' ? policy.moderateDamage.fixedFeeAmount : null,
-      percentageOfAsset: typeof policy.moderateDamage?.percentageOfAsset === 'number' ? policy.moderateDamage.percentageOfAsset : null,
-      conditionsAndEvidence: policy.moderateDamage?.conditionsAndEvidence?.trim() || null,
+      method:
+        policy.moderateDamage?.method ||
+        IncidentCompensationMethod.INCIDENT_NEGOTIATION,
+      fixedFeeAmount:
+        typeof policy.moderateDamage?.fixedFeeAmount === 'number'
+          ? policy.moderateDamage.fixedFeeAmount
+          : null,
+      percentageOfAsset:
+        typeof policy.moderateDamage?.percentageOfAsset === 'number'
+          ? policy.moderateDamage.percentageOfAsset
+          : null,
+      conditionsAndEvidence:
+        policy.moderateDamage?.conditionsAndEvidence?.trim() || null,
     };
 
     const severe: ResolvedDamageTier = {
       tier: 'severeDamage',
-      method: policy.severeDamage?.method || IncidentCompensationMethod.INCIDENT_NEGOTIATION,
-      fixedFeeAmount: typeof policy.severeDamage?.fixedFeeAmount === 'number' ? policy.severeDamage.fixedFeeAmount : null,
-      percentageOfAsset: typeof policy.severeDamage?.percentageOfAsset === 'number' ? policy.severeDamage.percentageOfAsset : null,
-      conditionsAndEvidence: policy.severeDamage?.conditionsAndEvidence?.trim() || null,
+      method:
+        policy.severeDamage?.method ||
+        IncidentCompensationMethod.INCIDENT_NEGOTIATION,
+      fixedFeeAmount:
+        typeof policy.severeDamage?.fixedFeeAmount === 'number'
+          ? policy.severeDamage.fixedFeeAmount
+          : null,
+      percentageOfAsset:
+        typeof policy.severeDamage?.percentageOfAsset === 'number'
+          ? policy.severeDamage.percentageOfAsset
+          : null,
+      conditionsAndEvidence:
+        policy.severeDamage?.conditionsAndEvidence?.trim() || null,
     };
 
     const loss: ResolvedDamageTier = {
       tier: 'totalLoss',
-      method: policy.totalLoss?.method || IncidentCompensationMethod.INCIDENT_NEGOTIATION,
-      fixedFeeAmount: typeof policy.totalLoss?.fixedFeeAmount === 'number' ? policy.totalLoss.fixedFeeAmount : null,
-      percentageOfAsset: typeof policy.totalLoss?.percentageOfAsset === 'number' ? policy.totalLoss.percentageOfAsset : null,
-      conditionsAndEvidence: policy.totalLoss?.conditionsAndEvidence?.trim() || null,
+      method:
+        policy.totalLoss?.method ||
+        IncidentCompensationMethod.INCIDENT_NEGOTIATION,
+      fixedFeeAmount:
+        typeof policy.totalLoss?.fixedFeeAmount === 'number'
+          ? policy.totalLoss.fixedFeeAmount
+          : null,
+      percentageOfAsset:
+        typeof policy.totalLoss?.percentageOfAsset === 'number'
+          ? policy.totalLoss.percentageOfAsset
+          : null,
+      conditionsAndEvidence:
+        policy.totalLoss?.conditionsAndEvidence?.trim() || null,
     };
 
     const requiresAssetValue = [minor, moderate, severe, loss].some(
@@ -206,7 +266,10 @@ export function resolveDamageCompensationRules(
       moderateDamage: moderate,
       severeDamage: severe,
       totalLoss: loss,
-      incidentNotificationHours: typeof policy.incidentNotificationHours === 'number' ? policy.incidentNotificationHours : null,
+      incidentNotificationHours:
+        typeof policy.incidentNotificationHours === 'number'
+          ? policy.incidentNotificationHours
+          : null,
       disputeResolutionTerms: policy.disputeResolutionTerms?.trim() || null,
       isLegacyV1: false,
       requiresAssetValue,
@@ -216,7 +279,8 @@ export function resolveDamageCompensationRules(
   // Legacy V1 interpretation: strictly preserve what was actually approved
   // No synthetic 50,000đ, 20%, or 100% injected if missing
   const legacyMinorFee =
-    typeof policy.minorDamageFee === 'number' && Number.isFinite(policy.minorDamageFee)
+    typeof policy.minorDamageFee === 'number' &&
+    Number.isFinite(policy.minorDamageFee)
       ? policy.minorDamageFee
       : null;
   const legacyModeratePct =
@@ -234,7 +298,10 @@ export function resolveDamageCompensationRules(
 
   const minor: ResolvedDamageTier = {
     tier: 'minorDamage',
-    method: legacyMinorFee !== null ? IncidentCompensationMethod.FIXED_FEE : IncidentCompensationMethod.INCIDENT_NEGOTIATION,
+    method:
+      legacyMinorFee !== null
+        ? IncidentCompensationMethod.FIXED_FEE
+        : IncidentCompensationMethod.INCIDENT_NEGOTIATION,
     fixedFeeAmount: legacyMinorFee,
     percentageOfAsset: null,
     conditionsAndEvidence: null,
@@ -242,7 +309,10 @@ export function resolveDamageCompensationRules(
 
   const moderate: ResolvedDamageTier = {
     tier: 'moderateDamage',
-    method: legacyModeratePct !== null ? IncidentCompensationMethod.PERCENTAGE_ON_ASSET : IncidentCompensationMethod.INCIDENT_NEGOTIATION,
+    method:
+      legacyModeratePct !== null
+        ? IncidentCompensationMethod.PERCENTAGE_ON_ASSET
+        : IncidentCompensationMethod.INCIDENT_NEGOTIATION,
     fixedFeeAmount: null,
     percentageOfAsset: legacyModeratePct,
     conditionsAndEvidence: null,
@@ -250,7 +320,10 @@ export function resolveDamageCompensationRules(
 
   const severe: ResolvedDamageTier = {
     tier: 'severeDamage',
-    method: legacySeverePct !== null ? IncidentCompensationMethod.PERCENTAGE_ON_ASSET : IncidentCompensationMethod.INCIDENT_NEGOTIATION,
+    method:
+      legacySeverePct !== null
+        ? IncidentCompensationMethod.PERCENTAGE_ON_ASSET
+        : IncidentCompensationMethod.INCIDENT_NEGOTIATION,
     fixedFeeAmount: null,
     percentageOfAsset: legacySeverePct,
     conditionsAndEvidence: null,
@@ -258,7 +331,10 @@ export function resolveDamageCompensationRules(
 
   const loss: ResolvedDamageTier = {
     tier: 'totalLoss',
-    method: legacySeverePct !== null ? IncidentCompensationMethod.PERCENTAGE_ON_ASSET : IncidentCompensationMethod.INCIDENT_NEGOTIATION,
+    method:
+      legacySeverePct !== null
+        ? IncidentCompensationMethod.PERCENTAGE_ON_ASSET
+        : IncidentCompensationMethod.INCIDENT_NEGOTIATION,
     fixedFeeAmount: null,
     percentageOfAsset: legacySeverePct,
     conditionsAndEvidence: null,
@@ -311,7 +387,8 @@ export class CancellationPolicy {
 
   @Prop({
     type: String,
-    default: 'Tiền cọc luôn được hoàn 100% nếu hủy trước khi nhận đồ. Phí hủy chỉ tính trên tiền thuê.',
+    default:
+      'Tiền cọc luôn được hoàn 100% nếu hủy trước khi nhận đồ. Phí hủy chỉ tính trên tiền thuê.',
     trim: true,
   })
   cancellationNotes?: string | null;
@@ -395,14 +472,13 @@ export class ProviderContractPolicyVersion {
   businessApprovalRequired: boolean;
 }
 
-export const ProviderContractPolicyVersionSchema =
-  SchemaFactory.createForClass(ProviderContractPolicyVersion);
+export const ProviderContractPolicyVersionSchema = SchemaFactory.createForClass(
+  ProviderContractPolicyVersion,
+);
 
 // Indexes
 ProviderContractPolicyVersionSchema.index(
   { providerId: 1, versionNumber: -1 },
   { unique: true },
 );
-ProviderContractPolicyVersionSchema.index(
-  { providerId: 1, status: 1 },
-);
+ProviderContractPolicyVersionSchema.index({ providerId: 1, status: 1 });

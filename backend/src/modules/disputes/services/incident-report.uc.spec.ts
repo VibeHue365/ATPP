@@ -92,12 +92,10 @@ function createService(
     {} as any,
     {} as any,
     {
-      getDisputePolicy: jest
-        .fn()
-        .mockResolvedValue({
-          requireEvidence: options.requireEvidence ?? true,
-          allowDisputeAfterCompletedHours: 72,
-        }),
+      getDisputePolicy: jest.fn().mockResolvedValue({
+        requireEvidence: options.requireEvidence ?? true,
+        allowDisputeAfterCompletedHours: 72,
+      }),
     } as any,
     {} as any,
   );

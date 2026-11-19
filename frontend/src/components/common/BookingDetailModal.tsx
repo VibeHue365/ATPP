@@ -1061,7 +1061,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
           {(() => {
             const firstItem = booking.items?.[0] || {};
             const prov = firstItem.productId?.providerId || firstItem.photographyPackageId?.providerId || firstItem.providerId || booking.providerId || {};
-            const pName = typeof prov === 'object' ? (prov.businessName || prov.fullName || prov.name || 'Đối tác VibeHue') : 'Đối tác VibeHue';
+            const pName = typeof prov === 'object' ? (prov.businessName || prov.fullName || prov.name || 'Đối tác TàGo') : 'Đối tác TàGo';
             const pPhone = typeof prov === 'object' ? (prov.contact?.phone || prov.phone || '—') : '—';
             const pAddrObj = typeof prov === 'object' ? prov.address : null;
             const pAddr = pAddrObj ? `${pAddrObj.addressLine || ''}, ${pAddrObj.district || ''}, ${pAddrObj.city || ''}`.replace(/^,\s*/, '') : '';

@@ -109,15 +109,28 @@ describe('Phase 2B: ContractPreparationService Tier & Risk Integration Suite', (
         collection: jest.fn().mockImplementation((name: string) => ({
           createIndex: jest.fn(),
           dropIndex: jest.fn(),
-          listIndexes: jest.fn().mockReturnValue({ toArray: jest.fn().mockResolvedValue([]) }),
+          listIndexes: jest
+            .fn()
+            .mockReturnValue({ toArray: jest.fn().mockResolvedValue([]) }),
           indexes: jest.fn().mockResolvedValue(
             name === 'digital_contracts'
-              ? [{ key: { bookingId: 1, providerId: 1, scope: 1 }, unique: true }]
+              ? [
+                  {
+                    key: { bookingId: 1, providerId: 1, scope: 1 },
+                    unique: true,
+                  },
+                ]
               : name === 'contract_versions'
-              ? [{ key: { contractId: 1, version: 1 }, unique: true }]
-              : name === 'provider_contract_acceptances'
-              ? [{ key: { providerId: 1, scope: 1 }, unique: true, partialFilterExpression: { status: 'ACTIVE' } }]
-              : []
+                ? [{ key: { contractId: 1, version: 1 }, unique: true }]
+                : name === 'provider_contract_acceptances'
+                  ? [
+                      {
+                        key: { providerId: 1, scope: 1 },
+                        unique: true,
+                        partialFilterExpression: { status: 'ACTIVE' },
+                      },
+                    ]
+                  : [],
           ),
           findOne: jest.fn().mockImplementation((query: any) => {
             if (name === 'bookings') {
@@ -127,7 +140,9 @@ describe('Phase 2B: ContractPreparationService Tier & Risk Integration Suite', (
               };
             }
             if (name === 'booking_items') {
-              const item = mockContext.rentalItems.find((i: any) => i._id.toString() === query._id.toString());
+              const item = mockContext.rentalItems.find(
+                (i: any) => i._id.toString() === query._id.toString(),
+              );
               return item ? { ...item } : null;
             }
             return null;
@@ -158,7 +173,9 @@ describe('Phase 2B: ContractPreparationService Tier & Risk Integration Suite', (
     mockVersionsModel.findById = jest.fn().mockReturnValue({
       session: jest.fn().mockResolvedValue(null),
     });
-    mockVersionsModel.updateOne = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+    mockVersionsModel.updateOne = jest
+      .fn()
+      .mockResolvedValue({ modifiedCount: 1 });
 
     mockPolicyService = {
       getContext: jest.fn().mockResolvedValue(mockContext),
@@ -330,7 +347,10 @@ describe('Phase 2B: ContractPreparationService Tier & Risk Integration Suite', (
   describe('Requirement 2: Real prepare() logic on declined contract & terms modification', () => {
     it('Case A: Terms unchanged -> prepare() reuses version 1, preserves DECLINED state and does not create new version', async () => {
       // Calculate exact expected hashes for current snapshot & template
-      const currentContentHash = hashContract({ template: mockTemplate, snapshot: mockSnapshot });
+      const currentContentHash = hashContract({
+        template: mockTemplate,
+        snapshot: mockSnapshot,
+      });
       const currentBookingFingerprint = hashContract({
         booking: mockSnapshot.booking,
         providerItems: mockSnapshot.providerItems,
@@ -363,7 +383,10 @@ describe('Phase 2B: ContractPreparationService Tier & Risk Integration Suite', (
         session: jest.fn().mockResolvedValue(existingVersionV1),
       });
 
-      const outcome = await service.prepare(bookingId.toString(), providerId.toString());
+      const outcome = await service.prepare(
+        bookingId.toString(),
+        providerId.toString(),
+      );
 
       expect(outcome.reused).toBe(true);
       expect(outcome.versionId).toBe(versionId.toString());
@@ -421,7 +444,10 @@ describe('Phase 2B: ContractPreparationService Tier & Risk Integration Suite', (
         ...mockSavedNewVersion,
       }));
 
-      const outcome = await service.prepare(bookingId.toString(), providerId.toString());
+      const outcome = await service.prepare(
+        bookingId.toString(),
+        providerId.toString(),
+      );
 
       expect(outcome.reused).toBe(false);
       expect(outcome.version).toBe(2);

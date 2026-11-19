@@ -61,7 +61,9 @@ describe('ProvidersService.getProviderAnalytics (VS-103, VS-104, VS-105)', () =>
     };
 
     bookingItemModel = {
-      find: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
+      find: jest
+        .fn()
+        .mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
       aggregate: jest.fn().mockResolvedValue([]),
     };
 
@@ -248,7 +250,9 @@ describe('ProvidersService.getProviderAnalytics (VS-103, VS-104, VS-105)', () =>
         aggregate: jest.fn().mockResolvedValue([]),
       });
 
-      await expect(service.getEarnings(userId.toString())).resolves.toMatchObject({
+      await expect(
+        service.getEarnings(userId.toString()),
+      ).resolves.toMatchObject({
         completedShoots: 0,
         totalEarnings: 0,
         platformCommission: 0,
@@ -282,14 +286,22 @@ describe('ProvidersService.getProviderAnalytics (VS-103, VS-104, VS-105)', () =>
         ]),
       });
 
-      const result = await service.getPhotographerCalendar(userId.toString(), '2026-10');
+      const result = await service.getPhotographerCalendar(
+        userId.toString(),
+        '2026-10',
+      );
 
       expect(result.events).toHaveLength(2);
       expect(result.events[0]).toMatchObject({
-        date: '2026-10-05', location: 'Kinh thành Huế', markerColor: 'green', cancelled: false,
+        date: '2026-10-05',
+        location: 'Kinh thành Huế',
+        markerColor: 'green',
+        cancelled: false,
       });
       expect(result.events[1]).toMatchObject({
-        markerColor: 'gray', textDecoration: 'line-through', cancelled: true,
+        markerColor: 'gray',
+        textDecoration: 'line-through',
+        cancelled: true,
       });
     });
   });

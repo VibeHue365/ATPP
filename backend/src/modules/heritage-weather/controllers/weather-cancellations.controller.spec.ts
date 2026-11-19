@@ -36,7 +36,9 @@ describe('WeatherCancellationsController', () => {
   });
 
   it('should call submitCancellationRequest', async () => {
-    mockService.submitCancellationRequest.mockResolvedValueOnce({ _id: 'req-1' });
+    mockService.submitCancellationRequest.mockResolvedValueOnce({
+      _id: 'req-1',
+    });
 
     const dto = {
       reason: 'Lũ lụt ngập đường di chuyển',
@@ -54,7 +56,9 @@ describe('WeatherCancellationsController', () => {
   });
 
   it('should call getBookingCancellationRequest', async () => {
-    mockService.getBookingCancellationRequest.mockResolvedValueOnce({ _id: 'req-1' });
+    mockService.getBookingCancellationRequest.mockResolvedValueOnce({
+      _id: 'req-1',
+    });
 
     const res = await controller.getBookingCancellation('bk-100', mockUser);
 
@@ -66,11 +70,15 @@ describe('WeatherCancellationsController', () => {
   });
 
   it('should call getCancellationRequestById', async () => {
-    mockService.getCancellationRequestById.mockResolvedValueOnce({ _id: 'req-1' });
+    mockService.getCancellationRequestById.mockResolvedValueOnce({
+      _id: 'req-1',
+    });
 
     const res = await controller.getCancellationById('req-1');
 
-    expect(mockService.getCancellationRequestById).toHaveBeenCalledWith('req-1');
+    expect(mockService.getCancellationRequestById).toHaveBeenCalledWith(
+      'req-1',
+    );
     expect(res).toEqual({ _id: 'req-1' });
   });
 });

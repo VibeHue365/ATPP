@@ -4,19 +4,19 @@ import { HydratedDocument, Types } from 'mongoose';
 export type WeatherProposalDocument = HydratedDocument<WeatherProposal>;
 
 export enum ProposalChangeType {
-  LOCATION_ONLY = 'LOCATION_ONLY',       // Chỉ đổi điểm (Không tăng weatherRescheduleCount per AD-02)
-  SLOT_ONLY = 'SLOT_ONLY',               // Đổi khung giờ cùng ngày (Tăng count khi APPLIED)
-  DATE_AND_SLOT = 'DATE_AND_SLOT',       // Đổi ngày và khung giờ (Tăng count khi APPLIED)
+  LOCATION_ONLY = 'LOCATION_ONLY', // Chỉ đổi điểm (Không tăng weatherRescheduleCount per AD-02)
+  SLOT_ONLY = 'SLOT_ONLY', // Đổi khung giờ cùng ngày (Tăng count khi APPLIED)
+  DATE_AND_SLOT = 'DATE_AND_SLOT', // Đổi ngày và khung giờ (Tăng count khi APPLIED)
 }
 
 export enum ProposalStatus {
-  PENDING = 'PENDING',                                   // Đang chờ thợ/shop phản hồi
+  PENDING = 'PENDING', // Đang chờ thợ/shop phản hồi
   APPROVED_PENDING_PAYMENT = 'APPROVED_PENDING_PAYMENT', // Thợ đồng ý, đang chờ khách trả phụ phí (AD-01)
-  APPLIED = 'APPLIED',                                   // Đã cập nhật thành công vào lịch chính thức
-  REJECTED = 'REJECTED',                                 // Thợ/Shop từ chối hoặc quá giờ chụp cũ
-  EXPIRED = 'EXPIRED',                                   // Hết hạn phản hồi TTL
+  APPLIED = 'APPLIED', // Đã cập nhật thành công vào lịch chính thức
+  REJECTED = 'REJECTED', // Thợ/Shop từ chối hoặc quá giờ chụp cũ
+  EXPIRED = 'EXPIRED', // Hết hạn phản hồi TTL
   EXPIRED_PAYMENT_CAPTURED = 'EXPIRED_PAYMENT_CAPTURED', // Khách trả trễ sau TTL -> Kích hoạt hoàn tiền
-  CANCELLED = 'CANCELLED',                               // Khách hủy đề xuất
+  CANCELLED = 'CANCELLED', // Khách hủy đề xuất
 }
 
 @Schema({ collection: 'weather_proposals', timestamps: true })
@@ -27,7 +27,12 @@ export class WeatherProposal {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
   customerId: Types.ObjectId;
 
-  @Prop({ type: [Types.ObjectId], ref: 'Provider', required: true, default: [] })
+  @Prop({
+    type: [Types.ObjectId],
+    ref: 'Provider',
+    required: true,
+    default: [],
+  })
   providerIds: Types.ObjectId[];
 
   @Prop({
@@ -42,8 +47,8 @@ export class WeatherProposal {
     type: {
       spotId: { type: Types.ObjectId, ref: 'HeritageSpot', default: null },
       spotName: { type: String, default: null },
-      date: { type: String, required: true },      // "YYYY-MM-DD"
-      timeSlot: { type: String, required: true },  // "08:00 - 10:00"
+      date: { type: String, required: true }, // "YYYY-MM-DD"
+      timeSlot: { type: String, required: true }, // "08:00 - 10:00"
       travelFee: { type: Number, default: 0 },
     },
     required: true,
@@ -60,8 +65,8 @@ export class WeatherProposal {
     type: {
       spotId: { type: Types.ObjectId, ref: 'HeritageSpot', default: null },
       spotName: { type: String, default: null },
-      date: { type: String, required: true },      // "YYYY-MM-DD"
-      timeSlot: { type: String, required: true },  // "08:00 - 10:00"
+      date: { type: String, required: true }, // "YYYY-MM-DD"
+      timeSlot: { type: String, required: true }, // "08:00 - 10:00"
       travelFee: { type: Number, default: 0 },
     },
     required: true,
@@ -129,7 +134,10 @@ export class WeatherProposal {
     },
     default: {},
   })
-  providerResponses: Map<string, { decision: string; respondedAt: Date; rejectionReason?: string }>;
+  providerResponses: Map<
+    string,
+    { decision: string; respondedAt: Date; rejectionReason?: string }
+  >;
 
   @Prop({ type: String, default: null })
   temporaryHoldRef?: string | null;
@@ -138,7 +146,8 @@ export class WeatherProposal {
   appliedAt?: Date | null;
 }
 
-export const WeatherProposalSchema = SchemaFactory.createForClass(WeatherProposal);
+export const WeatherProposalSchema =
+  SchemaFactory.createForClass(WeatherProposal);
 
 WeatherProposalSchema.index({ bookingId: 1, status: 1 });
 WeatherProposalSchema.index({ customerId: 1, createdAt: -1 });

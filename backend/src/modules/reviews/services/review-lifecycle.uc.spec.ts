@@ -52,18 +52,16 @@ function createService(
     create: jest.fn(async (data: Row) => data),
   };
   const bookingModel = {
-    findById: jest
-      .fn()
-      .mockResolvedValue(
-        options.booking === undefined
-          ? {
-              _id: new Types.ObjectId(),
-              customerId,
-              status: BookingStatus.Completed,
-              providerIds: [providerId],
-            }
-          : options.booking,
-      ),
+    findById: jest.fn().mockResolvedValue(
+      options.booking === undefined
+        ? {
+            _id: new Types.ObjectId(),
+            customerId,
+            status: BookingStatus.Completed,
+            providerIds: [providerId],
+          }
+        : options.booking,
+    ),
     updateOne: jest.fn().mockResolvedValue(undefined),
   };
   const bookingItemModel = {

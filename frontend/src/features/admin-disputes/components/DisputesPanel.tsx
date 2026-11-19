@@ -1923,7 +1923,7 @@ export function DisputesPanel() {
                   {/* Ký quỹ Escrow Box */}
                   <div className="df-history-box" style={{ gridColumn: 'span 2' }}>
                     <div className="df-history-box-title">
-                      <span>Hợp đồng Ký quỹ VibeHue Escrow #{getBookingCode(selected)}</span>
+                      <span>Hợp đồng Ký quỹ TàGo Escrow #{getBookingCode(selected)}</span>
                       <span style={{ fontSize: '11px', color: '#059669' }}>Bảo chứng an toàn</span>
                     </div>
                     <div style={{ fontSize: '12px', color: '#64748b', lineHeight: '1.6', marginTop: '6px' }}>

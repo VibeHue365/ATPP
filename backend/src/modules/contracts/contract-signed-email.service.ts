@@ -113,7 +113,7 @@ export class ContractSignedEmailService {
       const pdf = await this.readBuffer(stream);
       const delivered = await this.mail.sendMail(
         recipient,
-        `[VibeHue] Hợp đồng điện tử đã ký - ${filename.replace(/\.pdf$/i, '')}`,
+        `[TàGo] Hợp đồng điện tử đã ký - ${filename.replace(/\.pdf$/i, '')}`,
         this.html(filename, sha256),
         `Hợp đồng điện tử đã ký của bạn được đính kèm trong email này. Mã SHA-256: ${sha256}`,
         [{ filename, content: pdf, contentType: 'application/pdf' }],
@@ -166,11 +166,11 @@ export class ContractSignedEmailService {
     return `
       <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;padding:24px;color:#2a2a2a">
         <h2 style="color:#4a0e17">Hợp đồng điện tử đã ký</h2>
-        <p>VibeHue gửi bạn bản hợp đồng điện tử đã ký. Tệp PDF được đính kèm trong email này.</p>
+        <p>TàGo gửi bạn bản hợp đồng điện tử đã ký. Tệp PDF được đính kèm trong email này.</p>
         <p><strong>Tệp:</strong> ${this.escapeHtml(filename)}</p>
         <p style="font-size:12px;color:#666;word-break:break-all"><strong>SHA-256:</strong> ${sha256}</p>
         <hr style="border:0;border-top:1px solid #e8e2d5;margin:24px 0" />
-        <p style="font-size:12px;color:#777">Đây là email giao dịch tự động từ VibeHue. Vui lòng lưu tệp để đối chiếu khi cần.</p>
+        <p style="font-size:12px;color:#777">Đây là email giao dịch tự động từ TàGo. Vui lòng lưu tệp để đối chiếu khi cần.</p>
       </div>`;
   }
 

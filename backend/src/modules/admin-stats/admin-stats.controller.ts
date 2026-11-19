@@ -22,7 +22,12 @@ import type { AuthUser } from '../../common/decorators/current-user.decorator';
 import { AdminStatsService } from './admin-stats.service';
 import { AdminAiAnalyticsService } from './admin-ai-analytics.service';
 
-@Controller(['admin/stats', 'admin-stats', 'api/v1/admin-stats', 'api/v1/admin'])
+@Controller([
+  'admin/stats',
+  'admin-stats',
+  'api/v1/admin-stats',
+  'api/v1/admin',
+])
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class AdminStatsController {
   constructor(

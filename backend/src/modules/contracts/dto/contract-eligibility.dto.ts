@@ -1,4 +1,9 @@
-import { IsArray, IsMongoId, IsOptional, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsMongoId,
+  IsOptional,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class EligibilityCheckItemDto {

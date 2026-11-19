@@ -79,10 +79,7 @@ export class WeatherProposalsController {
    */
   @Post(':id/cancel')
   @UseGuards(JwtAuthGuard)
-  async cancelProposal(
-    @Param('id') id: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  async cancelProposal(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.weatherProposalsService.cancelProposal(id, user.sub);
   }
 

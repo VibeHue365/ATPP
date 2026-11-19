@@ -4,7 +4,10 @@ import { Model, Types } from 'mongoose';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { NotificationType } from '../../notifications/schemas/notification.schema';
 import { ChatGateway } from '../../chat/chat.gateway';
-import { Provider, ProviderDocument } from '../../providers/schemas/provider.schema';
+import {
+  Provider,
+  ProviderDocument,
+} from '../../providers/schemas/provider.schema';
 
 export interface SendWeatherRedAlertInput {
   booking: any;
@@ -73,7 +76,9 @@ export class WeatherNotificationService {
         this.chatGateway.server.to(socketId).emit(event, payload);
       }
     } catch (e: any) {
-      this.logger.warn(`Failed to emit ${event} to user ${userId}: ${e?.message}`);
+      this.logger.warn(
+        `Failed to emit ${event} to user ${userId}: ${e?.message}`,
+      );
     }
   }
 
@@ -85,7 +90,9 @@ export class WeatherNotificationService {
       if (!this.chatGateway?.server) return;
       this.chatGateway.server.to(room).emit(event, payload);
     } catch (e: any) {
-      this.logger.warn(`Failed to emit ${event} to room ${room}: ${e?.message}`);
+      this.logger.warn(
+        `Failed to emit ${event} to room ${room}: ${e?.message}`,
+      );
     }
   }
 
@@ -180,7 +187,9 @@ export class WeatherNotificationService {
           expiresAt: proposal.expiresAt,
         });
       } catch (err: any) {
-        this.logger.warn(`Failed to notify provider ${providerId}: ${err?.message}`);
+        this.logger.warn(
+          `Failed to notify provider ${providerId}: ${err?.message}`,
+        );
       }
     }
   }
@@ -342,7 +351,8 @@ export class WeatherNotificationService {
       bookingId: booking._id.toString(),
       bookingCode: booking.bookingCode,
       status: cancellation.status,
-      approvedRefundAmount: cancellation.reviewDecision?.approvedRefundAmount ?? 0,
+      approvedRefundAmount:
+        cancellation.reviewDecision?.approvedRefundAmount ?? 0,
       notes: cancellation.reviewDecision?.notes ?? null,
     };
 

@@ -919,7 +919,7 @@ export class SmartTaggingService {
         entityRevision: input.entity.taggingRevision,
         taxonomyRevision: input.taxonomyRevision,
         lastInputFingerprint: input.fingerprint,
-          signals: [signal],
+        signals: [signal],
         status: SmartTagAssignmentStatus.Suggested,
         suggestedAt: new Date(),
       });
@@ -1181,4 +1181,3 @@ function normalizeForFingerprint(value: string): string {
 function normalizeArray(values: string[] = []): string[] {
   return values.map(normalizeForFingerprint).sort();
 }
-

@@ -12,7 +12,10 @@ import {
   PayOSRefundService,
 } from '../../payments/services/payos-refund.service';
 import { Payment } from '../../payments/schemas/payment.schema';
-import { RefundRequest, RefundStatus } from '../../payments/schemas/refund-request.schema';
+import {
+  RefundRequest,
+  RefundStatus,
+} from '../../payments/schemas/refund-request.schema';
 import { Booking } from '../../bookings/schemas/booking.schema';
 
 describe('RefundOutboxSweeperService', () => {
@@ -91,7 +94,9 @@ describe('RefundOutboxSweeperService', () => {
       ],
     }).compile();
 
-    service = module.get<RefundOutboxSweeperService>(RefundOutboxSweeperService);
+    service = module.get<RefundOutboxSweeperService>(
+      RefundOutboxSweeperService,
+    );
   });
 
   describe('processSingleTask', () => {
@@ -113,10 +118,13 @@ describe('RefundOutboxSweeperService', () => {
         orderCode: 123456,
       });
 
-      const handled = await service.processSingleTask(task as any);
+      const handled = await service.processSingleTask(task);
 
       expect(handled).toBe(true);
-      expect(mockPayOSRefundService.refundPayment).toHaveBeenCalledWith(123456, 300000);
+      expect(mockPayOSRefundService.refundPayment).toHaveBeenCalledWith(
+        123456,
+        300000,
+      );
       expect(mockOutboxModel.updateOne).toHaveBeenCalledWith(
         { _id: task._id },
         expect.objectContaining({
@@ -147,7 +155,7 @@ describe('RefundOutboxSweeperService', () => {
         new PayOSRefundRejectedError('Số dư chi hộ không đủ'),
       );
 
-      const handled = await service.processSingleTask(task as any);
+      const handled = await service.processSingleTask(task);
 
       expect(handled).toBe(false);
       expect(mockOutboxModel.updateOne).toHaveBeenCalledWith(
@@ -177,7 +185,7 @@ describe('RefundOutboxSweeperService', () => {
         new Error('Network timeout'),
       );
 
-      const handled = await service.processSingleTask(task as any);
+      const handled = await service.processSingleTask(task);
 
       expect(handled).toBe(false);
       expect(mockOutboxModel.updateOne).toHaveBeenCalledWith(
@@ -208,7 +216,7 @@ describe('RefundOutboxSweeperService', () => {
         new Error('Network error 504 Gateway Timeout'),
       );
 
-      const handled = await service.processSingleTask(task as any);
+      const handled = await service.processSingleTask(task);
 
       expect(handled).toBe(false);
       expect(mockOutboxModel.updateOne).toHaveBeenCalledWith(
@@ -269,7 +277,7 @@ describe('RefundOutboxSweeperService', () => {
       const task = createMockTask();
       mockOutboxModel.findOneAndUpdate.mockResolvedValueOnce(null);
 
-      const handled = await service.processSingleTask(task as any);
+      const handled = await service.processSingleTask(task);
       expect(handled).toBe(false);
     });
 
@@ -284,7 +292,7 @@ describe('RefundOutboxSweeperService', () => {
         }),
       });
 
-      const handled = await service.processSingleTask(task as any);
+      const handled = await service.processSingleTask(task);
       expect(handled).toBe(false);
       expect(mockOutboxModel.updateOne).toHaveBeenCalledWith(
         { _id: task._id },
@@ -292,7 +300,9 @@ describe('RefundOutboxSweeperService', () => {
           $set: expect.objectContaining({
             status: OutboxStatus.PENDING,
             retryCount: 1,
-            lastError: expect.stringContaining('No successful PayOS payment record found'),
+            lastError: expect.stringContaining(
+              'No successful PayOS payment record found',
+            ),
           }),
         }),
       );

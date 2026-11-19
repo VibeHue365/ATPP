@@ -458,15 +458,42 @@ describe('AdminStatsService (VS-103, VS-104, VS-105)', () => {
 
   describe('VS-110: Low-rating Photographer Performance Alert Report', () => {
     it('returns photographers below 3.5 with their negative reviews', async () => {
-      providerModel.aggregate.mockResolvedValue([{ _id: new Types.ObjectId(), businessName: 'Hue Studio', city: 'Hue', averageRating: 3.2, totalReviews: 5, negativeReviews: [{ reviewId: new Types.ObjectId(), rating: 2, comment: 'Ảnh trả chậm' }] }]);
+      providerModel.aggregate.mockResolvedValue([
+        {
+          _id: new Types.ObjectId(),
+          businessName: 'Hue Studio',
+          city: 'Hue',
+          averageRating: 3.2,
+          totalReviews: 5,
+          negativeReviews: [
+            {
+              reviewId: new Types.ObjectId(),
+              rating: 2,
+              comment: 'Ảnh trả chậm',
+            },
+          ],
+        },
+      ]);
       const result = await service.getLowRatingPhotographers();
       expect(result.total).toBe(1);
-      expect(result.data[0]).toMatchObject({ businessName: 'Hue Studio', averageRating: 3.2 });
-      expect(result.data[0].negativeReviews[0]).toMatchObject({ rating: 2, comment: 'Ảnh trả chậm' });
-      expect(providerModel.aggregate).toHaveBeenCalledWith(expect.arrayContaining([
-        expect.objectContaining({ $match: expect.objectContaining({ capabilities: 'PHOTOGRAPHY' }) }),
-        expect.objectContaining({ $lookup: expect.objectContaining({ from: 'reviews' }) }),
-      ]));
+      expect(result.data[0]).toMatchObject({
+        businessName: 'Hue Studio',
+        averageRating: 3.2,
+      });
+      expect(result.data[0].negativeReviews[0]).toMatchObject({
+        rating: 2,
+        comment: 'Ảnh trả chậm',
+      });
+      expect(providerModel.aggregate).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            $match: expect.objectContaining({ capabilities: 'PHOTOGRAPHY' }),
+          }),
+          expect.objectContaining({
+            $lookup: expect.objectContaining({ from: 'reviews' }),
+          }),
+        ]),
+      );
     });
   });
 

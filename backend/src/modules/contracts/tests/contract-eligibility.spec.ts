@@ -12,7 +12,9 @@ describe('ContractReadService: Early Eligibility Check', () => {
       collection: jest.fn((name: string) => ({
         findOne: jest.fn(async (query: any) => {
           if (name in dbOverrides) {
-            return typeof dbOverrides[name] === 'function' ? dbOverrides[name](query) : dbOverrides[name];
+            return typeof dbOverrides[name] === 'function'
+              ? dbOverrides[name](query)
+              : dbOverrides[name];
           }
           if (name === 'products') {
             return {
@@ -71,7 +73,9 @@ describe('ContractReadService: Early Eligibility Check', () => {
 
   it('1. Item is ELIGIBLE when provider is active, accepted, and product has approved replacement value', async () => {
     const { readService } = createService();
-    const result = await readService.checkEligibility([{ productId: prodId.toString() }]);
+    const result = await readService.checkEligibility([
+      { productId: prodId.toString() },
+    ]);
     expect(result.eligible).toBe(true);
     expect(result.ineligibleItems).toHaveLength(0);
   });
@@ -86,7 +90,9 @@ describe('ContractReadService: Early Eligibility Check', () => {
       },
     });
 
-    const result = await readService.checkEligibility([{ productId: prodId.toString() }]);
+    const result = await readService.checkEligibility([
+      { productId: prodId.toString() },
+    ]);
     expect(result.eligible).toBe(false);
     expect(result.ineligibleItems).toHaveLength(1);
     expect(result.ineligibleItems[0].reason).toBe('PROVIDER_RENTAL_NOT_ACTIVE');
@@ -99,7 +105,9 @@ describe('ContractReadService: Early Eligibility Check', () => {
       provider_contract_acceptances: null,
     });
 
-    const result = await readService.checkEligibility([{ productId: prodId.toString() }]);
+    const result = await readService.checkEligibility([
+      { productId: prodId.toString() },
+    ]);
     expect(result.eligible).toBe(true);
     expect(result.ineligibleItems).toHaveLength(0);
     expect(result.flow).toBe('LEGACY');
@@ -115,9 +123,13 @@ describe('ContractReadService: Early Eligibility Check', () => {
       },
     });
 
-    const result = await readService.checkEligibility([{ productId: prodId.toString() }]);
+    const result = await readService.checkEligibility([
+      { productId: prodId.toString() },
+    ]);
     expect(result.eligible).toBe(false);
-    expect(result.ineligibleItems[0].reason).toBe('PROVIDER_ACCEPTANCE_SUSPENDED');
+    expect(result.ineligibleItems[0].reason).toBe(
+      'PROVIDER_ACCEPTANCE_SUSPENDED',
+    );
   });
 
   it('4. Flags CONTRACT_PRODUCT_REPLACEMENT_VALUE_MISSING when replacement value is not set', async () => {
@@ -130,10 +142,16 @@ describe('ContractReadService: Early Eligibility Check', () => {
       },
     });
 
-    const result = await readService.checkEligibility([{ productId: prodId.toString() }]);
+    const result = await readService.checkEligibility([
+      { productId: prodId.toString() },
+    ]);
     expect(result.eligible).toBe(false);
-    expect(result.ineligibleItems[0].reason).toBe('CONTRACT_PRODUCT_REPLACEMENT_VALUE_MISSING');
-    expect(result.ineligibleItems[0].message).toContain('chưa có Giá trị bồi hoàn');
+    expect(result.ineligibleItems[0].reason).toBe(
+      'CONTRACT_PRODUCT_REPLACEMENT_VALUE_MISSING',
+    );
+    expect(result.ineligibleItems[0].message).toContain(
+      'chưa có Giá trị bồi hoàn',
+    );
   });
 
   it('5. Flags CONTRACT_PRODUCT_REPLACEMENT_VALUE_UNAPPROVED when replacement value is not approved', async () => {
@@ -147,10 +165,16 @@ describe('ContractReadService: Early Eligibility Check', () => {
       },
     });
 
-    const result = await readService.checkEligibility([{ productId: prodId.toString() }]);
+    const result = await readService.checkEligibility([
+      { productId: prodId.toString() },
+    ]);
     expect(result.eligible).toBe(false);
-    expect(result.ineligibleItems[0].reason).toBe('CONTRACT_PRODUCT_REPLACEMENT_VALUE_UNAPPROVED');
-    expect(result.ineligibleItems[0].message).toContain('đang chờ Quản trị viên sàn phê duyệt');
+    expect(result.ineligibleItems[0].reason).toBe(
+      'CONTRACT_PRODUCT_REPLACEMENT_VALUE_UNAPPROVED',
+    );
+    expect(result.ineligibleItems[0].message).toContain(
+      'đang chờ Quản trị viên sàn phê duyệt',
+    );
   });
 
   it('6. Allows checkout without replacement value if provider policy does not use percentage compensation', async () => {
@@ -171,14 +195,18 @@ describe('ContractReadService: Early Eligibility Check', () => {
       },
     });
 
-    const result = await readService.checkEligibility([{ productId: prodId.toString() }]);
+    const result = await readService.checkEligibility([
+      { productId: prodId.toString() },
+    ]);
     expect(result.eligible).toBe(true);
     expect(result.ineligibleItems).toHaveLength(0);
   });
 
   it('7. Flags PRODUCT_ID_INVALID when productId is not a valid 24-hex ObjectId', async () => {
     const { readService } = createService();
-    const result = await readService.checkEligibility([{ productId: 'invalid_id_not_hex' }]);
+    const result = await readService.checkEligibility([
+      { productId: 'invalid_id_not_hex' },
+    ]);
     expect(result.eligible).toBe(false);
     expect(result.ineligibleItems).toHaveLength(1);
     expect(result.ineligibleItems[0].reason).toBe('PRODUCT_ID_INVALID');
@@ -187,7 +215,9 @@ describe('ContractReadService: Early Eligibility Check', () => {
   it('8. Flags PRODUCT_NOT_FOUND when product does not exist in collection', async () => {
     const { readService } = createService({ products: null });
     const nonExistentId = new Types.ObjectId().toString();
-    const result = await readService.checkEligibility([{ productId: nonExistentId }]);
+    const result = await readService.checkEligibility([
+      { productId: nonExistentId },
+    ]);
     expect(result.eligible).toBe(false);
     expect(result.ineligibleItems).toHaveLength(1);
     expect(result.ineligibleItems[0].reason).toBe('PRODUCT_NOT_FOUND');
@@ -229,7 +259,9 @@ describe('ContractReadService: Early Eligibility Check', () => {
         },
       });
 
-      const result = await readService.checkEligibility([{ productId: prodId.toString() }]);
+      const result = await readService.checkEligibility([
+        { productId: prodId.toString() },
+      ]);
       expect(result.eligible).toBe(true);
       expect(result.ineligibleItems).toHaveLength(0);
     });
@@ -245,9 +277,13 @@ describe('ContractReadService: Early Eligibility Check', () => {
         },
       });
 
-      const result = await readService.checkEligibility([{ productId: prodId.toString() }]);
+      const result = await readService.checkEligibility([
+        { productId: prodId.toString() },
+      ]);
       expect(result.eligible).toBe(false);
-      expect(result.ineligibleItems[0].reason).toBe('CONTRACT_PRODUCT_REPLACEMENT_VALUE_MISSING');
+      expect(result.ineligibleItems[0].reason).toBe(
+        'CONTRACT_PRODUCT_REPLACEMENT_VALUE_MISSING',
+      );
     });
   });
 });

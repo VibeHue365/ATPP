@@ -7,7 +7,10 @@ import {
   WeatherProposal,
   WeatherProposalDocument,
 } from '../schemas/weather-proposal.schema';
-import { Booking, BookingDocument } from '../../bookings/schemas/booking.schema';
+import {
+  Booking,
+  BookingDocument,
+} from '../../bookings/schemas/booking.schema';
 import { RedisService } from '../../../common/redis/redis.service';
 
 @Injectable()
@@ -56,7 +59,9 @@ export class WeatherProposalSupervisorService {
 
         await proposal.save();
         expiredCount++;
-        this.logger.log(`Supervisor marked proposal ${proposal._id} as EXPIRED (Proposal TTL passed).`);
+        this.logger.log(
+          `Supervisor marked proposal ${proposal._id} as EXPIRED (Proposal TTL passed).`,
+        );
       }
 
       // 2. Expire APPROVED_PENDING_PAYMENT proposals whose paymentExpiresAt has passed
@@ -84,10 +89,15 @@ export class WeatherProposalSupervisorService {
 
         await proposal.save();
         expiredCount++;
-        this.logger.log(`Supervisor marked proposal ${proposal._id} as EXPIRED (Payment TTL passed).`);
+        this.logger.log(
+          `Supervisor marked proposal ${proposal._id} as EXPIRED (Payment TTL passed).`,
+        );
       }
     } catch (error: any) {
-      this.logger.error(`Error in sweepExpiredProposals: ${error?.message}`, error);
+      this.logger.error(
+        `Error in sweepExpiredProposals: ${error?.message}`,
+        error,
+      );
     }
 
     return expiredCount;

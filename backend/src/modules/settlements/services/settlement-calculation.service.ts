@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Types } from 'mongoose';
 import { PolicyCode } from '../../system-policies/constants/policy-code.enum';
 import {
@@ -209,7 +213,10 @@ export class SettlementCalculationService {
       const providerDiscountAmount = this.getProviderDiscountAmount(item);
       const grossAmount = serviceAmount - providerDiscountAmount;
 
-      if (providerDiscountAmount < 0 || providerDiscountAmount > serviceAmount) {
+      if (
+        providerDiscountAmount < 0 ||
+        providerDiscountAmount > serviceAmount
+      ) {
         throw new BadRequestException(SETTLEMENT_ERROR_CODES.AmountInvalid);
       }
 
@@ -238,7 +245,9 @@ export class SettlementCalculationService {
     const allocations = new Map<string, number>();
 
     if (fixedPlatformFee <= 0) {
-      groups.forEach((group) => allocations.set(group.providerId.toString(), 0));
+      groups.forEach((group) =>
+        allocations.set(group.providerId.toString(), 0),
+      );
       return allocations;
     }
 
@@ -248,7 +257,9 @@ export class SettlementCalculationService {
     );
 
     if (bookingGrossAmount <= 0) {
-      groups.forEach((group) => allocations.set(group.providerId.toString(), 0));
+      groups.forEach((group) =>
+        allocations.set(group.providerId.toString(), 0),
+      );
       return allocations;
     }
 
@@ -323,7 +334,9 @@ export class SettlementCalculationService {
     }));
 
     if (group.grossAmount <= 0) {
-      return itemGrossAmounts.map(({ item }) => this.itemSnapshot(item, 0, 0, 0));
+      return itemGrossAmounts.map(({ item }) =>
+        this.itemSnapshot(item, 0, 0, 0),
+      );
     }
 
     const commissionAllocations = this.allocateAmountToItems(
@@ -361,7 +374,9 @@ export class SettlementCalculationService {
     );
 
     if (amount <= 0 || totalGross <= 0) {
-      itemGrossAmounts.forEach(({ item }) => allocations.set(item._id.toString(), 0));
+      itemGrossAmounts.forEach(({ item }) =>
+        allocations.set(item._id.toString(), 0),
+      );
       return allocations;
     }
 
@@ -396,7 +411,9 @@ export class SettlementCalculationService {
   ): SettlementItemSnapshot {
     const serviceAmount = this.getServiceAmount(item);
     const providerDiscountAmount = this.getProviderDiscountAmount(item);
-    const platformDiscountAmount = this.moneyRound(item.platformVoucherDiscountAmount ?? 0);
+    const platformDiscountAmount = this.moneyRound(
+      item.platformVoucherDiscountAmount ?? 0,
+    );
     const commissionBaseAmount = serviceAmount - providerDiscountAmount;
 
     return {

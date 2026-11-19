@@ -1,11 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 
-export type WeatherCancellationRequestDocument = HydratedDocument<WeatherCancellationRequest>;
+export type WeatherCancellationRequestDocument =
+  HydratedDocument<WeatherCancellationRequest>;
 
 export enum CancellationEligibilityBasis {
-  BASIS_A_QUOTA_EXHAUSTED = 'BASIS_A_QUOTA_EXHAUSTED',     // Đã dùng hết quota (count >= 2) + RED_ALERT
-  BASIS_B_FORCE_MAJEURE = 'BASIS_B_FORCE_MAJEURE',         // Chưa dùng hết quota (count < 2) + RED_ALERT + Bằng chứng bất khả kháng
+  BASIS_A_QUOTA_EXHAUSTED = 'BASIS_A_QUOTA_EXHAUSTED', // Đã dùng hết quota (count >= 2) + RED_ALERT
+  BASIS_B_FORCE_MAJEURE = 'BASIS_B_FORCE_MAJEURE', // Chưa dùng hết quota (count < 2) + RED_ALERT + Bằng chứng bất khả kháng
 }
 
 export enum CancellationReviewStatus {
@@ -17,7 +18,13 @@ export enum CancellationReviewStatus {
 
 @Schema({ collection: 'weather_cancellation_requests', timestamps: true })
 export class WeatherCancellationRequest {
-  @Prop({ type: Types.ObjectId, ref: 'Booking', required: true, unique: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'Booking',
+    required: true,
+    unique: true,
+    index: true,
+  })
   bookingId: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
@@ -90,6 +97,8 @@ export class WeatherCancellationRequest {
   refundRequestId?: Types.ObjectId | null;
 }
 
-export const WeatherCancellationRequestSchema = SchemaFactory.createForClass(WeatherCancellationRequest);
+export const WeatherCancellationRequestSchema = SchemaFactory.createForClass(
+  WeatherCancellationRequest,
+);
 
 WeatherCancellationRequestSchema.index({ status: 1, createdAt: -1 });

@@ -92,7 +92,8 @@ function createBookingData(overrides: Partial<any> = {}) {
 
 function createPaymentData(overrides: Partial<any> = {}) {
   const id = overrides._id || oid();
-  const code = overrides.paymentCode || `PAY_${id.toHexString().slice(-8).toUpperCase()}`;
+  const code =
+    overrides.paymentCode || `PAY_${id.toHexString().slice(-8).toUpperCase()}`;
   return {
     _id: id,
     bookingId: oid(),
@@ -113,7 +114,11 @@ function createPaymentData(overrides: Partial<any> = {}) {
   };
 }
 
-async function seedRentalItem(connection: Connection, bookingId: Types.ObjectId, providerId: Types.ObjectId) {
+async function seedRentalItem(
+  connection: Connection,
+  bookingId: Types.ObjectId,
+  providerId: Types.ObjectId,
+) {
   const itemId = oid();
   await connection.collection('booking_items').insertOne({
     _id: itemId,
@@ -130,7 +135,11 @@ async function seedRentalItem(connection: Connection, bookingId: Types.ObjectId,
   return itemId;
 }
 
-async function seedProvider(connection: Connection, providerId: Types.ObjectId, userId: Types.ObjectId) {
+async function seedProvider(
+  connection: Connection,
+  providerId: Types.ObjectId,
+  userId: Types.ObjectId,
+) {
   await connection.collection('providers').insertOne({
     _id: providerId,
     userId,
@@ -179,13 +188,21 @@ async function seedProvider(connection: Connection, providerId: Types.ObjectId, 
 
       const hello = await connection.db!.admin().command({ hello: 1 });
       if (hello.setName !== 'rsContractTest' || !hello.isWritablePrimary) {
-        throw new Error('Verification requires isolated replica set rsContractTest');
+        throw new Error(
+          'Verification requires isolated replica set rsContractTest',
+        );
       }
 
       bookings = connection.model(Booking.name, BookingSchema);
       payments = connection.model(Payment.name, PaymentSchema);
-      recoveries = connection.model(PaymentRecovery.name, PaymentRecoverySchema);
-      webhookEvents = connection.model(PaymentWebhookEvent.name, PaymentWebhookEventSchema);
+      recoveries = connection.model(
+        PaymentRecovery.name,
+        PaymentRecoverySchema,
+      );
+      webhookEvents = connection.model(
+        PaymentWebhookEvent.name,
+        PaymentWebhookEventSchema,
+      );
       contracts = connection.model(DigitalContract.name, DigitalContractSchema);
       versions = connection.model(ContractVersion.name, ContractVersionSchema);
       consents = connection.model(ContractConsent.name, ContractConsentSchema);
@@ -265,7 +282,11 @@ async function seedProvider(connection: Connection, providerId: Types.ObjectId, 
         // 5. Guard verification: mechanism is DRAFT, guard throws CONTRACT_MECHANISM_NOT_APPROVED
         let guardError: any = null;
         try {
-          await checkoutGuard.evaluate(bookingId.toString(), 250000, PaymentPurpose.DepositPayment);
+          await checkoutGuard.evaluate(
+            bookingId.toString(),
+            250000,
+            PaymentPurpose.DepositPayment,
+          );
         } catch (err: any) {
           guardError = err;
         }
@@ -278,24 +299,37 @@ async function seedProvider(connection: Connection, providerId: Types.ObjectId, 
           await session.withTransaction(async () => {
             await payments.updateOne(
               { _id: paymentId },
-              { $set: { status: PaymentStatus.Success, needsManualReview: true, paidAt: new Date() } },
+              {
+                $set: {
+                  status: PaymentStatus.Success,
+                  needsManualReview: true,
+                  paidAt: new Date(),
+                },
+              },
               { session },
             );
             await recoveries.create(
-              [{
-                paymentId,
-                bookingId,
-                bindingKey: hex64('a'),
-                state: PaymentRecoveryState.ReviewRequired,
-                lastErrorCode: 'CONTRACT_BINDING_STALE',
-                attempts: 0,
-                nextAttemptAt: new Date(),
-              }],
+              [
+                {
+                  paymentId,
+                  bookingId,
+                  bindingKey: hex64('a'),
+                  state: PaymentRecoveryState.ReviewRequired,
+                  lastErrorCode: 'CONTRACT_BINDING_STALE',
+                  attempts: 0,
+                  nextAttemptAt: new Date(),
+                },
+              ],
               { session },
             );
             await bookings.updateOne(
               { _id: bookingId },
-              { $set: { paymentReviewRequired: true, paymentReviewReason: 'CONTRACT_BINDING_STALE' } },
+              {
+                $set: {
+                  paymentReviewRequired: true,
+                  paymentReviewReason: 'CONTRACT_BINDING_STALE',
+                },
+              },
               { session },
             );
           });
@@ -333,7 +367,8 @@ async function seedProvider(connection: Connection, providerId: Types.ObjectId, 
             afterBooking!.status === BookingStatus.Confirmed ||
             afterBooking!.status === BookingStatus.DepositPaid, // FALSE!
           needsManualReview:
-            afterPayment!.needsManualReview || afterBooking!.paymentReviewRequired,
+            afterPayment!.needsManualReview ||
+            afterBooking!.paymentReviewRequired,
         };
 
         // Evidence: confirmed is FALSE while paymentStatus is SUCCESS!
@@ -362,10 +397,18 @@ async function seedProvider(connection: Connection, providerId: Types.ObjectId, 
         );
 
         // Simulate legacy confirmation
-        await payments.updateOne({ _id: pId }, { $set: { status: PaymentStatus.Success, paidAt: new Date() } });
+        await payments.updateOne(
+          { _id: pId },
+          { $set: { status: PaymentStatus.Success, paidAt: new Date() } },
+        );
         await bookings.updateOne(
           { _id: bId },
-          { $set: { status: BookingStatus.Confirmed, 'paymentSummary.paymentStatus': BookingPaymentStatus.Paid } },
+          {
+            $set: {
+              status: BookingStatus.Confirmed,
+              'paymentSummary.paymentStatus': BookingPaymentStatus.Paid,
+            },
+          },
         );
 
         const updatedB = await bookings.findById(bId);
@@ -403,7 +446,10 @@ async function seedProvider(connection: Connection, providerId: Types.ObjectId, 
             status: PaymentStatus.Failed,
           }),
         );
-        await bookings.updateOne({ _id: bId }, { $set: { status: BookingStatus.Cancelled } });
+        await bookings.updateOne(
+          { _id: bId },
+          { $set: { status: BookingStatus.Cancelled } },
+        );
 
         const b = await bookings.findById(bId);
         const p = await payments.findById(pId);
@@ -423,7 +469,11 @@ async function seedProvider(connection: Connection, providerId: Types.ObjectId, 
         await seedRentalItem(connection, bId, pId);
 
         await expect(
-          checkoutGuard.evaluate(bId.toString(), 250000, PaymentPurpose.DepositPayment),
+          checkoutGuard.evaluate(
+            bId.toString(),
+            250000,
+            PaymentPurpose.DepositPayment,
+          ),
         ).rejects.toThrow('CONTRACT_MECHANISM_NOT_APPROVED');
       });
 
@@ -454,7 +504,11 @@ async function seedProvider(connection: Connection, providerId: Types.ObjectId, 
         );
 
         await expect(
-          customGuard.evaluate(bId.toString(), 250000, PaymentPurpose.DepositPayment),
+          customGuard.evaluate(
+            bId.toString(),
+            250000,
+            PaymentPurpose.DepositPayment,
+          ),
         ).rejects.toThrow();
       });
 
@@ -476,9 +530,14 @@ async function seedProvider(connection: Connection, providerId: Types.ObjectId, 
           acceptedAt: new Date(),
         });
 
-        const activeAcceptance = await policyService.requireAutoAcceptance(providerId, 1);
+        const activeAcceptance = await policyService.requireAutoAcceptance(
+          providerId,
+          1,
+        );
         expect(activeAcceptance.mechanismHash).toBe(hex64('9'));
-        expect(activeAcceptance.mechanismHash).not.toBe(SYNTHETIC_TEST_MECHANISM_V2.hash);
+        expect(activeAcceptance.mechanismHash).not.toBe(
+          SYNTHETIC_TEST_MECHANISM_V2.hash,
+        );
       });
 
       it('Scenario 7: Customer ACCEPTed but not yet paid (version Accepted, consent stored, payment Pending)', async () => {
@@ -622,7 +681,14 @@ async function seedProvider(connection: Connection, providerId: Types.ObjectId, 
         // Expire lease and retry
         await recoveries.updateOne(
           { _id: rec._id },
-          { $set: { state: PaymentRecoveryState.FinalizationPending, leaseToken: null, leaseUntil: null }, $inc: { attempts: 1 } },
+          {
+            $set: {
+              state: PaymentRecoveryState.FinalizationPending,
+              leaseToken: null,
+              leaseUntil: null,
+            },
+            $inc: { attempts: 1 },
+          },
         );
 
         const retried = await recoveries.findById(rec._id);
@@ -671,7 +737,11 @@ async function seedProvider(connection: Connection, providerId: Types.ObjectId, 
         );
         await seedRentalItem(connection, bId, pId);
 
-        const decision = await checkoutGuard.evaluate(bId.toString(), 250000, PaymentPurpose.DepositPayment);
+        const decision = await checkoutGuard.evaluate(
+          bId.toString(),
+          250000,
+          PaymentPurpose.DepositPayment,
+        );
         expect(decision.binding).toBeNull();
         expect(decision.context).toBeNull();
       });
@@ -685,7 +755,11 @@ async function seedProvider(connection: Connection, providerId: Types.ObjectId, 
           }),
         );
 
-        const decision = await checkoutGuard.evaluate(bId.toString(), 500000, PaymentPurpose.DepositPayment);
+        const decision = await checkoutGuard.evaluate(
+          bId.toString(),
+          500000,
+          PaymentPurpose.DepositPayment,
+        );
         expect(decision.binding).toBeNull();
         expect(decision.context).toBeNull();
       });
@@ -714,7 +788,11 @@ async function seedProvider(connection: Connection, providerId: Types.ObjectId, 
         );
 
         await expect(
-          disabledGuard.evaluate(bId.toString(), 250000, PaymentPurpose.DepositPayment),
+          disabledGuard.evaluate(
+            bId.toString(),
+            250000,
+            PaymentPurpose.DepositPayment,
+          ),
         ).rejects.toThrow('CONTRACTS_V2_DISABLED');
       });
     });

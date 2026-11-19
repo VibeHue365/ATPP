@@ -45,7 +45,11 @@ import {
 } from '../disputes/schemas/dispute.schema';
 import { Review, ReviewDocument } from '../reviews/schemas/review.schema';
 import { ProductModerationStatus } from '../products/schemas/product.schema';
-import { ComboPromotion, ComboPromotionDocument, ComboPromotionStatus } from '../products/schemas/combo-promotion.schema';
+import {
+  ComboPromotion,
+  ComboPromotionDocument,
+  ComboPromotionStatus,
+} from '../products/schemas/combo-promotion.schema';
 import { buildVietnameseRegexPattern } from '../../common/utils/vietnamese.util';
 import {
   InventoryItem,
@@ -828,9 +832,9 @@ export class AdminStatsService {
       });
     }
     const [total, customers] = await Promise.all([
-      this.userModel.countDocuments(filter as any),
+      this.userModel.countDocuments(filter),
       this.userModel
-        .find(filter as any)
+        .find(filter)
         .select('profile auth.email auth.phone accountStatus createdAt')
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
@@ -906,11 +910,15 @@ export class AdminStatsService {
     const [user, bookings] = await Promise.all([
       this.userModel
         .findById(custObjId)
-        .select('profile auth.email auth.phone accountStatus createdAt updatedAt')
+        .select(
+          'profile auth.email auth.phone accountStatus createdAt updatedAt',
+        )
         .lean(),
       this.bookingModel
         .find({ customerId: custObjId })
-        .select('bookingCode bookingType status pricingSummary rentalPeriod createdAt updatedAt items cancellation rentalDepositRefund')
+        .select(
+          'bookingCode bookingType status pricingSummary rentalPeriod createdAt updatedAt items cancellation rentalDepositRefund',
+        )
         .sort({ createdAt: -1 })
         .limit(20)
         .lean(),
@@ -925,32 +933,48 @@ export class AdminStatsService {
     const [refunds, disputes] = await Promise.all([
       bookingIds.length > 0
         ? this.paymentModel
-          .find({
-            bookingId: { $in: bookingIds },
-            purpose: PaymentPurpose.DepositRefund,
-          })
-          .select('paymentCode amount status createdAt description bookingId')
-          .sort({ createdAt: -1 })
-          .limit(20)
-          .lean()
+            .find({
+              bookingId: { $in: bookingIds },
+              purpose: PaymentPurpose.DepositRefund,
+            })
+            .select('paymentCode amount status createdAt description bookingId')
+            .sort({ createdAt: -1 })
+            .limit(20)
+            .lean()
         : [],
       this.disputeModel
         .find({
           $or: [
             { customerId: custObjId },
-            ...(bookingIds.length > 0 ? [{ bookingId: { $in: bookingIds } }] : []),
+            ...(bookingIds.length > 0
+              ? [{ bookingId: { $in: bookingIds } }]
+              : []),
           ],
         })
-        .select('disputeCode status reason adminDecision compensationAmount createdAt updatedAt')
+        .select(
+          'disputeCode status reason adminDecision compensationAmount createdAt updatedAt',
+        )
         .sort({ createdAt: -1 })
         .limit(20)
         .lean(),
     ]);
 
-    const completedBookings = bookings.filter((b) => b.status === 'COMPLETED').length;
-    const cancelledBookings = bookings.filter((b) => b.status === 'CANCELLED').length;
+    const completedBookings = bookings.filter(
+      (b) => b.status === 'COMPLETED',
+    ).length;
+    const cancelledBookings = bookings.filter(
+      (b) => b.status === 'CANCELLED',
+    ).length;
     const totalSpent = bookings
-      .filter((b) => ['COMPLETED', 'CONFIRMED', 'DEPOSIT_PAID', 'PICKED_UP', 'RETURNED'].includes(b.status))
+      .filter((b) =>
+        [
+          'COMPLETED',
+          'CONFIRMED',
+          'DEPOSIT_PAID',
+          'PICKED_UP',
+          'RETURNED',
+        ].includes(b.status),
+      )
       .reduce((sum, b) => sum + (b.pricingSummary?.grandTotal || 0), 0);
 
     return {
@@ -974,7 +998,8 @@ export class AdminStatsService {
       },
       bookings: bookings.map((b: any) => ({
         id: b._id.toString(),
-        bookingCode: b.bookingCode || `#BK-${b._id.toString().slice(-6).toUpperCase()}`,
+        bookingCode:
+          b.bookingCode || `#BK-${b._id.toString().slice(-6).toUpperCase()}`,
         bookingType: b.bookingType,
         status: b.status,
         totalAmount: b.pricingSummary?.grandTotal || 0,
@@ -985,7 +1010,8 @@ export class AdminStatsService {
       })),
       refunds: refunds.map((r: any) => ({
         id: r._id.toString(),
-        refundCode: r.paymentCode || `#RF-${r._id.toString().slice(-6).toUpperCase()}`,
+        refundCode:
+          r.paymentCode || `#RF-${r._id.toString().slice(-6).toUpperCase()}`,
         amount: r.amount || 0,
         status: r.status,
         createdAt: r.createdAt,
@@ -993,7 +1019,8 @@ export class AdminStatsService {
       })),
       disputes: disputes.map((d: any) => ({
         id: d._id.toString(),
-        disputeCode: d.disputeCode || `#DP-${d._id.toString().slice(-6).toUpperCase()}`,
+        disputeCode:
+          d.disputeCode || `#DP-${d._id.toString().slice(-6).toUpperCase()}`,
         status: d.status,
         reason: d.reason,
         compensationAmount: d.compensationAmount || 0,
@@ -1017,9 +1044,15 @@ export class AdminStatsService {
     }
     const [total, providers] = await Promise.all([
       this.providerModel.countDocuments(filter),
-      this.providerModel.find(filter)
-        .select('userId businessName contact capabilities status rating wallet createdAt media address paymentAccounts taxCode')
-        .populate('userId', 'profile.fullName profile.avatarUrl auth.email auth.phone')
+      this.providerModel
+        .find(filter)
+        .select(
+          'userId businessName contact capabilities status rating wallet createdAt media address paymentAccounts taxCode',
+        )
+        .populate(
+          'userId',
+          'profile.fullName profile.avatarUrl auth.email auth.phone',
+        )
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
@@ -1499,11 +1532,9 @@ export class AdminStatsService {
     }
 
     const items = bookings.map((b: any) => {
-      const custObj = b.customerId as any;
+      const custObj = b.customerId;
       const provObj =
-        b.providerIds && b.providerIds.length > 0
-          ? (b.providerIds[0] as any)
-          : null;
+        b.providerIds && b.providerIds.length > 0 ? b.providerIds[0] : null;
       const bItems = itemsByBookingId.get(b._id.toString()) || [];
       const disp = disputeByBookingId.get(b._id.toString());
 
@@ -1635,8 +1666,8 @@ export class AdminStatsService {
         status: b.status || 'CONFIRMED',
         statusLabel,
         rentalDate: scheduleDate,
-        returnDate: (b as any).updatedAt
-          ? new Date((b as any).updatedAt).toLocaleDateString('vi-VN')
+        returnDate: b.updatedAt
+          ? new Date(b.updatedAt).toLocaleDateString('vi-VN')
           : scheduleDate,
         createdAt: b.createdAt,
         updatedAt: b.updatedAt,
@@ -1752,8 +1783,8 @@ export class AdminStatsService {
     ]);
 
     const items = transfers.map((t: any) => {
-      const bookingObj = t.bookingId as any;
-      const provObj = t.providerId as any;
+      const bookingObj = t.bookingId;
+      const provObj = t.providerId;
       return {
         id: t.transactionReference || t._id.toString(),
         bookingId: bookingObj?._id || '',
@@ -1785,9 +1816,12 @@ export class AdminStatsService {
 
   async banCustomer(userId: string) {
     const userObjectId = new Types.ObjectId(userId);
-    await this.userModel.updateOne({ _id: userObjectId } as any, {
-      $set: { accountStatus: 'BANNED' },
-    });
+    await this.userModel.updateOne(
+      { _id: userObjectId },
+      {
+        $set: { accountStatus: 'BANNED' },
+      },
+    );
     // Revoke all active sessions immediately so the user is kicked out
     await this.refreshTokenModel.updateMany(
       { userId: userObjectId },
@@ -1800,9 +1834,12 @@ export class AdminStatsService {
   }
 
   async unbanCustomer(userId: string) {
-    await this.userModel.updateOne({ _id: new Types.ObjectId(userId) } as any, {
-      $set: { accountStatus: 'ACTIVE' },
-    });
+    await this.userModel.updateOne(
+      { _id: new Types.ObjectId(userId) },
+      {
+        $set: { accountStatus: 'ACTIVE' },
+      },
+    );
     return { success: true, message: 'Khách hàng đã được mở khóa tài khoản' };
   }
 
@@ -2004,7 +2041,7 @@ export class AdminStatsService {
 
     const isRentalBooking =
       booking.bookingType === BookingType.AoDaiRental ||
-      (booking as any).type === BookingType.AoDaiRental ||
+      booking.type === BookingType.AoDaiRental ||
       (await this.bookingItemModel.exists({
         bookingId: booking._id,
         itemType: BookingItemType.Product,
@@ -2037,7 +2074,7 @@ export class AdminStatsService {
     });
     if (note) {
       if (!booking.notes) booking.notes = [];
-      (booking.notes as any).push({
+      booking.notes.push({
         content: `Quản trị viên cập nhật trạng thái: ${status}. Ghi chú: ${note}`,
         createdAt: new Date(),
       });
@@ -2749,16 +2786,39 @@ export class AdminStatsService {
   async getLowRatingPhotographers(threshold = 3.5) {
     const safeThreshold = Math.min(Math.max(threshold, 1), 5);
     const rows = await this.providerModel.aggregate([
-      { $match: { status: ProviderStatus.Active, capabilities: ProviderCapability.Photography } },
-      { $lookup: { from: 'reviews', localField: '_id', foreignField: 'providerId', as: 'reviews' } },
+      {
+        $match: {
+          status: ProviderStatus.Active,
+          capabilities: ProviderCapability.Photography,
+        },
+      },
+      {
+        $lookup: {
+          from: 'reviews',
+          localField: '_id',
+          foreignField: 'providerId',
+          as: 'reviews',
+        },
+      },
       {
         $addFields: {
           averageRating: { $avg: '$reviews.rating' },
           totalReviews: { $size: '$reviews' },
-          negativeReviews: { $filter: { input: '$reviews', as: 'review', cond: { $lte: ['$$review.rating', 3] } } },
+          negativeReviews: {
+            $filter: {
+              input: '$reviews',
+              as: 'review',
+              cond: { $lte: ['$$review.rating', 3] },
+            },
+          },
         },
       },
-      { $match: { totalReviews: { $gt: 0 }, averageRating: { $lt: safeThreshold } } },
+      {
+        $match: {
+          totalReviews: { $gt: 0 },
+          averageRating: { $lt: safeThreshold },
+        },
+      },
       { $sort: { averageRating: 1, totalReviews: -1 } },
       { $limit: 50 },
       {
@@ -2767,7 +2827,18 @@ export class AdminStatsService {
           city: '$address.city',
           averageRating: { $round: ['$averageRating', 1] },
           totalReviews: 1,
-          negativeReviews: { $map: { input: '$negativeReviews', as: 'review', in: { reviewId: '$$review._id', rating: '$$review.rating', comment: '$$review.comment', createdAt: '$$review.createdAt' } } },
+          negativeReviews: {
+            $map: {
+              input: '$negativeReviews',
+              as: 'review',
+              in: {
+                reviewId: '$$review._id',
+                rating: '$$review.rating',
+                comment: '$$review.comment',
+                createdAt: '$$review.createdAt',
+              },
+            },
+          },
         },
       },
     ]);
@@ -2775,8 +2846,12 @@ export class AdminStatsService {
       threshold: safeThreshold,
       total: rows.length,
       data: rows.map((row: any) => ({
-        photographerId: row._id.toString(), businessName: row.businessName, city: row.city ?? null,
-        averageRating: row.averageRating, totalReviews: row.totalReviews, negativeReviews: row.negativeReviews,
+        photographerId: row._id.toString(),
+        businessName: row.businessName,
+        city: row.city ?? null,
+        averageRating: row.averageRating,
+        totalReviews: row.totalReviews,
+        negativeReviews: row.negativeReviews,
       })),
     };
   }

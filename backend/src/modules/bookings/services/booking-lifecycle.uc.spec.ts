@@ -49,12 +49,10 @@ function createStatusService(
   const bookingsRepository = {
     startSession: jest.fn().mockResolvedValue(session),
     findBookingById: jest.fn().mockResolvedValue(booking),
-    findBookingItems: jest
-      .fn()
-      .mockReturnValue({
-        session: () => Promise.resolve(options.items ?? []),
-        then: (r: any) => Promise.resolve(options.items ?? []).then(r),
-      }),
+    findBookingItems: jest.fn().mockReturnValue({
+      session: () => Promise.resolve(options.items ?? []),
+      then: (r: any) => Promise.resolve(options.items ?? []).then(r),
+    }),
     updateManySchedules: jest.fn().mockResolvedValue(undefined),
     model: {
       findOneAndUpdate: jest.fn(async (filter: Row, update: Row) =>
@@ -63,20 +61,16 @@ function createStatusService(
     },
   };
   const providerModel = {
-    find: jest
-      .fn()
-      .mockReturnValue({
-        session: () => Promise.resolve(options.providers ?? []),
-        // Status notifications look up the provider owners with select().lean().
-        select: () => ({ lean: () => Promise.resolve(options.providers ?? []) }),
-      }),
+    find: jest.fn().mockReturnValue({
+      session: () => Promise.resolve(options.providers ?? []),
+      // Status notifications look up the provider owners with select().lean().
+      select: () => ({ lean: () => Promise.resolve(options.providers ?? []) }),
+    }),
     findOneAndUpdate: jest.fn().mockResolvedValue(undefined),
     db: {
-      model: jest
-        .fn()
-        .mockReturnValue({
-          findOne: () => ({ session: () => Promise.resolve(null) }),
-        }),
+      model: jest.fn().mockReturnValue({
+        findOne: () => ({ session: () => Promise.resolve(null) }),
+      }),
     },
   };
   const inventoryReservationModel = {

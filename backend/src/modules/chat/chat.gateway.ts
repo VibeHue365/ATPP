@@ -44,7 +44,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         client.handshake.headers?.authorization?.split(' ')[1];
 
       if (!token) {
-        this.logger.warn(`Connection rejected: No token provided (Socket ID: ${client.id})`);
+        this.logger.warn(
+          `Connection rejected: No token provided (Socket ID: ${client.id})`,
+        );
         client.disconnect();
         return;
       }
@@ -54,7 +56,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       const userId = payload.sub || payload.id;
       if (!userId) {
-        this.logger.warn(`Connection rejected: Sub/Id missing in token payload (Socket ID: ${client.id})`);
+        this.logger.warn(
+          `Connection rejected: Sub/Id missing in token payload (Socket ID: ${client.id})`,
+        );
         client.disconnect();
         return;
       }
@@ -102,14 +106,24 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         );
       }
     } else {
-      this.logger.log(`Unauthenticated socket disconnected (Socket ID: ${client.id})`);
+      this.logger.log(
+        `Unauthenticated socket disconnected (Socket ID: ${client.id})`,
+      );
     }
   }
 
   @SubscribeMessage('ping')
-  handlePing(@ConnectedSocket() client: Socket, @MessageBody() data: any): string {
-    this.logger.log(`Received 'ping' from client: ${client.id}. Data: ${JSON.stringify(data)}`);
-    client.emit('pong', { message: 'pong', timestamp: new Date().toISOString() });
+  handlePing(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: any,
+  ): string {
+    this.logger.log(
+      `Received 'ping' from client: ${client.id}. Data: ${JSON.stringify(data)}`,
+    );
+    client.emit('pong', {
+      message: 'pong',
+      timestamp: new Date().toISOString(),
+    });
     return 'pong';
   }
 
@@ -125,10 +139,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     try {
       await this.chatService.assertUserInRoom(data.roomId, userId, user.roles);
       client.join(`room:${data.roomId}`);
-      this.logger.log(`Socket ${client.id} (user ${userId}) joined room:${data.roomId}`);
+      this.logger.log(
+        `Socket ${client.id} (user ${userId}) joined room:${data.roomId}`,
+      );
       return { status: 'joined', roomId: data.roomId };
     } catch {
-      this.logger.warn(`Unauthorized join_room attempt by user ${userId} to room:${data?.roomId}`);
+      this.logger.warn(
+        `Unauthorized join_room attempt by user ${userId} to room:${data?.roomId}`,
+      );
       client.emit('error', {
         code: 'UNAUTHORIZED_ROOM',
         message: 'Bạn không có quyền tham gia cuộc trò chuyện này',
@@ -140,11 +158,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('send_message')
   async handleSendMessage(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { roomId: string; messageText: string; attachments?: string[] },
+    @MessageBody()
+    data: { roomId: string; messageText: string; attachments?: string[] },
   ) {
     const user = (client as any).user;
     if (!user) {
-      this.logger.warn(`SendMessage rejected: Unauthenticated socket (Socket ID: ${client.id})`);
+      this.logger.warn(
+        `SendMessage rejected: Unauthenticated socket (Socket ID: ${client.id})`,
+      );
       return;
     }
     const userId = user.sub || user.id;

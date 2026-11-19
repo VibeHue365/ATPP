@@ -4,7 +4,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
-/* eslint-disable @typescript-eslint/restrict-template-expressions */
+
 import {
   BadRequestException,
   Injectable,
@@ -84,7 +84,9 @@ export class BookingStatusService {
 
     try {
       const now = new Date();
-      const cutoff = new Date(now.getTime() - SYSTEM_POLICIES.BOOKING_HOLD_TIMEOUT_MS);
+      const cutoff = new Date(
+        now.getTime() - SYSTEM_POLICIES.BOOKING_HOLD_TIMEOUT_MS,
+      );
       const expiryFilter = pendingBookingExpiryFilter(now, cutoff);
 
       const expiredBookings = await this.bookingsRepository.findBookings(
@@ -96,14 +98,23 @@ export class BookingStatusService {
       if (expiredBookings.length > 0) {
         for (const booking of expiredBookings) {
           // A successful gateway payment can precede booking finalization.
-          if (await this.bookingsRepository.hasSuccessfulPayment(booking._id, session))
+          if (
+            await this.bookingsRepository.hasSuccessfulPayment(
+              booking._id,
+              session,
+            )
+          )
             continue;
           // A payment or another expiry worker may have changed the booking
           // after the initial scan. Only the winner may release its resources.
           const isV2 = booking.contractFlowVersion === 2;
           const changed = await this.bookingsRepository.updateManyBookings(
             isV2
-              ? { _id: booking._id, contractFlowVersion: 2, $and: [expiryFilter, freePaymentClaim(now)] }
+              ? {
+                  _id: booking._id,
+                  contractFlowVersion: 2,
+                  $and: [expiryFilter, freePaymentClaim(now)],
+                }
               : { _id: booking._id, ...expiryFilter },
             {
               $set: {
@@ -137,7 +148,10 @@ export class BookingStatusService {
           );
           await this.inventoryReservationModel
             .updateMany(
-              { bookingId: booking._id, status: ReservationStatus.TempReserved },
+              {
+                bookingId: booking._id,
+                status: ReservationStatus.TempReserved,
+              },
               { $set: { status: ReservationStatus.Cancelled } },
             )
             .session(session);
@@ -537,9 +551,7 @@ export class BookingStatusService {
           : null;
       const cancelReason =
         reason ||
-        (isProvider
-          ? 'Nhà cung cấp chủ động hủy lịch'
-          : 'Khách hàng hủy đơn');
+        (isProvider ? 'Nhà cung cấp chủ động hủy lịch' : 'Khách hàng hủy đơn');
       const timelineNote = isFreeCancel
         ? `Đơn hàng đã được hủy thành công. Hoàn tiền 100% (${refundAmount.toLocaleString('vi-VN')}đ).`
         : `Đơn hàng đã bị hủy. Khách bị phạt tiền dịch vụ (${penaltyAmount.toLocaleString('vi-VN')}đ). Hoàn cọc giữ đồ & số dư (${refundAmount.toLocaleString('vi-VN')}đ). Lý do phạt: ${penaltyReason}`;
@@ -587,8 +599,13 @@ export class BookingStatusService {
         );
 
         if (booking.providerIds && booking.providerIds.length > 0) {
-          const query = this.providerModel.find({ _id: { $in: booking.providerIds } });
-          const rawProviders = typeof (query as any)?.select === 'function' ? await (query as any).select('userId').lean() : await query;
+          const query = this.providerModel.find({
+            _id: { $in: booking.providerIds },
+          });
+          const rawProviders =
+            typeof (query as any)?.select === 'function'
+              ? await (query as any).select('userId').lean()
+              : await query;
           const providers = Array.isArray(rawProviders) ? rawProviders : [];
 
           for (const prov of providers as any[]) {
@@ -632,7 +649,9 @@ export class BookingStatusService {
           .updateMany(
             {
               bookingId: booking._id,
-              status: { $in: [SlotLeaseStatus.Temp, SlotLeaseStatus.Confirmed] },
+              status: {
+                $in: [SlotLeaseStatus.Temp, SlotLeaseStatus.Confirmed],
+              },
             },
             {
               $set: {
@@ -675,8 +694,7 @@ export class BookingStatusService {
         .findOne({ bookingId: booking._id })
         .session(session);
       if (escrow && escrow.status === 'HELD') {
-        escrow.status =
-          refundAmount > 0 ? 'REFUNDED' : 'CANCELLED';
+        escrow.status = refundAmount > 0 ? 'REFUNDED' : 'CANCELLED';
         await escrow.save({ session });
       }
 
@@ -1015,8 +1033,13 @@ export class BookingStatusService {
         );
 
         if (booking.providerIds && booking.providerIds.length > 0) {
-          const query = this.providerModel.find({ _id: { $in: booking.providerIds } });
-          const rawProviders = typeof (query as any)?.select === 'function' ? await (query as any).select('userId').lean() : await query;
+          const query = this.providerModel.find({
+            _id: { $in: booking.providerIds },
+          });
+          const rawProviders =
+            typeof (query as any)?.select === 'function'
+              ? await (query as any).select('userId').lean()
+              : await query;
           const providers = Array.isArray(rawProviders) ? rawProviders : [];
 
           for (const prov of providers as any[]) {

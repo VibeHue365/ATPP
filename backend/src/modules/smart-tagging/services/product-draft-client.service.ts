@@ -40,19 +40,26 @@ export class ProductDraftClientService {
   private readonly cloudName: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.serviceUrl = this.configService.get<string>('AI_SERVICE_URL', 'http://127.0.0.1:8000');
-    this.cloudName = this.configService.get<string>('CLOUDINARY_CLOUD_NAME', '') ?? '';
+    this.serviceUrl = this.configService.get<string>(
+      'AI_SERVICE_URL',
+      'http://127.0.0.1:8000',
+    );
+    this.cloudName =
+      this.configService.get<string>('CLOUDINARY_CLOUD_NAME', '') ?? '';
   }
 
   async draftFromPhotos(imageUrls: string[]): Promise<ProductDraft> {
     this.assertUploadedPhotos(imageUrls);
     try {
-      const response = await fetch(`${this.serviceUrl.replace(/\/$/, '')}/vision/describe-product`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image_urls: imageUrls }),
-        signal: AbortSignal.timeout(this.getTimeoutMs()),
-      });
+      const response = await fetch(
+        `${this.serviceUrl.replace(/\/$/, '')}/vision/describe-product`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image_urls: imageUrls }),
+          signal: AbortSignal.timeout(this.getTimeoutMs()),
+        },
+      );
       if (!response.ok) {
         this.logger.warn(`Product draft AI returned HTTP ${response.status}`);
         return UNAVAILABLE;
@@ -82,20 +89,34 @@ export class ProductDraftClientService {
       try {
         url = new URL(value);
       } catch {
-        throw new BadRequestException('Ảnh gợi ý phải là ảnh đã tải lên hệ thống.');
+        throw new BadRequestException(
+          'Ảnh gợi ý phải là ảnh đã tải lên hệ thống.',
+        );
       }
-      const ownCloud = !this.cloudName || url.pathname.startsWith(`/${this.cloudName}/`);
-      if (url.protocol !== 'https:' || url.hostname !== CLOUDINARY_HOST || !ownCloud) {
-        throw new BadRequestException('Ảnh gợi ý phải là ảnh đã tải lên hệ thống.');
+      const ownCloud =
+        !this.cloudName || url.pathname.startsWith(`/${this.cloudName}/`);
+      if (
+        url.protocol !== 'https:' ||
+        url.hostname !== CLOUDINARY_HOST ||
+        !ownCloud
+      ) {
+        throw new BadRequestException(
+          'Ảnh gợi ý phải là ảnh đã tải lên hệ thống.',
+        );
       }
     }
   }
 
   private getTimeoutMs(): number {
     const configured = Number(
-      this.configService.get<string>('PRODUCT_DRAFT_TIMEOUT_MS', String(DEFAULT_TIMEOUT_MS)),
+      this.configService.get<string>(
+        'PRODUCT_DRAFT_TIMEOUT_MS',
+        String(DEFAULT_TIMEOUT_MS),
+      ),
     );
-    return Number.isFinite(configured) && configured >= 1_000 && configured <= 60_000
+    return Number.isFinite(configured) &&
+      configured >= 1_000 &&
+      configured <= 60_000
       ? configured
       : DEFAULT_TIMEOUT_MS;
   }

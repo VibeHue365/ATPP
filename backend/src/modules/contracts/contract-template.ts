@@ -58,7 +58,11 @@ export const AO_DAI_RENTAL_V2: ContractTemplate = Object.freeze({
         heading: 'Các bên tham gia hợp đồng',
         source: 'snapshot.customer/provider',
       },
-      { id: 'items', heading: 'Danh mục trang phục thuê', source: 'snapshot.providerItems' },
+      {
+        id: 'items',
+        heading: 'Danh mục trang phục thuê',
+        source: 'snapshot.providerItems',
+      },
       {
         id: 'schedule',
         heading: 'Thời gian và địa điểm giao nhận trang phục',

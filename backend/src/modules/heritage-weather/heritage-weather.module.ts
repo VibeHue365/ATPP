@@ -36,7 +36,10 @@ import { WeatherAlertSchedulerService } from './services/weather-alert-scheduler
 import { PaymentsModule } from '../payments/payments.module';
 import { BookingsModule } from '../bookings/bookings.module';
 import { ProductsModule } from '../products/products.module';
-import { NotificationsModule, notificationModels } from '../notifications/notifications.module';
+import {
+  NotificationsModule,
+  notificationModels,
+} from '../notifications/notifications.module';
 import { ChatModule } from '../chat/chat.module';
 import { providerModels } from '../providers/providers.module';
 

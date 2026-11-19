@@ -54,11 +54,15 @@ describe('AdminWeatherCancellationsController', () => {
   });
 
   it('should call getCancellationDetails', async () => {
-    mockService.getCancellationRequestById.mockResolvedValueOnce({ _id: 'req-1' });
+    mockService.getCancellationRequestById.mockResolvedValueOnce({
+      _id: 'req-1',
+    });
 
     const res = await controller.getCancellationDetails('req-1');
 
-    expect(mockService.getCancellationRequestById).toHaveBeenCalledWith('req-1');
+    expect(mockService.getCancellationRequestById).toHaveBeenCalledWith(
+      'req-1',
+    );
     expect(res).toEqual({ _id: 'req-1' });
   });
 
@@ -73,7 +77,11 @@ describe('AdminWeatherCancellationsController', () => {
       notes: 'Hợp lệ',
     };
 
-    const res = await controller.reviewCancellation('req-1', mockAdminUser, dto);
+    const res = await controller.reviewCancellation(
+      'req-1',
+      mockAdminUser,
+      dto,
+    );
 
     expect(mockService.adminReviewCancellation).toHaveBeenCalledWith(
       'req-1',

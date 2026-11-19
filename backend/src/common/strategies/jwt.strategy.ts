@@ -131,7 +131,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     };
   }
 
-  private assertProviderAllowed(req: Request, providerStatus?: string | null): void {
+  private assertProviderAllowed(
+    req: Request,
+    providerStatus?: string | null,
+  ): void {
     if (providerStatus === 'SUSPENDED') {
       const url = req.originalUrl || req.url || '';
       const method = req.method || 'GET';

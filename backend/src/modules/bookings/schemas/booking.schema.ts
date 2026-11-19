@@ -379,7 +379,11 @@ export class Booking {
   @Prop({ type: Types.ObjectId, ref: 'WeatherProposal', default: null })
   activeWeatherProposalId?: Types.ObjectId | null;
 
-  @Prop({ type: Types.ObjectId, ref: 'WeatherCancellationRequest', default: null })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'WeatherCancellationRequest',
+    default: null,
+  })
   activeWeatherCancellationId?: Types.ObjectId | null;
 
   /** MÃ´Ìc thÆ¡Ì€i gian hoaÌƒn auto-dispute sweeper */

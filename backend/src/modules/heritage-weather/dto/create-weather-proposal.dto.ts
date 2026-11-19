@@ -1,4 +1,10 @@
-import { IsEnum, IsNotEmpty, IsOptional, IsString, Matches } from 'class-validator';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+} from 'class-validator';
 import { ProposalChangeType } from '../schemas/weather-proposal.schema';
 
 export class CreateWeatherProposalDto {
@@ -18,7 +24,8 @@ export class CreateWeatherProposalDto {
 
   @IsOptional()
   @Matches(/^\d{2}:\d{2}-\d{2}:\d{2}$/, {
-    message: 'proposedTimeSlot must be in the format HH:mm-HH:mm (e.g. 09:00-11:00)',
+    message:
+      'proposedTimeSlot must be in the format HH:mm-HH:mm (e.g. 09:00-11:00)',
   })
   proposedTimeSlot?: string;
 

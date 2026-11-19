@@ -227,16 +227,13 @@ describe('UC-23 Search Photographer (DaiBLL)', () => {
     },
   );
 
-  it(
-    'UT-23 UTCID12 returns a readable Vietnamese message for a malformed id',
-    async () => {
-      const { service } = createService([]);
+  it('UT-23 UTCID12 returns a readable Vietnamese message for a malformed id', async () => {
+    const { service } = createService([]);
 
-      await expect(service.findOne('photographer-1')).rejects.toThrow(
-        'ID nhiếp ảnh gia không hợp lệ',
-      );
-    },
-  );
+    await expect(service.findOne('photographer-1')).rejects.toThrow(
+      'ID nhiếp ảnh gia không hợp lệ',
+    );
+  });
 });
 
 describe('UC-24 View Photography Concept (DaiBLL)', () => {

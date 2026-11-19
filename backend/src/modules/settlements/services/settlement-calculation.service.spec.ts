@@ -181,7 +181,11 @@ describe('SettlementCalculationService', () => {
       bookingCode: 'BK005',
       status: 'COMPLETED',
     };
-    const first = await service.calculateSettlementsForBooking(booking, [item], null);
+    const first = await service.calculateSettlementsForBooking(
+      booking,
+      [item],
+      null,
+    );
 
     policyResolver.getActivePolicyByCode.mockResolvedValueOnce({
       version: 3,
@@ -193,7 +197,11 @@ describe('SettlementCalculationService', () => {
         minCommissionAmount: 0,
       },
     });
-    const second = await service.calculateSettlementsForBooking(booking, [item], null);
+    const second = await service.calculateSettlementsForBooking(
+      booking,
+      [item],
+      null,
+    );
 
     expect(first[0].commissionRate).toBe(0.1);
     expect(first[0].policySnapshot.policyVersion).toBe(2);

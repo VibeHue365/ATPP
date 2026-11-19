@@ -27,19 +27,19 @@ export const ScheduleCalendarView: React.FC<ScheduleCalendarViewProps> = ({
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDayIndex = (new Date(year, month, 1).getDay() + 6) % 7; // Monday = 0
 
-  // Index bookings by 'YYYY-MM-DD'
+  // Index bookings by 'YYYY-MM-DD' (Grouped by booking)
   const bookingsByDate = useMemo(() => {
     const map = new Map<string, any[]>();
     bookings.forEach((b) => {
-      (b.items || []).forEach((item: any) => {
-        const rawDate = item.shootDate || item.startDate || item.rentalFrom || b.startDate;
-        if (rawDate) {
-          const dateKey = new Date(rawDate).toISOString().split('T')[0];
-          const list = map.get(dateKey) || [];
-          list.push({ booking: b, item });
-          map.set(dateKey, list);
-        }
-      });
+      const items = b.items || [];
+      const firstItem = items[0] || {};
+      const rawDate = b.startDate || firstItem.rentalFrom || firstItem.startDate || firstItem.shootDate;
+      if (rawDate) {
+        const dateKey = new Date(rawDate).toISOString().split('T')[0];
+        const list = map.get(dateKey) || [];
+        list.push({ booking: b, item: firstItem });
+        map.set(dateKey, list);
+      }
     });
     return map;
   }, [bookings]);

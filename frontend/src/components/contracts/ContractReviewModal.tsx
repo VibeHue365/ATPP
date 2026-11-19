@@ -313,6 +313,15 @@ export const ContractReviewModal: React.FC<ContractReviewModalProps> = ({
     } catch (err: unknown) {
       console.error('Failed to submit contract consent:', err);
       const msg = err instanceof Error ? err.message : '';
+      if (
+        msg.includes('CONTRACT_CONSENT_ALREADY_DECIDED') ||
+        msg.includes('consent_already_decided') ||
+        (err as any)?.status === 409
+      ) {
+        toast.success('Hợp đồng đã được xác nhận thành công!');
+        await loadContractsData();
+        return;
+      }
       const translated = translateError(msg);
       toast.error(translated || 'Lỗi khi ghi nhận chấp thuận.');
       await loadContractsData();
@@ -438,7 +447,7 @@ export const ContractReviewModal: React.FC<ContractReviewModalProps> = ({
                         : `Cần chấp thuận ${totalCount - acceptedCount} hợp đồng thuê trước khi thanh toán`}
                     </strong>
                     <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem' }}>
-                      Theo Quy chế sàn VibeHue, bạn cần đọc và xác nhận các điều khoản
+                      Theo Quy chế sàn TàGo, bạn cần đọc và xác nhận các điều khoản
                       cho thuê với từng nhà cung cấp trang phục.
                     </p>
                   </div>

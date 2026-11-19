@@ -15,7 +15,11 @@ import { RateLimitService } from '../../auth/services/rate-limit.service';
 import { ProductsService } from '../../products/services/products.service';
 import { AiService } from '../services/ai.service';
 
-export const VISUAL_SEARCH_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+export const VISUAL_SEARCH_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+];
 // The AI service only returns this many matches by default (AC: top 5).
 const MAX_RESULTS = 5;
 
@@ -74,9 +78,7 @@ export class VisualSearchController {
     );
     return {
       items,
-      message: items.length
-        ? null
-        : 'Không tìm thấy áo dài phù hợp trong ảnh.',
+      message: items.length ? null : 'Không tìm thấy áo dài phù hợp trong ảnh.',
     };
   }
 

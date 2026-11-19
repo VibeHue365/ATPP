@@ -443,7 +443,7 @@ export const BookingContractsSection: React.FC<BookingContractsSectionProps> = (
         >
           <ShieldCheck size={14} color="#0284c7" />
           <span>
-            Đối tác chấp thuận trước cơ chế theo quy chế nền tảng VibeHue khi công bố sản phẩm.
+            Đối tác chấp thuận trước cơ chế theo quy chế nền tảng TàGo khi công bố sản phẩm.
           </span>
         </div>
       )}

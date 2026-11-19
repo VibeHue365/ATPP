@@ -4,12 +4,19 @@ import {
   FinalizationReviewError,
 } from './v2-payment-finalization.service';
 import { PaymentsService } from './payments.service';
-import { BookingStatus, BookingType, PaymentStatus as BookingPaymentStatus } from '../../bookings/schemas/booking.schema';
+import {
+  BookingStatus,
+  BookingType,
+  PaymentStatus as BookingPaymentStatus,
+} from '../../bookings/schemas/booking.schema';
 import { BookingItemType } from '../../bookings/schemas/booking-item.schema';
 import { ReservationStatus } from '../../products/schemas/inventory-reservation.schema';
 import { PaymentStatus } from '../schemas/payment.schema';
 import { PaymentRecoveryState } from '../schemas/payment-recovery.schema';
-import { SlotLeaseStatus, SlotLeasePurpose } from '../../bookings/schemas/inventory-slot-lease.schema';
+import {
+  SlotLeaseStatus,
+  SlotLeasePurpose,
+} from '../../bookings/schemas/inventory-slot-lease.schema';
 import { TurnaroundStatus } from '../../bookings/schemas/rental-fulfillment.types';
 import { ContractVersionState } from '../../contracts/schemas/contract-version.schema';
 import { ContractConsentAction } from '../../contracts/schemas/contract-consent.schema';
@@ -27,10 +34,23 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
   const inventoryItemId = new Types.ObjectId();
   const token = 'valid-token';
 
-  const defaultTemplate = { templateId: 'v1', version: 1, text: 'Template text' };
+  const defaultTemplate = {
+    templateId: 'v1',
+    version: 1,
+    text: 'Template text',
+  };
   const validSnapshot = {
-    booking: { bookingId: bookingId.toString(), customerId: customerId.toString(), currency: 'VND' },
-    providerItems: [{ providerId: providerId.toString(), items: [{ itemId: 'item1', price: 200000 }] }],
+    booking: {
+      bookingId: bookingId.toString(),
+      customerId: customerId.toString(),
+      currency: 'VND',
+    },
+    providerItems: [
+      {
+        providerId: providerId.toString(),
+        items: [{ itemId: 'item1', price: 200000 }],
+      },
+    ],
     pricing: { totalAmount: 200000, depositAmount: 0 },
   };
   const validFingerprint = hashContract({
@@ -38,7 +58,10 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
     providerItems: validSnapshot.providerItems,
     pricing: validSnapshot.pricing,
   });
-  const validContentHash = hashContract({ template: defaultTemplate, snapshot: validSnapshot });
+  const validContentHash = hashContract({
+    template: defaultTemplate,
+    snapshot: validSnapshot,
+  });
 
   const defaultBinding: any = {
     bindingVersion: 1,
@@ -83,7 +106,10 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
     let mockTemplates: any;
     let mockLeases: any;
 
-    const setupHourlyBooking = (turnaroundSlots = 1, slotLeaseRequired = true) => {
+    const setupHourlyBooking = (
+      turnaroundSlots = 1,
+      slotLeaseRequired = true,
+    ) => {
       const now = new Date();
       const rentalFrom = new Date(now.getTime() + 24 * 3600 * 1000);
       const rentalTo = new Date(rentalFrom.getTime() + 2 * 3600 * 1000); // 2 hours = 1 slot
@@ -131,14 +157,30 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
         },
       };
 
-      mockRecoveries.findOne.mockReturnValue({ session: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(recoveryJob) }) });
+      mockRecoveries.findOne.mockReturnValue({
+        session: jest
+          .fn()
+          .mockReturnValue({ lean: jest.fn().mockResolvedValue(recoveryJob) }),
+      });
       mockPayments.findById.mockReturnValue({
-        session: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(payment) }),
+        session: jest
+          .fn()
+          .mockReturnValue({ lean: jest.fn().mockResolvedValue(payment) }),
         lean: jest.fn().mockResolvedValue(payment),
       });
-      mockBookings.findById.mockReturnValue({ session: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(booking) }) });
-      mockItems.find.mockReturnValue({ session: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([hourlyProductItem]) }) });
-      mockReservations.countDocuments.mockReturnValue({ session: jest.fn().mockResolvedValue(1) });
+      mockBookings.findById.mockReturnValue({
+        session: jest
+          .fn()
+          .mockReturnValue({ lean: jest.fn().mockResolvedValue(booking) }),
+      });
+      mockItems.find.mockReturnValue({
+        session: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([hourlyProductItem]),
+        }),
+      });
+      mockReservations.countDocuments.mockReturnValue({
+        session: jest.fn().mockResolvedValue(1),
+      });
       mockPhotoHolds.confirmForBooking.mockResolvedValue({ confirmed: true });
       mockPayments.find.mockReturnValue({
         select: jest.fn().mockReturnValue({
@@ -168,15 +210,27 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
 
       mockItems = { find: jest.fn() };
       mockSchedules = { updateMany: jest.fn().mockResolvedValue({}) };
-      mockReservations = { countDocuments: jest.fn(), updateMany: jest.fn().mockResolvedValue({}) };
-      mockPayments = { findById: jest.fn(), find: jest.fn(), updateOne: jest.fn().mockResolvedValue({}) };
-      mockRecoveries = { findOne: jest.fn(), updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }) };
+      mockReservations = {
+        countDocuments: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({}),
+      };
+      mockPayments = {
+        findById: jest.fn(),
+        find: jest.fn(),
+        updateOne: jest.fn().mockResolvedValue({}),
+      };
+      mockRecoveries = {
+        findOne: jest.fn(),
+        updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+      };
       mockEscrows = { updateOne: jest.fn().mockResolvedValue({}) };
       mockNotifications = { updateOne: jest.fn().mockResolvedValue({}) };
       mockContracts = {
         findById: jest.fn().mockReturnValue({
           session: jest.fn().mockReturnValue({
-            lean: jest.fn().mockResolvedValue({ currentVersionId: contractVersionId }),
+            lean: jest
+              .fn()
+              .mockResolvedValue({ currentVersionId: contractVersionId }),
           }),
         }),
       };
@@ -201,7 +255,9 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
           }),
         }),
       };
-      mockPhotoHolds = { confirmForBooking: jest.fn().mockResolvedValue({ confirmed: true }) };
+      mockPhotoHolds = {
+        confirmForBooking: jest.fn().mockResolvedValue({ confirmed: true }),
+      };
       mockPromotions = {
         findRedemptionByBooking: jest.fn().mockResolvedValue(null),
         redeemVoucher: jest.fn().mockResolvedValue(undefined),
@@ -211,15 +267,25 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
         requireReviewClaimed: jest.fn().mockResolvedValue(true),
         retry: jest.fn().mockResolvedValue(true),
       };
-      mockContractPolicy = { getContext: jest.fn().mockResolvedValue({ rentalProviderIds: [providerId] }) };
-      mockPreparation = { assertSourcesUnchanged: jest.fn().mockResolvedValue(undefined) };
+      mockContractPolicy = {
+        getContext: jest
+          .fn()
+          .mockResolvedValue({ rentalProviderIds: [providerId] }),
+      };
+      mockPreparation = {
+        assertSourcesUnchanged: jest.fn().mockResolvedValue(undefined),
+      };
       mockSnapshots = { build: jest.fn().mockResolvedValue(validSnapshot) };
-      mockTemplates = { getApproved: jest.fn().mockReturnValue(defaultTemplate) };
+      mockTemplates = {
+        getApproved: jest.fn().mockReturnValue(defaultTemplate),
+      };
 
       mockLeases = {
         find: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ modifiedCount: 2 }),
-        countDocuments: jest.fn().mockReturnValue({ session: jest.fn().mockResolvedValue(0) }),
+        countDocuments: jest
+          .fn()
+          .mockReturnValue({ session: jest.fn().mockResolvedValue(0) }),
       };
 
       service = new V2PaymentFinalizationService(
@@ -256,8 +322,12 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
         }),
       });
 
-      await expect(service.finalize(paymentId, token)).rejects.toThrow(FinalizationReviewError);
-      await expect(service.finalize(paymentId, token)).rejects.toThrow('INVENTORY_SLOT_LEASE_MISSING');
+      await expect(service.finalize(paymentId, token)).rejects.toThrow(
+        FinalizationReviewError,
+      );
+      await expect(service.finalize(paymentId, token)).rejects.toThrow(
+        'INVENTORY_SLOT_LEASE_MISSING',
+      );
       expect(mockBookings.updateOne).not.toHaveBeenCalled();
     });
 
@@ -280,8 +350,12 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
         }),
       });
 
-      await expect(service.finalize(paymentId, token)).rejects.toThrow(FinalizationReviewError);
-      await expect(service.finalize(paymentId, token)).rejects.toThrow('INVENTORY_SLOT_LEASE_INSUFFICIENT');
+      await expect(service.finalize(paymentId, token)).rejects.toThrow(
+        FinalizationReviewError,
+      );
+      await expect(service.finalize(paymentId, token)).rejects.toThrow(
+        'INVENTORY_SLOT_LEASE_INSUFFICIENT',
+      );
       expect(mockBookings.updateOne).not.toHaveBeenCalled();
     });
 
@@ -309,8 +383,12 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
         }),
       });
 
-      await expect(service.finalize(paymentId, token)).rejects.toThrow(FinalizationReviewError);
-      await expect(service.finalize(paymentId, token)).rejects.toThrow('INVENTORY_SLOT_LEASE_EXPIRED');
+      await expect(service.finalize(paymentId, token)).rejects.toThrow(
+        FinalizationReviewError,
+      );
+      await expect(service.finalize(paymentId, token)).rejects.toThrow(
+        'INVENTORY_SLOT_LEASE_EXPIRED',
+      );
       expect(mockBookings.updateOne).not.toHaveBeenCalled();
     });
 
@@ -331,8 +409,12 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
         }),
       });
 
-      await expect(service.finalize(paymentId, token)).rejects.toThrow(FinalizationReviewError);
-      await expect(service.finalize(paymentId, token)).rejects.toThrow('INVENTORY_SLOT_LEASE_RELEASED');
+      await expect(service.finalize(paymentId, token)).rejects.toThrow(
+        FinalizationReviewError,
+      );
+      await expect(service.finalize(paymentId, token)).rejects.toThrow(
+        'INVENTORY_SLOT_LEASE_RELEASED',
+      );
       expect(mockBookings.updateOne).not.toHaveBeenCalled();
     });
 
@@ -364,8 +446,10 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
 
       // After updateMany: 0 remaining TEMP, 2 confirmed
       mockLeases.countDocuments.mockImplementation((filter: any) => {
-        if (filter.status === 'TEMP') return { session: jest.fn().mockResolvedValue(0) };
-        if (filter.status === 'CONFIRMED') return { session: jest.fn().mockResolvedValue(2) };
+        if (filter.status === 'TEMP')
+          return { session: jest.fn().mockResolvedValue(0) };
+        if (filter.status === 'CONFIRMED')
+          return { session: jest.fn().mockResolvedValue(2) };
         return { session: jest.fn().mockResolvedValue(0) };
       });
 
@@ -389,11 +473,15 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
       setupHourlyBooking(1);
       mockLeases.find.mockReturnValue({
         session: jest.fn().mockReturnValue({
-          lean: jest.fn().mockRejectedValue(new Error('MongoDB replica connection lost')),
+          lean: jest
+            .fn()
+            .mockRejectedValue(new Error('MongoDB replica connection lost')),
         }),
       });
 
-      await expect(service.finalize(paymentId, token)).rejects.toThrow('MongoDB replica connection lost');
+      await expect(service.finalize(paymentId, token)).rejects.toThrow(
+        'MongoDB replica connection lost',
+      );
       expect(mockBookings.updateOne).not.toHaveBeenCalled();
     });
 
@@ -426,7 +514,9 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
         }),
       });
 
-      await expect(service.finalize(paymentId, token)).rejects.toThrow('INVENTORY_SLOT_LEASE_MISSING');
+      await expect(service.finalize(paymentId, token)).rejects.toThrow(
+        'INVENTORY_SLOT_LEASE_MISSING',
+      );
 
       // Now provide 1 valid rental lease -> succeeds
       const rentalOnlyLeases = [
@@ -445,8 +535,10 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
         }),
       });
       mockLeases.countDocuments.mockImplementation((filter: any) => {
-        if (filter.status === 'TEMP') return { session: jest.fn().mockResolvedValue(0) };
-        if (filter.status === 'CONFIRMED') return { session: jest.fn().mockResolvedValue(1) };
+        if (filter.status === 'TEMP')
+          return { session: jest.fn().mockResolvedValue(0) };
+        if (filter.status === 'CONFIRMED')
+          return { session: jest.fn().mockResolvedValue(1) };
         return { session: jest.fn().mockResolvedValue(0) };
       });
 
@@ -471,7 +563,10 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
     let mockNotificationsService: any;
     let mockSession: any;
 
-    const setupLegacyHourlyPayment = (turnaroundSlots = 1, slotLeaseRequired = true) => {
+    const setupLegacyHourlyPayment = (
+      turnaroundSlots = 1,
+      slotLeaseRequired = true,
+    ) => {
       const now = new Date();
       const rentalFrom = new Date(now.getTime() + 24 * 3600 * 1000);
       const rentalTo = new Date(rentalFrom.getTime() + 2 * 3600 * 1000); // 2 hours = 1 slot
@@ -508,15 +603,18 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
         },
       };
 
-      mockBookingModel.findOneAndUpdate.mockImplementation((filter: any, update: any) => {
-        if (update.$set?.status) {
-          booking.status = update.$set.status;
-        }
-        if (update.$set?.['paymentSummary.paymentStatus']) {
-          booking.paymentSummary = update.$set['paymentSummary.paymentStatus'];
-        }
-        return booking;
-      });
+      mockBookingModel.findOneAndUpdate.mockImplementation(
+        (filter: any, update: any) => {
+          if (update.$set?.status) {
+            booking.status = update.$set.status;
+          }
+          if (update.$set?.['paymentSummary.paymentStatus']) {
+            booking.paymentSummary =
+              update.$set['paymentSummary.paymentStatus'];
+          }
+          return booking;
+        },
+      );
 
       mockBookingModel.db.model.mockImplementation((name: string) => {
         if (name === 'Payment') {
@@ -622,7 +720,9 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
         expect.objectContaining({
           $set: expect.objectContaining({
             paymentReviewRequired: true,
-            paymentReviewReason: expect.stringContaining('Thiếu slot lease bắt buộc'),
+            paymentReviewReason: expect.stringContaining(
+              'Thiếu slot lease bắt buộc',
+            ),
           }),
         }),
       );
@@ -646,7 +746,9 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
         expect.objectContaining({
           $set: expect.objectContaining({
             paymentReviewRequired: true,
-            paymentReviewReason: expect.stringContaining('Không đủ số lượng slot lease dự kiến'),
+            paymentReviewReason: expect.stringContaining(
+              'Không đủ số lượng slot lease dự kiến',
+            ),
           }),
         }),
       );
@@ -670,7 +772,9 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
         expect.objectContaining({
           $set: expect.objectContaining({
             paymentReviewRequired: true,
-            paymentReviewReason: expect.stringContaining('hết hạn trước khi thanh toán hoàn tất'),
+            paymentReviewReason: expect.stringContaining(
+              'hết hạn trước khi thanh toán hoàn tất',
+            ),
           }),
         }),
       );
@@ -694,7 +798,9 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
         expect.objectContaining({
           $set: expect.objectContaining({
             paymentReviewRequired: true,
-            paymentReviewReason: expect.stringContaining('Slot lease đã bị hủy hoặc giải phóng'),
+            paymentReviewReason: expect.stringContaining(
+              'Slot lease đã bị hủy hoặc giải phóng',
+            ),
           }),
         }),
       );
@@ -704,8 +810,16 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
     it('Scenario 5: full lease confirmation succeeds and transitions booking to CONFIRMED', async () => {
       const { paymentDoc, booking } = setupLegacyHourlyPayment(1); // 2 required
       mockSlotLeaseModel.find.mockResolvedValue([
-        { _id: new Types.ObjectId(), status: 'TEMP', expiresAt: new Date(Date.now() + 15 * 60 * 1000) },
-        { _id: new Types.ObjectId(), status: 'TEMP', expiresAt: new Date(Date.now() + 15 * 60 * 1000) },
+        {
+          _id: new Types.ObjectId(),
+          status: 'TEMP',
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        },
+        {
+          _id: new Types.ObjectId(),
+          status: 'TEMP',
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        },
       ]);
       mockSlotLeaseModel.countDocuments.mockImplementation((filter: any) => {
         if (filter.status === 'TEMP') return Promise.resolve(0);
@@ -726,10 +840,20 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
     it('Scenario 6: model/database error on lease confirmation aborts transition and sets paymentReviewRequired', async () => {
       const { paymentDoc, booking } = setupLegacyHourlyPayment(1);
       mockSlotLeaseModel.find.mockResolvedValue([
-        { _id: new Types.ObjectId(), status: 'TEMP', expiresAt: new Date(Date.now() + 15 * 60 * 1000) },
-        { _id: new Types.ObjectId(), status: 'TEMP', expiresAt: new Date(Date.now() + 15 * 60 * 1000) },
+        {
+          _id: new Types.ObjectId(),
+          status: 'TEMP',
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        },
+        {
+          _id: new Types.ObjectId(),
+          status: 'TEMP',
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        },
       ]);
-      mockSlotLeaseModel.updateMany.mockRejectedValue(new Error('DB write failure during slot lease confirm'));
+      mockSlotLeaseModel.updateMany.mockRejectedValue(
+        new Error('DB write failure during slot lease confirm'),
+      );
 
       await paymentsService.finalizeAfterPayment(paymentDoc);
 
@@ -739,7 +863,9 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
         expect.objectContaining({
           $set: expect.objectContaining({
             paymentReviewRequired: true,
-            paymentReviewReason: expect.stringContaining('Không thể xác nhận giữ chỗ hoặc trạng thái đơn hàng'),
+            paymentReviewReason: expect.stringContaining(
+              'Không thể xác nhận giữ chỗ hoặc trạng thái đơn hàng',
+            ),
           }),
         }),
       );
@@ -773,14 +899,20 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
         expect.objectContaining({
           $set: expect.objectContaining({
             paymentReviewRequired: true,
-            paymentReviewReason: expect.stringContaining('Thiếu slot lease bắt buộc'),
+            paymentReviewReason: expect.stringContaining(
+              'Thiếu slot lease bắt buộc',
+            ),
           }),
         }),
       );
 
       // Now provide 1 valid lease -> succeeds and transitions to CONFIRMED
       mockSlotLeaseModel.find.mockResolvedValue([
-        { _id: new Types.ObjectId(), status: 'TEMP', expiresAt: new Date(Date.now() + 15 * 60 * 1000) },
+        {
+          _id: new Types.ObjectId(),
+          status: 'TEMP',
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        },
       ]);
       mockSlotLeaseModel.countDocuments.mockImplementation((filter: any) => {
         if (filter.status === 'TEMP') return Promise.resolve(0);
@@ -797,8 +929,16 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
       const { paymentDoc, booking } = setupLegacyHourlyPayment(1, true);
       // Valid leases exist
       mockSlotLeaseModel.find.mockResolvedValue([
-        { _id: new Types.ObjectId(), status: 'TEMP', expiresAt: new Date(Date.now() + 15 * 60 * 1000) },
-        { _id: new Types.ObjectId(), status: 'TEMP', expiresAt: new Date(Date.now() + 15 * 60 * 1000) },
+        {
+          _id: new Types.ObjectId(),
+          status: 'TEMP',
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        },
+        {
+          _id: new Types.ObjectId(),
+          status: 'TEMP',
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        },
       ]);
       // Session unavailable (e.g. standalone Mongo)
       mockBookingModel.db.startSession.mockResolvedValue(null);
@@ -813,7 +953,9 @@ describe('Slot Lease Payment Finalization Unit Tests (V2 & Legacy)', () => {
         expect.objectContaining({
           $set: expect.objectContaining({
             paymentReviewRequired: true,
-            paymentReviewReason: expect.stringContaining('Không thể tạo phiên giao dịch (session/transaction)'),
+            paymentReviewReason: expect.stringContaining(
+              'Không thể tạo phiên giao dịch (session/transaction)',
+            ),
           }),
         }),
       );

@@ -50,7 +50,7 @@ import { HeritageWeatherModule } from './modules/heritage-weather/heritage-weath
         {
           name: 'auth',
           ttl: 60000,
-          limit: config.get<number>('THROTTLE_AUTH_LIMIT', 10),
+          limit: config.get<number>('THROTTLE_AUTH_LIMIT', 120),
         },
       ],
     }),
@@ -92,7 +92,7 @@ import { HeritageWeatherModule } from './modules/heritage-weather/heritage-weath
     HeritageWeatherModule,
   ],
   controllers: [AppController, ApiDocsController],
-    providers: [
+  providers: [
     AppService,
     {
       provide: APP_GUARD,

@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { Permissions } from '../../../common/decorators/permissions.decorator';
@@ -24,7 +32,11 @@ export class AdminPortfolioModerationController {
 
   @Patch(':id/moderation')
   @Permissions('moderation:manage')
-  moderate(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ModeratePortfolioItemDto) {
+  moderate(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: ModeratePortfolioItemDto,
+  ) {
     return this.providersService.moderatePortfolioItem(user.sub, id, dto);
   }
 }

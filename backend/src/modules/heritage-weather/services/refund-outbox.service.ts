@@ -28,7 +28,9 @@ export class RefundOutboxService {
    * Idempotently enqueues a refund task into the Transactional Outbox.
    * Duplicate sourceEventIds will return the existing task without creating a duplicate.
    */
-  async enqueueRefund(input: EnqueueRefundInput): Promise<RefundOutboxTaskDocument> {
+  async enqueueRefund(
+    input: EnqueueRefundInput,
+  ): Promise<RefundOutboxTaskDocument> {
     const bookingObjectId =
       typeof input.bookingId === 'string'
         ? new Types.ObjectId(input.bookingId)
@@ -71,7 +73,10 @@ export class RefundOutboxService {
         });
         if (existing) return existing;
       }
-      this.logger.error(`Failed to enqueue refund outbox task: ${err?.message}`, err);
+      this.logger.error(
+        `Failed to enqueue refund outbox task: ${err?.message}`,
+        err,
+      );
       throw err;
     }
   }
@@ -79,7 +84,9 @@ export class RefundOutboxService {
   /**
    * Retrieves task by sourceEventId
    */
-  async getTask(sourceEventId: string): Promise<RefundOutboxTaskDocument | null> {
+  async getTask(
+    sourceEventId: string,
+  ): Promise<RefundOutboxTaskDocument | null> {
     return this.outboxModel.findOne({ sourceEventId }).exec();
   }
 
@@ -98,9 +105,7 @@ export class RefundOutboxService {
     bookingId: string | Types.ObjectId,
   ): Promise<RefundOutboxTaskDocument[]> {
     const bId =
-      typeof bookingId === 'string'
-        ? new Types.ObjectId(bookingId)
-        : bookingId;
+      typeof bookingId === 'string' ? new Types.ObjectId(bookingId) : bookingId;
     return this.outboxModel
       .find({ bookingId: bId })
       .sort({ createdAt: -1 })

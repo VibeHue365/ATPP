@@ -52,7 +52,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
   private getExceptionBody(exception: unknown): ErrorResponseBody {
     if (!(exception instanceof HttpException)) {
       const err = exception as any;
-      if (err?.type === 'entity.too.large' || err?.status === 413 || err?.statusCode === 413) {
+      if (
+        err?.type === 'entity.too.large' ||
+        err?.status === 413 ||
+        err?.statusCode === 413
+      ) {
         return {
           statusCode: HttpStatus.PAYLOAD_TOO_LARGE,
           message: 'Dung lượng yêu cầu quá lớn (vượt quá giới hạn cho phép).',
@@ -66,7 +70,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       return { message: response };
     }
 
-    return response as ErrorResponseBody;
+    return response;
   }
 
   private normalizeMessage(body: ErrorResponseBody): string {

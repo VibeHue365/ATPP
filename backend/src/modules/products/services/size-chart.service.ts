@@ -89,9 +89,13 @@ export class SizeChartService {
       weightUnit: dto.weightUnit,
       imageUrl: dto.imageUrl,
       // Replacing an image discards old OCR rows, even if a stale client sends them.
-      rows: changedSource && previous && dto.source === 'IMAGE' && !trustedImageExtraction
-        ? []
-        : dto.rows,
+      rows:
+        changedSource &&
+        previous &&
+        dto.source === 'IMAGE' &&
+        !trustedImageExtraction
+          ? []
+          : dto.rows,
       requiredMeasurements: dto.requiredMeasurements,
       fitRules: dto.fitRules ?? [],
       stretchAllowanceCm: dto.stretchAllowanceCm,

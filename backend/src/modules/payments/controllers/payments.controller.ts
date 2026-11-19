@@ -40,36 +40,59 @@ export class PaymentsController {
     private readonly configService: ConfigService,
     private readonly paymentsRepository: PaymentsRepository,
     private readonly webhookEventRepository: WebhookEventRepository,
-  ) { }
+  ) {}
 
   private ensureSimulatorEnabled() {
-    const rawEnv = this.configService.get<string>('NODE_ENV') ?? process.env.NODE_ENV;
+    const rawEnv =
+      this.configService.get<string>('NODE_ENV') ?? process.env.NODE_ENV;
     const nodeEnv = (rawEnv || 'development').toLowerCase();
-    const isSimExplicitlyEnabled = this.configService.get<string>('ENABLE_PAYMENT_SIMULATOR') === 'true';
+    const isSimExplicitlyEnabled =
+      this.configService.get<string>('ENABLE_PAYMENT_SIMULATOR') === 'true';
     if (nodeEnv === 'production' && !isSimExplicitlyEnabled) {
-      throw new NotFoundException('Cổng thanh toán giả lập không khả dụng trên môi trường này.');
+      throw new NotFoundException(
+        'Cổng thanh toán giả lập không khả dụng trên môi trường này.',
+      );
     }
-    if (nodeEnv !== 'development' && nodeEnv !== 'test' && !isSimExplicitlyEnabled) {
-      throw new NotFoundException('Cổng thanh toán giả lập không khả dụng trên môi trường này.');
+    if (
+      nodeEnv !== 'development' &&
+      nodeEnv !== 'test' &&
+      !isSimExplicitlyEnabled
+    ) {
+      throw new NotFoundException(
+        'Cổng thanh toán giả lập không khả dụng trên môi trường này.',
+      );
     }
   }
 
-  @Post('create-link')
+  @Post(['create-link', 'create'])
   @UseGuards(JwtAuthGuard)
   async createLink(
     @CurrentUser() user: AuthUser,
     @Body() dto: CreatePaymentLinkDto,
   ) {
+    const rawIds = (
+      dto.bookingIds && dto.bookingIds.length > 0
+        ? dto.bookingIds
+        : dto.bookingId
+          ? [dto.bookingId]
+          : []
+    ).filter(Boolean);
+
+    if (rawIds.length === 0) {
+      throw new BadRequestException('Vui lòng cung cấp ít nhất một bookingId.');
+    }
+
     return this.paymentsService.createPaymentLink(
-      dto.bookingId,
+      rawIds[0],
       dto.purpose,
       user.sub,
+      rawIds,
     );
   }
 
   @Get(':code/status')
   @UseGuards(JwtAuthGuard)
-  @SkipThrottle({ auth: true })
+  @SkipThrottle()
   async getStatus(@CurrentUser() user: AuthUser, @Param('code') code: string) {
     return this.paymentsService.getPaymentStatus(code, user.sub);
   }
@@ -96,9 +119,7 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
   @Roles('ADMIN')
   @Permissions('payment:manage')
-  async confirmManual(
-    @Param('code') code: string,
-  ) {
+  async confirmManual(@Param('code') code: string) {
     return this.paymentsService.confirmPayment(code);
   }
 
@@ -128,7 +149,8 @@ export class PaymentsController {
       );
     }
 
-    const matchedPayment = await this.paymentsRepository.findByOrderCode(orderCode);
+    const matchedPayment =
+      await this.paymentsRepository.findByOrderCode(orderCode);
     const isV2 = matchedPayment?.contractBinding?.flowVersion === 2;
 
     const checksumKey = this.configService.get<string>(
@@ -164,7 +186,12 @@ export class PaymentsController {
     const claim = await this.webhookEventRepository.claimVerifiedEvent(
       webhookId,
       isV2
-        ? { orderCode, status, amount: webhookData.amount, currency: webhookData.currency }
+        ? {
+            orderCode,
+            status,
+            amount: webhookData.amount,
+            currency: webhookData.currency,
+          }
         : body.data,
       isV2 ? null : body.signature,
     );
@@ -194,7 +221,10 @@ export class PaymentsController {
           );
         }
         if (isV2)
-          await this.paymentsService.confirmPayment(payment.paymentCode, { source: 'WEBHOOK', orderCode });
+          await this.paymentsService.confirmPayment(payment.paymentCode, {
+            source: 'WEBHOOK',
+            orderCode,
+          });
         else await this.paymentsService.confirmPayment(payment.paymentCode);
       } else if (['FAILED', 'EXPIRED', 'CANCELLED'].includes(status)) {
         const payment =
@@ -247,14 +277,14 @@ export class PaymentsController {
   }
 
   @Post('checkout/:code/confirm')
-  @SkipThrottle({ auth: true })
+  @SkipThrottle()
   async confirmSimulation(@Param('code') code: string) {
     this.ensureSimulatorEnabled();
     return this.paymentsService.confirmPayment(code, { source: 'SIMULATOR' });
   }
 
   @Post('checkout/:code/cancel')
-  @SkipThrottle({ auth: true })
+  @SkipThrottle()
   async cancelSimulation(@Param('code') code: string) {
     this.ensureSimulatorEnabled();
     return this.paymentsService.cancelPayment(code);
@@ -262,7 +292,7 @@ export class PaymentsController {
 
   // CHECKOUT SCREEN SIMULATOR (HTML View)
   @Get('checkout/:code')
-  @SkipThrottle({ auth: true })
+  @SkipThrottle()
   async renderCheckout(@Param('code') code: string, @Res() res: Response) {
     this.ensureSimulatorEnabled();
     try {
@@ -275,7 +305,7 @@ export class PaymentsController {
       const booking = payment.bookingId as any;
       const bookingCode = booking?.bookingCode || 'N/A';
       const amount = payment.amount;
-      const memo = `VIBEHUE PAY ${payment.paymentCode}`;
+      const memo = `TAGO PAY ${payment.paymentCode}`;
       const frontendUrl = getPrimaryFrontendUrl(process.env.FRONTEND_URL);
 
       const html = `
@@ -343,7 +373,7 @@ export class PaymentsController {
 
               <!-- Back link -->
               <div class="mt-8 pt-4 border-t border-stone-100">
-                <a id="cancel-back-btn" href="vibehue://payment/cancel" class="text-xs font-bold text-stone-500 hover:text-stone-700 flex items-center gap-1">
+                <a id="cancel-back-btn" href="tago://payment/cancel" class="text-xs font-bold text-stone-500 hover:text-stone-700 flex items-center gap-1">
                   ← Hủy thanh toán
                 </a>
               </div>
@@ -375,7 +405,7 @@ export class PaymentsController {
                   </div>
                   <div>
                     <label class="block text-[10px] font-bold text-stone-500 uppercase mb-1">Tên chủ tài khoản (Không dấu)</label>
-                    <input type="text" id="holder-input" class="w-full p-2 bg-white border border-stone-300 rounded-lg text-xs font-bold text-stone-800 focus:outline-none focus:border-stone-500" value="CONG TY VIBEHUE" placeholder="Nhập tên chủ tài khoản...">
+                    <input type="text" id="holder-input" class="w-full p-2 bg-white border border-stone-300 rounded-lg text-xs font-bold text-stone-800 focus:outline-none focus:border-stone-500" value="CONG TY TAGO" placeholder="Nhập tên chủ tài khoản...">
                   </div>
                   <p class="text-[10px] text-stone-400 italic">
                     * Bạn có thể nhập số tài khoản thực của bạn ở trên để quét QR chuyển khoản thực tế. Cấu hình được lưu tự động.
@@ -417,7 +447,7 @@ export class PaymentsController {
             <p class="text-sm text-stone-500 mb-6 leading-relaxed">
               Hệ thống đã xác nhận khoản chuyển tiền cọc trị giá <strong>${amount.toLocaleString('vi-VN')}đ</strong> cho giao dịch <strong>${payment.paymentCode}</strong> hoàn tất thành công.
             </p>
-            <a id="success-back-btn" href="vibehue://payment/success" class="w-full py-3.5 vh-bg-red vh-bg-red-hover text-white font-bold text-sm rounded-xl transition inline-flex items-center justify-center shadow-md">
+            <a id="success-back-btn" href="tago://payment/success" class="w-full py-3.5 vh-bg-red vh-bg-red-hover text-white font-bold text-sm rounded-xl transition inline-flex items-center justify-center shadow-md">
               Xác nhận và quay lại
             </a>
           </div>
@@ -464,14 +494,15 @@ export class PaymentsController {
               accInput.value = localStorage.getItem('vh_sim_account');
             }
             if (localStorage.getItem('vh_sim_holder')) {
-              holderInput.value = localStorage.getItem('vh_sim_holder');
+              const savedHolder = localStorage.getItem('vh_sim_holder');
+              holderInput.value = savedHolder === 'CONG TY VIBEHUE' ? 'CONG TY TAGO' : savedHolder;
             }
 
              function updateQR() {
                qrLoader.classList.remove('hidden');
                const bankBin = bankSelect.value;
                const accountNo = accInput.value.trim() || '1029384756';
-               const accountHolder = holderInput.value.trim().toUpperCase() || 'CONG TY VIBEHUE';
+               const accountHolder = holderInput.value.trim().toUpperCase() || 'CONG TY TAGO';
                const bankText = bankSelect.options[bankSelect.selectedIndex].text;
 
                // VietQR API endpoint (use stable img.vietqr.io domain, omit accountName to let the bank app look it up dynamically via Napas)
@@ -508,7 +539,7 @@ export class PaymentsController {
               } catch (err) {
                 console.error('Failed to cancel payment:', err);
               }
-              window.location.href = 'vibehue://payment/cancel';
+              window.location.href = 'tago://payment/cancel';
               setTimeout(() => {
                  window.location.href = frontendUrl + '/checkout/result?paymentCode=' + encodeURIComponent(code);
               }, 500);
@@ -517,7 +548,7 @@ export class PaymentsController {
             const successBackBtn = document.getElementById('success-back-btn');
             successBackBtn.addEventListener('click', (e) => {
               e.preventDefault();
-              window.location.href = 'vibehue://payment/success';
+              window.location.href = 'tago://payment/success';
               setTimeout(() => {
                  window.location.href = frontendUrl + '/checkout/result?paymentCode=' + encodeURIComponent(code);
               }, 500);
@@ -547,7 +578,7 @@ export class PaymentsController {
                     successCard.classList.remove('opacity-0', 'scale-95');
                     successCard.classList.add('opacity-100', 'scale-100');
                     // Thử chuyển hướng ứng dụng di động trước, sau đó fallback về web sau 1.5s
-                    window.location.href = 'vibehue://payment/success';
+                    window.location.href = 'tago://payment/success';
                     setTimeout(() => {
                        window.location.href = frontendUrl + '/checkout/result?paymentCode=' + encodeURIComponent(code);
                     }, 1500);

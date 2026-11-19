@@ -56,7 +56,10 @@ export class OpenMeteoClientService {
   /**
    * Fetches raw hourly forecast from Open-Meteo with Redis L2 and In-Memory L1 caching.
    */
-  async getHourlyForecast(lat: number, lng: number): Promise<OpenMeteoHourlyData> {
+  async getHourlyForecast(
+    lat: number,
+    lng: number,
+  ): Promise<OpenMeteoHourlyData> {
     const roundedLat = lat.toFixed(2);
     const roundedLng = lng.toFixed(2);
     const cacheKey = `weather:forecast:${roundedLat}:${roundedLng}`;
@@ -117,7 +120,9 @@ export class OpenMeteoClientService {
       try {
         await this.redisService.set(cacheKey, hourlyData, this.cacheTtlSeconds);
       } catch (err: any) {
-        this.logger.warn(`Failed to store weather in Redis L2: ${err?.message}`);
+        this.logger.warn(
+          `Failed to store weather in Redis L2: ${err?.message}`,
+        );
       }
 
       return hourlyData;
@@ -142,7 +147,10 @@ export class OpenMeteoClientService {
    * Fetches weather and transforms it into an array of structured HourlyWeatherMetric
    * with rolling 2-hour precipitation accumulation computed.
    */
-  async getHourlyMetrics(lat: number, lng: number): Promise<HourlyWeatherMetric[]> {
+  async getHourlyMetrics(
+    lat: number,
+    lng: number,
+  ): Promise<HourlyWeatherMetric[]> {
     const raw = await this.getHourlyForecast(lat, lng);
     const metrics: HourlyWeatherMetric[] = [];
 

@@ -126,8 +126,7 @@ export class ContractReadService {
             contract.bookingId.toString().slice(-6).toUpperCase(),
           bookingStatus: booking?.status ?? 'UNKNOWN',
           bookingCreatedAt: booking?.createdAt ?? null,
-          startDate:
-            booking?.startDate ?? booking?.rentalStartDate ?? null,
+          startDate: booking?.startDate ?? booking?.rentalStartDate ?? null,
           endDate: booking?.endDate ?? booking?.rentalEndDate ?? null,
           totalAmount: booking?.totalAmount ?? 0,
           depositAmount: booking?.depositAmount ?? 0,
@@ -250,7 +249,8 @@ export class ContractReadService {
               `[ContractReadService] Auto-prepare failed: ${prepareErr?.message}`,
               prepareErr?.stack,
             );
-            const errCode = prepareErr?.message || 'CONTRACT_PREPARATION_FAILED';
+            const errCode =
+              prepareErr?.message || 'CONTRACT_PREPARATION_FAILED';
             blockers.push(errCode);
             return {
               providerId: providerId.toString(),
@@ -368,8 +368,13 @@ export class ContractReadService {
     if (booking.status !== 'PENDING_PAYMENT') {
       throw new ConflictException('BOOKING_NOT_PREPARABLE');
     }
-    if (booking.holdExpiresAt && new Date(booking.holdExpiresAt) <= new Date()) {
-      throw new BadRequestException('BOOKING_EXPIRED: Đơn hàng đã hết thời gian giữ chỗ, vui lòng đặt lại đơn mới.');
+    if (
+      booking.holdExpiresAt &&
+      new Date(booking.holdExpiresAt) <= new Date()
+    ) {
+      throw new BadRequestException(
+        'BOOKING_EXPIRED: Đơn hàng đã hết thời gian giữ chỗ, vui lòng đặt lại đơn mới.',
+      );
     }
 
     const context = await this.policy.getContext(bookingId);
@@ -463,7 +468,10 @@ export class ContractReadService {
       reason: string;
       message: string;
     }> = [];
-    const itemFlows: Array<{ productId: string; flow: 'LEGACY' | 'CONTRACT_V2' }> = [];
+    const itemFlows: Array<{
+      productId: string;
+      flow: 'LEGACY' | 'CONTRACT_V2';
+    }> = [];
 
     for (const item of items) {
       if (!item?.productId) continue;
@@ -477,12 +485,15 @@ export class ContractReadService {
           providerId: '',
           providerName: 'Không xác định',
           reason: 'PRODUCT_ID_INVALID',
-          message: 'Mã trang phục trong giỏ hàng không hợp lệ. Vui lòng xóa và thêm lại sản phẩm.',
+          message:
+            'Mã trang phục trong giỏ hàng không hợp lệ. Vui lòng xóa và thêm lại sản phẩm.',
         });
         continue;
       }
 
-      const product = (await db.collection('products').findOne({ _id: prodObjId })) as any;
+      const product = (await db
+        .collection('products')
+        .findOne({ _id: prodObjId })) as any;
       if (!product) {
         ineligibleItems.push({
           productId: item.productId,
@@ -490,12 +501,15 @@ export class ContractReadService {
           providerId: '',
           providerName: 'Không xác định',
           reason: 'PRODUCT_NOT_FOUND',
-          message: 'Trang phục không còn tồn tại trên hệ thống. Vui lòng xóa khỏi giỏ hàng.',
+          message:
+            'Trang phục không còn tồn tại trên hệ thống. Vui lòng xóa khỏi giỏ hàng.',
         });
         continue;
       }
 
-      const provider = (await db.collection('providers').findOne({ _id: product.providerId })) as any;
+      const provider = (await db
+        .collection('providers')
+        .findOne({ _id: product.providerId })) as any;
       const providerName = provider?.businessName || 'Nhà cung cấp';
       const productName = product?.name || 'Trang phục';
       const providerIdStr = product.providerId?.toString() || '';
@@ -514,7 +528,7 @@ export class ContractReadService {
           providerId: providerIdStr,
           providerName,
           reason: 'PROVIDER_RENTAL_NOT_ACTIVE',
-          message: `Shop '${providerName}' chưa được kích hoạt quyền cho thuê Áo dài trên sàn VibeHue. Quý khách vui lòng chọn trang phục từ Shop khác hoặc liên hệ Shop.`,
+          message: `Shop '${providerName}' chưa được kích hoạt quyền cho thuê Áo dài trên sàn TàGo. Quý khách vui lòng chọn trang phục từ Shop khác hoặc liên hệ Shop.`,
         });
         continue;
       }
@@ -591,7 +605,9 @@ export class ContractReadService {
 
       let policies: any;
       try {
-        policies = await this.snapshots.currentPoliciesForProvider(product.providerId);
+        policies = await this.snapshots.currentPoliciesForProvider(
+          product.providerId,
+        );
       } catch (err: any) {
         ineligibleItems.push({
           productId: item.productId,
@@ -616,7 +632,7 @@ export class ContractReadService {
         continue;
       }
 
-      const damageComp = policies?.providerDamageCompensation as any;
+      const damageComp = policies?.providerDamageCompensation;
       const resolvedComp = resolveDamageCompensationRules(damageComp);
 
       if (resolvedComp.requiresAssetValue) {
@@ -689,16 +705,14 @@ export class ContractReadService {
     };
   }
 
-  private async reconcileErroneousLegacyBooking(
-    booking: {
-      _id: Types.ObjectId;
-      bookingType: string;
-      status: string;
-      contractFlowVersion?: 2 | null;
-      providerIds?: Types.ObjectId[];
-      holdExpiresAt?: Date | null;
-    },
-  ): Promise<boolean> {
+  private async reconcileErroneousLegacyBooking(booking: {
+    _id: Types.ObjectId;
+    bookingType: string;
+    status: string;
+    contractFlowVersion?: 2 | null;
+    providerIds?: Types.ObjectId[];
+    holdExpiresAt?: Date | null;
+  }): Promise<boolean> {
     if (
       booking.contractFlowVersion !== 2 ||
       booking.bookingType !== 'AODAI_RENTAL' ||

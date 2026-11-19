@@ -37,7 +37,7 @@ class HttpClient {
     const isFormData = options.body instanceof FormData;
     const timeoutMs =
       customTimeoutMs ??
-      (isFormData ? 60_000 : options.method === 'GET' ? 10_000 : 20_000);
+      (isFormData ? 90_000 : options.method === 'GET' ? 30_000 : 60_000);
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
     const signal = options.signal
       ? AbortSignal.any([options.signal, timeoutSignal])
@@ -72,12 +72,21 @@ class HttpClient {
 
       return this.parseResponse<T>(response);
     } catch (error: any) {
+      if (
+        error?.name === 'AbortError' ||
+        error?.code === 'ERR_CANCELED' ||
+        error?.name === 'CanceledError' ||
+        error?.message?.includes('aborted')
+      ) {
+        throw error;
+      }
       console.error(`API Request failed on ${path}:`, error);
       if (error?.response || error?.status) {
         throw error;
       }
       const translated = translateError(error?.message || 'Lỗi kết nối máy chủ.');
       const networkErr: any = new Error(translated);
+      networkErr.name = error?.name || 'Error';
       networkErr.cause = error;
       throw networkErr;
     }

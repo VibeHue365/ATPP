@@ -58,7 +58,9 @@ describe('WeatherNotificationService', () => {
       ],
     }).compile();
 
-    service = module.get<WeatherNotificationService>(WeatherNotificationService);
+    service = module.get<WeatherNotificationService>(
+      WeatherNotificationService,
+    );
   });
 
   it('should be defined', () => {
@@ -225,7 +227,9 @@ describe('WeatherNotificationService', () => {
         expect.objectContaining({ spotName: 'Lăng Khải Định' }),
       );
 
-      expect(mockServer.to).toHaveBeenCalledWith(`booking:${bookingId.toString()}`);
+      expect(mockServer.to).toHaveBeenCalledWith(
+        `booking:${bookingId.toString()}`,
+      );
       expect(mockServer.emit).toHaveBeenCalledWith(
         'plan_b_applied',
         expect.objectContaining({

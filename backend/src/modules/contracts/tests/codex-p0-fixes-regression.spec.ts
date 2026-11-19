@@ -36,7 +36,7 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
 
       prepService = new ContractPreparationService(
         true,
-        mockConnection as any,
+        mockConnection,
         {} as any,
         {} as any,
         {} as any,
@@ -69,8 +69,10 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
           quantity: customItemFields.quantity ?? 1,
           rentalPrice: 100000,
           depositAmount: 200000,
-          rentalFrom: customItemFields.rentalFrom || new Date('2026-11-15T00:00:00Z'),
-          rentalTo: customItemFields.rentalTo || new Date('2026-11-17T23:59:59Z'),
+          rentalFrom:
+            customItemFields.rentalFrom || new Date('2026-11-15T00:00:00Z'),
+          rentalTo:
+            customItemFields.rentalTo || new Date('2026-11-17T23:59:59Z'),
           selectedSize: customItemFields.selectedSize || 'L',
           selectedColor: customItemFields.selectedColor || 'Đỏ',
           ...customItemFields,
@@ -85,7 +87,11 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
       const itemId = oid();
       const productId = oid();
       const realInventoryItemId = oid();
-      const context = createTestContext(bookingId, itemId, providerId, { productId, selectedSize: 'L', selectedColor: 'Đỏ' });
+      const context = createTestContext(bookingId, itemId, providerId, {
+        productId,
+        selectedSize: 'L',
+        selectedColor: 'Đỏ',
+      });
 
       const bookingsCol = {
         findOne: jest.fn().mockResolvedValue({
@@ -142,7 +148,9 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
         return {};
       });
 
-      await expect(prepService.assertLiveHold(context, providerId)).resolves.not.toThrow();
+      await expect(
+        prepService.assertLiveHold(context, providerId),
+      ).resolves.not.toThrow();
     });
 
     it('INV-02: Không có Hold -> 422 RENTAL_HOLD_EXPIRED_OR_MISSING, không tạo Hold giả', async () => {
@@ -161,7 +169,9 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
       };
 
       const reservationsCol = {
-        find: jest.fn().mockReturnValue({ toArray: jest.fn().mockResolvedValue([]) }),
+        find: jest
+          .fn()
+          .mockReturnValue({ toArray: jest.fn().mockResolvedValue([]) }),
         insertOne: jest.fn(),
       };
 
@@ -171,7 +181,9 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
         return {};
       });
 
-      await expect(prepService.assertLiveHold(context, providerId)).rejects.toThrow(
+      await expect(
+        prepService.assertLiveHold(context, providerId),
+      ).rejects.toThrow(
         new UnprocessableEntityException('RENTAL_HOLD_EXPIRED_OR_MISSING'),
       );
       expect(reservationsCol.insertOne).not.toHaveBeenCalled();
@@ -211,7 +223,9 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
       };
 
       const inventoryItemsCol = {
-        find: jest.fn().mockReturnValue({ toArray: jest.fn().mockResolvedValue([]) }),
+        find: jest
+          .fn()
+          .mockReturnValue({ toArray: jest.fn().mockResolvedValue([]) }),
       };
 
       mockDb.collection.mockImplementation((name: string) => {
@@ -221,9 +235,9 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
         return {};
       });
 
-      await expect(prepService.assertLiveHold(context, providerId)).rejects.toThrow(
-        /RENTAL_HOLD_ITEM_NOT_FOUND/,
-      );
+      await expect(
+        prepService.assertLiveHold(context, providerId),
+      ).rejects.toThrow(/RENTAL_HOLD_ITEM_NOT_FOUND/);
     });
 
     it('INV-04: Inventory item tồn tại nhưng thuộc Product khác -> 422 RENTAL_HOLD_PRODUCT_MISMATCH', async () => {
@@ -233,7 +247,9 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
       const orderedProductId = oid();
       const differentProductId = oid();
       const inventoryItemId = oid();
-      const context = createTestContext(bookingId, itemId, providerId, { productId: orderedProductId });
+      const context = createTestContext(bookingId, itemId, providerId, {
+        productId: orderedProductId,
+      });
 
       const bookingsCol = {
         findOne: jest.fn().mockResolvedValue({
@@ -281,9 +297,9 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
         return {};
       });
 
-      await expect(prepService.assertLiveHold(context, providerId)).rejects.toThrow(
-        /RENTAL_HOLD_PRODUCT_MISMATCH/,
-      );
+      await expect(
+        prepService.assertLiveHold(context, providerId),
+      ).rejects.toThrow(/RENTAL_HOLD_PRODUCT_MISMATCH/);
     });
 
     it('INV-05: Đúng Product nhưng sai variant/size -> 422 RENTAL_HOLD_VARIANT_MISMATCH', async () => {
@@ -292,7 +308,10 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
       const itemId = oid();
       const productId = oid();
       const inventoryItemId = oid();
-      const context = createTestContext(bookingId, itemId, providerId, { productId, selectedSize: 'XL' });
+      const context = createTestContext(bookingId, itemId, providerId, {
+        productId,
+        selectedSize: 'XL',
+      });
 
       const bookingsCol = {
         findOne: jest.fn().mockResolvedValue({
@@ -340,9 +359,9 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
         return {};
       });
 
-      await expect(prepService.assertLiveHold(context, providerId)).rejects.toThrow(
-        /RENTAL_HOLD_VARIANT_MISMATCH/,
-      );
+      await expect(
+        prepService.assertLiveHold(context, providerId),
+      ).rejects.toThrow(/RENTAL_HOLD_VARIANT_MISMATCH/);
     });
 
     it('INV-06: Inventory item thuộc Provider khác -> 422 RENTAL_HOLD_PROVIDER_MISMATCH', async () => {
@@ -352,7 +371,9 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
       const itemId = oid();
       const productId = oid();
       const inventoryItemId = oid();
-      const context = createTestContext(bookingId, itemId, providerAId, { productId });
+      const context = createTestContext(bookingId, itemId, providerAId, {
+        productId,
+      });
 
       const bookingsCol = {
         findOne: jest.fn().mockResolvedValue({
@@ -408,9 +429,9 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
         return {};
       });
 
-      await expect(prepService.assertLiveHold(context, providerAId)).rejects.toThrow(
-        /RENTAL_HOLD_PROVIDER_MISMATCH/,
-      );
+      await expect(
+        prepService.assertLiveHold(context, providerAId),
+      ).rejects.toThrow(/RENTAL_HOLD_PROVIDER_MISMATCH/);
     });
 
     it('INV-08: Hold hết hạn (expired) -> 422 RENTAL_HOLD_EXPIRED_OR_MISSING', async () => {
@@ -433,7 +454,9 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
         return {};
       });
 
-      await expect(prepService.assertLiveHold(context, providerId)).rejects.toThrow(
+      await expect(
+        prepService.assertLiveHold(context, providerId),
+      ).rejects.toThrow(
         new UnprocessableEntityException('BOOKING_NOT_PREPARABLE'),
       );
     });
@@ -442,7 +465,9 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
       const providerId = oid();
       const bookingId = oid();
       const itemId = oid();
-      const context = createTestContext(bookingId, itemId, providerId, { quantity: 2 }); // Ordered 2 units!
+      const context = createTestContext(bookingId, itemId, providerId, {
+        quantity: 2,
+      }); // Ordered 2 units!
 
       const bookingsCol = {
         findOne: jest.fn().mockResolvedValue({
@@ -474,7 +499,9 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
         return {};
       });
 
-      await expect(prepService.assertLiveHold(context, providerId)).rejects.toThrow(
+      await expect(
+        prepService.assertLiveHold(context, providerId),
+      ).rejects.toThrow(
         new UnprocessableEntityException('RENTAL_HOLD_EXPIRED_OR_MISSING'),
       );
     });
@@ -524,9 +551,9 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
         return {};
       });
 
-      await expect(prepService.assertLiveHold(context, providerId)).rejects.toThrow(
-        /RENTAL_HOLD_DATE_MISMATCH/,
-      );
+      await expect(
+        prepService.assertLiveHold(context, providerId),
+      ).rejects.toThrow(/RENTAL_HOLD_DATE_MISMATCH/);
     });
 
     it('INV-11: Hold tạm (TEMP_RESERVED) thiếu trường expiresAt hoặc null -> 422 RENTAL_HOLD_EXPIRED_OR_MISSING', async () => {
@@ -535,7 +562,9 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
       const itemId = oid();
       const productId = oid();
       const realInventoryItemId = oid();
-      const context = createTestContext(bookingId, itemId, providerId, { productId });
+      const context = createTestContext(bookingId, itemId, providerId, {
+        productId,
+      });
 
       const bookingsCol = {
         findOne: jest.fn().mockResolvedValue({
@@ -569,9 +598,9 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
         return {};
       });
 
-      await expect(prepService.assertLiveHold(context, providerId)).rejects.toThrow(
-        /RENTAL_HOLD_EXPIRED_OR_MISSING/,
-      );
+      await expect(
+        prepService.assertLiveHold(context, providerId),
+      ).rejects.toThrow(/RENTAL_HOLD_EXPIRED_OR_MISSING/);
     });
 
     it('INV-12: Hold thiếu trường reservedFrom hoặc reservedTo -> 422 RENTAL_HOLD_DATE_MISMATCH', async () => {
@@ -580,7 +609,9 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
       const itemId = oid();
       const productId = oid();
       const realInventoryItemId = oid();
-      const context = createTestContext(bookingId, itemId, providerId, { productId });
+      const context = createTestContext(bookingId, itemId, providerId, {
+        productId,
+      });
 
       const bookingsCol = {
         findOne: jest.fn().mockResolvedValue({
@@ -614,9 +645,9 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
         return {};
       });
 
-      await expect(prepService.assertLiveHold(context, providerId)).rejects.toThrow(
-        /RENTAL_HOLD_DATE_MISMATCH/,
-      );
+      await expect(
+        prepService.assertLiveHold(context, providerId),
+      ).rejects.toThrow(/RENTAL_HOLD_DATE_MISMATCH/);
     });
 
     it('INV-13: Ca hợp lệ chuẩn từ booking-creation flow: có expiresAt tương lai, bao quát rentalFrom/rentalTo -> PASS', async () => {
@@ -693,7 +724,9 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
         return {};
       });
 
-      await expect(prepService.assertLiveHold(context, providerId)).resolves.not.toThrow();
+      await expect(
+        prepService.assertLiveHold(context, providerId),
+      ).resolves.not.toThrow();
     });
   });
 
@@ -720,8 +753,8 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
 
       policyService = new ProviderContractPolicyService(
         true,
-        mockConnection as any,
-        mockPolicyModel as any,
+        mockConnection,
+        mockPolicyModel,
         {} as any,
         {} as any,
       );
@@ -753,15 +786,23 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
         })
         .mockResolvedValueOnce(null);
 
-      const approvePromise = policyService.adminReview(adminUser, versionId.toString(), {
-        action: 'APPROVE',
-        reviewNote: 'Duyệt chính sách',
-      });
+      const approvePromise = policyService.adminReview(
+        adminUser,
+        versionId.toString(),
+        {
+          action: 'APPROVE',
+          reviewNote: 'Duyệt chính sách',
+        },
+      );
 
-      const rejectPromise = policyService.adminReview(adminUser, versionId.toString(), {
-        action: 'REJECT',
-        reviewNote: 'Từ chối chính sách',
-      });
+      const rejectPromise = policyService.adminReview(
+        adminUser,
+        versionId.toString(),
+        {
+          action: 'REJECT',
+          reviewNote: 'Từ chối chính sách',
+        },
+      );
 
       const results = await Promise.allSettled([approvePromise, rejectPromise]);
 
@@ -771,7 +812,7 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
       expect(fulfilled).toHaveLength(1);
       expect(rejected).toHaveLength(1);
 
-      const failureReason = (rejected[0] as PromiseRejectedResult).reason;
+      const failureReason = rejected[0].reason;
       expect(failureReason).toBeInstanceOf(ConflictException);
       expect(failureReason.message).toBe('POLICY_NOT_PENDING_REVIEW');
     });
@@ -788,16 +829,27 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
 
       mockPolicyModel.findById.mockResolvedValue(pendingDoc);
       mockPolicyModel.findOneAndUpdate
-        .mockResolvedValueOnce({ ...pendingDoc, status: ProviderPolicyReviewStatus.Approved })
+        .mockResolvedValueOnce({
+          ...pendingDoc,
+          status: ProviderPolicyReviewStatus.Approved,
+        })
         .mockResolvedValueOnce(null);
 
-      const first = policyService.adminReview(adminUser, versionId.toString(), { action: 'APPROVE' });
-      const second = policyService.adminReview(adminUser, versionId.toString(), { action: 'APPROVE' });
+      const first = policyService.adminReview(adminUser, versionId.toString(), {
+        action: 'APPROVE',
+      });
+      const second = policyService.adminReview(
+        adminUser,
+        versionId.toString(),
+        { action: 'APPROVE' },
+      );
 
       const results = await Promise.allSettled([first, second]);
       expect(results[0].status).toBe('fulfilled');
       expect(results[1].status).toBe('rejected');
-      expect((results[1] as PromiseRejectedResult).reason).toBeInstanceOf(ConflictException);
+      expect((results[1] as PromiseRejectedResult).reason).toBeInstanceOf(
+        ConflictException,
+      );
     });
 
     it('rejects double REJECT on the same policy version', async () => {
@@ -812,16 +864,28 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
 
       mockPolicyModel.findById.mockResolvedValue(pendingDoc);
       mockPolicyModel.findOneAndUpdate
-        .mockResolvedValueOnce({ ...pendingDoc, status: ProviderPolicyReviewStatus.Rejected })
+        .mockResolvedValueOnce({
+          ...pendingDoc,
+          status: ProviderPolicyReviewStatus.Rejected,
+        })
         .mockResolvedValueOnce(null);
 
-      const first = policyService.adminReview(adminUser, versionId.toString(), { action: 'REJECT', reviewNote: 'Thiếu thông tin' });
-      const second = policyService.adminReview(adminUser, versionId.toString(), { action: 'REJECT', reviewNote: 'Thiếu thông tin' });
+      const first = policyService.adminReview(adminUser, versionId.toString(), {
+        action: 'REJECT',
+        reviewNote: 'Thiếu thông tin',
+      });
+      const second = policyService.adminReview(
+        adminUser,
+        versionId.toString(),
+        { action: 'REJECT', reviewNote: 'Thiếu thông tin' },
+      );
 
       const results = await Promise.allSettled([first, second]);
       expect(results[0].status).toBe('fulfilled');
       expect(results[1].status).toBe('rejected');
-      expect((results[1] as PromiseRejectedResult).reason).toBeInstanceOf(ConflictException);
+      expect((results[1] as PromiseRejectedResult).reason).toBeInstanceOf(
+        ConflictException,
+      );
     });
   });
 
@@ -900,7 +964,10 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
       dto.bookingFingerprint = 'b'.repeat(64);
       dto.idempotencyKey = 'idempotency-key-12345';
 
-      const errors = await validate(dto, { whitelist: true, forbidNonWhitelisted: true });
+      const errors = await validate(dto, {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      });
       expect(errors.length).toBe(0);
     });
 
@@ -914,7 +981,10 @@ describe('Codex P0 Findings Verification & Regression Suite', () => {
       dto.source = 'CHECKOUT_QUICK_FORM';
       dto.presentationMode = 'QUICK';
 
-      const errors = await validate(dto, { whitelist: true, forbidNonWhitelisted: true });
+      const errors = await validate(dto, {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      });
       expect(errors.length).toBe(0);
     });
   });

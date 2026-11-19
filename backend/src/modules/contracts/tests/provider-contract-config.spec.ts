@@ -97,7 +97,9 @@ describe('Phase 2A: ProviderContractConfigService Unit Tests', () => {
 
       const config = await service.getConfig(mockUser);
       expect(config.isDefault).toBe(false);
-      expect(config.contractMode).toBe(ProviderContractMode.CUSTOM_ORDER_THRESHOLD);
+      expect(config.contractMode).toBe(
+        ProviderContractMode.CUSTOM_ORDER_THRESHOLD,
+      );
       expect(config.orderThresholdAmount).toBe(500000);
       expect(config.version).toBe(3);
     });
@@ -181,7 +183,9 @@ describe('Phase 2A: ProviderContractConfigService Unit Tests', () => {
         { ipAddress: '127.0.0.1', userAgent: 'JestTestAgent' },
       );
 
-      expect(result.contractMode).toBe(ProviderContractMode.CUSTOM_ORDER_THRESHOLD);
+      expect(result.contractMode).toBe(
+        ProviderContractMode.CUSTOM_ORDER_THRESHOLD,
+      );
       expect(result.orderThresholdAmount).toBe(600000);
       expect(result.version).toBe(1);
 
@@ -222,7 +226,9 @@ describe('Phase 2A: ProviderContractConfigService Unit Tests', () => {
         contractMode: ProviderContractMode.ALWAYS_DETAILED,
       });
 
-      expect(existingDoc.contractMode).toBe(ProviderContractMode.ALWAYS_DETAILED);
+      expect(existingDoc.contractMode).toBe(
+        ProviderContractMode.ALWAYS_DETAILED,
+      );
       expect(existingDoc.orderThresholdAmount).toBeNull();
       expect(existingDoc.version).toBe(3); // Bumped from 2 to 3
       expect(result.version).toBe(3);

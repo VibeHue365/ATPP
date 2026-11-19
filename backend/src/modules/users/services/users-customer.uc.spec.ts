@@ -38,7 +38,7 @@ describe('Customer profile and wishlist use cases (DaiBLL)', () => {
     };
     const service = new UsersService(
       usersRepository as any,
-      userProfileMapper as any,
+      userProfileMapper,
       {} as any,
       publicMedia as any,
     );

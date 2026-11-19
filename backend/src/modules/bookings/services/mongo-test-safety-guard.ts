@@ -33,7 +33,9 @@ export function sanitizeMongoUriForLogging(uri: string): string {
  */
 export function assertSafeTestMongoUri(uriString: string): SafeMongoTarget {
   if (!uriString || typeof uriString !== 'string') {
-    throw new Error('[DB SAFETY GUARD] MongoDB test URI is required and must be a string.');
+    throw new Error(
+      '[DB SAFETY GUARD] MongoDB test URI is required and must be a string.',
+    );
   }
 
   // 1. Prohibit remote scheme mongodb+srv
@@ -58,7 +60,9 @@ export function assertSafeTestMongoUri(uriString: string): SafeMongoTarget {
   }
 
   if (parsed.protocol !== 'mongodb:') {
-    throw new Error(`[DB SAFETY GUARD] Invalid scheme "${parsed.protocol}". Only mongodb: is allowed.`);
+    throw new Error(
+      `[DB SAFETY GUARD] Invalid scheme "${parsed.protocol}". Only mongodb: is allowed.`,
+    );
   }
 
   // 3. Prohibit non-local hostnames
@@ -72,7 +76,9 @@ export function assertSafeTestMongoUri(uriString: string): SafeMongoTarget {
   // 4. Validate database name: must end with _test or be exactly slot_lease_concurrency_test
   const rawDb = decodeURIComponent(parsed.pathname.replace(/^\//, '')).trim();
   if (!rawDb) {
-    throw new Error('[DB SAFETY GUARD] Integration test URI must specify a target database name in pathname.');
+    throw new Error(
+      '[DB SAFETY GUARD] Integration test URI must specify a target database name in pathname.',
+    );
   }
 
   const isDevOrProd =
@@ -103,7 +109,9 @@ export function assertSafeTestMongoUri(uriString: string): SafeMongoTarget {
 /**
  * Assert that an active connection points to a safe local test database before destructive operations (e.g. dropDatabase).
  */
-export function assertSafeTestConnection(connection: { host?: string; name?: string } | null | undefined): void {
+export function assertSafeTestConnection(
+  connection: { host?: string; name?: string } | null | undefined,
+): void {
   if (!connection) {
     throw new Error('[DB SAFETY GUARD] Connection is null or undefined.');
   }

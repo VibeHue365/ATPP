@@ -1,4 +1,8 @@
-import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
@@ -6,7 +10,11 @@ import { OAuth2Client } from 'google-auth-library';
 import { Types } from 'mongoose';
 import { GoogleOAuthProfile } from '../../../common/strategies/google.strategy';
 import { UsersRepository } from '../../users/repositories/users.repository';
-import { AuthProviderType, UserDocument, UserStatus } from '../../users/schemas/user.schema';
+import {
+  AuthProviderType,
+  UserDocument,
+  UserStatus,
+} from '../../users/schemas/user.schema';
 import { UsersService } from '../../users/services/users.service';
 import { OAuthExchangeDto } from '../dto/oauth-exchange.dto';
 import { AuthRepository } from '../repositories/auth.repository';
@@ -97,7 +105,10 @@ export class OAuthService {
   ): Promise<OAuthLoginCode> {
     const user = await this.resolveGoogleUser(profile);
     return {
-      code: await this.createOAuthExchangeCode(user._id, user.auth.emailNormalized),
+      code: await this.createOAuthExchangeCode(
+        user._id,
+        user.auth.emailNormalized,
+      ),
     };
   }
 
@@ -112,8 +123,12 @@ export class OAuthService {
     );
 
     const webClientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
-    const androidClientId = this.configService.get<string>('GOOGLE_ANDROID_CLIENT_ID');
-    const audiences = [webClientId, androidClientId].filter(Boolean) as string[];
+    const androidClientId = this.configService.get<string>(
+      'GOOGLE_ANDROID_CLIENT_ID',
+    );
+    const audiences = [webClientId, androidClientId].filter(
+      Boolean,
+    ) as string[];
 
     let payload;
     try {
@@ -123,11 +138,15 @@ export class OAuthService {
       });
       payload = ticket.getPayload();
     } catch {
-      throw new UnauthorizedException('Google ID Token không hợp lệ hoặc đã hết hạn');
+      throw new UnauthorizedException(
+        'Google ID Token không hợp lệ hoặc đã hết hạn',
+      );
     }
 
     if (!payload || !payload.email) {
-      throw new UnauthorizedException('Google ID Token không chứa thông tin email');
+      throw new UnauthorizedException(
+        'Google ID Token không chứa thông tin email',
+      );
     }
 
     const profile: GoogleOAuthProfile = {

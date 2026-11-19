@@ -141,7 +141,10 @@ export interface RentalFulfillment {
   handoverRiskIncidentId?: Types.ObjectId | null;
 }
 
-export const createRentalFulfillment = (returnDueAt: Date, pickupDueAt: Date | null = null): RentalFulfillment => ({
+export const createRentalFulfillment = (
+  returnDueAt: Date,
+  pickupDueAt: Date | null = null,
+): RentalFulfillment => ({
   status: RentalFulfillmentStatus.Pending,
   pickupDueAt,
   returnDueAt,

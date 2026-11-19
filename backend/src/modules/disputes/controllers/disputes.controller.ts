@@ -62,10 +62,12 @@ export class DisputesController {
     @CurrentUser() user: AuthUser,
     @UploadedFiles() files: Express.Multer.File[],
   ): Promise<{ urls: string[] }> {
-    if (!user.roles.some((role) => ['PROVIDER', 'CUSTOMER', 'ADMIN'].includes(role.toUpperCase()))) {
-      throw new ForbiddenException(
-        'Bạn không có quyền tải ảnh bằng chứng',
-      );
+    if (
+      !user.roles.some((role) =>
+        ['PROVIDER', 'CUSTOMER', 'ADMIN'].includes(role.toUpperCase()),
+      )
+    ) {
+      throw new ForbiddenException('Bạn không có quyền tải ảnh bằng chứng');
     }
     if (!files?.length) {
       throw new BadRequestException('Vui lòng chọn ít nhất một ảnh bằng chứng');
@@ -84,7 +86,12 @@ export class DisputesController {
         };
         const storageKey = `dispute-evidence/${new Date().toISOString().slice(0, 10)}/${randomUUID()}${extensionByMime[file.mimetype]}`;
         const bucket = 'dispute-evidence-private';
-        await this.privateStorage.uploadPrivateFile(bucket, storageKey, file.buffer, file.mimetype);
+        await this.privateStorage.uploadPrivateFile(
+          bucket,
+          storageKey,
+          file.buffer,
+          file.mimetype,
+        );
         return `private://${bucket}/${storageKey}`;
       }),
     );
@@ -99,15 +106,26 @@ export class DisputesController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<StreamableFile> {
     try {
-      const result = await this.disputesService.viewEvidence(user.sub, user.roles, reference);
+      const result = await this.disputesService.viewEvidence(
+        user.sub,
+        user.roles,
+        reference,
+      );
       response.setHeader('Content-Type', result.mimeType);
-      response.setHeader('Content-Disposition', `inline; filename="${result.fileName}"`);
+      response.setHeader(
+        'Content-Disposition',
+        `inline; filename="${result.fileName}"`,
+      );
       response.setHeader('Cache-Control', 'private, no-store, max-age=0');
       response.setHeader('X-Content-Type-Options', 'nosniff');
       // StreamableFile tells NestJS to pipe this Readable stream directly to the response
       return new StreamableFile(result.file);
     } catch (err: any) {
-      console.error('[ERROR] viewEvidence caught:', err?.constructor?.name, err?.message);
+      console.error(
+        '[ERROR] viewEvidence caught:',
+        err?.constructor?.name,
+        err?.message,
+      );
       throw err;
     }
   }
@@ -115,9 +133,20 @@ export class DisputesController {
   private hasValidImageSignature(file: Express.Multer.File): boolean {
     const header = file.buffer?.subarray(0, 12);
     if (!header?.length) return false;
-    if (file.mimetype === 'image/jpeg') return header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
-    if (file.mimetype === 'image/png') return header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4e && header[3] === 0x47;
-    return file.mimetype === 'image/webp' && header.toString('ascii', 0, 4) === 'RIFF' && header.toString('ascii', 8, 12) === 'WEBP';
+    if (file.mimetype === 'image/jpeg')
+      return header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+    if (file.mimetype === 'image/png')
+      return (
+        header[0] === 0x89 &&
+        header[1] === 0x50 &&
+        header[2] === 0x4e &&
+        header[3] === 0x47
+      );
+    return (
+      file.mimetype === 'image/webp' &&
+      header.toString('ascii', 0, 4) === 'RIFF' &&
+      header.toString('ascii', 8, 12) === 'WEBP'
+    );
   }
   /** POST /api/disputes/incidents - Shop báo cáo hỏng đồ */
   @Post('incidents')
@@ -127,7 +156,9 @@ export class DisputesController {
     body: CreateIncidentDto,
   ) {
     if (!user.roles.includes('PROVIDER') && !user.roles.includes('provider')) {
-      throw new ForbiddenException('Chỉ nhà cung cấp mới có quyền tạo báo cáo sự cố');
+      throw new ForbiddenException(
+        'Chỉ nhà cung cấp mới có quyền tạo báo cáo sự cố',
+      );
     }
     return this.disputesService.createIncidentReport(user.sub, body);
   }
@@ -161,7 +192,11 @@ export class DisputesController {
     @Param('id') incidentId: string,
     @Body() body?: { reason?: string; evidencePhotos?: string[] },
   ) {
-    return this.disputesService.customerDisagreeIncident(incidentId, user.sub, body);
+    return this.disputesService.customerDisagreeIncident(
+      incidentId,
+      user.sub,
+      body,
+    );
   }
 
   /** GET /api/disputes/admin/disputed - Admin lấy danh sách tranh chấp */
@@ -190,7 +225,9 @@ export class DisputesController {
       throw new ForbiddenException('Bạn không có quyền thực hiện phán quyết');
     }
     if (!body.decision || !body.notes) {
-      throw new BadRequestException('Thiếu thông tin quyết định phán quyết hoặc ghi chú');
+      throw new BadRequestException(
+        'Thiếu thông tin quyết định phán quyết hoặc ghi chú',
+      );
     }
     return this.disputesService.adminResolveIncident(
       bookingId,

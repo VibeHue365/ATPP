@@ -20,7 +20,10 @@ import { Product } from '../../products/schemas/product.schema';
 import { PhotographyPackage } from '../../products/schemas/photography-package.schema';
 import { PromotionsService } from '../../products/services/promotions.service';
 import { VoucherPricingService } from '../../products/services/voucher-pricing.service';
-import { DiscountType, PromotionDocument } from '../../products/schemas/promotion.schema';
+import {
+  DiscountType,
+  PromotionDocument,
+} from '../../products/schemas/promotion.schema';
 import { PaymentsService } from '../../payments/services/payments.service';
 import { ProductsService } from '../../products/services/products.service';
 import {
@@ -60,13 +63,19 @@ import {
   ScheduleType,
   ScheduleCapability,
 } from '../../products/schemas/provider-schedule.schema';
-import { ShopScheduleConfig, TimeSlotEngineService } from './time-slot-engine.service';
+import {
+  ShopScheduleConfig,
+  TimeSlotEngineService,
+} from './time-slot-engine.service';
 import {
   InventorySlotLease,
   InventorySlotLeaseDocument,
   SlotLeaseStatus,
 } from '../schemas/inventory-slot-lease.schema';
-import { TurnaroundStatus, createRentalFulfillment } from '../schemas/rental-fulfillment.types';
+import {
+  TurnaroundStatus,
+  createRentalFulfillment,
+} from '../schemas/rental-fulfillment.types';
 
 export interface BookingCreationServiceDeps {
   bookingsRepository: BookingsRepository;
@@ -173,17 +182,26 @@ export class BookingCreationService {
       if (!schedules || schedules.length === 0) return undefined;
 
       const recurringSchedules = schedules.filter(
-        (s) => s.scheduleType === ScheduleType.Recurring && typeof s.dayOfWeek === 'number',
+        (s) =>
+          s.scheduleType === ScheduleType.Recurring &&
+          typeof s.dayOfWeek === 'number',
       );
       let weeklyOffDays: number[] | undefined = undefined;
       if (recurringSchedules.length > 0) {
-        const workingDays = new Set(recurringSchedules.map((s) => s.dayOfWeek as number));
-        weeklyOffDays = [0, 1, 2, 3, 4, 5, 6].filter((d) => !workingDays.has(d));
+        const workingDays = new Set(
+          recurringSchedules.map((s) => s.dayOfWeek as number),
+        );
+        weeklyOffDays = [0, 1, 2, 3, 4, 5, 6].filter(
+          (d) => !workingDays.has(d),
+        );
       }
 
       const offDays: string[] = [];
       for (const s of schedules) {
-        if (s.scheduleType === ScheduleType.SpecificDate && Array.isArray(s.offDays)) {
+        if (
+          s.scheduleType === ScheduleType.SpecificDate &&
+          Array.isArray(s.offDays)
+        ) {
           for (const d of s.offDays) {
             const dateStr = new Date(d).toLocaleDateString('en-CA', {
               timeZone: 'Asia/Ho_Chi_Minh',
@@ -286,7 +304,10 @@ export class BookingCreationService {
     const bookedDates = new Set<string>();
     const bookedSlots: { date: string; timeSlot: string }[] = [];
     const variantDates = new Map<string, Set<string>>();
-    const variantSlots = new Map<string, { date: string; timeSlot: string }[]>();
+    const variantSlots = new Map<
+      string,
+      { date: string; timeSlot: string }[]
+    >();
 
     items.forEach((item) => {
       if (item.rentalType === 'DAILY') {
@@ -299,7 +320,9 @@ export class BookingCreationService {
               timeZone: 'Asia/Ho_Chi_Minh',
             });
             bookedDates.add(dateStr);
-            const key = `${String(item.selectedSize || 'M').trim().toUpperCase()}_${this.normalizeColor(item.selectedColor)}`;
+            const key = `${String(item.selectedSize || 'M')
+              .trim()
+              .toUpperCase()}_${this.normalizeColor(item.selectedColor)}`;
             if (!variantDates.has(key)) variantDates.set(key, new Set());
             variantDates.get(key)!.add(dateStr);
             current.setDate(current.getDate() + 1);
@@ -311,9 +334,13 @@ export class BookingCreationService {
             timeZone: 'Asia/Ho_Chi_Minh',
           });
           bookedSlots.push({ date: dateStr, timeSlot: item.shootTimeSlot });
-          const key = `${String(item.selectedSize || 'M').trim().toUpperCase()}_${this.normalizeColor(item.selectedColor)}`;
+          const key = `${String(item.selectedSize || 'M')
+            .trim()
+            .toUpperCase()}_${this.normalizeColor(item.selectedColor)}`;
           if (!variantSlots.has(key)) variantSlots.set(key, []);
-          variantSlots.get(key)!.push({ date: dateStr, timeSlot: item.shootTimeSlot });
+          variantSlots
+            .get(key)!
+            .push({ date: dateStr, timeSlot: item.shootTimeSlot });
         }
       }
     });
@@ -322,7 +349,10 @@ export class BookingCreationService {
       bookedDates: Array.from(bookedDates),
       bookedSlots,
       variantBookedDates: Object.fromEntries(
-        Array.from(variantDates.entries()).map(([key, dates]) => [key, Array.from(dates)]),
+        Array.from(variantDates.entries()).map(([key, dates]) => [
+          key,
+          Array.from(dates),
+        ]),
       ),
       variantBookedSlots: Object.fromEntries(variantSlots.entries()),
     };
@@ -384,9 +414,10 @@ export class BookingCreationService {
     const rentalProviderIdsSet = new Set<string>();
     const reservationsCreated: InventoryReservationDocument[] = [];
     let booking: BookingDocument | null = null;
-    let promotionId: Types.ObjectId | null = null;
+    const promotionId: Types.ObjectId | null = null;
 
     const todayStr = new Date().toISOString().split('T')[0];
+    const rentalDateRanges = new Set<string>();
     for (const item of dto.items) {
       if (item.rentalFrom) {
         const itemDateStr = new Date(item.rentalFrom)
@@ -408,6 +439,21 @@ export class BookingCreationService {
           );
         }
       }
+      if (item.rentalFrom || item.rentalTo) {
+        const fromStr = item.rentalFrom
+          ? new Date(item.rentalFrom).toISOString().split('T')[0]
+          : '';
+        const toStr = item.rentalTo
+          ? new Date(item.rentalTo).toISOString().split('T')[0]
+          : '';
+        rentalDateRanges.add(`${fromStr}_${toStr}`);
+      }
+    }
+
+    if (rentalDateRanges.size > 1) {
+      throw new BadRequestException(
+        'Tất cả trang phục trong cùng một đơn thuê phải có cùng thời gian nhận và trả đồ. Vui lòng tạo đơn riêng cho từng đợt thuê để đảm bảo lịch trình và hợp đồng chính xác.',
+      );
     }
 
     try {
@@ -490,7 +536,8 @@ export class BookingCreationService {
           }
 
           let upfrontBlock: any = null;
-          const turnaroundSlots = providerInfo?.rentalSettings?.turnaroundSlots ?? 1;
+          const turnaroundSlots =
+            providerInfo?.rentalSettings?.turnaroundSlots ?? 1;
           const useSlotLeases = !!providerInfo?.useSlotLeases;
 
           let contractualRentalTo: Date | null = null;
@@ -499,7 +546,9 @@ export class BookingCreationService {
           if (rType === 'HOURLY') {
             if (item.shootDate && item.shootTimeSlot) {
               const { startSlotIndex, rentalSlotCount } = this.timeEngineService
-                ? this.timeEngineService.parseAndValidateTimeSlot(item.shootTimeSlot)
+                ? this.timeEngineService.parseAndValidateTimeSlot(
+                    item.shootTimeSlot,
+                  )
                 : { startSlotIndex: 1, rentalSlotCount: 1 };
 
               const hourlyRate =
@@ -509,8 +558,12 @@ export class BookingCreationService {
               unitPrice = hourlyRate * (rentalSlotCount * 2);
 
               const parts = item.shootTimeSlot.split('-');
-              const [sh, sm] = (parts[0]?.trim() || '07:00').split(':').map(Number);
-              const [eh, em] = (parts[1]?.trim() || '09:00').split(':').map(Number);
+              const [sh, sm] = (parts[0]?.trim() || '07:00')
+                .split(':')
+                .map(Number);
+              const [eh, em] = (parts[1]?.trim() || '09:00')
+                .split(':')
+                .map(Number);
               reservedFrom = new Date(item.shootDate);
               reservedFrom.setHours(sh, sm, 0, 0);
               reservedTo = new Date(item.shootDate);
@@ -520,13 +573,21 @@ export class BookingCreationService {
 
               if (useSlotLeases) {
                 if (!this.timeEngineService || !this.slotLeaseService) {
-                  throw new BadRequestException('Hệ thống slot lease chưa sẵn sàng để xử lý đơn hàng.');
+                  throw new BadRequestException(
+                    'Hệ thống slot lease chưa sẵn sàng để xử lý đơn hàng.',
+                  );
                 }
                 if (!reservedFrom || !providerId) {
-                  throw new BadRequestException('Thiếu thông tin thời gian hoặc nhà cung cấp cho đơn thuê slot.');
+                  throw new BadRequestException(
+                    'Thiếu thông tin thời gian hoặc nhà cung cấp cho đơn thuê slot.',
+                  );
                 }
-                const dateStr = this.timeEngineService.getVnParts(reservedFrom).dateStr;
-                const scheduleConfig = await this.getProviderScheduleConfig(providerId, session);
+                const dateStr =
+                  this.timeEngineService.getVnParts(reservedFrom).dateStr;
+                const scheduleConfig = await this.getProviderScheduleConfig(
+                  providerId,
+                  session,
+                );
                 upfrontBlock = this.timeEngineService.calculateUpfrontBlock(
                   dateStr,
                   startSlotIndex,
@@ -535,7 +596,9 @@ export class BookingCreationService {
                   scheduleConfig,
                 );
                 if (!upfrontBlock) {
-                  throw new BadRequestException('Không thể tính toán khung giờ thuê (upfront block).');
+                  throw new BadRequestException(
+                    'Không thể tính toán khung giờ thuê (upfront block).',
+                  );
                 }
               }
             } else if (item.rentalFrom && item.rentalTo) {
@@ -554,7 +617,9 @@ export class BookingCreationService {
 
               // DAILY turnaround: extend reservedTo by 1 day on inventory reservation
               reservedToForTurnaround = new Date(contractualRentalTo);
-              reservedToForTurnaround.setDate(reservedToForTurnaround.getDate() + 1);
+              reservedToForTurnaround.setDate(
+                reservedToForTurnaround.getDate() + 1,
+              );
               reservedToForTurnaround.setHours(23, 59, 59, 999);
             }
           }
@@ -630,10 +695,10 @@ export class BookingCreationService {
             }
 
             const isHourly = rType === 'HOURLY';
-            const targetEnd = (reservedToForTurnaround || reservedTo) as Date;
+            const targetEnd = reservedToForTurnaround || reservedTo;
             const now = new Date();
             const overlapFilter = buildReservationOverlapFilter(
-              reservedFrom as Date,
+              reservedFrom,
               targetEnd,
               isHourly,
               now,
@@ -654,20 +719,31 @@ export class BookingCreationService {
 
             if (useSlotLeases && upfrontBlock && this.leaseModel) {
               const allSlotFilters = [
-                ...upfrontBlock.rentalSlots.map((s: any) => ({ dateStr: s.dateStr, slotIndex: s.slotIndex })),
-                ...upfrontBlock.turnaroundSlots.map((s: any) => ({ dateStr: s.dateStr, slotIndex: s.slotIndex })),
+                ...upfrontBlock.rentalSlots.map((s: any) => ({
+                  dateStr: s.dateStr,
+                  slotIndex: s.slotIndex,
+                })),
+                ...upfrontBlock.turnaroundSlots.map((s: any) => ({
+                  dateStr: s.dateStr,
+                  slotIndex: s.slotIndex,
+                })),
               ];
               if (allSlotFilters.length > 0) {
                 const busyLeases =
                   (await this.leaseModel
                     .find({
-                      inventoryItemId: { $in: inventoryItems.map((i) => i._id) },
+                      inventoryItemId: {
+                        $in: inventoryItems.map((i) => i._id),
+                      },
                       $or: allSlotFilters,
                       $and: [
                         {
                           $or: [
                             { status: SlotLeaseStatus.Confirmed },
-                            { status: SlotLeaseStatus.Temp, expiresAt: { $gt: new Date() } },
+                            {
+                              status: SlotLeaseStatus.Temp,
+                              expiresAt: { $gt: new Date() },
+                            },
                           ],
                         },
                       ],
@@ -678,29 +754,43 @@ export class BookingCreationService {
                   busyInventoryItemIds.add(bl.inventoryItemId.toString());
                 }
               }
-            } else if (!upfrontBlock && this.leaseModel && reservedFrom && targetEnd) {
+            } else if (
+              !upfrontBlock &&
+              this.leaseModel &&
+              reservedFrom &&
+              targetEnd
+            ) {
               const dateStrs: string[] = [];
               const cur = new Date(reservedFrom);
               const end = new Date(targetEnd);
               while (cur <= end) {
-                const dStr = cur.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+                const dStr = cur.toLocaleDateString('en-CA', {
+                  timeZone: 'Asia/Ho_Chi_Minh',
+                });
                 if (!dateStrs.includes(dStr)) dateStrs.push(dStr);
                 cur.setDate(cur.getDate() + 1);
               }
-              const endStr = end.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+              const endStr = end.toLocaleDateString('en-CA', {
+                timeZone: 'Asia/Ho_Chi_Minh',
+              });
               if (!dateStrs.includes(endStr)) dateStrs.push(endStr);
 
               if (dateStrs.length > 0) {
                 const busyDailyLeases =
                   (await this.leaseModel
                     .find({
-                      inventoryItemId: { $in: inventoryItems.map((i) => i._id) },
+                      inventoryItemId: {
+                        $in: inventoryItems.map((i) => i._id),
+                      },
                       dateStr: { $in: dateStrs },
                       $and: [
                         {
                           $or: [
                             { status: SlotLeaseStatus.Confirmed },
-                            { status: SlotLeaseStatus.Temp, expiresAt: { $gt: new Date() } },
+                            {
+                              status: SlotLeaseStatus.Temp,
+                              expiresAt: { $gt: new Date() },
+                            },
                           ],
                         },
                       ],
@@ -806,7 +896,9 @@ export class BookingCreationService {
                 rentalType: rType,
                 comboDiscountPercent,
                 comboDiscountAmount,
-                ...(upfrontBlock ? { upfrontBlock, turnaroundSlots, useSlotLeases: true } : {}),
+                ...(upfrontBlock
+                  ? { upfrontBlock, turnaroundSlots, useSlotLeases: true }
+                  : {}),
               } as any);
             }
           }
@@ -883,65 +975,7 @@ export class BookingCreationService {
       }
 
       for (const detail of itemDetails) {
-        if (detail.itemType === BookingItemType.Product && detail.productId) {
-          if (
-            detail.rentalType === 'DAILY' &&
-            detail.rentalFrom &&
-            detail.rentalTo
-          ) {
-            const busySchedules = await this.getBusySchedulesForProduct(
-              detail.productId.toString(),
-            );
-            const variantKey = `${(detail.selectedSize || 'M').trim().toUpperCase()}_${this.normalizeColor(detail.selectedColor || 'WHITE')}`;
-            const hasVariantBusyDates = Boolean(
-              busySchedules.variantBookedDates && Object.keys(busySchedules.variantBookedDates).length > 0,
-            );
-            const busyDatesSet = new Set(
-              hasVariantBusyDates
-                ? busySchedules.variantBookedDates?.[variantKey] || []
-                : busySchedules.bookedDates,
-            );
-            const start = new Date(detail.rentalFrom);
-            const end = new Date(detail.rentalTo);
-            const current = new Date(start);
-            while (current <= end) {
-              const dateStr = current.toISOString().split('T')[0];
-              if (busyDatesSet.has(dateStr)) {
-                throw new BadRequestException(
-                  `Sản phẩm đã được đặt lịch thuê vào ngày ${dateStr}. Vui lòng chọn thời gian khác.`,
-                );
-              }
-              current.setDate(current.getDate() + 1);
-            }
-          } else if (detail.rentalType === 'HOURLY' && detail.shootDate) {
-            const busySchedules = await this.getBusySchedulesForProduct(
-              detail.productId.toString(),
-            );
-            const dateStr = new Date(detail.shootDate)
-              .toISOString()
-              .split('T')[0];
-            const variantKey = `${(detail.selectedSize || 'M').trim().toUpperCase()}_${this.normalizeColor(detail.selectedColor || 'WHITE')}`;
-            const hasVariantBusySlots = Boolean(
-              busySchedules.variantBookedSlots && Object.keys(busySchedules.variantBookedSlots).length > 0,
-            );
-            const busySlots = hasVariantBusySlots
-              ? busySchedules.variantBookedSlots?.[variantKey] || []
-              : busySchedules.bookedSlots;
-            const isSlotConflict =
-              detail.shootTimeSlot != null &&
-              busySlots.some(
-                (slot) =>
-                  slot.date === dateStr &&
-                  slot.timeSlot &&
-                  this.isTimeSlotOverlap(slot.timeSlot, detail.shootTimeSlot!),
-              );
-            if (isSlotConflict) {
-              throw new BadRequestException(
-                `Sản phẩm đã được đặt thuê vào ngày ${dateStr} khung giờ ${detail.shootTimeSlot}. Vui lòng chọn khung giờ khác.`,
-              );
-            }
-          }
-        } else if (
+        if (
           detail.itemType === BookingItemType.PhotographyPackage &&
           detail.photographyPackageId
         ) {
@@ -969,14 +1003,39 @@ export class BookingCreationService {
         }
       }
 
+      if (dto.bookingType !== BookingType.Combo && providerIdsSet.size > 1) {
+        throw new BadRequestException(
+          'Đơn hàng không thể chứa sản phẩm từ nhiều đối tác hoặc cửa hàng khác nhau. Vui lòng tách đơn theo từng cửa hàng.',
+        );
+      }
 
+      if (
+        dto.bookingType === BookingType.AoDaiRental &&
+        itemDetails.length > 1
+      ) {
+        const dateRanges = new Set(
+          itemDetails.map(
+            (it) =>
+              `${it.rentalFrom ? new Date(it.rentalFrom).toISOString().split('T')[0] : ''}_${
+                it.rentalTo
+                  ? new Date(it.rentalTo).toISOString().split('T')[0]
+                  : ''
+              }`,
+          ),
+        );
+        if (dateRanges.size > 1) {
+          throw new BadRequestException(
+            'Mỗi đơn thuê áo dài chỉ áp dụng cho một khoảng thời gian nhận/trả duy nhất. Vui lòng tách đơn theo từng đợt thuê.',
+          );
+        }
+      }
 
       const travelFee = dto.travelFee || 0;
       const comboDiscountTotal = itemDetails.reduce(
         (sum, item) => sum + (item.comboDiscountAmount || 0),
         0,
       );
-      let voucherDiscountTotal = 0;
+      const voucherDiscountTotal = 0;
 
       let promotion: PromotionDocument | null = null;
       if (dto.promoCode) {
@@ -1160,7 +1219,9 @@ export class BookingCreationService {
           const detAny = detail as any;
           if (detAny.useSlotLeases) {
             if (!detAny.upfrontBlock || !this.slotLeaseService) {
-              throw new BadRequestException('Không thể tạo upfront slot lease cho đơn hàng.');
+              throw new BadRequestException(
+                'Không thể tạo upfront slot lease cho đơn hàng.',
+              );
             }
             await this.slotLeaseService.acquireUpfrontBlockLease(
               {
@@ -1173,10 +1234,12 @@ export class BookingCreationService {
                   dateStr: s.dateStr,
                   slotIndex: s.slotIndex,
                 })),
-                turnaroundSlots: detAny.upfrontBlock.turnaroundSlots.map((s: any) => ({
-                  dateStr: s.dateStr,
-                  slotIndex: s.slotIndex,
-                })),
+                turnaroundSlots: detAny.upfrontBlock.turnaroundSlots.map(
+                  (s: any) => ({
+                    dateStr: s.dateStr,
+                    slotIndex: s.slotIndex,
+                  }),
+                ),
                 status: SlotLeaseStatus.Temp,
                 expiresAt: new Date(Date.now() + 30 * 60 * 1000),
               },
@@ -1190,7 +1253,11 @@ export class BookingCreationService {
               detail.rentalTo || new Date(),
               detail.rentalFrom || new Date(),
             );
-            if (detAny.useSlotLeases && detAny.upfrontBlock && slotLeasesCreated) {
+            if (
+              detAny.useSlotLeases &&
+              detAny.upfrontBlock &&
+              slotLeasesCreated
+            ) {
               fulfillment.turnaroundStatus = TurnaroundStatus.Scheduled;
               fulfillment.turnaroundSlotsSnapshot = detAny.turnaroundSlots ?? 0;
               fulfillment.availableFrom = detAny.upfrontBlock.availableFrom;
@@ -1398,54 +1465,6 @@ export class BookingCreationService {
         rentalTo = end;
       }
 
-      if (rentalType === 'DAILY' && rentalFrom && rentalTo) {
-        const busySchedules = await this.getBusySchedulesForProduct(productId);
-        const variantKey = `${size.trim().toUpperCase()}_${this.normalizeColor(color)}`;
-        const hasVariantBusyDates = Boolean(
-          busySchedules.variantBookedDates && Object.keys(busySchedules.variantBookedDates).length > 0,
-        );
-        const busyDatesSet = new Set(
-          hasVariantBusyDates
-            ? busySchedules.variantBookedDates?.[variantKey] || []
-            : busySchedules.bookedDates,
-        );
-        const start = new Date(rentalFrom);
-        const end = new Date(rentalTo);
-        const current = new Date(start);
-        while (current <= end) {
-          const dateStr = current.toISOString().split('T')[0];
-          if (busyDatesSet.has(dateStr)) {
-            throw new BadRequestException(
-              `Sản phẩm đã được đặt lịch thuê vào ngày ${dateStr}. Vui lòng chọn thời gian khác.`,
-            );
-          }
-          current.setDate(current.getDate() + 1);
-        }
-      } else if (rentalType === 'HOURLY' && shootDate) {
-        const busySchedules = await this.getBusySchedulesForProduct(productId);
-        const dateStr = new Date(shootDate).toISOString().split('T')[0];
-        const variantKey = `${size.trim().toUpperCase()}_${this.normalizeColor(color)}`;
-        const hasVariantBusySlots = Boolean(
-          busySchedules.variantBookedSlots && Object.keys(busySchedules.variantBookedSlots).length > 0,
-        );
-        const busySlots = hasVariantBusySlots
-          ? busySchedules.variantBookedSlots?.[variantKey] || []
-          : busySchedules.bookedSlots;
-        const isSlotConflict =
-          shootTimeSlot != null &&
-          busySlots.some(
-            (slot) =>
-              slot.date === dateStr &&
-              slot.timeSlot &&
-              this.isTimeSlotOverlap(slot.timeSlot, shootTimeSlot),
-          );
-        if (isSlotConflict) {
-          throw new BadRequestException(
-            `Sản phẩm đã được đặt thuê vào ngày ${dateStr} khung giờ ${shootTimeSlot}. Vui lòng chọn khung giờ khác.`,
-          );
-        }
-      }
-
       const depositTotal = product.depositAmount * quantity;
       const grandTotal = subTotal + depositTotal;
 
@@ -1498,14 +1517,23 @@ export class BookingCreationService {
 
         if (useSlotLeases) {
           if (!this.timeEngineService || !this.slotLeaseService) {
-            throw new BadRequestException('Hệ thống slot lease chưa sẵn sàng để xử lý đơn hàng.');
+            throw new BadRequestException(
+              'Hệ thống slot lease chưa sẵn sàng để xử lý đơn hàng.',
+            );
           }
           if (!shootTimeSlot || !startDateTime) {
-            throw new BadRequestException('Thiếu khung giờ thuê (shootTimeSlot) cho đơn hàng.');
+            throw new BadRequestException(
+              'Thiếu khung giờ thuê (shootTimeSlot) cho đơn hàng.',
+            );
           }
-          const dateStr = this.timeEngineService.getVnParts(startDateTime!).dateStr;
-          const { startSlotIndex, rentalSlotCount } = this.timeEngineService.parseAndValidateTimeSlot(shootTimeSlot);
-          const scheduleConfig = await this.getProviderScheduleConfig(product.providerId, session);
+          const dateStr =
+            this.timeEngineService.getVnParts(startDateTime).dateStr;
+          const { startSlotIndex, rentalSlotCount } =
+            this.timeEngineService.parseAndValidateTimeSlot(shootTimeSlot);
+          const scheduleConfig = await this.getProviderScheduleConfig(
+            product.providerId,
+            session,
+          );
           upfrontBlock = this.timeEngineService.calculateUpfrontBlock(
             dateStr,
             startSlotIndex,
@@ -1514,7 +1542,9 @@ export class BookingCreationService {
             scheduleConfig,
           );
           if (!upfrontBlock) {
-            throw new BadRequestException('Không thể tính toán khung giờ thuê (upfront block).');
+            throw new BadRequestException(
+              'Không thể tính toán khung giờ thuê (upfront block).',
+            );
           }
         }
       }
@@ -1585,7 +1615,7 @@ export class BookingCreationService {
         }
       }
 
-      const targetEnd = (reservedToForTurnaround || reservedTo) as Date;
+      const targetEnd = reservedToForTurnaround || reservedTo;
       const conflictingReservations = await this.inventoryReservationModel
         .find({
           inventoryItemId: { $in: inventoryItems.map((item) => item._id) },
@@ -1603,8 +1633,14 @@ export class BookingCreationService {
 
       if (useSlotLeases && upfrontBlock && this.leaseModel) {
         const allSlotFilters = [
-          ...upfrontBlock.rentalSlots.map((s: any) => ({ dateStr: s.dateStr, slotIndex: s.slotIndex })),
-          ...upfrontBlock.turnaroundSlots.map((s: any) => ({ dateStr: s.dateStr, slotIndex: s.slotIndex })),
+          ...upfrontBlock.rentalSlots.map((s: any) => ({
+            dateStr: s.dateStr,
+            slotIndex: s.slotIndex,
+          })),
+          ...upfrontBlock.turnaroundSlots.map((s: any) => ({
+            dateStr: s.dateStr,
+            slotIndex: s.slotIndex,
+          })),
         ];
         if (allSlotFilters.length > 0) {
           const busyLeases = await this.leaseModel
@@ -1615,7 +1651,10 @@ export class BookingCreationService {
                 {
                   $or: [
                     { status: SlotLeaseStatus.Confirmed },
-                    { status: SlotLeaseStatus.Temp, expiresAt: { $gt: new Date() } },
+                    {
+                      status: SlotLeaseStatus.Temp,
+                      expiresAt: { $gt: new Date() },
+                    },
                   ],
                 },
               ],
@@ -1625,16 +1664,25 @@ export class BookingCreationService {
             busyInventoryItemIds.add(bl.inventoryItemId.toString());
           }
         }
-      } else if (!upfrontBlock && this.leaseModel && reservedFrom && targetEnd) {
+      } else if (
+        !upfrontBlock &&
+        this.leaseModel &&
+        reservedFrom &&
+        targetEnd
+      ) {
         const dateStrs: string[] = [];
         const cur = new Date(reservedFrom);
         const end = new Date(targetEnd);
         while (cur <= end) {
-          const dStr = cur.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+          const dStr = cur.toLocaleDateString('en-CA', {
+            timeZone: 'Asia/Ho_Chi_Minh',
+          });
           if (!dateStrs.includes(dStr)) dateStrs.push(dStr);
           cur.setDate(cur.getDate() + 1);
         }
-        const endStr = end.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+        const endStr = end.toLocaleDateString('en-CA', {
+          timeZone: 'Asia/Ho_Chi_Minh',
+        });
         if (!dateStrs.includes(endStr)) dateStrs.push(endStr);
 
         if (dateStrs.length > 0) {
@@ -1647,7 +1695,10 @@ export class BookingCreationService {
                   {
                     $or: [
                       { status: SlotLeaseStatus.Confirmed },
-                      { status: SlotLeaseStatus.Temp, expiresAt: { $gt: new Date() } },
+                      {
+                        status: SlotLeaseStatus.Temp,
+                        expiresAt: { $gt: new Date() },
+                      },
                     ],
                   },
                 ],
@@ -1805,7 +1856,9 @@ export class BookingCreationService {
         let slotLeasesCreated = false;
         if (useSlotLeases) {
           if (!upfrontBlock || !this.slotLeaseService) {
-            throw new BadRequestException('Không thể tạo upfront slot lease cho đơn hàng.');
+            throw new BadRequestException(
+              'Không thể tạo upfront slot lease cho đơn hàng.',
+            );
           }
           await this.slotLeaseService.acquireUpfrontBlockLease(
             {

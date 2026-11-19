@@ -575,7 +575,7 @@ export const AdminContractPolicyReviewPanel: React.FC = () => {
                               if (!clause) {
                                 return (
                                   <div className="p-2 bg-stone-100 rounded text-stone-600 text-[11px] italic">
-                                    Shop không nhập điều khoản riêng. Sẽ áp dụng Quy chế hòa giải trung gian chuẩn của Sàn VibeHue (không phán quyết bắt buộc, không tự động giữ cọc).
+                                    Shop không nhập điều khoản riêng. Sẽ áp dụng Quy chế hòa giải trung gian chuẩn của Sàn TàGo (không phán quyết bắt buộc, không tự động giữ cọc).
                                   </div>
                                 );
                               }

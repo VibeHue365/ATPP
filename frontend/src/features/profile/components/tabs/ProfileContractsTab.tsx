@@ -306,7 +306,7 @@ export const ProfileContractsTab: React.FC<ProfileContractsTabProps> = ({ onNavi
                 Chưa có hợp đồng nào đang có hiệu lực
               </h4>
               <p style={{ margin: '0 0 18px', fontSize: '13px', color: '#64748b', maxWidth: '420px', marginLeft: 'auto', marginRight: 'auto' }}>
-                Khi bạn đặt thuê trang phục áo dài trên VibeHue, hợp đồng điện tử cho các đơn hàng đang tiến hành sẽ xuất hiện tại đây.
+                Khi bạn đặt thuê trang phục áo dài trên TàGo, hợp đồng điện tử cho các đơn hàng đang tiến hành sẽ xuất hiện tại đây.
               </p>
               {onNavigateRental && (
                 <button

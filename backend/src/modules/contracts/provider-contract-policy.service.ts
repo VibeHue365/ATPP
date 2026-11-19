@@ -44,11 +44,19 @@ export class ProviderContractPolicyService {
       .sort({ versionNumber: -1 })
       .lean();
 
-    const active = versions.find((v) => v.status === ProviderPolicyReviewStatus.Approved) || null;
-    const pending = versions.find((v) => v.status === ProviderPolicyReviewStatus.PendingReview) || null;
-    const draft = versions.find(
-      (v) => v.status === ProviderPolicyReviewStatus.Draft || v.status === ProviderPolicyReviewStatus.Rejected,
-    ) || null;
+    const active =
+      versions.find((v) => v.status === ProviderPolicyReviewStatus.Approved) ||
+      null;
+    const pending =
+      versions.find(
+        (v) => v.status === ProviderPolicyReviewStatus.PendingReview,
+      ) || null;
+    const draft =
+      versions.find(
+        (v) =>
+          v.status === ProviderPolicyReviewStatus.Draft ||
+          v.status === ProviderPolicyReviewStatus.Rejected,
+      ) || null;
 
     return {
       providerId: provider._id.toString(),
@@ -68,7 +76,8 @@ export class ProviderContractPolicyService {
   }
 
   async saveDraft(user: AuthUser, dto: SaveProviderPolicyDraftDto) {
-    if (!this.enabled) throw new ServiceUnavailableException('CONTRACTS_V2_DISABLED');
+    if (!this.enabled)
+      throw new ServiceUnavailableException('CONTRACTS_V2_DISABLED');
     const provider = await this.access.ownProvider(user);
 
     // Validate platform guardrails before saving draft
@@ -121,7 +130,8 @@ export class ProviderContractPolicyService {
   }
 
   async submitForReview(user: AuthUser, dto?: SaveProviderPolicyDraftDto) {
-    if (!this.enabled) throw new ServiceUnavailableException('CONTRACTS_V2_DISABLED');
+    if (!this.enabled)
+      throw new ServiceUnavailableException('CONTRACTS_V2_DISABLED');
     const provider = await this.access.ownProvider(user);
 
     if (dto) {
@@ -147,7 +157,8 @@ export class ProviderContractPolicyService {
     // Rigorous submission readiness and guardrails check
     this.assertSubmissionReadiness(draft);
 
-    const plain = typeof draft.toObject === 'function' ? draft.toObject() : draft;
+    const plain =
+      typeof draft.toObject === 'function' ? draft.toObject() : draft;
     const canonicalData = {
       garmentCare: plain.garmentCare,
       lateReturn: plain.lateReturn,
@@ -166,7 +177,11 @@ export class ProviderContractPolicyService {
     return draft.save();
   }
 
-  async adminReview(adminUser: AuthUser, versionId: string, dto: AdminReviewPolicyDto) {
+  async adminReview(
+    adminUser: AuthUser,
+    versionId: string,
+    dto: AdminReviewPolicyDto,
+  ) {
     if (!adminUser.roles.includes('ADMIN')) {
       throw new ForbiddenException('ADMIN_ROLE_REQUIRED');
     }
@@ -197,7 +212,9 @@ export class ProviderContractPolicyService {
       }
     } else {
       if (!dto.reviewNote || !dto.reviewNote.trim()) {
-        throw new BadRequestException('REVIEW_NOTE_REQUIRED: Bắt buộc cung cấp lý do từ chối để Shop điều chỉnh.');
+        throw new BadRequestException(
+          'REVIEW_NOTE_REQUIRED: Bắt buộc cung cấp lý do từ chối để Shop điều chỉnh.',
+        );
       }
     }
 
@@ -221,7 +238,7 @@ export class ProviderContractPolicyService {
             reviewNote:
               dto.action === 'APPROVE'
                 ? (dto.reviewNote ?? null)
-                : (dto.reviewNote?.trim() || null),
+                : dto.reviewNote?.trim() || null,
           },
         },
         { new: true },
@@ -237,7 +254,7 @@ export class ProviderContractPolicyService {
       version.reviewNote =
         dto.action === 'APPROVE'
           ? (dto.reviewNote ?? null)
-          : (dto.reviewNote?.trim() || null);
+          : dto.reviewNote?.trim() || null;
       updatedVersion =
         typeof (version as any).save === 'function'
           ? await (version as any).save()
@@ -281,7 +298,9 @@ export class ProviderContractPolicyService {
         );
 
         if (provider?.userId) {
-          const notifCol = contractDb(this.connection).collection('notifications');
+          const notifCol = contractDb(this.connection).collection(
+            'notifications',
+          );
           if (notifCol && typeof notifCol.insertOne === 'function') {
             await notifCol.insertOne({
               userId: provider.userId,
@@ -291,7 +310,7 @@ export class ProviderContractPolicyService {
                   : 'Chính sách hợp đồng cần điều chỉnh lại',
               content:
                 dto.action === 'APPROVE'
-                  ? `Chính sách hợp đồng phiên bản v${updatedVersion.versionNumber} của bạn đã được Ban Quản trị VibeHue phê duyệt thành công.${dto.reviewNote ? ` Ghi chú: ${dto.reviewNote}` : ''}`
+                  ? `Chính sách hợp đồng phiên bản v${updatedVersion.versionNumber} của bạn đã được Ban Quản trị TàGo phê duyệt thành công.${dto.reviewNote ? ` Ghi chú: ${dto.reviewNote}` : ''}`
                   : `Chính sách hợp đồng phiên bản v${updatedVersion.versionNumber} chưa được phê duyệt. Lý do: ${dto.reviewNote?.trim() || ''}. Vui lòng chỉnh sửa lại bản thảo và gửi duyệt lại.`,
               type: 'SYSTEM',
               isRead: false,
@@ -318,7 +337,9 @@ export class ProviderContractPolicyService {
 
   async getPendingPoliciesForAdmin(adminUser: AuthUser) {
     if (!adminUser.roles.includes('ADMIN')) {
-      throw new ForbiddenException('ADMIN_ROLE_REQUIRED: Chỉ Quản trị viên sàn mới có quyền xem danh sách chờ duyệt.');
+      throw new ForbiddenException(
+        'ADMIN_ROLE_REQUIRED: Chỉ Quản trị viên sàn mới có quyền xem danh sách chờ duyệt.',
+      );
     }
 
     const pendingList = await this.policyModel
@@ -332,7 +353,15 @@ export class ProviderContractPolicyService {
     const providers = await contractDb(this.connection)
       .collection('providers')
       .find({ _id: { $in: providerIds } })
-      .project({ _id: 1, userId: 1, name: 1, shopName: 1, businessName: 1, email: 1, phone: 1 })
+      .project({
+        _id: 1,
+        userId: 1,
+        name: 1,
+        shopName: 1,
+        businessName: 1,
+        email: 1,
+        phone: 1,
+      })
       .toArray();
 
     const providerMap = new Map(providers.map((pr) => [pr._id.toString(), pr]));
@@ -344,7 +373,11 @@ export class ProviderContractPolicyService {
         id: policy._id.toString(),
         providerInfo: {
           id: policy.providerId.toString(),
-          shopName: prov?.shopName || prov?.businessName || prov?.name || 'Shop đối tác',
+          shopName:
+            prov?.shopName ||
+            prov?.businessName ||
+            prov?.name ||
+            'Shop đối tác',
           email: prov?.email || null,
           phone: prov?.phone || null,
         },
@@ -354,7 +387,9 @@ export class ProviderContractPolicyService {
 
   async getPolicyDetailForAdmin(adminUser: AuthUser, versionId: string) {
     if (!adminUser.roles.includes('ADMIN')) {
-      throw new ForbiddenException('ADMIN_ROLE_REQUIRED: Chỉ Quản trị viên sàn mới có quyền xem chi tiết chính sách.');
+      throw new ForbiddenException(
+        'ADMIN_ROLE_REQUIRED: Chỉ Quản trị viên sàn mới có quyền xem chi tiết chính sách.',
+      );
     }
 
     const policy = await this.policyModel.findById(versionId).lean();
@@ -364,7 +399,16 @@ export class ProviderContractPolicyService {
       .collection('providers')
       .findOne(
         { _id: policy.providerId },
-        { projection: { _id: 1, name: 1, shopName: 1, businessName: 1, email: 1, phone: 1 } },
+        {
+          projection: {
+            _id: 1,
+            name: 1,
+            shopName: 1,
+            businessName: 1,
+            email: 1,
+            phone: 1,
+          },
+        },
       );
 
     const activePolicy = await this.policyModel
@@ -378,7 +422,14 @@ export class ProviderContractPolicyService {
     const allVersions = await this.policyModel
       .find({ providerId: policy.providerId })
       .sort({ versionNumber: -1 })
-      .select({ versionNumber: 1, status: 1, submittedAt: 1, approvedAt: 1, reviewedAt: 1, reviewNote: 1 })
+      .select({
+        versionNumber: 1,
+        status: 1,
+        submittedAt: 1,
+        approvedAt: 1,
+        reviewedAt: 1,
+        reviewNote: 1,
+      })
       .lean();
 
     return {
@@ -386,11 +437,17 @@ export class ProviderContractPolicyService {
         ...policy,
         id: policy._id.toString(),
       },
-      activeApproved: activePolicy ? { ...activePolicy, id: activePolicy._id.toString() } : null,
+      activeApproved: activePolicy
+        ? { ...activePolicy, id: activePolicy._id.toString() }
+        : null,
       history: allVersions.map((v) => ({ ...v, id: v._id.toString() })),
       providerInfo: {
         id: policy.providerId.toString(),
-        shopName: provider?.shopName || provider?.businessName || provider?.name || 'Shop đối tác',
+        shopName:
+          provider?.shopName ||
+          provider?.businessName ||
+          provider?.name ||
+          'Shop đối tác',
         email: provider?.email || null,
         phone: provider?.phone || null,
       },
@@ -426,10 +483,26 @@ export class ProviderContractPolicyService {
 
     if (hasV2Tiers) {
       const tiers = [
-        { key: 'minorDamage', name: 'Hư hỏng nhẹ', rule: damageComp.minorDamage },
-        { key: 'moderateDamage', name: 'Hư hỏng vừa', rule: damageComp.moderateDamage },
-        { key: 'severeDamage', name: 'Hư hỏng nặng', rule: damageComp.severeDamage },
-        { key: 'totalLoss', name: 'Mất trang phục', rule: damageComp.totalLoss },
+        {
+          key: 'minorDamage',
+          name: 'Hư hỏng nhẹ',
+          rule: damageComp.minorDamage,
+        },
+        {
+          key: 'moderateDamage',
+          name: 'Hư hỏng vừa',
+          rule: damageComp.moderateDamage,
+        },
+        {
+          key: 'severeDamage',
+          name: 'Hư hỏng nặng',
+          rule: damageComp.severeDamage,
+        },
+        {
+          key: 'totalLoss',
+          name: 'Mất trang phục',
+          rule: damageComp.totalLoss,
+        },
       ];
 
       for (const t of tiers) {
@@ -440,12 +513,17 @@ export class ProviderContractPolicyService {
         }
 
         if (t.rule.method === IncidentCompensationMethod.FIXED_FEE) {
-          if (typeof t.rule.fixedFeeAmount !== 'number' || t.rule.fixedFeeAmount < 0) {
+          if (
+            typeof t.rule.fixedFeeAmount !== 'number' ||
+            t.rule.fixedFeeAmount < 0
+          ) {
             throw new UnprocessableEntityException(
               `INVALID_TIER_FIXED_FEE: Mức phí cố định cho '${t.name}' phải là số tiền hợp lệ (>= 0).`,
             );
           }
-        } else if (t.rule.method === IncidentCompensationMethod.PERCENTAGE_ON_ASSET) {
+        } else if (
+          t.rule.method === IncidentCompensationMethod.PERCENTAGE_ON_ASSET
+        ) {
           if (
             typeof t.rule.percentageOfAsset !== 'number' ||
             t.rule.percentageOfAsset < 1 ||
@@ -471,40 +549,64 @@ export class ProviderContractPolicyService {
   }
 
   private assertGuardrails(data: any) {
-    const { lateReturn, damageCompensation, cancellationPolicy, customTermsText } = data;
+    const {
+      lateReturn,
+      damageCompensation,
+      cancellationPolicy,
+      customTermsText,
+    } = data;
 
     // Technical non-negative validation
     if (lateReturn) {
       if (lateReturn.gracePeriodHours < 0) {
-        throw new UnprocessableEntityException('TECHNICAL_VALIDATION_ERROR: Thời gian ân hạn không được âm.');
+        throw new UnprocessableEntityException(
+          'TECHNICAL_VALIDATION_ERROR: Thời gian ân hạn không được âm.',
+        );
       }
       if (lateReturn.hourlyLateFee < 0) {
-        throw new UnprocessableEntityException('TECHNICAL_VALIDATION_ERROR: Phí trễ mỗi giờ không được âm.');
+        throw new UnprocessableEntityException(
+          'TECHNICAL_VALIDATION_ERROR: Phí trễ mỗi giờ không được âm.',
+        );
       }
       if (lateReturn.dailyLateFee < 0) {
-        throw new UnprocessableEntityException('TECHNICAL_VALIDATION_ERROR: Phí trễ mỗi ngày không được âm.');
+        throw new UnprocessableEntityException(
+          'TECHNICAL_VALIDATION_ERROR: Phí trễ mỗi ngày không được âm.',
+        );
       }
       if (lateReturn.maxLateDaysAllowed < 1) {
-        throw new UnprocessableEntityException('TECHNICAL_VALIDATION_ERROR: Số ngày trễ tối đa phải từ 1 ngày.');
+        throw new UnprocessableEntityException(
+          'TECHNICAL_VALIDATION_ERROR: Số ngày trễ tối đa phải từ 1 ngày.',
+        );
       }
     }
 
     if (damageCompensation) {
       // Legacy bounds check if present
-      if (typeof damageCompensation.minorDamageFee === 'number' && damageCompensation.minorDamageFee < 0) {
-        throw new UnprocessableEntityException('TECHNICAL_VALIDATION_ERROR: Phí lỗi nhỏ không được âm.');
+      if (
+        typeof damageCompensation.minorDamageFee === 'number' &&
+        damageCompensation.minorDamageFee < 0
+      ) {
+        throw new UnprocessableEntityException(
+          'TECHNICAL_VALIDATION_ERROR: Phí lỗi nhỏ không được âm.',
+        );
       }
       if (
         typeof damageCompensation.moderateDamagePercent === 'number' &&
-        (damageCompensation.moderateDamagePercent < 0 || damageCompensation.moderateDamagePercent > 100)
+        (damageCompensation.moderateDamagePercent < 0 ||
+          damageCompensation.moderateDamagePercent > 100)
       ) {
-        throw new UnprocessableEntityException('TECHNICAL_VALIDATION_ERROR: Tỷ lệ bồi thường hư hỏng vừa phải từ 0% đến 100%.');
+        throw new UnprocessableEntityException(
+          'TECHNICAL_VALIDATION_ERROR: Tỷ lệ bồi thường hư hỏng vừa phải từ 0% đến 100%.',
+        );
       }
       if (
         typeof damageCompensation.severeDamageOrLossPercent === 'number' &&
-        (damageCompensation.severeDamageOrLossPercent < 0 || damageCompensation.severeDamageOrLossPercent > 100)
+        (damageCompensation.severeDamageOrLossPercent < 0 ||
+          damageCompensation.severeDamageOrLossPercent > 100)
       ) {
-        throw new UnprocessableEntityException('TECHNICAL_VALIDATION_ERROR: Tỷ lệ bồi thường mất đồ phải từ 0% đến 100%.');
+        throw new UnprocessableEntityException(
+          'TECHNICAL_VALIDATION_ERROR: Tỷ lệ bồi thường mất đồ phải từ 0% đến 100%.',
+        );
       }
 
       // V2 bounds check
@@ -517,16 +619,22 @@ export class ProviderContractPolicyService {
 
       for (const t of v2Tiers) {
         if (typeof t.fixedFeeAmount === 'number' && t.fixedFeeAmount < 0) {
-          throw new UnprocessableEntityException('TECHNICAL_VALIDATION_ERROR: Phí bồi thường không được âm.');
+          throw new UnprocessableEntityException(
+            'TECHNICAL_VALIDATION_ERROR: Phí bồi thường không được âm.',
+          );
         }
         if (
           typeof t.percentageOfAsset === 'number' &&
           (t.percentageOfAsset < 0 || t.percentageOfAsset > 100)
         ) {
-          throw new UnprocessableEntityException('TECHNICAL_VALIDATION_ERROR: Tỷ lệ bồi thường phải từ 0% đến 100%.');
+          throw new UnprocessableEntityException(
+            'TECHNICAL_VALIDATION_ERROR: Tỷ lệ bồi thường phải từ 0% đến 100%.',
+          );
         }
         if (t.conditionsAndEvidence && t.conditionsAndEvidence.length > 500) {
-          throw new UnprocessableEntityException('TECHNICAL_VALIDATION_ERROR: Điều kiện chứng minh tối đa 500 ký tự.');
+          throw new UnprocessableEntityException(
+            'TECHNICAL_VALIDATION_ERROR: Điều kiện chứng minh tối đa 500 ký tự.',
+          );
         }
       }
 
@@ -534,11 +642,17 @@ export class ProviderContractPolicyService {
         typeof damageCompensation.incidentNotificationHours === 'number' &&
         damageCompensation.incidentNotificationHours < 1
       ) {
-        throw new UnprocessableEntityException('TECHNICAL_VALIDATION_ERROR: Thời hạn thông báo sự cố phải từ 1 giờ.');
+        throw new UnprocessableEntityException(
+          'TECHNICAL_VALIDATION_ERROR: Thời hạn thông báo sự cố phải từ 1 giờ.',
+        );
       }
-      const rawDispute = damageCompensation.disputeResolutionTerms || damageCompensation.disputeResolutionNotes;
+      const rawDispute =
+        damageCompensation.disputeResolutionTerms ||
+        damageCompensation.disputeResolutionNotes;
       if (rawDispute && rawDispute.length > 1000) {
-        throw new UnprocessableEntityException('TECHNICAL_VALIDATION_ERROR: Điều khoản giải quyết tranh chấp tối đa 1000 ký tự.');
+        throw new UnprocessableEntityException(
+          'TECHNICAL_VALIDATION_ERROR: Điều khoản giải quyết tranh chấp tối đa 1000 ký tự.',
+        );
       }
       const disputeCheck = validateDisputeResolutionClause(rawDispute);
       if (!disputeCheck.isValid) {
@@ -550,19 +664,32 @@ export class ProviderContractPolicyService {
 
     // Cancellation refund rules: must have at least 1 rule, each rule percentage 0 - 100%
     if (cancellationPolicy) {
-      if (!Array.isArray(cancellationPolicy.refundRules) || cancellationPolicy.refundRules.length === 0) {
-        throw new UnprocessableEntityException('GUARDRAIL_CANCELLATION_RULES_EMPTY: Cần ít nhất 1 mốc hoàn tiền khi hủy đơn.');
+      if (
+        !Array.isArray(cancellationPolicy.refundRules) ||
+        cancellationPolicy.refundRules.length === 0
+      ) {
+        throw new UnprocessableEntityException(
+          'GUARDRAIL_CANCELLATION_RULES_EMPTY: Cần ít nhất 1 mốc hoàn tiền khi hủy đơn.',
+        );
       }
       for (const rule of cancellationPolicy.refundRules) {
-        if (rule.daysBeforeRental < 0 || rule.refundPercentage < 0 || rule.refundPercentage > 100) {
-          throw new UnprocessableEntityException('TECHNICAL_VALIDATION_ERROR: Mốc hoàn tiền hoặc tỷ lệ phần trăm hủy đơn không hợp lệ.');
+        if (
+          rule.daysBeforeRental < 0 ||
+          rule.refundPercentage < 0 ||
+          rule.refundPercentage > 100
+        ) {
+          throw new UnprocessableEntityException(
+            'TECHNICAL_VALIDATION_ERROR: Mốc hoàn tiền hoặc tỷ lệ phần trăm hủy đơn không hợp lệ.',
+          );
         }
       }
     }
 
     // Custom terms text: max 1000 chars
     if (customTermsText && customTermsText.length > 1000) {
-      throw new UnprocessableEntityException('GUARDRAIL_CUSTOM_TERMS_TOO_LONG: Điều khoản tùy chỉnh tối đa 1000 ký tự.');
+      throw new UnprocessableEntityException(
+        'GUARDRAIL_CUSTOM_TERMS_TOO_LONG: Điều khoản tùy chỉnh tối đa 1000 ký tự.',
+      );
     }
   }
 
@@ -574,10 +701,13 @@ export class ProviderContractPolicyService {
       (lateReturn.hourlyLateFee ?? 0) > 50000 ||
       (lateReturn.dailyLateFee ?? 0) > 200000 ||
       (lateReturn.maxLateDaysAllowed ?? 0) > 7 ||
-      (damageCompensation.minorDamageFee != null && damageCompensation.minorDamageFee > 100000) ||
+      (damageCompensation.minorDamageFee != null &&
+        damageCompensation.minorDamageFee > 100000) ||
       (damageCompensation.moderateDamagePercent != null &&
-        (damageCompensation.moderateDamagePercent < 10 || damageCompensation.moderateDamagePercent > 30)) ||
-      (damageCompensation.severeDamageOrLossPercent != null && damageCompensation.severeDamageOrLossPercent < 50)
+        (damageCompensation.moderateDamagePercent < 10 ||
+          damageCompensation.moderateDamagePercent > 30)) ||
+      (damageCompensation.severeDamageOrLossPercent != null &&
+        damageCompensation.severeDamageOrLossPercent < 50)
     );
   }
 }

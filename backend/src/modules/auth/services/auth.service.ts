@@ -205,7 +205,9 @@ export class AuthService {
         'ACCOUNT_BANNED',
         context,
       );
-      throw new ForbiddenException('Tài khoản của bạn đã bị khóa bởi quản trị viên.');
+      throw new ForbiddenException(
+        'Tài khoản của bạn đã bị khóa bởi quản trị viên.',
+      );
     }
 
     if (user.accountStatus !== UserStatus.Active || !user.auth.emailVerified) {
@@ -227,10 +229,7 @@ export class AuthService {
       );
     }
 
-    const validPassword = await bcrypt.compare(
-      dto.password,
-      passwordHash,
-    );
+    const validPassword = await bcrypt.compare(dto.password, passwordHash);
     if (!validPassword) {
       await this.rateLimitService.assertRateLimit(
         loginRateLimitKey,
@@ -308,7 +307,10 @@ export class AuthService {
     return this.passwordResetService.resetPassword(dto, context);
   }
 
-  createGoogleOAuthState(context: RequestContext, redirectUri?: string): Promise<string> {
+  createGoogleOAuthState(
+    context: RequestContext,
+    redirectUri?: string,
+  ): Promise<string> {
     return this.oauthService.createGoogleOAuthState(context, redirectUri);
   }
 
@@ -386,6 +388,8 @@ export class AuthService {
   }
 
   private demoTokensEnabled(): boolean {
-    return this.configService.get<string>('AUTH_DEMO_TOKENS_ENABLED') === 'true';
+    return (
+      this.configService.get<string>('AUTH_DEMO_TOKENS_ENABLED') === 'true'
+    );
   }
 }

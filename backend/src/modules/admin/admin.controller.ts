@@ -1,4 +1,13 @@
-import { Controller, Get, Patch, Param, UseGuards, ForbiddenException, NotFoundException, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Patch,
+  Param,
+  UseGuards,
+  ForbiddenException,
+  NotFoundException,
+  Query,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -10,8 +19,14 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../common/decorators/current-user.decorator';
 import { User, UserStatus } from '../users/schemas/user.schema';
 import { Booking, BookingStatus } from '../bookings/schemas/booking.schema';
-import { BookingItem, BookingItemType } from '../bookings/schemas/booking-item.schema';
-import { Provider, ProviderCapability } from '../providers/schemas/provider.schema';
+import {
+  BookingItem,
+  BookingItemType,
+} from '../bookings/schemas/booking-item.schema';
+import {
+  Provider,
+  ProviderCapability,
+} from '../providers/schemas/provider.schema';
 import {
   ProviderVerification,
   VerificationStatus,
@@ -30,7 +45,8 @@ export class AdminController {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<User>,
     @InjectModel(Booking.name) private readonly bookingModel: Model<Booking>,
-    @InjectModel(BookingItem.name) private readonly bookingItemModel: Model<BookingItem>,
+    @InjectModel(BookingItem.name)
+    private readonly bookingItemModel: Model<BookingItem>,
     @InjectModel(Provider.name) private readonly providerModel: Model<Provider>,
     @InjectModel(ProviderVerification.name)
     private readonly providerVerificationModel: Model<ProviderVerification>,
@@ -42,7 +58,9 @@ export class AdminController {
   private checkAdmin(user: AuthUser) {
     const roles = user.roles || [];
     if (!roles.includes('ADMIN') && !roles.includes('admin')) {
-      throw new ForbiddenException('Bạn không có quyền truy cập chức năng Admin');
+      throw new ForbiddenException(
+        'Bạn không có quyền truy cập chức năng Admin',
+      );
     }
   }
 
@@ -79,7 +97,7 @@ export class AdminController {
     });
 
     const totalBookings = await this.bookingModel.countDocuments({
-      status: { $ne: BookingStatus.Draft }
+      status: { $ne: BookingStatus.Draft },
     });
 
     const completedBookings = await this.bookingModel.find({
@@ -101,10 +119,12 @@ export class AdminController {
     }
 
     for (const b of completedBookings) {
-      const bDate = (b as any).createdAt ? new Date((b as any).createdAt) : null;
+      const bDate = (b as any).createdAt
+        ? new Date((b as any).createdAt)
+        : null;
       if (bDate) {
         const mLabel = `${dayNames[bDate.getDay()]} (${bDate.getDate()}/${bDate.getMonth() + 1})`;
-        const dayObj = revenueByWeek.find(d => d.month === mLabel);
+        const dayObj = revenueByWeek.find((d) => d.month === mLabel);
         if (dayObj) {
           dayObj.revenue += b.pricingSummary?.grandTotal || 0;
         }
@@ -120,10 +140,12 @@ export class AdminController {
     }
 
     for (const b of completedBookings) {
-      const bDate = (b as any).createdAt ? new Date((b as any).createdAt) : null;
+      const bDate = (b as any).createdAt
+        ? new Date((b as any).createdAt)
+        : null;
       if (bDate) {
         const mLabel = `${bDate.getMonth() + 1}/${bDate.getFullYear().toString().slice(-2)}`;
-        const monthObj = revenueByMonth.find(m => m.month === mLabel);
+        const monthObj = revenueByMonth.find((m) => m.month === mLabel);
         if (monthObj) {
           monthObj.revenue += b.pricingSummary?.grandTotal || 0;
         }
@@ -139,10 +161,12 @@ export class AdminController {
     }
 
     for (const b of completedBookings) {
-      const bDate = (b as any).createdAt ? new Date((b as any).createdAt) : null;
+      const bDate = (b as any).createdAt
+        ? new Date((b as any).createdAt)
+        : null;
       if (bDate) {
         const yLabel = `${bDate.getFullYear()}`;
-        const yearObj = revenueByYear.find(y => y.month === yLabel);
+        const yearObj = revenueByYear.find((y) => y.month === yLabel);
         if (yearObj) {
           yearObj.revenue += b.pricingSummary?.grandTotal || 0;
         }
@@ -163,47 +187,54 @@ export class AdminController {
 
     // 3. Popular products: top 10 bằng cách join booking_items + products
     const rentAggregation = await this.bookingItemModel.aggregate([
-      { $match: { itemType: BookingItemType.Product, productId: { $ne: null } } },
+      {
+        $match: { itemType: BookingItemType.Product, productId: { $ne: null } },
+      },
       { $group: { _id: '$productId', rentCount: { $sum: '$quantity' } } },
       { $sort: { rentCount: -1 } },
       { $limit: 10 },
     ]);
 
     const topProductIds = rentAggregation.map((r) => r._id as Types.ObjectId);
-    const viewCountMap = await this.analyticsService.getViewCountMap(topProductIds);
+    const viewCountMap =
+      await this.analyticsService.getViewCountMap(topProductIds);
 
     // Lấy thêm sản phẩm nếu chưa đủ 10 (để trường hợp chưa có booking nào)
     const existingIds = new Set(topProductIds.map((id) => id.toString()));
-    const additionalProducts = topProductIds.length < 10
-      ? await this.productModel
-          .find({ _id: { $nin: topProductIds } })
-          .sort({ 'rating.totalReviews': -1 })
-          .limit(10 - topProductIds.length)
-          .lean()
-      : [];
+    const additionalProducts =
+      topProductIds.length < 10
+        ? await this.productModel
+            .find({ _id: { $nin: topProductIds } })
+            .sort({ 'rating.totalReviews': -1 })
+            .limit(10 - topProductIds.length)
+            .lean()
+        : [];
 
-    const topProductDocs = topProductIds.length > 0
-      ? await this.productModel.find({ _id: { $in: topProductIds } }).lean()
-      : [];
+    const topProductDocs =
+      topProductIds.length > 0
+        ? await this.productModel.find({ _id: { $in: topProductIds } }).lean()
+        : [];
 
     const allPopularProducts = [
       ...topProductDocs.map((p) => {
-        const agg = rentAggregation.find((r) => r._id.toString() === (p._id as Types.ObjectId).toString());
+        const agg = rentAggregation.find(
+          (r) => r._id.toString() === p._id.toString(),
+        );
         return {
-          _id: (p._id as Types.ObjectId).toString(),
+          _id: p._id.toString(),
           name: p.name,
           basePrice: p.basePrice,
-          viewCount: viewCountMap.get((p._id as Types.ObjectId).toString()) ?? 0,
+          viewCount: viewCountMap.get(p._id.toString()) ?? 0,
           rentCount: agg?.rentCount ?? 0,
         };
       }),
       ...additionalProducts
-        .filter((p) => !existingIds.has((p._id as Types.ObjectId).toString()))
+        .filter((p) => !existingIds.has(p._id.toString()))
         .map((p) => ({
-          _id: (p._id as Types.ObjectId).toString(),
+          _id: p._id.toString(),
           name: p.name,
           basePrice: p.basePrice,
-          viewCount: viewCountMap.get((p._id as Types.ObjectId).toString()) ?? 0,
+          viewCount: viewCountMap.get(p._id.toString()) ?? 0,
           rentCount: 0,
         })),
     ];
@@ -244,14 +275,19 @@ export class AdminController {
         : {}),
     };
 
-    const { page: safePage, limit: safeLimit, skip } = clampPagination({ page: Number(page), limit: Number(limit) });
+    const {
+      page: safePage,
+      limit: safeLimit,
+      skip,
+    } = clampPagination({ page: Number(page), limit: Number(limit) });
     const total = await this.userModel.countDocuments(filter);
-    const customers = await this.userModel.find(filter)
+    const customers = await this.userModel
+      .find(filter)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(safeLimit);
 
-    const items = customers.map(c => ({
+    const items = customers.map((c) => ({
       id: c._id,
       fullName: c.profile?.fullName || 'Khách hàng',
       avatarUrl: c.profile?.avatarUrl || '',
@@ -283,14 +319,19 @@ export class AdminController {
       capabilities: { $in: [ProviderCapability.AoDaiRental, 'RENTAL' as any] },
     };
 
-    const { page: safePage, limit: safeLimit, skip } = clampPagination({ page: Number(page), limit: Number(limit) });
+    const {
+      page: safePage,
+      limit: safeLimit,
+      skip,
+    } = clampPagination({ page: Number(page), limit: Number(limit) });
     const total = await this.providerModel.countDocuments(filter);
-    const providers = await this.providerModel.find(filter)
+    const providers = await this.providerModel
+      .find(filter)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(safeLimit);
 
-    const items = providers.map(p => ({
+    const items = providers.map((p) => ({
       id: p._id,
       businessName: p.businessName,
       email: p.contact?.email || '',

@@ -7,9 +7,7 @@ import {
 } from '@nestjs/common';
 
 import { Types } from 'mongoose';
-import {
-  AdminAuditAction,
-} from '../../auth/schemas/admin-audit-log.schema';
+import { AdminAuditAction } from '../../auth/schemas/admin-audit-log.schema';
 import { SecurityEventType } from '../../auth/schemas/security-event.schema';
 import {
   SecurityLogService,
@@ -28,7 +26,10 @@ import {
 import { UpdateProfileDto } from '../dto/update-profile.dto';
 import { UpdatePreferencesDto } from '../dto/update-preferences.dto';
 import { UpdateNotificationSettingsDto } from '../dto/update-notification-settings.dto';
-import { CreateUserAddressDto, UpdateUserAddressDto } from '../dto/user-address.dto';
+import {
+  CreateUserAddressDto,
+  UpdateUserAddressDto,
+} from '../dto/user-address.dto';
 import { UserProfileMapper } from '../mappers/user-profile.mapper';
 import { UsersRepository } from '../repositories/users.repository';
 import { PublicMediaService } from '../../storage/services/public-media.service';
@@ -97,7 +98,8 @@ export class UsersService {
     if (dto.dateOfBirth !== undefined)
       update.dateOfBirth = new Date(dto.dateOfBirth);
 
-    const hasAddressOrNote = dto.address !== undefined || dto.note !== undefined;
+    const hasAddressOrNote =
+      dto.address !== undefined || dto.note !== undefined;
     const changedFields = Object.keys(update);
     if (changedFields.length === 0 && !hasAddressOrNote) {
       throw new BadRequestException('No valid profile fields to update');
@@ -111,7 +113,8 @@ export class UsersService {
       const user = await this.findUserForAddresses(userId);
       const addresses = this.addressEntries(user);
       const defaultAddr = addresses.find((a) => a.isDefault) || addresses[0];
-      const trimmedAddress = dto.address !== undefined ? dto.address.trim() : undefined;
+      const trimmedAddress =
+        dto.address !== undefined ? dto.address.trim() : undefined;
       const trimmedNote = dto.note !== undefined ? dto.note.trim() : undefined;
 
       if (defaultAddr) {
@@ -148,18 +151,33 @@ export class UsersService {
     return this.toAddressResponses(user);
   }
 
-  async createAddress(userId: string, dto: CreateUserAddressDto): Promise<Record<string, unknown>> {
+  async createAddress(
+    userId: string,
+    dto: CreateUserAddressDto,
+  ): Promise<Record<string, unknown>> {
     const user = await this.findUserForAddresses(userId);
     const addresses = this.addressEntries(user);
-    const shouldBecomeDefault = dto.isDefault === true || addresses.length === 0;
-    if (shouldBecomeDefault) addresses.forEach((address) => { address.isDefault = false; });
-    addresses.push({ ...this.normalizeAddress(dto), isDefault: shouldBecomeDefault });
+    const shouldBecomeDefault =
+      dto.isDefault === true || addresses.length === 0;
+    if (shouldBecomeDefault)
+      addresses.forEach((address) => {
+        address.isDefault = false;
+      });
+    addresses.push({
+      ...this.normalizeAddress(dto),
+      isDefault: shouldBecomeDefault,
+    });
     await user.save();
     return this.toAddressResponses(user).at(-1)!;
   }
 
-  async updateAddress(userId: string, addressId: string, dto: UpdateUserAddressDto): Promise<Record<string, unknown>> {
-    if (Object.keys(dto).length === 0) throw new BadRequestException('No address fields to update');
+  async updateAddress(
+    userId: string,
+    addressId: string,
+    dto: UpdateUserAddressDto,
+  ): Promise<Record<string, unknown>> {
+    if (Object.keys(dto).length === 0)
+      throw new BadRequestException('No address fields to update');
     const user = await this.findUserForAddresses(userId);
     const address = this.findAddressEntry(user, addressId);
     Object.assign(address, this.normalizeAddress(dto));
@@ -170,56 +188,94 @@ export class UsersService {
   async removeAddress(userId: string, addressId: string): Promise<void> {
     const user = await this.findUserForAddresses(userId);
     const addresses = this.addressEntries(user);
-    const index = addresses.findIndex((address) => String(address._id) === addressId);
+    const index = addresses.findIndex(
+      (address) => String(address._id) === addressId,
+    );
     if (index < 0) throw new NotFoundException('Address not found');
     const [removed] = addresses.splice(index, 1);
-    if (removed.isDefault && addresses.length > 0) addresses[0].isDefault = true;
+    if (removed.isDefault && addresses.length > 0)
+      addresses[0].isDefault = true;
     await user.save();
   }
 
-  async setDefaultAddress(userId: string, addressId: string): Promise<Record<string, unknown>> {
+  async setDefaultAddress(
+    userId: string,
+    addressId: string,
+  ): Promise<Record<string, unknown>> {
     const user = await this.findUserForAddresses(userId);
     const selected = this.findAddressEntry(user, addressId);
-    this.addressEntries(user).forEach((address) => { address.isDefault = String(address._id) === String(selected._id); });
+    this.addressEntries(user).forEach((address) => {
+      address.isDefault = String(address._id) === String(selected._id);
+    });
     await user.save();
     return this.toAddressResponse(selected);
   }
 
   private async findUserForAddresses(userId: string): Promise<UserDocument> {
-    const user = await this.usersRepository.findUserById(this.toObjectId(userId));
+    const user = await this.usersRepository.findUserById(
+      this.toObjectId(userId),
+    );
     if (!user) throw new NotFoundException('User not found');
     return user;
   }
 
   private addressEntries(user: UserDocument): Array<Record<string, any>> {
-    return ((user.addresses || []) as unknown) as Array<Record<string, any>>;
+    return user.addresses || [];
   }
 
-  private findAddressEntry(user: UserDocument, addressId: string): Record<string, any> {
-    if (!Types.ObjectId.isValid(addressId)) throw new NotFoundException('Address not found');
-    const address = this.addressEntries(user).find((entry) => String(entry._id) === addressId);
+  private findAddressEntry(
+    user: UserDocument,
+    addressId: string,
+  ): Record<string, any> {
+    if (!Types.ObjectId.isValid(addressId))
+      throw new NotFoundException('Address not found');
+    const address = this.addressEntries(user).find(
+      (entry) => String(entry._id) === addressId,
+    );
     if (!address) throw new NotFoundException('Address not found');
     return address;
   }
 
-  private normalizeAddress(dto: Partial<CreateUserAddressDto>): Record<string, unknown> {
+  private normalizeAddress(
+    dto: Partial<CreateUserAddressDto>,
+  ): Record<string, unknown> {
     const normalized: Record<string, unknown> = {};
-    const textFields = ['label', 'recipientName', 'phone', 'addressLine', 'ward', 'district', 'city', 'note'] as const;
+    const textFields = [
+      'label',
+      'recipientName',
+      'phone',
+      'addressLine',
+      'ward',
+      'district',
+      'city',
+      'note',
+    ] as const;
     for (const field of textFields) {
-      if (dto[field] !== undefined) normalized[field] = dto[field]?.trim() || null;
+      if (dto[field] !== undefined)
+        normalized[field] = dto[field]?.trim() || null;
     }
     return normalized;
   }
 
   private toAddressResponses(user: UserDocument): Record<string, unknown>[] {
-    return this.addressEntries(user).map((address) => this.toAddressResponse(address));
+    return this.addressEntries(user).map((address) =>
+      this.toAddressResponse(address),
+    );
   }
 
-  private toAddressResponse(address: Record<string, any>): Record<string, unknown> {
+  private toAddressResponse(
+    address: Record<string, any>,
+  ): Record<string, unknown> {
     return {
-      id: String(address._id), label: address.label, recipientName: address.recipientName ?? null,
-      phone: address.phone ?? null, addressLine: address.addressLine, ward: address.ward ?? null,
-      district: address.district ?? null, city: address.city ?? null, note: address.note ?? null,
+      id: String(address._id),
+      label: address.label,
+      recipientName: address.recipientName ?? null,
+      phone: address.phone ?? null,
+      addressLine: address.addressLine,
+      ward: address.ward ?? null,
+      district: address.district ?? null,
+      city: address.city ?? null,
+      note: address.note ?? null,
       isDefault: Boolean(address.isDefault),
     };
   }
@@ -260,8 +316,13 @@ export class UsersService {
 
     // Remove a previous MinIO avatar only after the replacement is saved.
     // Legacy local URLs are retained so historical files remain accessible.
-    if (existingUser.profile?.avatarUrl && existingUser.profile?.avatarUrl !== avatarUrl) {
-      await this.publicMedia.deleteByUrl(existingUser.profile?.avatarUrl).catch(() => undefined);
+    if (
+      existingUser.profile?.avatarUrl &&
+      existingUser.profile?.avatarUrl !== avatarUrl
+    ) {
+      await this.publicMedia
+        .deleteByUrl(existingUser.profile?.avatarUrl)
+        .catch(() => undefined);
     }
 
     return this.getMe(userId, roles);
@@ -307,9 +368,8 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    const recentLoginHistory = await this.usersRepository.listRecentLoginHistory(
-      user._id,
-    );
+    const recentLoginHistory =
+      await this.usersRepository.listRecentLoginHistory(user._id);
     return {
       ...this.toAdminUserResponse(user, true),
       recentLoginHistory: recentLoginHistory.map((entry) => ({
@@ -333,14 +393,15 @@ export class UsersService {
     const actorObjectId = this.toObjectId(actorId);
     const targetUserId = this.toObjectId(userId);
     const normalizedRoles = this.normalizeRoles(dto.roles);
-    const activeRoleCodes = await this.usersRepository.findActiveRoleCodes(
-      normalizedRoles,
-    );
+    const activeRoleCodes =
+      await this.usersRepository.findActiveRoleCodes(normalizedRoles);
     const inactiveRole = normalizedRoles.find(
       (role) => !activeRoleCodes.includes(role),
     );
     if (inactiveRole) {
-      throw new BadRequestException(`Role is missing or inactive: ${inactiveRole}`);
+      throw new BadRequestException(
+        `Role is missing or inactive: ${inactiveRole}`,
+      );
     }
     const targetUser = await this.usersRepository.findUserById(targetUserId);
 
@@ -400,7 +461,10 @@ export class UsersService {
     const actorObjectId = this.toObjectId(actorId);
     const targetUserId = this.toObjectId(userId);
 
-    if (actorObjectId.equals(targetUserId) && dto.status !== UserStatus.Active) {
+    if (
+      actorObjectId.equals(targetUserId) &&
+      dto.status !== UserStatus.Active
+    ) {
       throw new ForbiddenException('Cannot disable your own account');
     }
 
@@ -626,7 +690,9 @@ export class UsersService {
     marketingEmail: boolean;
     appPush: boolean;
   }> {
-    const user = await this.usersRepository.findUserById(this.toObjectId(userId));
+    const user = await this.usersRepository.findUserById(
+      this.toObjectId(userId),
+    );
     if (!user) throw new NotFoundException('User not found');
 
     return {
@@ -647,9 +713,8 @@ export class UsersService {
     return {
       marketingEmail:
         dto.marketingEmail ??
-        (user.notificationPreferences?.marketingEmail !== false),
-      appPush:
-        dto.appPush ?? (user.notificationPreferences?.appPush !== false),
+        user.notificationPreferences?.marketingEmail !== false,
+      appPush: dto.appPush ?? user.notificationPreferences?.appPush !== false,
     };
   }
 
@@ -664,12 +729,18 @@ export class UsersService {
       throw new BadRequestException('Invalid target id');
     }
     const targetObjectId = new Types.ObjectId(targetId);
-    await this.usersRepository.toggleFavorite(userObjectId, targetType, targetObjectId);
+    await this.usersRepository.toggleFavorite(
+      userObjectId,
+      targetType,
+      targetObjectId,
+    );
     return this.getMe(userId, roles);
   }
 
   private normalizeRoles(roles: string[]): string[] {
-    const normalizedRoles = [...new Set(roles.map((role) => role.toUpperCase()))];
+    const normalizedRoles = [
+      ...new Set(roles.map((role) => role.toUpperCase())),
+    ];
 
     if (normalizedRoles.length === 0) {
       throw new BadRequestException('At least one role is required');
@@ -691,7 +762,8 @@ export class UsersService {
   ): Record<string, unknown> {
     const base = {
       id: user._id.toString(),
-      userCode: user.userCode || `USR${user._id.toString().slice(-3).toUpperCase()}`,
+      userCode:
+        user.userCode || `USR${user._id.toString().slice(-3).toUpperCase()}`,
       email: user.auth.email,
       phone: user.auth.phone ?? null,
       fullName: user.profile.fullName,
@@ -746,10 +818,19 @@ export class UsersService {
   private hasValidImageSignature(file: Express.Multer.File): boolean {
     const header = file.buffer?.subarray(0, 12);
     if (!header?.length) return false;
-    if (file.mimetype === 'image/jpeg') return header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
-    if (file.mimetype === 'image/png') return header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4e && header[3] === 0x47;
-    return file.mimetype === 'image/webp' && header.toString('ascii', 0, 4) === 'RIFF' && header.toString('ascii', 8, 12) === 'WEBP';
+    if (file.mimetype === 'image/jpeg')
+      return header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+    if (file.mimetype === 'image/png')
+      return (
+        header[0] === 0x89 &&
+        header[1] === 0x50 &&
+        header[2] === 0x4e &&
+        header[3] === 0x47
+      );
+    return (
+      file.mimetype === 'image/webp' &&
+      header.toString('ascii', 0, 4) === 'RIFF' &&
+      header.toString('ascii', 8, 12) === 'WEBP'
+    );
   }
-
-
 }

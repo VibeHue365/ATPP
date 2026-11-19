@@ -130,7 +130,10 @@ describeHoldE2e('photography hold concurrency (MongoDB replica set)', () => {
     await session.endSession();
 
     expect(
-      await client.db(databaseName).collection('bookings').countDocuments({ _id: bookingId }),
+      await client
+        .db(databaseName)
+        .collection('bookings')
+        .countDocuments({ _id: bookingId }),
     ).toBe(0);
     expect(
       await client

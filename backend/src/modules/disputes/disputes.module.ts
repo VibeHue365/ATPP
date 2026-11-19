@@ -1,8 +1,14 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Dispute, DisputeSchema } from './schemas/dispute.schema';
-import { IncidentReport, IncidentReportSchema } from './schemas/incident-report.schema';
-import { PrivateEvidenceUpload, PrivateEvidenceUploadSchema } from './schemas/private-evidence-upload.schema';
+import {
+  IncidentReport,
+  IncidentReportSchema,
+} from './schemas/incident-report.schema';
+import {
+  PrivateEvidenceUpload,
+  PrivateEvidenceUploadSchema,
+} from './schemas/private-evidence-upload.schema';
 import { DisputesService } from './services/disputes.service';
 import { PrivateEvidenceCleanupService } from './services/private-evidence-cleanup.service';
 import { DisputesController } from './controllers/disputes.controller';

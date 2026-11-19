@@ -30,7 +30,9 @@ export class PrivateEvidenceCleanupService {
         await this.privateStorage.deletePrivateFile(EVIDENCE_BUCKET, key);
         await this.uploadModel.deleteOne({ _id: upload._id, incidentId: null });
       } catch (error) {
-        this.logger.warn(`Unable to remove expired private evidence ${upload._id}: ${String(error)}`);
+        this.logger.warn(
+          `Unable to remove expired private evidence ${upload._id}: ${String(error)}`,
+        );
       }
     }
   }

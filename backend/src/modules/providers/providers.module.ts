@@ -29,8 +29,14 @@ import {
 } from '../bookings/schemas/booking-item.schema';
 import { Review, ReviewSchema } from '../reviews/schemas/review.schema';
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
-import { BookingSchedule, BookingScheduleSchema } from '../bookings/schemas/booking-schedule.schema';
-import { PhotographyPackage, PhotographyPackageSchema } from '../products/schemas/photography-package.schema';
+import {
+  BookingSchedule,
+  BookingScheduleSchema,
+} from '../bookings/schemas/booking-schedule.schema';
+import {
+  PhotographyPackage,
+  PhotographyPackageSchema,
+} from '../products/schemas/photography-package.schema';
 import { ProviderVerificationsController } from './controllers/provider-verifications.controller';
 import { AdminProviderVerificationsController } from './controllers/admin-provider-verifications.controller';
 import { AdminProvidersController } from './controllers/admin-providers.controller';
@@ -44,15 +50,27 @@ import { ProviderOcrQueueService } from './services/provider-ocr-queue.service';
 import { ProviderOcrOutboxService } from './services/provider-ocr-outbox.service';
 import { ProviderDocumentOcrService } from './services/provider-document-ocr.service';
 import { ProviderOcrRecoveryService } from './services/provider-ocr-recovery.service';
-import { ProviderVerificationOcrAttempt, ProviderVerificationOcrAttemptSchema } from './schemas/provider-verification-ocr-attempt.schema';
-import { ProviderVerificationOcrOutboxEvent, ProviderVerificationOcrOutboxEventSchema } from './schemas/provider-verification-ocr-outbox.schema';
+import {
+  ProviderVerificationOcrAttempt,
+  ProviderVerificationOcrAttemptSchema,
+} from './schemas/provider-verification-ocr-attempt.schema';
+import {
+  ProviderVerificationOcrOutboxEvent,
+  ProviderVerificationOcrOutboxEventSchema,
+} from './schemas/provider-verification-ocr-outbox.schema';
 import { SmartTaggingModule } from '../smart-tagging/smart-tagging.module';
 
 export const providerModels = MongooseModule.forFeature([
   { name: Provider.name, schema: ProviderSchema },
   { name: ProviderVerification.name, schema: ProviderVerificationSchema },
-  { name: ProviderVerificationOcrAttempt.name, schema: ProviderVerificationOcrAttemptSchema },
-  { name: ProviderVerificationOcrOutboxEvent.name, schema: ProviderVerificationOcrOutboxEventSchema },
+  {
+    name: ProviderVerificationOcrAttempt.name,
+    schema: ProviderVerificationOcrAttemptSchema,
+  },
+  {
+    name: ProviderVerificationOcrOutboxEvent.name,
+    schema: ProviderVerificationOcrOutboxEventSchema,
+  },
   { name: PortfolioItem.name, schema: PortfolioItemSchema },
 ]);
 

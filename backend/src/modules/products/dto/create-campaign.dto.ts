@@ -1,4 +1,13 @@
-import { IsNotEmpty, IsString, IsNumber, Min, Max, IsDateString, IsIn, IsOptional } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsNumber,
+  Min,
+  Max,
+  IsDateString,
+  IsIn,
+  IsOptional,
+} from 'class-validator';
 import type { CampaignType } from '../utils/campaign-pricing.util';
 
 export class CreateCampaignDto {

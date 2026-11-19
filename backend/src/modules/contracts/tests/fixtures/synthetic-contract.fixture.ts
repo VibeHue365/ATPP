@@ -14,10 +14,22 @@ export const SYNTHETIC_APPROVED_TEMPLATE: ContractTemplate = Object.freeze({
   sections: Object.freeze([
     { id: 'parties', heading: 'Các bên', source: 'snapshot.customer/provider' },
     { id: 'items', heading: 'Áo dài thuê', source: 'snapshot.providerItems' },
-    { id: 'schedule', heading: 'Thời gian giao trả', source: 'snapshot.providerItems' },
+    {
+      id: 'schedule',
+      heading: 'Thời gian giao trả',
+      source: 'snapshot.providerItems',
+    },
     { id: 'pricing', heading: 'Giá và tiền cọc', source: 'snapshot.pricing' },
-    { id: 'policies', heading: 'Chính sách áp dụng', source: 'snapshot.policies' },
-    { id: 'consent', heading: 'Xác nhận của các bên', source: 'contract consent records' },
+    {
+      id: 'policies',
+      heading: 'Chính sách áp dụng',
+      source: 'snapshot.policies',
+    },
+    {
+      id: 'consent',
+      heading: 'Xác nhận của các bên',
+      source: 'contract consent records',
+    },
   ]),
 });
 
@@ -25,13 +37,14 @@ export const SYNTHETIC_APPROVED_TEMPLATE: ContractTemplate = Object.freeze({
  * Synthetic Test-Only Provider Mechanism.
  * Confined strictly to test database and memory.
  */
-export const SYNTHETIC_APPROVED_MECHANISM: AutoAcceptanceMechanism = Object.freeze({
-  version: 'synthetic-auto-acceptance-v1',
-  status: 'APPROVED',
-  approvedAt: '2026-10-28T00:00:00.000Z',
-  scope: 'AO_DAI_RENTAL',
-  description: 'Cơ chế chấp thuận kiểm thử tổng hợp (Synthetic Test Only)',
-});
+export const SYNTHETIC_APPROVED_MECHANISM: AutoAcceptanceMechanism =
+  Object.freeze({
+    version: 'synthetic-auto-acceptance-v1',
+    status: 'APPROVED',
+    approvedAt: '2026-10-28T00:00:00.000Z',
+    scope: 'AO_DAI_RENTAL',
+    description: 'Cơ chế chấp thuận kiểm thử tổng hợp (Synthetic Test Only)',
+  });
 
 /**
  * PayOS Webhook Signer utility for test harness.
@@ -54,7 +67,10 @@ export function signPayOSWebhook(
  */
 export function installNetworkGuard(): () => void {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  globalThis.fetch = (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
     const urlStr = String(input);
     if (
       urlStr.includes('payos.vn') ||

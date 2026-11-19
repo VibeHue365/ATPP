@@ -3,7 +3,10 @@ import { InjectConnection } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
 import { GridFSBucket, ObjectId } from 'mongodb';
 import { Readable } from 'stream';
-import { PrivateStoragePutResult, PrivateStorageService } from './private-storage.service';
+import {
+  PrivateStoragePutResult,
+  PrivateStorageService,
+} from './private-storage.service';
 
 /**
  * MongoDB GridFS implementation of PrivateStorageService.
@@ -20,7 +23,10 @@ import { PrivateStoragePutResult, PrivateStorageService } from './private-storag
  *   - storageKey : the storage path (unique per bucket)
  */
 @Injectable()
-export class MongoGridFSPrivateStorageService extends PrivateStorageService implements OnModuleInit {
+export class MongoGridFSPrivateStorageService
+  extends PrivateStorageService
+  implements OnModuleInit
+{
   // Cache of GridFSBucket instances keyed by bucket name
   private readonly buckets = new Map<string, GridFSBucket>();
 
@@ -30,7 +36,9 @@ export class MongoGridFSPrivateStorageService extends PrivateStorageService impl
 
   onModuleInit() {
     // Connection is ready at this point — nothing to do, buckets are created lazily
-    console.log('[MongoGridFSPrivateStorage] Using MongoDB GridFS for private file storage');
+    console.log(
+      '[MongoGridFSPrivateStorage] Using MongoDB GridFS for private file storage',
+    );
   }
 
   // ─── Public API ──────────────────────────────────────────────────────────────
@@ -63,10 +71,12 @@ export class MongoGridFSPrivateStorageService extends PrivateStorageService impl
     const file = await this.findFile(gfs, bucket, storageKey);
 
     if (!file) {
-      throw new NotFoundException(`Private file not found: ${bucket}/${storageKey}`);
+      throw new NotFoundException(
+        `Private file not found: ${bucket}/${storageKey}`,
+      );
     }
 
-    return gfs.openDownloadStream(file._id as ObjectId);
+    return gfs.openDownloadStream(file._id);
   }
 
   async deletePrivateFile(bucket: string, storageKey: string): Promise<void> {
@@ -90,23 +100,37 @@ export class MongoGridFSPrivateStorageService extends PrivateStorageService impl
       if (!db) {
         throw new Error('MongoDB connection is not established yet');
       }
-      this.buckets.set(bucket, new GridFSBucket(db, { bucketName: gfsBucketName }));
+      this.buckets.set(
+        bucket,
+        new GridFSBucket(db, { bucketName: gfsBucketName }),
+      );
     }
     return this.buckets.get(bucket)!;
   }
 
   /** Finds a GridFS file document by (bucket, storageKey) metadata. */
-  private async findFile(gfs: GridFSBucket, bucket: string, storageKey: string) {
-    const cursor = gfs.find({ filename: storageKey, 'metadata.bucket': bucket }, { limit: 1 });
+  private async findFile(
+    gfs: GridFSBucket,
+    bucket: string,
+    storageKey: string,
+  ) {
+    const cursor = gfs.find(
+      { filename: storageKey, 'metadata.bucket': bucket },
+      { limit: 1 },
+    );
     const files = await cursor.toArray();
     return files.length > 0 ? files[0] : null;
   }
 
   /** Deletes a file from GridFS if it exists (no-op if absent). */
-  private async deleteIfExists(gfs: GridFSBucket, bucket: string, storageKey: string): Promise<void> {
+  private async deleteIfExists(
+    gfs: GridFSBucket,
+    bucket: string,
+    storageKey: string,
+  ): Promise<void> {
     const existing = await this.findFile(gfs, bucket, storageKey);
     if (existing) {
-      await gfs.delete(existing._id as ObjectId);
+      await gfs.delete(existing._id);
     }
   }
 }

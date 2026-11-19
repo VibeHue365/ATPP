@@ -76,7 +76,11 @@ export class HeritageSpotsService implements OnApplicationBootstrap {
 
     if (dto.search && dto.search.trim()) {
       const searchRegex = new RegExp(dto.search.trim(), 'i');
-      filter.$or = [{ name: searchRegex }, { address: searchRegex }, { slug: searchRegex }];
+      filter.$or = [
+        { name: searchRegex },
+        { address: searchRegex },
+        { slug: searchRegex },
+      ];
     }
 
     // Nếu có tọa độ lat, lng -> sử dụng chỉ mục 2dsphere $near
@@ -121,7 +125,9 @@ export class HeritageSpotsService implements OnApplicationBootstrap {
    * Tìm di tích theo slug
    */
   async findBySlug(slug: string): Promise<HeritageSpotDocument> {
-    const spot = await this.heritageSpotModel.findOne({ slug, isActive: true }).exec();
+    const spot = await this.heritageSpotModel
+      .findOne({ slug, isActive: true })
+      .exec();
     if (!spot) {
       throw new NotFoundException(`Không tìm thấy di tích với slug: ${slug}`);
     }
@@ -139,14 +145,20 @@ export class HeritageSpotsService implements OnApplicationBootstrap {
     let newTravelFee = 0;
 
     if (oldSpotId && Types.ObjectId.isValid(oldSpotId)) {
-      const oldSpot = await this.heritageSpotModel.findById(oldSpotId).select('baseTravelFee').lean();
+      const oldSpot = await this.heritageSpotModel
+        .findById(oldSpotId)
+        .select('baseTravelFee')
+        .lean();
       if (oldSpot) {
         oldTravelFee = oldSpot.baseTravelFee || 0;
       }
     }
 
     if (newSpotId && Types.ObjectId.isValid(newSpotId)) {
-      const newSpot = await this.heritageSpotModel.findById(newSpotId).select('baseTravelFee').lean();
+      const newSpot = await this.heritageSpotModel
+        .findById(newSpotId)
+        .select('baseTravelFee')
+        .lean();
       if (newSpot) {
         newTravelFee = newSpot.baseTravelFee || 0;
       }

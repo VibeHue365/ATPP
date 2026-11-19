@@ -96,21 +96,17 @@ function createService(
       .mockResolvedValue(
         options.current === undefined ? verification() : options.current,
       ),
-    create: jest
-      .fn()
-      .mockImplementation(async (data: Row) => ({
-        _id: new Types.ObjectId(),
-        ...data,
-      })),
+    create: jest.fn().mockImplementation(async (data: Row) => ({
+      _id: new Types.ObjectId(),
+      ...data,
+    })),
   };
   const providerModel = {
     findOne: jest.fn().mockResolvedValue(options.activeProvider ?? null),
-    create: jest
-      .fn()
-      .mockImplementation(async (data: Row) => ({
-        _id: new Types.ObjectId(),
-        ...data,
-      })),
+    create: jest.fn().mockImplementation(async (data: Row) => ({
+      _id: new Types.ObjectId(),
+      ...data,
+    })),
   };
   const userModel = {
     findById: jest
@@ -260,7 +256,7 @@ describe('UC-08 Upgrade Provider Account (HuyLDN)', () => {
 
     await service.createVerification(
       { ...customer, roles: ['PROVIDER'] },
-      { requestedCapabilities: [ProviderCapability.Photography] } as any,
+      { requestedCapabilities: [ProviderCapability.Photography] },
       meta,
     );
 
@@ -512,7 +508,7 @@ describe('UC-09 Verify Provider (HuyLDN)', () => {
     const result = await service.adminReject(
       admin,
       submitted._id.toString(),
-      { reason: 'Ảnh CCCD mờ' } as any,
+      { reason: 'Ảnh CCCD mờ' },
       meta,
     );
 
@@ -549,7 +545,7 @@ describe('UC-09 Verify Provider (HuyLDN)', () => {
     const result = await service.adminRequestChanges(
       admin,
       submitted._id.toString(),
-      { reason: 'Bổ sung ảnh cửa hàng' } as any,
+      { reason: 'Bổ sung ảnh cửa hàng' },
       meta,
     );
 

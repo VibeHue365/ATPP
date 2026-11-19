@@ -2,9 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { User } from '../../users/schemas/user.schema';
-import {
-  SmartTagAssignment,
-} from '../../smart-tagging/schemas/smart-tag-assignment.schema';
+import { SmartTagAssignment } from '../../smart-tagging/schemas/smart-tag-assignment.schema';
 import {
   SmartTagAssignmentStatus,
   SmartTagEntityType,
@@ -40,7 +38,8 @@ export class PersonalizedProductRecommendationService {
       productTypes?: string[];
     } = {},
   ) {
-    if (!Types.ObjectId.isValid(userId)) throw new NotFoundException('User not found');
+    if (!Types.ObjectId.isValid(userId))
+      throw new NotFoundException('User not found');
     const user = await this.userModel
       .findById(userId)
       .select({ preferences: 1 })
@@ -71,8 +70,12 @@ export class PersonalizedProductRecommendationService {
     for (const assignment of assignments) {
       const key = assignment.entityId.toString();
       const product = productsById.get(key);
-      if (!product || assignment.entityRevision !== product.taggingRevision) continue;
-      tagsByProduct.set(key, [...(tagsByProduct.get(key) ?? []), assignment.tagCode]);
+      if (!product || assignment.entityRevision !== product.taggingRevision)
+        continue;
+      tagsByProduct.set(key, [
+        ...(tagsByProduct.get(key) ?? []),
+        assignment.tagCode,
+      ]);
     }
 
     const ranked = candidates
@@ -82,7 +85,10 @@ export class PersonalizedProductRecommendationService {
         return matchesPreferredSize(preferences.preferredSize, product.sizes);
       })
       .map((product: any) => {
-        const plain = typeof product.toObject === 'function' ? product.toObject() : { ...product };
+        const plain =
+          typeof product.toObject === 'function'
+            ? product.toObject()
+            : { ...product };
         const approvedCustomTags = (plain.customTags ?? []).filter(
           (tag: any) => tag.status === ProductCustomTagStatus.Approved,
         );
@@ -114,7 +120,8 @@ export class PersonalizedProductRecommendationService {
       .sort(
         (first, second) =>
           second.recommendation.score - first.recommendation.score ||
-          Number(second.rating?.averageRating ?? 0) - Number(first.rating?.averageRating ?? 0),
+          Number(second.rating?.averageRating ?? 0) -
+            Number(first.rating?.averageRating ?? 0),
       );
 
     const limit = Math.min(24, Math.max(1, requestedLimit || 12));

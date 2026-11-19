@@ -25,9 +25,7 @@ describe('WeatherProposalsController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [WeatherProposalsController],
-      providers: [
-        { provide: WeatherProposalsService, useValue: mockService },
-      ],
+      providers: [{ provide: WeatherProposalsService, useValue: mockService }],
     }).compile();
 
     controller = module.get<WeatherProposalsController>(
@@ -52,7 +50,9 @@ describe('WeatherProposalsController', () => {
   });
 
   it('should call listProposalsForBooking', async () => {
-    mockService.listProposalsByBooking.mockResolvedValueOnce([{ _id: 'prop-1' }]);
+    mockService.listProposalsByBooking.mockResolvedValueOnce([
+      { _id: 'prop-1' },
+    ]);
 
     const result = await controller.listProposalsForBooking('bk-1');
     expect(mockService.listProposalsByBooking).toHaveBeenCalledWith('bk-1');
@@ -68,7 +68,10 @@ describe('WeatherProposalsController', () => {
   });
 
   it('should call respondProposal', async () => {
-    mockService.respondProposal.mockResolvedValueOnce({ _id: 'prop-1', status: 'APPLIED' });
+    mockService.respondProposal.mockResolvedValueOnce({
+      _id: 'prop-1',
+      status: 'APPLIED',
+    });
 
     const result = await controller.respondProposal('prop-1', mockUser, {
       decision: 'APPROVED',
@@ -83,10 +86,16 @@ describe('WeatherProposalsController', () => {
   });
 
   it('should call cancelProposal', async () => {
-    mockService.cancelProposal.mockResolvedValueOnce({ _id: 'prop-1', status: 'CANCELLED' });
+    mockService.cancelProposal.mockResolvedValueOnce({
+      _id: 'prop-1',
+      status: 'CANCELLED',
+    });
 
     const result = await controller.cancelProposal('prop-1', mockUser);
-    expect(mockService.cancelProposal).toHaveBeenCalledWith('prop-1', 'user-123');
+    expect(mockService.cancelProposal).toHaveBeenCalledWith(
+      'prop-1',
+      'user-123',
+    );
     expect(result.status).toBe('CANCELLED');
   });
 
@@ -98,7 +107,10 @@ describe('WeatherProposalsController', () => {
       amount: 50000,
     });
 
-    expect(mockService.captureProposalPayment).toHaveBeenCalledWith(123456, 50000);
+    expect(mockService.captureProposalPayment).toHaveBeenCalledWith(
+      123456,
+      50000,
+    );
     expect(result.success).toBe(true);
   });
 });

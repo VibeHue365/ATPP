@@ -25,9 +25,13 @@ import { PublicMediaCleanupService } from './services/public-media-cleanup.servi
         local: LocalPrivateStorageService,
         gridfs: MongoGridFSPrivateStorageService,
       ) => {
-        const provider = config.get<string>('PRIVATE_STORAGE_PROVIDER', 'gridfs').toLowerCase();
+        const provider = config
+          .get<string>('PRIVATE_STORAGE_PROVIDER', 'gridfs')
+          .toLowerCase();
         if (provider === 'minio') {
-          console.log('[StorageModule] Using MinIO private storage (with GridFS read fallback)');
+          console.log(
+            '[StorageModule] Using MinIO private storage (with GridFS read fallback)',
+          );
           const isMinioNotFound = (error: unknown): boolean => {
             if (!error || typeof error !== 'object') return false;
             const e = error as { code?: string; statusCode?: number };
@@ -59,7 +63,9 @@ import { PublicMediaCleanupService } from './services/public-media-cleanup.servi
                   throw error;
                 }
               }
-              await gridfs.deletePrivateFile(bucket, storageKey).catch(() => undefined);
+              await gridfs
+                .deletePrivateFile(bucket, storageKey)
+                .catch(() => undefined);
             },
             exists: async (bucket, storageKey) => {
               if (await minio.exists(bucket, storageKey)) {
@@ -75,10 +81,17 @@ import { PublicMediaCleanupService } from './services/public-media-cleanup.servi
           return local;
         }
         // Default: gridfs — uses the existing MongoDB Atlas connection, works on all machines
-        console.log('[StorageModule] Using MongoDB GridFS private storage (default)');
+        console.log(
+          '[StorageModule] Using MongoDB GridFS private storage (default)',
+        );
         return gridfs;
       },
-      inject: [ConfigService, MinioPrivateStorageService, LocalPrivateStorageService, MongoGridFSPrivateStorageService],
+      inject: [
+        ConfigService,
+        MinioPrivateStorageService,
+        LocalPrivateStorageService,
+        MongoGridFSPrivateStorageService,
+      ],
     },
   ],
   exports: [PrivateStorageService, PublicMediaService],

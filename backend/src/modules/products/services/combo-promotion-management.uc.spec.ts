@@ -167,7 +167,7 @@ describe('UC-27 Smart Combo Recommendation - combo management (DaiBLL)', () => {
     await service.update(comboId, providerId, {
       discountPercent: 20,
       status: ComboPromotionStatus.Active,
-    } as any);
+    });
 
     expect(comboModel.findByIdAndUpdate).toHaveBeenCalledWith(
       comboId,

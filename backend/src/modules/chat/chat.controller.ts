@@ -105,7 +105,8 @@ export class ChatController {
     }),
   )
   async uploadFile(@UploadedFile() file: Express.Multer.File) {
-    if (!file) throw new BadRequestException('Vui lòng chọn tệp tin cần tải lên');
+    if (!file)
+      throw new BadRequestException('Vui lòng chọn tệp tin cần tải lên');
     const result = await this.cloudinaryService.uploadImage(file);
     return { url: result.secure_url };
   }

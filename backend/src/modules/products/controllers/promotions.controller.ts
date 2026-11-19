@@ -150,20 +150,26 @@ export class PromotionsController {
   ) {
     if (dto.discountType === DiscountType.Percentage) {
       if (dto.discountValue != null && dto.discountValue > 70 && !isAdmin) {
-        throw new BadRequestException('Mức chiết khấu theo phần trăm tối đa là 70%.');
+        throw new BadRequestException(
+          'Mức chiết khấu theo phần trăm tối đa là 70%.',
+        );
       }
       if (dto.discountValue != null && dto.discountValue <= 0) {
         throw new BadRequestException('Mức chiết khấu phải lớn hơn 0.');
       }
       if (dto.maxDiscountAmount != null && dto.maxDiscountAmount <= 0) {
-        throw new BadRequestException('Mức giảm tối đa (maxDiscountAmount) phải lớn hơn 0.');
+        throw new BadRequestException(
+          'Mức giảm tối đa (maxDiscountAmount) phải lớn hơn 0.',
+        );
       }
     }
     if (dto.startDate && dto.endDate) {
       const start = new Date(dto.startDate);
       const end = new Date(dto.endDate);
       if (end <= start) {
-        throw new BadRequestException('Ngày kết thúc mã giảm giá phải sau ngày bắt đầu.');
+        throw new BadRequestException(
+          'Ngày kết thúc mã giảm giá phải sau ngày bắt đầu.',
+        );
       }
     }
   }

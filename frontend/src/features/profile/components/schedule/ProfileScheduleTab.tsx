@@ -243,53 +243,97 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
         return;
       }
 
-      // 2. NON-COMBO BOOKINGS HANDLING
+      // 2. NON-COMBO BOOKINGS HANDLING (Grouped by date range within booking - Cấp độ 2)
       if (activeCategory === 'COMBO') return;
 
-      (b.items || []).forEach((item: any, idx: number) => {
-        const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE' || b.bookingType === 'PHOTOGRAPHY';
-        const isCombo =
-          b.bookingType === 'COMBO' ||
-          item.itemType === 'COMBO' ||
-          (b.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId) &&
-            b.items?.some((i: any) => i.itemType === 'PRODUCT' || i.productId));
+      const items = b.items || [];
+      const isPhoto =
+        b.bookingType === 'PHOTOGRAPHY' ||
+        (items.length > 0 && items.every((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId));
 
-        // Check if matches activeCategory
-        if (activeCategory === 'RENTAL' && (isPhoto || isCombo)) return;
-        if (activeCategory === 'PHOTOSHOOT' && (!isPhoto || isCombo)) return;
+      // Check if matches activeCategory
+      if (activeCategory === 'RENTAL' && isPhoto) return;
+      if (activeCategory === 'PHOTOSHOOT' && !isPhoto) return;
 
-        const pkgObj = item.photographyPackageId && typeof item.photographyPackageId === 'object' ? item.photographyPackageId : null;
-        const prodObj = !isPhoto && item.productId && typeof item.productId === 'object' ? item.productId : null;
+      // Group items in this booking by provider and rental date range (Tách dòng lịch nếu khác shop hoặc khác ngày thuê)
+      const getItemDateRangeKey = (it: any) => {
+        const provId = it.providerId ? (typeof it.providerId === 'object' ? it.providerId._id || it.providerId : it.providerId) : '';
+        const start = it.startDate || it.rentalFrom || it.shootDate || b.startDate || '';
+        const end = it.endDate || it.rentalTo || b.endDate || '';
+        const startStr = start ? new Date(start).toISOString().split('T')[0] : '';
+        const endStr = end ? new Date(end).toISOString().split('T')[0] : '';
+        return `${provId}_${startStr}_${endStr}`;
+      };
 
-        const title =
-          prodObj?.name ||
-          pkgObj?.name ||
-          item.packageSnapshot?.name ||
-          item.name ||
-          (isPhoto ? 'Gói Chụp Ảnh Nghệ Thuật' : 'Áo Dài Truyền Thống');
+      const dateRangeGroups = new Map<string, any[]>();
+      if (items.length === 0) {
+        dateRangeGroups.set('default', []);
+      } else {
+        items.forEach((it: any) => {
+          const key = getItemDateRangeKey(it);
+          const grp = dateRangeGroups.get(key) || [];
+          grp.push(it);
+          dateRangeGroups.set(key, grp);
+        });
+      }
+
+      dateRangeGroups.forEach((groupItems, dRangeKey) => {
+        const firstGroupItem = groupItems[0] || {};
+        const uniqueNames: string[] = [];
+        groupItems.forEach((i: any) => {
+          const pkgObj = isPhoto && i.photographyPackageId && typeof i.photographyPackageId === 'object' ? i.photographyPackageId : null;
+          const prodObj = !isPhoto && i.productId && typeof i.productId === 'object' ? i.productId : null;
+          const n = prodObj?.name || pkgObj?.name || i.packageSnapshot?.name || i.name || i.productName;
+          if (n && !uniqueNames.includes(n)) uniqueNames.push(n);
+        });
+
+        const totalQty = groupItems.reduce((sum: number, i: any) => sum + (Number(i.quantity) || 1), 0);
+
+        let title = '';
+        if (uniqueNames.length === 1) {
+          title = totalQty > 1 ? `${uniqueNames[0]} (x${totalQty})` : uniqueNames[0];
+        } else if (uniqueNames.length === 2) {
+          title = `${uniqueNames[0]} + ${uniqueNames[1]}`;
+        } else if (uniqueNames.length > 2) {
+          title = `${uniqueNames[0]} + ${groupItems.length - 1} sản phẩm khác`;
+        } else {
+          title = b.productName || (isPhoto ? 'Gói Chụp Ảnh Nghệ Thuật' : 'Áo Dài Truyền Thống');
+        }
+
+        const prodObj = !isPhoto && firstGroupItem.productId && typeof firstGroupItem.productId === 'object' ? firstGroupItem.productId : null;
+        const pkgObj = isPhoto && firstGroupItem.photographyPackageId && typeof firstGroupItem.photographyPackageId === 'object' ? firstGroupItem.photographyPackageId : null;
 
         const image =
           prodObj?.images?.[0] ||
           prodObj?.coverImage ||
           pkgObj?.coverImage ||
-          item.images?.[0] ||
-          item.coverImage ||
-          item.image ||
-          item.productImage;
+          firstGroupItem.images?.[0] ||
+          firstGroupItem.coverImage ||
+          firstGroupItem.image ||
+          firstGroupItem.productImage ||
+          b.image;
 
-        const size = isPhoto ? '' : (item.selectedSize || item.size || '');
+        let size = '';
+        if (!isPhoto) {
+          const uniqueSizes: string[] = [];
+          groupItems.forEach((i: any) => {
+            const s = i.selectedSize || i.size;
+            if (s && !uniqueSizes.includes(s)) uniqueSizes.push(s);
+          });
+          if (uniqueSizes.length > 0) size = uniqueSizes.join(', ');
+        }
 
-        const rawStart = item.startDate || item.rentalFrom || item.shootDate || b.startDate;
-        const rawEnd = item.endDate || item.rentalTo || b.endDate;
+        const rawStart = firstGroupItem.startDate || firstGroupItem.rentalFrom || firstGroupItem.shootDate || b.startDate;
+        const rawEnd = firstGroupItem.endDate || firstGroupItem.rentalTo || b.endDate;
 
         let pickupDate = rawStart ? new Date(rawStart).toLocaleDateString('vi-VN') : 'Chưa đặt';
-        let pickupTime = item.shootTimeSlot || item.pickupTime || '09:00';
+        let pickupTime = firstGroupItem.shootTimeSlot || firstGroupItem.pickupTime || b.pickupTime || '09:00';
         let returnDate = rawEnd ? new Date(rawEnd).toLocaleDateString('vi-VN') : '—';
-        let returnTime = item.returnTime || '18:00';
+        let returnTime = firstGroupItem.returnTime || b.returnTime || '18:00';
 
         if (isPhoto) {
-          pickupDate = item.shootDate || rawStart ? new Date(item.shootDate || rawStart).toLocaleDateString('vi-VN') : 'Chưa đặt';
-          pickupTime = item.shootTimeSlot || '09:00 - 11:00';
+          pickupDate = firstGroupItem.shootDate || rawStart ? new Date(firstGroupItem.shootDate || rawStart).toLocaleDateString('vi-VN') : 'Chưa đặt';
+          pickupTime = firstGroupItem.shootTimeSlot || b.shootTimeSlot || '09:00 - 11:00';
           if (b.deliveredPhotos?.length > 0) {
             returnDate = 'Đã giao ảnh';
             returnTime = `${b.deliveredPhotos.length} ảnh`;
@@ -322,7 +366,7 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
             statusColor = '#B45309';
           } else if (b.status === 'CONFIRMED') {
             statusLabel = 'SẮP CHỤP';
-            statusSubtext = getDaysDiffText(item.shootDate || rawStart, 'Chụp sau') || 'Đã xác nhận lịch';
+            statusSubtext = getDaysDiffText(firstGroupItem.shootDate || rawStart, 'Chụp sau') || 'Đã xác nhận lịch';
             statusBg = '#EFF6FF';
             statusColor = '#1D4ED8';
           } else if (b.status === 'IN_PROGRESS') {
@@ -338,83 +382,6 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
           } else if (b.status === 'COMPLETED') {
             statusLabel = 'HOÀN TẤT';
             statusSubtext = 'Đã nhận đủ ảnh';
-            statusBg = '#E8F8F5';
-            statusColor = '#27AE60';
-          } else if (b.status === 'CANCELLED') {
-            statusLabel = 'ĐÃ HỦY';
-            statusSubtext = 'Đơn đã hủy';
-            statusBg = '#FDEDEC';
-            statusColor = '#C0392B';
-          } else if (b.status === 'DISPUTED') {
-            statusLabel = 'TRANH CHẤP';
-            statusSubtext = 'Đang xử lý khiếu nại';
-            statusBg = '#FEF2F2';
-            statusColor = '#DC2626';
-          } else if (b.status === 'REFUNDED' || b.status === 'PARTIALLY_REFUNDED') {
-            statusLabel = 'ĐÃ HOÀN TIỀN';
-            statusSubtext = 'Đã hoàn tiền đơn';
-            statusBg = '#F3F4F6';
-            statusColor = '#4B5563';
-          }
-        } else if (isCombo) {
-          if (b.status === 'PENDING_PAYMENT') {
-            statusLabel = 'CHỜ CỌC';
-            statusSubtext = 'Chưa thanh toán cọc';
-            statusBg = '#FEF3C7';
-            statusColor = '#B45309';
-          } else if (b.status === 'DEPOSIT_PAID') {
-            statusLabel = 'CHỜ DUYỆT';
-            statusSubtext = 'Chờ đối tác xác nhận';
-            statusBg = '#FFFBEB';
-            statusColor = '#B45309';
-          } else if (b.status === 'CONFIRMED') {
-            statusLabel = 'SẮP DIỄN RA';
-            statusSubtext = getDaysDiffText(rawStart, 'Bắt đầu sau') || 'Đã xác nhận lịch';
-            statusBg = '#EFF6FF';
-            statusColor = '#1D4ED8';
-          } else if (b.status === 'PICKUP_PENDING') {
-            statusLabel = 'CHỜ NHẬN ĐỒ';
-            statusSubtext = 'Trang phục sẵn sàng, chờ nhận';
-            statusBg = '#F5EEF8';
-            statusColor = '#8E44AD';
-          } else if (b.status === 'IN_PROGRESS' || b.status === 'PICKED_UP') {
-            statusLabel = 'ĐANG TRẢI NGHIỆM';
-            statusSubtext = 'Đang trong lịch trình combo';
-            statusBg = '#ECFDF5';
-            statusColor = '#047857';
-          } else if (b.status === 'RETURN_PENDING') {
-            const hasIncident = Boolean(
-              b.activeIncident ||
-              b.hasIncident ||
-              b.statusTimeline?.some((t: any) =>
-                t.status === 'RETURN_PENDING' &&
-                (t.note?.includes('sự cố') || t.note?.includes('báo cáo') || t.note?.includes('đền bù') || t.note?.includes('hỏng'))
-              )
-            );
-            if (hasIncident) {
-              statusLabel = 'CHỜ DUYỆT SỰ CỐ';
-              statusSubtext = 'Shop yêu cầu đền bù hư hỏng';
-              statusBg = '#FFF1F2';
-              statusColor = '#E11D48';
-            } else {
-              statusLabel = 'CHỜ TRẢ ĐỒ';
-              statusSubtext = 'Đang kiểm tra trả đồ combo';
-              statusBg = '#FEF9E7';
-              statusColor = '#F39C12';
-            }
-          } else if (b.status === 'AWAITING_REVIEW') {
-            statusLabel = 'CHỜ DUYỆT ẢNH';
-            statusSubtext = 'Đã có ảnh, vui lòng duyệt';
-            statusBg = '#FEF3C7';
-            statusColor = '#B45309';
-          } else if (b.status === 'COMBO_PHOTOS_APPROVED') {
-            statusLabel = 'ĐÃ DUYỆT ẢNH';
-            statusSubtext = 'Chờ hoàn tất trả đồ';
-            statusBg = '#E0F2FE';
-            statusColor = '#0369A1';
-          } else if (b.status === 'COMPLETED' || b.status === 'RETURNED') {
-            statusLabel = 'HOÀN TẤT';
-            statusSubtext = 'Đã hoàn tất trải nghiệm';
             statusBg = '#E8F8F5';
             statusColor = '#27AE60';
           } else if (b.status === 'CANCELLED') {
@@ -504,14 +471,14 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
         }
 
         // Nếu có yêu cầu đổi lịch đang chờ duyệt
-        if (item.rescheduleRequest?.status === 'PENDING') {
+        if (groupItems.some((i: any) => i.rescheduleRequest?.status === 'PENDING')) {
           statusSubtext = 'Đang chờ duyệt đổi lịch';
         }
 
         rows.push({
-          id: `${b._id}-${idx}`,
+          id: `${b._id}-${dRangeKey}`,
           bookingId: b._id,
-          code: b.bookingCode || `RT-${b._id.slice(-4)}`,
+          code: b.bookingCode || (isPhoto ? `PS-${b._id.slice(-4)}` : `RT-${b._id.slice(-4)}`),
           title,
           size,
           image,
@@ -525,7 +492,7 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
           statusBg,
           statusColor,
           booking: b,
-          item
+          item: firstGroupItem
         });
       });
     });
@@ -565,7 +532,7 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
     return list;
   }, [tableItems, activeStatus, searchQuery]);
 
-  // Dynamic Urgent Items (Overdue or Due Soon within 48h)
+  // Dynamic Urgent Items (Overdue or Due Soon within 48h, Grouped by Booking)
   const urgentItems = useMemo(() => {
     if (!bookings || bookings.length === 0) {
       return [];
@@ -589,70 +556,103 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
       const isPickedUp = b.status === 'PICKED_UP' || b.status === 'IN_PROGRESS';
       if (!isPickedUp) return;
 
-      (b.items || []).forEach((item: any, idx: number) => {
-        const rawEnd = item.endDate || item.rentalTo || b.endDate;
-        if (!rawEnd) return;
+      const items = b.items || [];
+      const firstItem = items[0] || {};
+      const rawEnd = b.endDate || firstItem.endDate || firstItem.rentalTo;
+      if (!rawEnd) return;
 
-        const dueTime = new Date(rawEnd).getTime();
-        if (isNaN(dueTime)) return;
+      const dueTime = new Date(rawEnd).getTime();
+      if (isNaN(dueTime)) return;
 
-        const diffMs = dueTime - now;
+      const diffMs = dueTime - now;
 
-        // 1. Quá hạn (Overdue)
-        if (diffMs < 0) {
-          const diffHours = Math.abs(diffMs) / (1000 * 60 * 60);
-          const days = Math.floor(diffHours / 24);
-          const hours = Math.floor(diffHours % 24);
-
-          const countdownValue = days > 0 ? `${days} ngày` : `${Math.max(1, hours)} giờ`;
-
-          results.push({
-            id: `urgent-${b._id}-${idx}`,
-            type: 'OVERDUE',
-            title: item.name || 'Trang phục thuê',
-            code: b.bookingCode || `RT-${b._id.slice(-4)}`,
-            size: item.selectedSize || item.size || '',
-            dueDate: new Date(rawEnd).toLocaleDateString('vi-VN', {
-              hour: '2-digit',
-              minute: '2-digit',
-              day: '2-digit',
-              month: '2-digit',
-              year: 'numeric'
-            }),
-            countdownLabel: 'Quá hạn',
-            countdownValue,
-            image: item.images?.[0] || item.coverImage || item.image,
-            booking: b
-          });
-        }
-        // 2. Sắp đến hạn (Due soon <= 48h)
-        else if (diffMs <= 48 * 60 * 60 * 1000) {
-          const diffHours = diffMs / (1000 * 60 * 60);
-          const days = Math.floor(diffHours / 24);
-          const hours = Math.ceil(diffHours % 24);
-
-          const countdownValue = days > 0 ? `${days} ngày` : `${Math.max(1, hours)} giờ`;
-
-          results.push({
-            id: `urgent-${b._id}-${idx}`,
-            type: 'DUE_SOON',
-            title: item.name || 'Trang phục thuê',
-            code: b.bookingCode || `RT-${b._id.slice(-4)}`,
-            size: item.selectedSize || item.size || '',
-            dueDate: new Date(rawEnd).toLocaleDateString('vi-VN', {
-              hour: '2-digit',
-              minute: '2-digit',
-              day: '2-digit',
-              month: '2-digit',
-              year: 'numeric'
-            }),
-            countdownLabel: 'Còn',
-            countdownValue,
-            image: item.images?.[0] || item.coverImage || item.image,
-            booking: b
-          });
-        }
+      const uniqueNames: string[] = [];
+      items.forEach((i: any) => {
+        const prodObj = i.productId && typeof i.productId === 'object' ? i.productId : null;
+        const n = i.name || prodObj?.name || i.productName;
+        if (n && !uniqueNames.includes(n)) uniqueNames.push(n);
       });
+      const totalQty = items.reduce((sum: number, i: any) => sum + (Number(i.quantity) || 1), 0);
+      let title = '';
+      if (uniqueNames.length === 1) {
+        title = totalQty > 1 ? `${uniqueNames[0]} (x${totalQty})` : uniqueNames[0];
+      } else if (uniqueNames.length === 2) {
+        title = `${uniqueNames[0]} + ${uniqueNames[1]}`;
+      } else if (uniqueNames.length > 2) {
+        title = `${uniqueNames[0]} + ${items.length - 1} sản phẩm khác`;
+      } else {
+        title = b.productName || 'Trang phục thuê';
+      }
+
+      const uniqueSizes: string[] = [];
+      items.forEach((i: any) => {
+        const s = i.selectedSize || i.size;
+        if (s && !uniqueSizes.includes(s)) uniqueSizes.push(s);
+      });
+      const size = uniqueSizes.length > 0 ? `Size ${uniqueSizes.join(', ')}` : '';
+
+      const image =
+        firstItem.productId?.images?.[0] ||
+        firstItem.productId?.coverImage ||
+        firstItem.images?.[0] ||
+        firstItem.coverImage ||
+        firstItem.image ||
+        firstItem.productImage;
+
+      // 1. Quá hạn (Overdue)
+      if (diffMs < 0) {
+        const diffHours = Math.abs(diffMs) / (1000 * 60 * 60);
+        const days = Math.floor(diffHours / 24);
+        const hours = Math.floor(diffHours % 24);
+
+        const countdownValue = days > 0 ? `${days} ngày` : `${Math.max(1, hours)} giờ`;
+
+        results.push({
+          id: `urgent-${b._id}`,
+          type: 'OVERDUE',
+          title,
+          code: b.bookingCode || `RT-${b._id.slice(-4)}`,
+          size,
+          dueDate: new Date(rawEnd).toLocaleDateString('vi-VN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+          }),
+          countdownLabel: 'Quá hạn',
+          countdownValue,
+          image,
+          booking: b
+        });
+      }
+      // 2. Sắp đến hạn (Due soon <= 48h)
+      else if (diffMs <= 48 * 60 * 60 * 1000) {
+        const diffHours = diffMs / (1000 * 60 * 60);
+        const days = Math.floor(diffHours / 24);
+        const hours = Math.ceil(diffHours % 24);
+
+        const countdownValue = days > 0 ? `${days} ngày` : `${Math.max(1, hours)} giờ`;
+
+        results.push({
+          id: `urgent-${b._id}`,
+          type: 'DUE_SOON',
+          title,
+          code: b.bookingCode || `RT-${b._id.slice(-4)}`,
+          size,
+          dueDate: new Date(rawEnd).toLocaleDateString('vi-VN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+          }),
+          countdownLabel: 'Còn',
+          countdownValue,
+          image,
+          booking: b
+        });
+      }
     });
 
     return results;
@@ -679,14 +679,15 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
             upcomingCombos++;
           }
         } else {
-          (b.items || []).forEach((item: any) => {
-            const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE' || b.bookingType === 'PHOTOGRAPHY';
-            if (isPhoto && (isConfirmed || isPickedUp)) {
-              upcomingShoots++;
-            } else if (!isPhoto && isPickedUp) {
-              activeRentals++;
-            }
-          });
+          const isPhoto =
+            b.bookingType === 'PHOTOGRAPHY' ||
+            (b.items && b.items.length > 0 && b.items.every((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId));
+
+          if (isPhoto && (isConfirmed || isPickedUp)) {
+            upcomingShoots++;
+          } else if (!isPhoto && isPickedUp) {
+            activeRentals++;
+          }
         }
       });
     }
@@ -699,7 +700,7 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
     };
   }, [bookings, user]);
 
-  // Dynamic Category Counts
+  // Dynamic Category Counts (Counts bookings per category)
   const categoryCounts = useMemo(() => {
     let rentals = 0;
     let photoshoots = 0;
@@ -725,26 +726,38 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
             if (b.status === 'RETURNED' || b.status === 'COMPLETED' || b.status === 'RETURN_PENDING' || b.status === 'COMBO_PHOTOS_APPROVED') subReturned++;
           }
         } else {
-          (b.items || []).forEach((item: any) => {
-            const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE' || b.bookingType === 'PHOTOGRAPHY';
-            if (isPhoto) {
-              photoshoots++;
-              if (activeCategory === 'PHOTOSHOOT') {
-                subAll++;
-                if (b.status === 'IN_PROGRESS' || b.status === 'AWAITING_REVIEW') subRenting++;
-                if (b.status === 'CONFIRMED' || b.status === 'DEPOSIT_PAID') subPickupSoon++;
-                if (b.status === 'COMPLETED') subReturned++;
-              }
-            } else {
-              rentals++;
-              if (activeCategory === 'RENTAL') {
-                subAll++;
-                if (b.status === 'PICKED_UP' || b.status === 'IN_PROGRESS') subRenting++;
-                if (b.status === 'PICKUP_PENDING' || b.status === 'CONFIRMED' || b.status === 'DEPOSIT_PAID') subPickupSoon++;
-                if (b.status === 'RETURNED' || b.status === 'COMPLETED' || b.status === 'RETURN_PENDING') subReturned++;
-              }
+          const isPhoto =
+            b.bookingType === 'PHOTOGRAPHY' ||
+            (b.items && b.items.length > 0 && b.items.every((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId));
+
+          if (isPhoto) {
+            photoshoots++;
+            if (activeCategory === 'PHOTOSHOOT') {
+              subAll++;
+              if (b.status === 'IN_PROGRESS' || b.status === 'AWAITING_REVIEW') subRenting++;
+              if (b.status === 'CONFIRMED' || b.status === 'DEPOSIT_PAID') subPickupSoon++;
+              if (b.status === 'COMPLETED') subReturned++;
             }
-          });
+          } else {
+            const items = b.items || [];
+            const getItemDateRangeKey = (it: any) => {
+              const provId = it.providerId ? (typeof it.providerId === 'object' ? it.providerId._id || it.providerId : it.providerId) : '';
+              const start = it.startDate || it.rentalFrom || it.shootDate || b.startDate || '';
+              const end = it.endDate || it.rentalTo || b.endDate || '';
+              const startStr = start ? new Date(start).toISOString().split('T')[0] : '';
+              const endStr = end ? new Date(end).toISOString().split('T')[0] : '';
+              return `${provId}_${startStr}_${endStr}`;
+            };
+            const slotCount = items.length > 0 ? new Set(items.map(getItemDateRangeKey)).size : 1;
+
+            rentals += slotCount;
+            if (activeCategory === 'RENTAL') {
+              subAll += slotCount;
+              if (b.status === 'PICKED_UP' || b.status === 'IN_PROGRESS') subRenting += slotCount;
+              if (b.status === 'PICKUP_PENDING' || b.status === 'CONFIRMED' || b.status === 'DEPOSIT_PAID') subPickupSoon += slotCount;
+              if (b.status === 'RETURNED' || b.status === 'COMPLETED' || b.status === 'RETURN_PENDING') subReturned += slotCount;
+            }
+          }
         }
       });
 

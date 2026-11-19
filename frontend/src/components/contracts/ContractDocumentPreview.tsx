@@ -110,10 +110,10 @@ export const ContractDocumentPreview: React.FC<ContractDocumentPreviewProps> = (
     const cancelPolicy = policies.providerCancellationPolicy;
     const customTerms = policies.providerCustomTermsText;
 
-    const provName = provider.businessName || 'Nhà cung cấp đối tác VibeHue';
+    const provName = provider.businessName || 'Nhà cung cấp đối tác TàGo';
     const provAddr = formatAddress(provider.address, 'Chưa cập nhật trên hệ thống');
     const provPhone =
-      provider.contact?.phone || provider.phone || 'Liên hệ qua ứng dụng VibeHue';
+      provider.contact?.phone || provider.phone || 'Liên hệ qua ứng dụng TàGo';
     const provEmail = provider.contact?.email || provider.email || 'Chưa cập nhật trên hệ thống';
 
     const custName = customer.fullName || customerName || 'Chưa cập nhật trên hệ thống';
@@ -482,7 +482,7 @@ export const ContractDocumentPreview: React.FC<ContractDocumentPreviewProps> = (
                     <li>
                       <strong>Hỗ trợ giải quyết tranh chấp:</strong>{' '}
                       {(resolved.disputeResolutionTerms || damageComp.disputeResolutionNotes || '').trim() ||
-                        'Khi có tranh chấp hoặc bất đồng về tình trạng trang phục, Nền tảng VibeHue đóng vai trò là kênh tiếp nhận phản ánh và hỗ trợ hai bên hòa giải trung gian dựa trên chứng cứ giao nhận, không tự ý phán quyết hay khấu trừ tiền.'}
+                        'Khi có tranh chấp hoặc bất đồng về tình trạng trang phục, Nền tảng TàGo đóng vai trò là kênh tiếp nhận phản ánh và hỗ trợ hai bên hòa giải trung gian dựa trên chứng cứ giao nhận, không tự ý phán quyết hay khấu trừ tiền.'}
                     </li>
                   </ul>
                 </div>
@@ -556,11 +556,11 @@ export const ContractDocumentPreview: React.FC<ContractDocumentPreviewProps> = (
                 <ul>
                   <li>
                     <strong>Quy định hủy từ Bên Cho Thuê:</strong>{' '}
-                    {policies.providerCancellation || 'Áp dụng theo quy chế hoạt động của nền tảng VibeHue.'}
+                    {policies.providerCancellation || 'Áp dụng theo quy chế hoạt động của nền tảng TàGo.'}
                   </li>
                   {policies.cancellation?.value?.freeCancelBeforeHours && (
                     <li>
-                      <strong>Quy định bảo vệ từ Sàn VibeHue:</strong> Cho phép hủy miễn phí trước{' '}
+                      <strong>Quy định bảo vệ từ Sàn TàGo:</strong> Cho phép hủy miễn phí trước{' '}
                       {policies.cancellation.value.freeCancelBeforeHours} giờ so với thời điểm nhận đồ. Tiền cọc và tiền thuê sẽ được hoàn trả theo quy trình của sàn.
                     </li>
                   )}
@@ -582,7 +582,7 @@ export const ContractDocumentPreview: React.FC<ContractDocumentPreviewProps> = (
             <div className="vh-article-block">
               <h5>ĐIỀU {customTerms && customTerms.trim() ? 7 : 6}: HIỆU LỰC HỢP ĐỒNG VÀ XÁC NHẬN GIAO KẾT ĐIỆN TỬ</h5>
               <ul>
-                <li>Hợp đồng điện tử này được xác lập (formedAt) tại thời điểm Bên B hoàn tất xác nhận chấp thuận điện tử trên hệ thống VibeHue theo quy định của Luật Giao dịch điện tử.</li>
+                <li>Hợp đồng điện tử này được xác lập (formedAt) tại thời điểm Bên B hoàn tất xác nhận chấp thuận điện tử trên hệ thống TàGo theo quy định của Luật Giao dịch điện tử.</li>
                 <li>Điều kiện thực thi và hiệu lực cung cấp dịch vụ (effectiveAt) bắt đầu khi đơn hàng hoàn tất nghĩa vụ thanh toán (paidAt) và được hệ thống xác nhận hợp lệ theo Quy chế nền tảng.</li>
                 <li>Bản ghi hợp đồng điện tử được tạo mã băm SHA-256 để bảo đảm tính toàn vẹn kỹ thuật, chống sửa đổi trái phép và phục vụ tra cứu, đối soát theo quy định.</li>
               </ul>
@@ -603,7 +603,7 @@ export const ContractDocumentPreview: React.FC<ContractDocumentPreviewProps> = (
               <div className="vh-exec-text muted">
                 {policies.providerPolicyVersion
                   ? `Chính sách áp dụng: Phiên bản v${policies.providerPolicyVersion} đã được phê duyệt`
-                  : 'Áp dụng điều kiện giao dịch chung đã cam kết với VibeHue'}
+                  : 'Áp dụng điều kiện giao dịch chung đã cam kết với TàGo'}
               </div>
               <div className="vh-exec-badge platform">[ GHI NHẬN THEO QUY CHẾ NỀN TẢNG ]</div>
             </div>
@@ -655,7 +655,7 @@ export const ContractDocumentPreview: React.FC<ContractDocumentPreviewProps> = (
 
         {/* Document Footer */}
         <div className="vh-doc-footer">
-          Hợp đồng điện tử VibeHue — Nền tảng cho thuê trang phục truyền thống | Bản xem trước chuẩn PDF
+          Hợp đồng điện tử TàGo — Nền tảng cho thuê trang phục truyền thống | Bản xem trước chuẩn PDF
         </div>
       </div>
     );

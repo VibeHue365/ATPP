@@ -411,7 +411,7 @@ export const ContractDetailViewerModal: React.FC<ContractDetailViewerModalProps>
           }}
         >
           <div style={{ fontSize: '12px', color: '#64748b' }}>
-            Hợp đồng dịch vụ điện tử theo quy định giao dịch điện tử của nền tảng VibeHue.
+            Hợp đồng dịch vụ điện tử theo quy định giao dịch điện tử của nền tảng TàGo.
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

@@ -64,11 +64,19 @@ describe('P0.1 — NestJS Startup & Dependency Injection Verification', () => {
   });
 
   it('3. Successfully resolves all core contract domain services', () => {
-    const prepService = moduleRef.get<ContractPreparationService>(ContractPreparationService);
+    const prepService = moduleRef.get<ContractPreparationService>(
+      ContractPreparationService,
+    );
     const readService = moduleRef.get<ContractReadService>(ContractReadService);
-    const approvalService = moduleRef.get<ProviderContractApprovalService>(ProviderContractApprovalService);
-    const guardService = moduleRef.get<ContractCheckoutGuard>(ContractCheckoutGuard);
-    const mechanismService = moduleRef.get<ContractMechanismService>(ContractMechanismService);
+    const approvalService = moduleRef.get<ProviderContractApprovalService>(
+      ProviderContractApprovalService,
+    );
+    const guardService = moduleRef.get<ContractCheckoutGuard>(
+      ContractCheckoutGuard,
+    );
+    const mechanismService = moduleRef.get<ContractMechanismService>(
+      ContractMechanismService,
+    );
 
     expect(prepService).toBeDefined();
     expect(readService).toBeDefined();
@@ -82,7 +90,8 @@ describe('P0.1 — NestJS Startup & Dependency Injection Verification', () => {
     const mockUnconfiguredConfig = {
       get: jest.fn((_key: string, defaultValue?: string) => defaultValue),
     };
-    const defaultVal = mockUnconfiguredConfig.get(CONTRACTS_V2_ENABLED, 'false') === 'true';
+    const defaultVal =
+      mockUnconfiguredConfig.get(CONTRACTS_V2_ENABLED, 'false') === 'true';
     expect(defaultVal).toBe(false);
 
     // Current module resolves flag as boolean (not string or undefined)

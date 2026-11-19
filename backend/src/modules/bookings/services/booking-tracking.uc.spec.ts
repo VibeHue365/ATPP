@@ -61,11 +61,9 @@ function createService(
   });
   const bookingModel = {
     findById,
-    find: jest
-      .fn()
-      .mockReturnValue({
-        sort: () => ({ exec: () => Promise.resolve(options.bookings ?? []) }),
-      }),
+    find: jest.fn().mockReturnValue({
+      sort: () => ({ exec: () => Promise.resolve(options.bookings ?? []) }),
+    }),
     db: {
       model: jest.fn((name: string) =>
         name === 'CustomerReview'
@@ -79,19 +77,15 @@ function createService(
   };
   const bookingScheduleModel = {
     find: jest.fn().mockReturnValue(chain(options.schedules ?? [])),
-    findOne: jest
-      .fn()
-      .mockReturnValue({
-        exec: () => Promise.resolve(options.schedule ?? null),
-      }),
+    findOne: jest.fn().mockReturnValue({
+      exec: () => Promise.resolve(options.schedule ?? null),
+    }),
   };
   const providerModel = {
     find: jest.fn().mockResolvedValue(options.providers ?? []),
-    findOne: jest
-      .fn()
-      .mockReturnValue({
-        exec: () => Promise.resolve(options.provider ?? null),
-      }),
+    findOne: jest.fn().mockReturnValue({
+      exec: () => Promise.resolve(options.provider ?? null),
+    }),
   };
   const coordinator = { coordinate: jest.fn().mockResolvedValue(undefined) };
   const service = Object.create(BookingsService.prototype) as BookingsService;

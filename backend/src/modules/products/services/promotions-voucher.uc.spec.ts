@@ -151,7 +151,7 @@ describe('UC-20 Create Discount Code (HoangLVM)', () => {
   it('UT-20 UTCID12 creates a platform voucher without a provider owner', async () => {
     const { service, promotionModel } = createService();
 
-    await service.createPromotion(null, dto as any);
+    await service.createPromotion(null, dto);
 
     expect(promotionModel.create).toHaveBeenCalledWith(
       expect.objectContaining({ code: 'HE2026', providerId: null }),

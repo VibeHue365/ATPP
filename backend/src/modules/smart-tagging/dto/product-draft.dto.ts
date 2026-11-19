@@ -1,4 +1,10 @@
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsString, MaxLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 /** UC-C10: photos the provider already uploaded in wizard step 1 (cover first). */
 export class ProductDraftRequestDto {

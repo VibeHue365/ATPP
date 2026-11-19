@@ -39,7 +39,9 @@ const TAG_LABELS: Readonly<Record<string, string>> = {
   BIEU_DIEN_SU_KIEN: 'Biểu diễn/Sự kiện',
 };
 
-export function normalizePreferences(preferences: any): RecommendationPreferences {
+export function normalizePreferences(
+  preferences: any,
+): RecommendationPreferences {
   return {
     styles: normalizeValues(preferences?.preferredAoDaiStyles),
     occasions: normalizeValues(preferences?.preferredOccasions),
@@ -88,7 +90,9 @@ export function scoreProduct(
 
   if (preferences.materials.length) {
     possible += 15;
-    const matched = preferences.materials.filter((value) => productMaterials.has(value));
+    const matched = preferences.materials.filter((value) =>
+      productMaterials.has(value),
+    );
     if (matched.length) {
       earned += 15;
       reasons.push(`Có chất liệu bạn yêu thích: ${matched.join(', ')}`);
@@ -97,7 +101,9 @@ export function scoreProduct(
 
   if (preferences.colors.length) {
     possible += 15;
-    const matched = preferences.colors.filter((value) => productColors.has(value));
+    const matched = preferences.colors.filter((value) =>
+      productColors.has(value),
+    );
     if (matched.length) {
       earned += 15;
       reasons.push(`Có màu sắc phù hợp: ${matched.slice(0, 3).join(', ')}`);
@@ -106,15 +112,22 @@ export function scoreProduct(
 
   if (preferences.budgetMin != null || preferences.budgetMax != null) {
     possible += 10;
-    const aboveMinimum = preferences.budgetMin == null || product.basePrice >= preferences.budgetMin;
-    const belowMaximum = preferences.budgetMax == null || product.basePrice <= preferences.budgetMax;
+    const aboveMinimum =
+      preferences.budgetMin == null ||
+      product.basePrice >= preferences.budgetMin;
+    const belowMaximum =
+      preferences.budgetMax == null ||
+      product.basePrice <= preferences.budgetMax;
     if (aboveMinimum && belowMaximum) {
       earned += 10;
       reasons.push('Nằm trong ngân sách của bạn');
     }
   }
 
-  const rating = Math.max(0, Math.min(5, Number(product.rating?.averageRating) || 0));
+  const rating = Math.max(
+    0,
+    Math.min(5, Number(product.rating?.averageRating) || 0),
+  );
   earned += (rating / 5) * 10;
   if (rating >= 4.5) reasons.push(`Được đánh giá cao: ${rating.toFixed(1)}★`);
 
@@ -135,16 +148,24 @@ export function matchesPreferredSize(
 }
 
 function expandColorTones(values: string[]): string[] {
-  return [...new Set(values.flatMap((value) => COLOR_TONE_MAP[value] ?? [value]))];
+  return [
+    ...new Set(values.flatMap((value) => COLOR_TONE_MAP[value] ?? [value])),
+  ];
 }
 
 function normalizeValues(values: unknown): string[] {
   if (!Array.isArray(values)) return [];
-  return [...new Set(values.map((value) => String(value).trim().toUpperCase()).filter(Boolean))];
+  return [
+    ...new Set(
+      values.map((value) => String(value).trim().toUpperCase()).filter(Boolean),
+    ),
+  ];
 }
 
 function normalizeOptional(value: unknown): string | null {
-  const normalized = String(value ?? '').trim().toUpperCase();
+  const normalized = String(value ?? '')
+    .trim()
+    .toUpperCase();
   return normalized || null;
 }
 

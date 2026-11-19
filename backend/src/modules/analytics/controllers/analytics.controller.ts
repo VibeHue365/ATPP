@@ -1,4 +1,14 @@
-import { Controller, Post, Body, Param, HttpCode, HttpStatus, Get, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Param,
+  HttpCode,
+  HttpStatus,
+  Get,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { AnalyticsService } from '../services/analytics.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';

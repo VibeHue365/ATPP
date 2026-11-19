@@ -96,18 +96,14 @@ describe('Provider Ao Dai catalog use cases (DaiBLL)', () => {
     };
     const collections: Record<string, { find: jest.Mock }> = {
       booking_items: {
-        find: jest
-          .fn()
-          .mockReturnValue({
-            toArray: () => Promise.resolve(options.bookingItems ?? []),
-          }),
+        find: jest.fn().mockReturnValue({
+          toArray: () => Promise.resolve(options.bookingItems ?? []),
+        }),
       },
       bookings: {
-        find: jest
-          .fn()
-          .mockReturnValue({
-            toArray: () => Promise.resolve(options.activeBookings ?? []),
-          }),
+        find: jest.fn().mockReturnValue({
+          toArray: () => Promise.resolve(options.activeBookings ?? []),
+        }),
       },
     };
     const connection = {

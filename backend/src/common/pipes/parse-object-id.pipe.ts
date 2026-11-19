@@ -3,7 +3,9 @@ import { Types } from 'mongoose';
 
 @Injectable()
 export class ParseObjectIdPipe implements PipeTransform<string, string> {
-  constructor(private readonly errorMessage: string = 'ID sản phẩm không hợp lệ') {}
+  constructor(
+    private readonly errorMessage: string = 'ID sản phẩm không hợp lệ',
+  ) {}
 
   transform(value: string): string {
     if (

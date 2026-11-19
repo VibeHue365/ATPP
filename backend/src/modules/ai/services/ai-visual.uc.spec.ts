@@ -49,7 +49,10 @@ function createVisualSearchController(
 ) {
   return new VisualSearchController(
     service,
-    { assertRateLimit: rateLimit, ipKey: (ip?: string) => ip || 'unknown-ip' } as any,
+    {
+      assertRateLimit: rateLimit,
+      ipKey: (ip?: string) => ip || 'unknown-ip',
+    } as any,
     {
       getActiveProductsPage: jest.fn().mockResolvedValue({ data: products }),
     } as any,

@@ -33,7 +33,9 @@ export function validateEnv(config: EnvConfig): EnvConfig {
   ];
 
   if (missing.length > 0) {
-    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    throw new Error(
+      `Missing required environment variables: ${missing.join(', ')}`,
+    );
   }
 
   const saltRounds = Number(config.BCRYPT_SALT_ROUNDS ?? '12');

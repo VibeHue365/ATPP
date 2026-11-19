@@ -6,9 +6,6 @@ import {
   ChevronDown,
   HelpCircle,
   LogOut,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Search,
   Settings,
   Store,
   User,
@@ -57,13 +54,9 @@ export function ProviderHeader({
   getNotiTimeAgo,
   setCurrentView,
   provider,
-  isSidebarCollapsed = false,
-  toggleSidebar,
 }: ProviderHeaderProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [searchValue, setSearchValue] = useState('');
   const profileRef = useRef<HTMLDivElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -80,26 +73,11 @@ export function ProviderHeader({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Global shortcut (Cmd+K / Ctrl+K) to focus search
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
   const handleLogout = async () => {
     setIsProfileOpen(false);
     await logout();
     navigate('/auth/login');
   };
-
-  const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().includes('MAC');
-  const shortcutText = isMac ? '⌘ K' : 'Ctrl K';
 
   const businessName = provider?.businessName || user?.fullName || 'Huế Áo Dài Studio';
   const rawAvatar =
@@ -116,34 +94,8 @@ export function ProviderHeader({
 
   return (
     <header className="p-header-bar">
-      {/* 1. Left: Toggle Sidebar + Search Bar */}
-      <div className="p-header-left">
-        {toggleSidebar && (
-          <button
-            type="button"
-            className="p-header-toggle-btn"
-            onClick={toggleSidebar}
-            title={isSidebarCollapsed ? "Mở rộng thanh menu (280px)" : "Thu gọn thanh menu (76px)"}
-            aria-label="Toggle sidebar"
-          >
-            {isSidebarCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
-          </button>
-        )}
-
-        <div className="p-search-wrapper">
-          <Search size={18} className="p-search-icon" />
-          <input
-            ref={searchInputRef}
-            type="text"
-            className="p-search-input"
-            placeholder="Tìm kiếm đơn đặt lịch, khách hàng, dịch vụ..."
-            value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
-            id="global-provider-search"
-          />
-          <span className="p-search-shortcut-badge">{shortcutText}</span>
-        </div>
-      </div>
+      {/* Left empty container to keep right actions aligned */}
+      <div className="p-header-left" />
 
       {/* 2. Right Actions: Notification Bell + Profile */}
       <div className="p-header-actions">

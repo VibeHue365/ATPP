@@ -18,19 +18,71 @@ import {
 } from './fixtures/synthetic-contract.fixture';
 
 // Domain Schemas & Enums
-import { DigitalContract, DigitalContractSchema, ContractApprovalMode, ContractScope } from '../../bookings/schemas/digital-contract.schema';
-import { ContractVersion, ContractVersionSchema, ContractVersionState, ContractDocumentStatus } from '../schemas/contract-version.schema';
-import { ContractConsent, ContractConsentSchema, ContractConsentAction } from '../schemas/contract-consent.schema';
-import { ProviderContractAcceptance, ProviderContractAcceptanceSchema, ProviderAcceptanceStatus } from '../schemas/provider-contract-acceptance.schema';
-import { Booking, BookingSchema, BookingStatus, BookingType } from '../../bookings/schemas/booking.schema';
-import { BookingItem, BookingItemSchema } from '../../bookings/schemas/booking-item.schema';
-import { BookingSchedule, BookingScheduleSchema } from '../../bookings/schemas/booking-schedule.schema';
-import { InventoryReservation, InventoryReservationSchema, ReservationStatus } from '../../products/schemas/inventory-reservation.schema';
-import { Payment, PaymentSchema, PaymentStatus, PaymentPurpose } from '../../payments/schemas/payment.schema';
-import { PaymentRecovery, PaymentRecoverySchema, PaymentRecoveryState } from '../../payments/schemas/payment-recovery.schema';
-import { BookingEscrow, BookingEscrowSchema, EscrowStatus } from '../../payments/schemas/booking-escrow.schema';
-import { PaymentWebhookEvent, PaymentWebhookEventSchema } from '../../payments/schemas/payment-webhook-event.schema';
-import { Notification, NotificationSchema } from '../../notifications/schemas/notification.schema';
+import {
+  DigitalContract,
+  DigitalContractSchema,
+  ContractApprovalMode,
+  ContractScope,
+} from '../../bookings/schemas/digital-contract.schema';
+import {
+  ContractVersion,
+  ContractVersionSchema,
+  ContractVersionState,
+  ContractDocumentStatus,
+} from '../schemas/contract-version.schema';
+import {
+  ContractConsent,
+  ContractConsentSchema,
+  ContractConsentAction,
+} from '../schemas/contract-consent.schema';
+import {
+  ProviderContractAcceptance,
+  ProviderContractAcceptanceSchema,
+  ProviderAcceptanceStatus,
+} from '../schemas/provider-contract-acceptance.schema';
+import {
+  Booking,
+  BookingSchema,
+  BookingStatus,
+  BookingType,
+} from '../../bookings/schemas/booking.schema';
+import {
+  BookingItem,
+  BookingItemSchema,
+} from '../../bookings/schemas/booking-item.schema';
+import {
+  BookingSchedule,
+  BookingScheduleSchema,
+} from '../../bookings/schemas/booking-schedule.schema';
+import {
+  InventoryReservation,
+  InventoryReservationSchema,
+  ReservationStatus,
+} from '../../products/schemas/inventory-reservation.schema';
+import {
+  Payment,
+  PaymentSchema,
+  PaymentStatus,
+  PaymentPurpose,
+} from '../../payments/schemas/payment.schema';
+import {
+  PaymentRecovery,
+  PaymentRecoverySchema,
+  PaymentRecoveryState,
+} from '../../payments/schemas/payment-recovery.schema';
+import {
+  BookingEscrow,
+  BookingEscrowSchema,
+  EscrowStatus,
+} from '../../payments/schemas/booking-escrow.schema';
+import {
+  PaymentWebhookEvent,
+  PaymentWebhookEventSchema,
+} from '../../payments/schemas/payment-webhook-event.schema';
+import {
+  Notification,
+  NotificationSchema,
+} from '../../notifications/schemas/notification.schema';
 
 // Real Domain Services
 import { ContractAccessService } from '../contract-access.service';
@@ -52,7 +104,9 @@ import { PrivateStorageService } from '../../storage/services/private-storage.se
 const target = contractTestTarget();
 const oid = () => new Types.ObjectId();
 const TEST_CHECKSUM_KEY = 'test-payos-checksum-secret-64-hex-value-only';
-const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPROVED_MECHANISM)).digest('hex');
+const mechanismHash = createHash('sha256')
+  .update(JSON.stringify(SYNTHETIC_APPROVED_MECHANISM))
+  .digest('hex');
 
 (target ? describe : describe.skip)(
   'Phase 8B.1: Isolated Synthetic End-to-End Execution (17 Scenarios)',
@@ -99,56 +153,86 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
       // 3. Verify Replica Set Name and Primary Health
       const hello = await connection.db!.admin().command({ hello: 1 });
       if (hello.setName !== 'rsContractTest' || !hello.isWritablePrimary) {
-        throw new Error('Preflight Check Failed: Isolated test replica set is not primary');
+        throw new Error(
+          'Preflight Check Failed: Isolated test replica set is not primary',
+        );
       }
 
       // Initialize Real Models
       contracts = connection.model(DigitalContract.name, DigitalContractSchema);
       versions = connection.model(ContractVersion.name, ContractVersionSchema);
       consents = connection.model(ContractConsent.name, ContractConsentSchema);
-      acceptances = connection.model(ProviderContractAcceptance.name, ProviderContractAcceptanceSchema);
+      acceptances = connection.model(
+        ProviderContractAcceptance.name,
+        ProviderContractAcceptanceSchema,
+      );
       bookings = connection.model(Booking.name, BookingSchema);
       bookingItems = connection.model(BookingItem.name, BookingItemSchema);
       schedules = connection.model(BookingSchedule.name, BookingScheduleSchema);
-      reservations = connection.model(InventoryReservation.name, InventoryReservationSchema);
+      reservations = connection.model(
+        InventoryReservation.name,
+        InventoryReservationSchema,
+      );
       payments = connection.model(Payment.name, PaymentSchema);
-      recoveries = connection.model(PaymentRecovery.name, PaymentRecoverySchema);
+      recoveries = connection.model(
+        PaymentRecovery.name,
+        PaymentRecoverySchema,
+      );
       escrows = connection.model(BookingEscrow.name, BookingEscrowSchema);
-      webhookEvents = connection.model(PaymentWebhookEvent.name, PaymentWebhookEventSchema);
+      webhookEvents = connection.model(
+        PaymentWebhookEvent.name,
+        PaymentWebhookEventSchema,
+      );
       notifications = connection.model(Notification.name, NotificationSchema);
 
       // Create Mandatory Unique Indexes on Scratch DB
-      await connection.db!.collection('digital_contracts').createIndex(
-        { bookingId: 1, providerId: 1, scope: 1 },
-        { unique: true, name: 'booking_provider_scope_unique' },
-      );
-      await connection.db!.collection('contract_consents').createIndex(
-        { contractVersionId: 1, actorUserId: 1 },
-        { unique: true },
-      );
-      await connection.db!.collection('contract_consents').createIndex(
-        { actorUserId: 1, idempotencyKey: 1 },
-        { unique: true },
-      );
-      await connection.db!.collection('contract_versions').createIndex(
-        { contractId: 1, version: 1 },
-        { unique: true },
-      );
-      await connection.db!.collection('provider_contract_acceptances').createIndex(
-        { providerId: 1, scope: 1 },
-        { unique: true, partialFilterExpression: { status: 'ACTIVE' } },
-      );
-      await connection.db!.collection('payment_recoveries').createIndex({ paymentId: 1 }, { unique: true });
-      await connection.db!.collection('booking_escrows').createIndex({ bookingId: 1 }, { unique: true });
-      await connection.db!.collection('payment_webhook_events').createIndex({ webhookId: 1 }, { unique: true });
+      await connection
+        .db!.collection('digital_contracts')
+        .createIndex(
+          { bookingId: 1, providerId: 1, scope: 1 },
+          { unique: true, name: 'booking_provider_scope_unique' },
+        );
+      await connection
+        .db!.collection('contract_consents')
+        .createIndex(
+          { contractVersionId: 1, actorUserId: 1 },
+          { unique: true },
+        );
+      await connection
+        .db!.collection('contract_consents')
+        .createIndex({ actorUserId: 1, idempotencyKey: 1 }, { unique: true });
+      await connection
+        .db!.collection('contract_versions')
+        .createIndex({ contractId: 1, version: 1 }, { unique: true });
+      await connection
+        .db!.collection('provider_contract_acceptances')
+        .createIndex(
+          { providerId: 1, scope: 1 },
+          { unique: true, partialFilterExpression: { status: 'ACTIVE' } },
+        );
+      await connection
+        .db!.collection('payment_recoveries')
+        .createIndex({ paymentId: 1 }, { unique: true });
+      await connection
+        .db!.collection('booking_escrows')
+        .createIndex({ bookingId: 1 }, { unique: true });
+      await connection
+        .db!.collection('payment_webhook_events')
+        .createIndex({ webhookId: 1 }, { unique: true });
 
       // In-Memory Storage Service
       storageMap = new Map<string, Buffer>();
       storageService = {
-        uploadPrivateFile: jest.fn((bucket: string, storageKey: string, buffer: Buffer) => {
-          storageMap.set(`${bucket}:${storageKey}`, buffer);
-          return Promise.resolve({ storageProvider: 'synthetic-test-storage', bucket, storageKey });
-        }),
+        uploadPrivateFile: jest.fn(
+          (bucket: string, storageKey: string, buffer: Buffer) => {
+            storageMap.set(`${bucket}:${storageKey}`, buffer);
+            return Promise.resolve({
+              storageProvider: 'synthetic-test-storage',
+              bucket,
+              storageKey,
+            });
+          },
+        ),
         readPrivateFile: jest.fn((bucket: string, storageKey: string) => {
           const buf = storageMap.get(`${bucket}:${storageKey}`);
           if (!buf) throw new Error('FILE_NOT_FOUND');
@@ -161,7 +245,7 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
           storageMap.delete(`${bucket}:${storageKey}`);
           return Promise.resolve();
         }),
-      } as unknown as PrivateStorageService;
+      };
 
       pdfGenerator = new ContractPdfGenerator();
     }, 30000);
@@ -169,7 +253,10 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
     afterAll(async () => {
       if (uninstallNetworkGuard) uninstallNetworkGuard();
       if (!connection) return;
-      if (scratchName.startsWith('contract_synthetic_') && scratchName.endsWith('_test')) {
+      if (
+        scratchName.startsWith('contract_synthetic_') &&
+        scratchName.endsWith('_test')
+      ) {
         await connection.dropDatabase();
       }
       await connection.close();
@@ -185,8 +272,14 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
         getApproved: () => SYNTHETIC_APPROVED_TEMPLATE,
       };
       const mechanismService = {
-        getDraft: () => ({ ...SYNTHETIC_APPROVED_MECHANISM, hash: mechanismHash }),
-        getApproved: () => ({ ...SYNTHETIC_APPROVED_MECHANISM, hash: mechanismHash }),
+        getDraft: () => ({
+          ...SYNTHETIC_APPROVED_MECHANISM,
+          hash: mechanismHash,
+        }),
+        getApproved: () => ({
+          ...SYNTHETIC_APPROVED_MECHANISM,
+          hash: mechanismHash,
+        }),
       };
 
       const snapshots = new Map<string, Record<string, unknown>>();
@@ -203,7 +296,7 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
         versions,
         policy,
         snapshotService as never,
-        templateService as never,
+        templateService,
       );
 
       const read = new ContractReadService(
@@ -213,7 +306,7 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
         consents,
         access,
         policy,
-        templateService as never,
+        templateService,
         snapshotService as never,
         preparation,
       );
@@ -228,8 +321,8 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
         policy,
         preparation,
         snapshotService as never,
-        templateService as never,
-        mechanismService as never,
+        templateService,
+        mechanismService,
       );
 
       const checkout = new ContractCheckoutGuard(
@@ -240,8 +333,8 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
         policy,
         snapshotService as never,
         preparation,
-        templateService as never,
-        mechanismService as never,
+        templateService,
+        mechanismService,
       );
 
       const evidence = new ContractEvidenceService(
@@ -252,7 +345,12 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
         access,
       );
 
-      const recovery = new PaymentRecoveryService(enabled, recoveries, payments, bookings);
+      const recovery = new PaymentRecoveryService(
+        enabled,
+        recoveries,
+        payments,
+        bookings,
+      );
       const paymentsRepo = new PaymentsRepository(payments);
       const webhookRepo = new WebhookEventRepository(webhookEvents);
 
@@ -269,13 +367,15 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
         contracts,
         versions,
         consents,
-        { confirmForBooking: jest.fn().mockResolvedValue({ confirmed: true }) } as never,
+        {
+          confirmForBooking: jest.fn().mockResolvedValue({ confirmed: true }),
+        } as never,
         { findRedemptionByBooking: jest.fn().mockResolvedValue(null) } as never,
         recovery,
         policy,
         preparation,
         snapshotService as never,
-        templateService as never,
+        templateService,
         evidence,
       );
 
@@ -297,7 +397,10 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
 
     async function prepareBooking(services: any, seed: any) {
       for (const pId of seed.providerIds) {
-        const res = await services.preparation.prepare(seed.bookingId.toString(), pId.toString());
+        const res = await services.preparation.prepare(
+          seed.bookingId.toString(),
+          pId.toString(),
+        );
         await versions.updateOne(
           { _id: new Types.ObjectId(res.versionId) },
           {
@@ -312,7 +415,14 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
     }
 
     // Helper: Seed Booking & Provider data
-    async function seedBooking(providerCount = 1, options: { bookingType?: string; flowVersion?: number; holdExpired?: boolean } = {}) {
+    async function seedBooking(
+      providerCount = 1,
+      options: {
+        bookingType?: string;
+        flowVersion?: number;
+        holdExpired?: boolean;
+      } = {},
+    ) {
       const customerId = oid();
       const customerUserId = customerId;
       const providerIds = Array.from({ length: providerCount }, oid);
@@ -331,7 +441,10 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
         contractFlowVersion: options.flowVersion ?? 2,
         customerId,
         providerIds,
-        pricingSummary: { amountDueNow: 500000 * providerCount, grandTotal: 500000 * providerCount },
+        pricingSummary: {
+          amountDueNow: 500000 * providerCount,
+          grandTotal: 500000 * providerCount,
+        },
         holdExpiresAt,
         updatedAt: now,
       });
@@ -349,7 +462,10 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
           status: 'ACTIVE',
           businessName: `Tiệm Áo Dài ${i + 1}`,
           capabilities: ['AODAI_RENTAL'],
-          policies: { rentalPolicy: 'STANDARD', cancellationPolicy: 'FLEXIBLE' },
+          policies: {
+            rentalPolicy: 'STANDARD',
+            cancellationPolicy: 'FLEXIBLE',
+          },
         });
 
         await connection.db!.collection('booking_items').insertOne({
@@ -377,11 +493,19 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
           providerId: pId.toString(),
           bookingType: 'AODAI_RENTAL',
           bookingItemIds: [itemId.toString()],
-          booking: { code: 'SYNTH', rentalFrom: '15/11/2026', rentalTo: '18/11/2026' },
+          booking: {
+            code: 'SYNTH',
+            rentalFrom: '15/11/2026',
+            rentalTo: '18/11/2026',
+          },
           customer: { name: 'Nguyễn Văn A' },
           provider: { name: `Tiệm Áo Dài ${i + 1}` },
           providerItems: [{ bookingItemId: itemId.toString(), size: 'M' }],
-          pricing: { rentalFee: 500000, depositFee: 1000000, amountDueNow: 500000 },
+          pricing: {
+            rentalFee: 500000,
+            depositFee: 1000000,
+            amountDueNow: 500000,
+          },
           policies: { rental: 'Standard', cancellation: 'Flexible' },
           template: { version: SYNTHETIC_APPROVED_TEMPLATE.version },
         };
@@ -401,7 +525,14 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
         });
       }
 
-      return { customerId, customerUserId, providerIds, providerUserIds, bookingId, snapshots };
+      return {
+        customerId,
+        customerUserId,
+        providerIds,
+        providerUserIds,
+        bookingId,
+        snapshots,
+      };
     }
 
     // =========================================================================
@@ -415,16 +546,24 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
 
       await prepareBooking(services, seed);
 
-      const contract = await contracts.findOne({ bookingId: seed.bookingId }).lean();
+      const contract = await contracts
+        .findOne({ bookingId: seed.bookingId })
+        .lean();
       expect(contract).toBeTruthy();
       expect(contract?.status).toBe('DRAFT');
 
-      const version = await versions.findById(contract?.currentVersionId).lean();
+      const version = await versions
+        .findById(contract?.currentVersionId)
+        .lean();
       expect(version?.state).toBe(ContractVersionState.Offered);
       expect(version?.contentHash).toBeDefined();
 
       const readiness = await services.read.readiness(
-        { sub: seed.customerId.toString(), roles: ['CUSTOMER'], permissions: [] },
+        {
+          sub: seed.customerId.toString(),
+          roles: ['CUSTOMER'],
+          permissions: [],
+        },
         seed.bookingId.toString(),
       );
       expect(readiness.requirement).toBe('REQUIRED');
@@ -440,26 +579,37 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
       // Normal multi-provider without unallocated fields -> Prepares 2 separate contracts
       await prepareBooking(services, seed);
 
-      const contractList = await contracts.find({ bookingId: seed.bookingId }).lean();
+      const contractList = await contracts
+        .find({ bookingId: seed.bookingId })
+        .lean();
       expect(contractList).toHaveLength(2);
-      expect(contractList[0].providerId.toString()).not.toBe(contractList[1].providerId.toString());
+      expect(contractList[0].providerId.toString()).not.toBe(
+        contractList[1].providerId.toString(),
+      );
 
       // Conditional Blocker Check: If unallocated voucher exists on combo booking, ContractSnapshotService fails closed
-      await connection.db!.collection('bookings').updateOne(
-        { _id: seed.bookingId },
-        { $set: { 'voucherSnapshot.discountAmount': 50000 } },
-      );
+      await connection
+        .db!.collection('bookings')
+        .updateOne(
+          { _id: seed.bookingId },
+          { $set: { 'voucherSnapshot.discountAmount': 50000 } },
+        );
       // Clean previous contracts to re-trigger snapshot build
       await contracts.deleteMany({ bookingId: seed.bookingId });
       await versions.deleteMany({});
-      
-      const realSnapshotService = new (jest.requireActual('../contract-snapshot.service').ContractSnapshotService)(
-        connection,
-        { resolve: jest.fn() } as never,
+
+      const realSnapshotService = new (jest.requireActual(
+        '../contract-snapshot.service',
+      ).ContractSnapshotService)(connection, { resolve: jest.fn() });
+      const context = await services.policy.getContext(
+        seed.bookingId.toString(),
       );
-      const context = await services.policy.getContext(seed.bookingId.toString());
       await expect(
-        realSnapshotService.build(context, seed.providerIds[0], SYNTHETIC_APPROVED_TEMPLATE),
+        realSnapshotService.build(
+          context,
+          seed.providerIds[0],
+          SYNTHETIC_APPROVED_TEMPLATE,
+        ),
       ).rejects.toThrow(UnprocessableEntityException);
     });
 
@@ -469,8 +619,14 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
       for (const [k, v] of seed.snapshots) services.snapshots.set(k, v);
       await prepareBooking(services, seed);
 
-      const contractList = await contracts.find({ bookingId: seed.bookingId }).lean();
-      const actor = { sub: seed.customerId.toString(), roles: ['CUSTOMER'], permissions: [] };
+      const contractList = await contracts
+        .find({ bookingId: seed.bookingId })
+        .lean();
+      const actor = {
+        sub: seed.customerId.toString(),
+        roles: ['CUSTOMER'],
+        permissions: [],
+      };
 
       for (const c of contractList) {
         const v = await versions.findById(c.currentVersionId).lean();
@@ -489,11 +645,18 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
         expect(consentRes.action).toBe(ContractConsentAction.Accept);
       }
 
-      const allConsents = await consents.find({ actorUserId: seed.customerId }).lean();
+      const allConsents = await consents
+        .find({ actorUserId: seed.customerId })
+        .lean();
       expect(allConsents).toHaveLength(2);
 
-      const readiness = await services.read.readiness(actor, seed.bookingId.toString());
-      expect(readiness.providers.every((p: any) => p.status === 'ACCEPTED')).toBe(true);
+      const readiness = await services.read.readiness(
+        actor,
+        seed.bookingId.toString(),
+      );
+      expect(
+        readiness.providers.every((p: any) => p.status === 'ACCEPTED'),
+      ).toBe(true);
     });
 
     it('E2E-04: Khách DECLINE một hợp đồng (chặn tạo thanh toán ngay lập tức)', async () => {
@@ -504,7 +667,11 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
 
       const c = await contracts.findOne({ bookingId: seed.bookingId }).lean();
       const v = await versions.findById(c!.currentVersionId).lean();
-      const actor = { sub: seed.customerId.toString(), roles: ['CUSTOMER'], permissions: [] };
+      const actor = {
+        sub: seed.customerId.toString(),
+        roles: ['CUSTOMER'],
+        permissions: [],
+      };
 
       await services.consent.decide(
         actor,
@@ -524,7 +691,11 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
 
       // Checkout guard blocks payment evaluation with ConflictException
       await expect(
-        services.checkout.evaluate(seed.bookingId.toString(), 500000, PaymentPurpose.DepositPayment),
+        services.checkout.evaluate(
+          seed.bookingId.toString(),
+          500000,
+          PaymentPurpose.DepositPayment,
+        ),
       ).rejects.toThrow(ConflictException);
     });
 
@@ -536,7 +707,11 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
 
       const c = await contracts.findOne({ bookingId: seed.bookingId }).lean();
       const v = await versions.findById(c!.currentVersionId).lean();
-      const actor = { sub: seed.customerId.toString(), roles: ['CUSTOMER'], permissions: [] };
+      const actor = {
+        sub: seed.customerId.toString(),
+        roles: ['CUSTOMER'],
+        permissions: [],
+      };
 
       // Submit consent with altered/stale contentHash
       await expect(
@@ -560,12 +735,23 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
       const services = buildServices();
       for (const [k, v] of seed.snapshots) services.snapshots.set(k, v);
 
-      const actor = { sub: seed.customerId.toString(), roles: ['CUSTOMER'], permissions: [] };
-      const readiness = await services.read.readiness(actor, seed.bookingId.toString());
+      const actor = {
+        sub: seed.customerId.toString(),
+        roles: ['CUSTOMER'],
+        permissions: [],
+      };
+      const readiness = await services.read.readiness(
+        actor,
+        seed.bookingId.toString(),
+      );
       expect(readiness.blockers).toContain('BOOKING_NOT_PREPARABLE');
 
       await expect(
-        services.checkout.evaluate(seed.bookingId.toString(), 500000, PaymentPurpose.DepositPayment),
+        services.checkout.evaluate(
+          seed.bookingId.toString(),
+          500000,
+          PaymentPurpose.DepositPayment,
+        ),
       ).rejects.toThrow(ConflictException);
     });
 
@@ -577,7 +763,11 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
 
       const c = await contracts.findOne({ bookingId: seed.bookingId }).lean();
       const v = await versions.findById(c!.currentVersionId).lean();
-      const actor = { sub: seed.customerId.toString(), roles: ['CUSTOMER'], permissions: [] };
+      const actor = {
+        sub: seed.customerId.toString(),
+        roles: ['CUSTOMER'],
+        permissions: [],
+      };
 
       // 1. Accept contract
       await services.consent.decide(
@@ -615,7 +805,10 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
         paidAt: new Date(),
         contractBinding: binding,
         contractIntentKey: key,
-        payos: { orderCode, checkoutUrl: 'http://localhost:5173/checkout/result' },
+        payos: {
+          orderCode,
+          checkoutUrl: 'http://localhost:5173/checkout/result',
+        },
       });
 
       await bookings.updateOne(
@@ -623,7 +816,11 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
         {
           $set: {
             pricingSummary: { grandTotal: 500000, depositTotal: 0 },
-            paymentSummary: { totalPaid: 500000, totalRefunded: 0, paymentStatus: 'PAID' },
+            paymentSummary: {
+              totalPaid: 500000,
+              totalRefunded: 0,
+              paymentStatus: 'PAID',
+            },
             paymentExpiryClaim: {
               phase: 'FINALIZING',
               token: randomUUID(),
@@ -661,14 +858,20 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
       expect(claim.state).toBe('claimed');
 
       // Record Acknowledged & Process Finalization
-      await services.recovery.recordAcknowledged(paymentId, seed.bookingId, key);
+      await services.recovery.recordAcknowledged(
+        paymentId,
+        seed.bookingId,
+        key,
+      );
       expect(await services.finalization.processDue()).toBe(1);
 
       // Verify Final State
       const updatedBooking = await bookings.findById(seed.bookingId).lean();
       expect(updatedBooking?.status).toBe(BookingStatus.Confirmed);
 
-      const escrow = await escrows.findOne({ bookingId: seed.bookingId }).lean();
+      const escrow = await escrows
+        .findOne({ bookingId: seed.bookingId })
+        .lean();
       expect(escrow?.status).toBe(EscrowStatus.Held);
 
       const finalVersion = await versions.findById(v!._id).lean();
@@ -694,10 +897,17 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
       // Webhook sends CANCELLED
       await payments.updateOne(
         { _id: payment._id },
-        { $set: { status: PaymentStatus.Cancelled, lastError: 'Customer cancelled payment' } },
+        {
+          $set: {
+            status: PaymentStatus.Cancelled,
+            lastError: 'Customer cancelled payment',
+          },
+        },
       );
 
-      const escrow = await escrows.findOne({ bookingId: seed.bookingId }).lean();
+      const escrow = await escrows
+        .findOne({ bookingId: seed.bookingId })
+        .lean();
       expect(escrow).toBeNull(); // Escrow MUST NOT be created
     });
 
@@ -707,14 +917,25 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
       const webhookId = `payos_${orderCode}_PAID`;
       const webhookData = { orderCode, amount: 500000, status: 'PAID' };
 
-      const claim1 = await services.webhookRepo.claimVerifiedEvent(webhookId, webhookData, 'sig1');
+      const claim1 = await services.webhookRepo.claimVerifiedEvent(
+        webhookId,
+        webhookData,
+        'sig1',
+      );
       expect(claim1.state).toBe('claimed');
 
       // Mark processed
-      await webhookEvents.updateOne({ webhookId }, { $set: { processed: true } });
+      await webhookEvents.updateOne(
+        { webhookId },
+        { $set: { processed: true } },
+      );
 
       // Second Webhook with identical ID
-      const claim2 = await services.webhookRepo.claimVerifiedEvent(webhookId, webhookData, 'sig1');
+      const claim2 = await services.webhookRepo.claimVerifiedEvent(
+        webhookId,
+        webhookData,
+        'sig1',
+      );
       expect(claim2.state).toBe('processed'); // Idempotently skipped
     });
 
@@ -763,8 +984,13 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
       const c = await contracts.findOne({ bookingId: seed.bookingId }).lean();
       const v = await versions.findById(c!.currentVersionId).lean();
 
-      await versions.updateOne({ _id: v!._id }, { $set: { state: ContractVersionState.Accepted } });
-      const doc = await services.evidence.generateAndStorePdf(v!._id.toString());
+      await versions.updateOne(
+        { _id: v!._id },
+        { $set: { state: ContractVersionState.Accepted } },
+      );
+      const doc = await services.evidence.generateAndStorePdf(
+        v!._id.toString(),
+      );
 
       expect(doc.status).toBe(ContractDocumentStatus.Ready);
       expect(doc.sha256).toMatch(/^[a-f0-9]{64}$/);
@@ -783,17 +1009,26 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
 
       const c = await contracts.findOne({ bookingId: seed.bookingId }).lean();
       const v = await versions.findById(c!.currentVersionId).lean();
-      await versions.updateOne({ _id: v!._id }, { $set: { state: ContractVersionState.Accepted } });
+      await versions.updateOne(
+        { _id: v!._id },
+        { $set: { state: ContractVersionState.Accepted } },
+      );
 
-      const doc = await services.evidence.generateAndStorePdf(v!._id.toString());
+      const doc = await services.evidence.generateAndStorePdf(
+        v!._id.toString(),
+      );
       const storedBuf = storageMap.get(`${doc.bucket}:${doc.storageKey}`)!;
 
       // Client-side SHA-256 calculation
-      const calculatedHash = createHash('sha256').update(storedBuf).digest('hex');
+      const calculatedHash = createHash('sha256')
+        .update(storedBuf)
+        .digest('hex');
       expect(calculatedHash).toBe(doc.sha256);
 
       // Verify integrity method
-      const integrity = await services.evidence.verifyIntegrity(v!._id.toString());
+      const integrity = await services.evidence.verifyIntegrity(
+        v!._id.toString(),
+      );
       expect(integrity.valid).toBe(true);
       expect(integrity.storedSha256).toBe(integrity.actualSha256);
     });
@@ -806,20 +1041,37 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
 
       const c = await contracts.findOne({ bookingId: seed.bookingId }).lean();
       const v = await versions.findById(c!.currentVersionId).lean();
-      await versions.updateOne({ _id: v!._id }, { $set: { state: ContractVersionState.Accepted } });
+      await versions.updateOne(
+        { _id: v!._id },
+        { $set: { state: ContractVersionState.Accepted } },
+      );
       await services.evidence.generateAndStorePdf(v!._id.toString());
 
-      const actorCustomer = { sub: seed.customerId.toString(), roles: ['CUSTOMER'], permissions: [] };
-      const streamRes = await services.evidence.getPdfStream(actorCustomer, c!._id.toString());
+      const actorCustomer = {
+        sub: seed.customerId.toString(),
+        roles: ['CUSTOMER'],
+        permissions: [],
+      };
+      const streamRes = await services.evidence.getPdfStream(
+        actorCustomer,
+        c!._id.toString(),
+      );
       expect(streamRes.filename).toContain('.pdf');
       expect(streamRes.sha256).toBeDefined();
 
-      const evidence = await services.evidence.getEvidence(actorCustomer, c!._id.toString());
+      const evidence = await services.evidence.getEvidence(
+        actorCustomer,
+        c!._id.toString(),
+      );
       expect(evidence.documentStatus).toBe('READY');
       expect(evidence.integrityVerified).toBe(true);
 
       // Unauthorized customer rejected with 404
-      const otherCustomer = { sub: oid().toString(), roles: ['CUSTOMER'], permissions: [] };
+      const otherCustomer = {
+        sub: oid().toString(),
+        roles: ['CUSTOMER'],
+        permissions: [],
+      };
       await expect(
         services.evidence.getPdfStream(otherCustomer, c!._id.toString()),
       ).rejects.toThrow(NotFoundException);
@@ -831,11 +1083,20 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
       for (const [k, v] of seed.snapshots) services.snapshots.set(k, v);
       await prepareBooking(services, seed);
 
-      const contractList = await contracts.find({ bookingId: seed.bookingId }).lean();
-      const actorProvider0 = { sub: seed.providerUserIds[0].toString(), roles: ['PROVIDER'], permissions: [] };
+      const contractList = await contracts
+        .find({ bookingId: seed.bookingId })
+        .lean();
+      const actorProvider0 = {
+        sub: seed.providerUserIds[0].toString(),
+        roles: ['PROVIDER'],
+        permissions: [],
+      };
 
       // Provider 0 lists booking contracts: ONLY sees own contract
-      const list = await services.read.listForBooking(actorProvider0, seed.bookingId.toString());
+      const list = await services.read.listForBooking(
+        actorProvider0,
+        seed.bookingId.toString(),
+      );
       expect(list).toHaveLength(1);
       expect(list[0].contractId).toBe(contractList[0]._id.toString());
 
@@ -845,7 +1106,10 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
       ).rejects.toThrow(NotFoundException);
 
       await expect(
-        services.evidence.getPdfStream(actorProvider0, contractList[1]._id.toString()),
+        services.evidence.getPdfStream(
+          actorProvider0,
+          contractList[1]._id.toString(),
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -853,12 +1117,23 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
       const seed = await seedBooking(1, { flowVersion: 1 });
       const services = buildServices();
 
-      const actor = { sub: seed.customerId.toString(), roles: ['CUSTOMER'], permissions: [] };
-      const readiness = await services.read.readiness(actor, seed.bookingId.toString());
+      const actor = {
+        sub: seed.customerId.toString(),
+        roles: ['CUSTOMER'],
+        permissions: [],
+      };
+      const readiness = await services.read.readiness(
+        actor,
+        seed.bookingId.toString(),
+      );
       expect(readiness.blockers).toContain('LEGACY_BOOKING');
 
       // Legacy booking evaluates to null binding (does not block checkout)
-      const decision = await services.checkout.evaluate(seed.bookingId.toString(), 500000, PaymentPurpose.DepositPayment);
+      const decision = await services.checkout.evaluate(
+        seed.bookingId.toString(),
+        500000,
+        PaymentPurpose.DepositPayment,
+      );
       expect(decision.binding).toBeNull();
     });
 
@@ -866,13 +1141,22 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
       const seed = await seedBooking(1, { bookingType: 'PHOTOGRAPHY' });
       const services = buildServices();
 
-      const actor = { sub: seed.customerId.toString(), roles: ['CUSTOMER'], permissions: [] };
-      const readiness = await services.read.readiness(actor, seed.bookingId.toString());
+      const actor = {
+        sub: seed.customerId.toString(),
+        roles: ['CUSTOMER'],
+        permissions: [],
+      };
+      const readiness = await services.read.readiness(
+        actor,
+        seed.bookingId.toString(),
+      );
       expect(readiness.requirement).toBe('NOT_REQUIRED');
       expect(readiness.providers).toHaveLength(0);
 
       // Context returns empty rental items
-      const context = await services.policy.getContext(seed.bookingId.toString());
+      const context = await services.policy.getContext(
+        seed.bookingId.toString(),
+      );
       expect(context.rentalItems).toHaveLength(0);
     });
 
@@ -882,13 +1166,24 @@ const mechanismHash = createHash('sha256').update(JSON.stringify(SYNTHETIC_APPRO
       const services = buildServices({ contractsV2Enabled: false });
       for (const [k, v] of seed.snapshots) services.snapshots.set(k, v);
 
-      const actor = { sub: seed.customerId.toString(), roles: ['CUSTOMER'], permissions: [] };
-      const readiness = await services.read.readiness(actor, seed.bookingId.toString());
+      const actor = {
+        sub: seed.customerId.toString(),
+        roles: ['CUSTOMER'],
+        permissions: [],
+      };
+      const readiness = await services.read.readiness(
+        actor,
+        seed.bookingId.toString(),
+      );
       expect(readiness.blockers).toContain('FEATURE_DISABLED');
 
       // Checkout guard rejects payment link creation with ServiceUnavailableException
       await expect(
-        services.checkout.evaluate(seed.bookingId.toString(), 500000, PaymentPurpose.DepositPayment),
+        services.checkout.evaluate(
+          seed.bookingId.toString(),
+          500000,
+          PaymentPurpose.DepositPayment,
+        ),
       ).rejects.toThrow(ServiceUnavailableException);
     });
   },

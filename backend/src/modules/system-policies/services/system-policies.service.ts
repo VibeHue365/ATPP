@@ -109,7 +109,11 @@ export class SystemPoliciesService implements OnModuleInit {
     this.validationService.validateCodeAndType(dto.code, dto.type);
     this.validationService.validatePolicyValue(dto.code, dto.value);
 
-    const policy = await this.createDraftWithVersionRetry(actorObjectId, dto, 0);
+    const policy = await this.createDraftWithVersionRetry(
+      actorObjectId,
+      dto,
+      0,
+    );
 
     await this.recordAudit({
       actorId: actorObjectId,
@@ -186,8 +190,16 @@ export class SystemPoliciesService implements OnModuleInit {
     try {
       const activated =
         this.activationMode() === 'TRANSACTION'
-          ? await this.activateWithTransaction(target._id, actorObjectId, dto.reason)
-          : await this.activateWithCompensation(target._id, actorObjectId, dto.reason);
+          ? await this.activateWithTransaction(
+              target._id,
+              actorObjectId,
+              dto.reason,
+            )
+          : await this.activateWithCompensation(
+              target._id,
+              actorObjectId,
+              dto.reason,
+            );
 
       this.resolverService.clearCache(activated.code);
 
@@ -332,7 +344,9 @@ export class SystemPoliciesService implements OnModuleInit {
     try {
       let activated: SystemPolicyDocument | null = null;
       await session.withTransaction(async () => {
-        const target = await this.policyModel.findById(targetId).session(session);
+        const target = await this.policyModel
+          .findById(targetId)
+          .session(session);
         if (!target) throw new NotFoundException(PolicyErrorCode.NotFound);
         this.assertActivatable(target);
 
@@ -344,11 +358,7 @@ export class SystemPoliciesService implements OnModuleInit {
           })
           .session(session);
 
-        await this.deactivateInternalForActivation(
-          oldActive,
-          actorId,
-          session,
-        );
+        await this.deactivateInternalForActivation(oldActive, actorId, session);
         target.status = PolicyStatus.Active;
         target.activatedBy = actorId;
         target.activatedAt = new Date();
@@ -455,9 +465,7 @@ export class SystemPoliciesService implements OnModuleInit {
   }
 
   private assertActivatable(policy: SystemPolicyDocument): void {
-    if (
-      ![PolicyStatus.Draft, PolicyStatus.Inactive].includes(policy.status)
-    ) {
+    if (![PolicyStatus.Draft, PolicyStatus.Inactive].includes(policy.status)) {
       throw new BadRequestException(PolicyErrorCode.ActivateStatusInvalid);
     }
   }

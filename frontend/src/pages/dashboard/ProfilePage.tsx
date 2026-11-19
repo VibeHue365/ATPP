@@ -322,7 +322,7 @@ export const ProfilePage: React.FC = () => {
     };
   }, [bookings, user]);
 
-  // 2. Compute Upcoming Schedule Items for Column 1 (100% Dynamic)
+  // 2. Compute Upcoming Schedule Items for Column 1 (100% Dynamic, Grouped by Date Range)
   const upcomingSchedule: UpcomingScheduleItem[] = useMemo(() => {
     const activeBookings = bookings.filter((b) =>
       ['CONFIRMED', 'DEPOSIT_PAID', 'IN_PROGRESS', 'AWAITING_REVIEW', 'PICKED_UP', 'PICKUP_PENDING'].includes(
@@ -333,16 +333,111 @@ export const ProfilePage: React.FC = () => {
     const list: UpcomingScheduleItem[] = [];
 
     activeBookings.forEach((b) => {
-      (b.items || []).forEach((item: any, idx: number) => {
-        const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE';
-        const rawDate = item.shootDate || item.startDate || item.rentalFrom || b.startDate;
+      const items = b.items || [];
+      const firstItem = items[0] || {};
+      const isBookingCombo =
+        b.bookingType === 'COMBO' ||
+        (items.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId) &&
+          items.some((i: any) => i.itemType === 'PRODUCT' || i.productId));
+      const isPhoto =
+        !isBookingCombo &&
+        (b.bookingType === 'PHOTOGRAPHY' ||
+          (items.length > 0 && items.every((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId)));
+
+      // Combo or Photography: 1 card per booking
+      if (isBookingCombo || isPhoto || items.length === 0) {
+        const rawDate = b.startDate || firstItem.rentalFrom || firstItem.startDate || firstItem.shootDate;
         const dateStr = rawDate ? new Date(rawDate).toLocaleDateString('vi-VN') : 'Sắp tới';
 
         let badgeStatus: UpcomingScheduleItem['badgeStatus'] = 'UPCOMING';
         let badgeLabel = 'SẮP TỚI';
         let countdownText = 'Sắp diễn ra';
 
-        if (b.status === 'PICKED_UP') {
+        if (b.status === 'PICKED_UP' || b.status === 'IN_PROGRESS') {
+          badgeStatus = 'ACTIVE';
+          badgeLabel = isPhoto ? 'ĐANG CHỤP' : 'ĐANG THUÊ';
+          countdownText = isPhoto ? 'Đang trong buổi chụp' : 'Đang trong thời gian thuê';
+        } else if (b.status === 'CONFIRMED' || b.status === 'DEPOSIT_PAID') {
+          badgeStatus = 'URGENT';
+          badgeLabel = 'SẮP ĐẾN HẠN';
+          countdownText = 'Sắp diễn ra';
+        } else if (b.status === 'PICKUP_PENDING') {
+          badgeStatus = 'UPCOMING';
+          badgeLabel = 'CHỜ NHẬN ĐỒ';
+          countdownText = 'Sẵn sàng nhận đồ';
+        } else if (b.status === 'AWAITING_REVIEW') {
+          badgeStatus = 'URGENT';
+          badgeLabel = 'CHỜ DUYỆT ẢNH';
+          countdownText = 'Cần duyệt ảnh';
+        }
+
+        let title = '';
+        if (isBookingCombo) {
+          title = b.comboName || b.comboSnapshot?.name || 'Combo Áo Dài & Chụp Ảnh';
+        } else {
+          const uniqueNames: string[] = [];
+          items.forEach((i: any) => {
+            const pkgObj = i.photographyPackageId && typeof i.photographyPackageId === 'object' ? i.photographyPackageId : null;
+            const name = i.name || pkgObj?.name || i.packageSnapshot?.name || i.productName;
+            if (name && !uniqueNames.includes(name)) uniqueNames.push(name);
+          });
+          const totalQty = items.reduce((sum: number, i: any) => sum + (Number(i.quantity) || 1), 0);
+          if (uniqueNames.length === 1) {
+            title = totalQty > 1 ? `${uniqueNames[0]} (x${totalQty})` : uniqueNames[0];
+          } else if (uniqueNames.length === 2) {
+            title = `${uniqueNames[0]} + ${uniqueNames[1]}`;
+          } else if (uniqueNames.length > 2) {
+            title = `${uniqueNames[0]} + ${items.length - 1} sản phẩm khác`;
+          } else {
+            title = b.productName || 'Gói Chụp Ảnh Cổ Phong';
+          }
+        }
+
+        list.push({
+          id: b._id,
+          bookingId: b._id,
+          bookingCode: b.bookingCode || (isPhoto ? `PS-${b._id.slice(-4)}` : `RT-${b._id.slice(-4)}`),
+          type: isBookingCombo ? 'COMBO' : 'PHOTOSHOOT',
+          title,
+          code: b.bookingCode || (isPhoto ? `PS-${b._id.slice(-4)}` : `RT-${b._id.slice(-4)}`),
+          timeSlot: firstItem.shootTimeSlot || (isPhoto ? '18:00' : undefined),
+          dateStr,
+          countdownText,
+          badgeStatus,
+          badgeLabel,
+          booking: b
+        });
+        return;
+      }
+
+      // Rental Bookings: Group by provider & date range (Tách card lịch nếu khác shop hoặc khác ngày)
+      const getItemDateRangeKey = (it: any) => {
+        const provId = it.providerId ? (typeof it.providerId === 'object' ? it.providerId._id || it.providerId : it.providerId) : '';
+        const start = it.startDate || it.rentalFrom || b.startDate || '';
+        const end = it.endDate || it.rentalTo || b.endDate || '';
+        const startStr = start ? new Date(start).toISOString().split('T')[0] : '';
+        const endStr = end ? new Date(end).toISOString().split('T')[0] : '';
+        return `${provId}_${startStr}_${endStr}`;
+      };
+
+      const dateRangeGroups = new Map<string, any[]>();
+      items.forEach((it: any) => {
+        const key = getItemDateRangeKey(it);
+        const grp = dateRangeGroups.get(key) || [];
+        grp.push(it);
+        dateRangeGroups.set(key, grp);
+      });
+
+      dateRangeGroups.forEach((groupItems, dRangeKey) => {
+        const firstGroupItem = groupItems[0] || {};
+        const rawDate = firstGroupItem.startDate || firstGroupItem.rentalFrom || b.startDate;
+        const dateStr = rawDate ? new Date(rawDate).toLocaleDateString('vi-VN') : 'Sắp tới';
+
+        let badgeStatus: UpcomingScheduleItem['badgeStatus'] = 'UPCOMING';
+        let badgeLabel = 'SẮP TỚI';
+        let countdownText = 'Sắp diễn ra';
+
+        if (b.status === 'PICKED_UP' || b.status === 'IN_PROGRESS') {
           badgeStatus = 'ACTIVE';
           badgeLabel = 'ĐANG THUÊ';
           countdownText = 'Đang trong thời gian thuê';
@@ -350,29 +445,51 @@ export const ProfilePage: React.FC = () => {
           badgeStatus = 'URGENT';
           badgeLabel = 'SẮP ĐẾN HẠN';
           countdownText = 'Sắp diễn ra';
+        } else if (b.status === 'PICKUP_PENDING') {
+          badgeStatus = 'UPCOMING';
+          badgeLabel = 'CHỜ NHẬN ĐỒ';
+          countdownText = 'Sẵn sàng nhận đồ';
         }
 
-        const prodObj = !isPhoto && item.productId && typeof item.productId === 'object' ? item.productId : null;
-        const pkgObj = item.photographyPackageId && typeof item.photographyPackageId === 'object' ? item.photographyPackageId : null;
-        const itemTitle =
-          item.name ||
-          prodObj?.name ||
-          pkgObj?.name ||
-          item.packageSnapshot?.name ||
-          item.productName ||
-          b.productName ||
-          (isPhoto ? 'Gói Chụp Ảnh Cổ Phong' : 'Áo Dài Di Sản');
+        const uniqueNames: string[] = [];
+        groupItems.forEach((i: any) => {
+          const prodObj = i.productId && typeof i.productId === 'object' ? i.productId : null;
+          const name = i.name || prodObj?.name || i.productName;
+          if (name && !uniqueNames.includes(name)) uniqueNames.push(name);
+        });
+        const totalQty = groupItems.reduce((sum: number, i: any) => sum + (Number(i.quantity) || 1), 0);
+
+        let title = '';
+        if (uniqueNames.length === 1) {
+          title = totalQty > 1 ? `${uniqueNames[0]} (x${totalQty})` : uniqueNames[0];
+        } else if (uniqueNames.length === 2) {
+          title = `${uniqueNames[0]} + ${uniqueNames[1]}`;
+        } else if (uniqueNames.length > 2) {
+          title = `${uniqueNames[0]} + ${groupItems.length - 1} sản phẩm khác`;
+        } else {
+          title = b.productName || 'Áo Dài Di Sản';
+        }
+
+        const uniqueSizes: string[] = [];
+        const uniqueColors: string[] = [];
+        groupItems.forEach((i: any) => {
+          const s = i.selectedSize || i.size;
+          const c = i.selectedColor || i.color;
+          if (s && !uniqueSizes.includes(s)) uniqueSizes.push(s);
+          if (c && !uniqueColors.includes(c)) uniqueColors.push(c);
+        });
+        const size = uniqueSizes.length > 0 ? `Size ${uniqueSizes.join(', ')}` : undefined;
+        const color = uniqueColors.length > 0 ? `Màu ${uniqueColors.join(', ')}` : undefined;
 
         list.push({
-          id: `${b._id}-${idx}`,
+          id: `${b._id}-${dRangeKey}`,
           bookingId: b._id,
           bookingCode: b.bookingCode || `RT-${b._id.slice(-4)}`,
-          type: isPhoto ? 'PHOTOSHOOT' : 'RENTAL',
-          title: itemTitle,
+          type: 'RENTAL',
+          title,
           code: b.bookingCode || `RT-${b._id.slice(-4)}`,
-          size: item.selectedSize || item.size || 'M',
-          color: item.selectedColor || item.color,
-          timeSlot: item.shootTimeSlot || (isPhoto ? '18:00' : undefined),
+          size,
+          color,
           dateStr,
           countdownText,
           badgeStatus,
@@ -385,7 +502,7 @@ export const ProfilePage: React.FC = () => {
     return list;
   }, [bookings]);
 
-  // 3. Compute Recent Orders for Column 2 (100% Dynamic)
+  // 3. Compute Recent Orders for Column 2 (100% Dynamic, Grouped by Booking)
   const recentOrders: RecentOrderItem[] = useMemo(() => {
     const statusBadges: Record<string, { label: string; bg: string; color: string }> = {
       PENDING_PAYMENT: { label: 'Chờ thanh toán', bg: '#FEF3C7', color: '#B45309' },
@@ -399,24 +516,47 @@ export const ProfilePage: React.FC = () => {
     };
 
     return bookings.slice(0, 4).map((b) => {
-      const firstItem = b.items?.[0] || {};
-      const isPhoto = firstItem.itemType === 'PHOTOGRAPHY_PACKAGE';
+      const items = b.items || [];
+      const isBookingCombo =
+        b.bookingType === 'COMBO' ||
+        (items.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId) &&
+          items.some((i: any) => i.itemType === 'PRODUCT' || i.productId));
+      const isPhoto =
+        !isBookingCombo &&
+        (b.bookingType === 'PHOTOGRAPHY' ||
+          (items.length > 0 && items.every((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId)));
+
       const statusInfo = statusBadges[b.status] || {
         label: b.status,
         bg: '#F2F4F4',
         color: '#574D4F'
       };
 
-      const prodObj = !isPhoto && firstItem.productId && typeof firstItem.productId === 'object' ? firstItem.productId : null;
-      const pkgObj = firstItem.photographyPackageId && typeof firstItem.photographyPackageId === 'object' ? firstItem.photographyPackageId : null;
-      const orderTitle =
-        firstItem.name ||
-        prodObj?.name ||
-        pkgObj?.name ||
-        firstItem.packageSnapshot?.name ||
-        firstItem.productName ||
-        b.productName ||
-        (isPhoto ? 'Gói Chụp Ảnh Nghệ Thuật' : 'Áo Dài Di Sản');
+      let orderTitle = '';
+      if (isBookingCombo) {
+        orderTitle = b.comboName || b.comboSnapshot?.name || 'Combo Áo Dài & Chụp Ảnh';
+      } else {
+        const uniqueNames: string[] = [];
+        items.forEach((i: any) => {
+          const prodObj = !isPhoto && i.productId && typeof i.productId === 'object' ? i.productId : null;
+          const pkgObj = isPhoto && i.photographyPackageId && typeof i.photographyPackageId === 'object' ? i.photographyPackageId : null;
+          const name = i.name || prodObj?.name || pkgObj?.name || i.packageSnapshot?.name || i.productName;
+          if (name && !uniqueNames.includes(name)) {
+            uniqueNames.push(name);
+          }
+        });
+        const totalQty = items.reduce((sum: number, i: any) => sum + (Number(i.quantity) || 1), 0);
+
+        if (uniqueNames.length === 1) {
+          orderTitle = totalQty > 1 ? `${uniqueNames[0]} (x${totalQty})` : uniqueNames[0];
+        } else if (uniqueNames.length === 2) {
+          orderTitle = `${uniqueNames[0]} + ${uniqueNames[1]}`;
+        } else if (uniqueNames.length > 2) {
+          orderTitle = `${uniqueNames[0]} + ${items.length - 1} sản phẩm khác`;
+        } else {
+          orderTitle = b.productName || (isPhoto ? 'Gói Chụp Ảnh Nghệ Thuật' : 'Áo Dài Di Sản');
+        }
+      }
 
       return {
         id: b._id,

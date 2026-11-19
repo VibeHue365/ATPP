@@ -17,11 +17,15 @@ import { AnalyticsModule } from '../analytics/analytics.module';
  * and verification domain.
  */
 @Module({
-  imports: [ProvidersModule, ProductsModule, SmartTaggingModule, BookingsModule, CategoriesModule, AnalyticsModule],
-  controllers: [
-    PhotographersController,
-    ProviderPhotographyPackagesController,
+  imports: [
+    ProvidersModule,
+    ProductsModule,
+    SmartTaggingModule,
+    BookingsModule,
+    CategoriesModule,
+    AnalyticsModule,
   ],
+  controllers: [PhotographersController, ProviderPhotographyPackagesController],
   providers: [
     PhotographersService,
     PhotographyPackagesService,

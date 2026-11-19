@@ -1,7 +1,11 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Banner, BannerDocument, BannerPlacement } from '../schemas/banner.schema';
+import {
+  Banner,
+  BannerDocument,
+  BannerPlacement,
+} from '../schemas/banner.schema';
 import { UpdateBannerDto } from '../dto/banner.dto';
 import { PublicMediaService } from '../../storage/services/public-media.service';
 
@@ -82,15 +86,24 @@ export class BannersService {
   /**
    * Cập nhật hoặc tạo mới banner (Atomic Upsert + Clean-up ảnh cũ)
    */
-  async updateBanner(dto: UpdateBannerDto, adminId?: string): Promise<BannerDocument> {
+  async updateBanner(
+    dto: UpdateBannerDto,
+    adminId?: string,
+  ): Promise<BannerDocument> {
     // 1. Kiểm tra ảnh cũ để xóa rác Cloudinary nếu ảnh bị thay thế
-    const existing = await this.bannerModel.findOne({ placement: dto.placement }).lean();
+    const existing = await this.bannerModel
+      .findOne({ placement: dto.placement })
+      .lean();
     if (existing?.imageUrl && existing.imageUrl !== dto.imageUrl) {
       try {
         await this.publicMediaService.deleteByUrl(existing.imageUrl);
-        this.logger.log(`Deleted replaced banner image from storage: ${existing.imageUrl}`);
+        this.logger.log(
+          `Deleted replaced banner image from storage: ${existing.imageUrl}`,
+        );
       } catch (err: any) {
-        this.logger.warn(`Failed to clean up old banner image ${existing.imageUrl}: ${err?.message}`);
+        this.logger.warn(
+          `Failed to clean up old banner image ${existing.imageUrl}: ${err?.message}`,
+        );
       }
     }
 
@@ -104,7 +117,10 @@ export class BannersService {
           subtitle: dto.subtitle ?? '',
           linkUrl: dto.linkUrl ?? '',
           isActive: dto.isActive !== undefined ? dto.isActive : true,
-          updatedBy: adminId && Types.ObjectId.isValid(adminId) ? new Types.ObjectId(adminId) : null,
+          updatedBy:
+            adminId && Types.ObjectId.isValid(adminId)
+              ? new Types.ObjectId(adminId)
+              : null,
         },
       },
       { upsert: true, new: true, setDefaultsOnInsert: true },
@@ -119,17 +135,23 @@ export class BannersService {
   /**
    * Upload ảnh banner lên Cloudinary với kiểm tra Magic Bytes
    */
-  async uploadBannerImage(file: Express.Multer.File): Promise<{ url: string; key: string }> {
+  async uploadBannerImage(
+    file: Express.Multer.File,
+  ): Promise<{ url: string; key: string }> {
     return this.publicMediaService.uploadImage('banners', file);
   }
 
   /**
    * Xóa banner và dọn rác ảnh
    */
-  async deleteBanner(placement: BannerPlacement): Promise<{ success: boolean }> {
+  async deleteBanner(
+    placement: BannerPlacement,
+  ): Promise<{ success: boolean }> {
     const existing = await this.bannerModel.findOne({ placement });
     if (!existing) {
-      throw new NotFoundException(`Banner for placement ${placement} not found`);
+      throw new NotFoundException(
+        `Banner for placement ${placement} not found`,
+      );
     }
 
     if (existing.imageUrl) {

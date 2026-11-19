@@ -42,11 +42,9 @@ function createProviderAnalytics(
         }
       : options.provider;
   const counts = options.counts ?? { all: 0, completed: 0, cancelled: 0 };
-  const inventoryAggregate = jest
-    .fn()
-    .mockReturnValue({
-      then: (fn: (rows: Row[]) => unknown) => Promise.resolve(fn([])),
-    });
+  const inventoryAggregate = jest.fn().mockReturnValue({
+    then: (fn: (rows: Row[]) => unknown) => Promise.resolve(fn([])),
+  });
   const bookingModel = {
     find: jest.fn().mockResolvedValue(options.bookings ?? []),
     countDocuments: jest.fn(async (filter: Row) =>
@@ -309,14 +307,12 @@ function createAdminStats(options: Row = {}) {
     ),
     aggregate: jest.fn().mockResolvedValue(options.bookingAggregate ?? []),
     db: {
-      model: jest
-        .fn()
-        .mockReturnValue({
-          countDocuments: jest
-            .fn()
-            .mockResolvedValue((options.transfers ?? []).length),
-          find: () => lean(options.transfers ?? []),
-        }),
+      model: jest.fn().mockReturnValue({
+        countDocuments: jest
+          .fn()
+          .mockResolvedValue((options.transfers ?? []).length),
+        find: () => lean(options.transfers ?? []),
+      }),
     },
   };
   const service = Object.create(

@@ -121,7 +121,9 @@ describe('WeatherAdvisorController', () => {
         timeSlot: '14:00-16:00',
       });
 
-      expect(mockHeritageSpotsService.findById).toHaveBeenCalledWith('spot-123');
+      expect(mockHeritageSpotsService.findById).toHaveBeenCalledWith(
+        'spot-123',
+      );
       expect(result.spot.name).toBe('Đại Nội Huế');
       expect(result.assessment.slotScore).toBe(9.0);
     });

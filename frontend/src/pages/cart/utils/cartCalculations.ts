@@ -117,9 +117,19 @@ export const enrichCartItems = (cart: CartItem[], realProductList: any[]): Enric
             ? baseHourlyRate * hours
             : dbProduct.basePrice * countRentalDays(pricingFrom, pricingTo);
 
+        const provId = dbProduct.providerId?._id
+          ? dbProduct.providerId._id.toString()
+          : typeof dbProduct.providerId === 'string'
+            ? dbProduct.providerId
+            : item.providerId;
+        const provName =
+          dbProduct.providerId?.businessName || dbProduct.providerId?.name || item.providerName;
+
         return {
           ...item,
           productId: dbProduct._id ? dbProduct._id.toString() : item.productId,
+          providerId: provId,
+          providerName: provName,
           depositAmount: dbProduct.depositAmount,
           basePrice,
           originalPrice: originalBasePrice,

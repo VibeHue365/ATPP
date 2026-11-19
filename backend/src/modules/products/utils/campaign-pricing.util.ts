@@ -41,11 +41,15 @@ export function isCampaignDay(
 ): boolean {
   if (!campaign) return false;
   const key = toVnDayKey(day);
-  return key >= toVnDayKey(campaign.startDate) && key <= toVnDayKey(campaign.endDate);
+  return (
+    key >= toVnDayKey(campaign.startDate) && key <= toVnDayKey(campaign.endDate)
+  );
 }
 
 /** Dạng chiến dịch trả về cho client (listing, chi tiết sản phẩm, gian hàng, banner). */
-export function toPublicCampaign(campaign: CampaignPricingRule & { occasion: string }) {
+export function toPublicCampaign(
+  campaign: CampaignPricingRule & { occasion: string },
+) {
   return {
     occasion: campaign.occasion,
     type: campaign.type ?? 'DISCOUNT',
@@ -68,12 +72,18 @@ export function applyCampaignToRate(
 }
 
 /** Giá giờ gốc: 30% giá ngày (quy ước hiện hành), trước khi áp chiến dịch. */
-export function resolveHourlyRate(basePrice: number, hourlyPrice?: number | null): number {
+export function resolveHourlyRate(
+  basePrice: number,
+  hourlyPrice?: number | null,
+): number {
   return hourlyPrice || Math.round(basePrice * 0.3) || 80000;
 }
 
 /** Số ngày thuê tính tiền, giữ đúng công thức cũ: tính cả ngày đầu và ngày cuối. */
-export function countRentalDays(from: Date | string, to: Date | string): number {
+export function countRentalDays(
+  from: Date | string,
+  to: Date | string,
+): number {
   const start = new Date(from);
   const end = new Date(to);
   return Math.ceil(Math.abs(end.getTime() - start.getTime()) / DAY_MS) + 1;
@@ -90,7 +100,11 @@ export function calculateDailyRentalTotal(
   const start = new Date(from).getTime();
   let total = 0;
   for (let i = 0; i < days; i += 1) {
-    total += applyCampaignToRate(basePrice, campaign, new Date(start + i * DAY_MS));
+    total += applyCampaignToRate(
+      basePrice,
+      campaign,
+      new Date(start + i * DAY_MS),
+    );
   }
   return { total, days };
 }

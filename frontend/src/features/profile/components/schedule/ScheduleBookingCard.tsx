@@ -41,14 +41,32 @@ export const ScheduleBookingCard: React.FC<ScheduleBookingCardProps> = ({
   const prodItem = booking.items?.find((i: any) => i.itemType === 'PRODUCT' || i.productId);
   const pkgItem = booking.items?.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId);
 
-  const item = (isCombo ? prodItem : null) || booking.items?.[0] || {};
+  const items = booking.items || [];
+  const item = (isCombo ? prodItem : null) || items[0] || {};
   const isPhoto = !isCombo && item.itemType === 'PHOTOGRAPHY_PACKAGE';
   const pkgObj = (isCombo ? pkgItem?.photographyPackageId : item.photographyPackageId) && typeof (isCombo ? pkgItem?.photographyPackageId : item.photographyPackageId) === 'object' ? (isCombo ? pkgItem.photographyPackageId : item.photographyPackageId) : null;
   const prodObj = (isCombo ? prodItem?.productId : (!isPhoto && item.productId)) && typeof (isCombo ? prodItem?.productId : item.productId) === 'object' ? (isCombo ? prodItem.productId : item.productId) : null;
 
-  const itemName = isCombo
-    ? (booking.comboName || (pkgObj?.name && prodObj?.name ? `${pkgObj.name} • ${prodObj.name}` : null) || booking.name || 'Combo Áo Dài & Chụp Ảnh Nghệ Thuật')
-    : (prodObj?.name || pkgObj?.name || item.name || (isPhoto ? 'Gói Chụp Ảnh Cổ Phong' : 'Áo Dài Nhật Bình'));
+  let itemName = '';
+  if (isCombo) {
+    itemName = booking.comboName || (pkgObj?.name && prodObj?.name ? `${pkgObj.name} • ${prodObj.name}` : null) || booking.name || 'Combo Áo Dài & Chụp Ảnh Nghệ Thuật';
+  } else {
+    const uniqueNames: string[] = [];
+    items.forEach((i: any) => {
+      const p = !isPhoto && i.productId && typeof i.productId === 'object' ? i.productId : null;
+      const k = isPhoto && i.photographyPackageId && typeof i.photographyPackageId === 'object' ? i.photographyPackageId : null;
+      const n = p?.name || k?.name || i.packageSnapshot?.name || i.name || i.productName;
+      if (n && !uniqueNames.includes(n)) uniqueNames.push(n);
+    });
+    const totalQty = items.reduce((sum: number, i: any) => sum + (Number(i.quantity) || 1), 0);
+    if (uniqueNames.length === 1) {
+      itemName = totalQty > 1 ? `${uniqueNames[0]} (x${totalQty})` : uniqueNames[0];
+    } else if (uniqueNames.length > 1) {
+      itemName = `${uniqueNames[0]} + ${items.length - 1} sản phẩm khác`;
+    } else {
+      itemName = prodObj?.name || pkgObj?.name || item.name || (isPhoto ? 'Gói Chụp Ảnh Cổ Phong' : 'Áo Dài Nhật Bình');
+    }
+  }
   const itemImage = prodObj?.images?.[0] || pkgObj?.coverImage || item.image || item.productImage;
   const providerName =
     booking.providerIds?.[0]?.businessName ||

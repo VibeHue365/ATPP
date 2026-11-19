@@ -76,7 +76,10 @@ const template = {
     let currentProviderUsers: string[] = [];
     let otherVersionIds: string[] = [];
     let readsService: ContractReadService;
-    let evidenceServiceMock: { getPdfStream: jest.Mock; getEvidence: jest.Mock };
+    let evidenceServiceMock: {
+      getPdfStream: jest.Mock;
+      getEvidence: jest.Mock;
+    };
     const roles = new Map<string, { roles: string[]; permissions: string[] }>();
     const sessions = new Set<string>();
     const signer = new JwtService({ secret });
@@ -343,24 +346,34 @@ const template = {
       );
       readsService = reads;
       evidenceServiceMock = {
-        getPdfStream: jest.fn().mockImplementation((user: any, _contractId: string, versionId?: string) => {
-          if (versionId && otherVersionIds.includes(versionId)) {
-            throw new NotFoundException('CONTRACT_VERSION_NOT_FOUND');
-          }
-          if (user.roles?.includes('ADMIN')) {
-            // Admin allowed
-          } else if (roles.get(user.sub)?.roles?.includes('CUSTOMER')) {
-            if (user.sub !== currentCustomer?.toString()) throw new NotFoundException('CONTRACT_NOT_FOUND');
-          } else if (roles.get(user.sub)?.roles?.includes('PROVIDER')) {
-            if (!currentProviderUsers.includes(user.sub)) throw new NotFoundException('CONTRACT_NOT_FOUND');
-          }
-          return Promise.resolve({
-            stream: Readable.from(Buffer.from('%PDF-1.4 test stream %%EOF')),
-            filename: 'test-contract.pdf',
-            sha256: 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
-            contentHash: '11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff',
-          });
-        }),
+        getPdfStream: jest
+          .fn()
+          .mockImplementation(
+            (user: any, _contractId: string, versionId?: string) => {
+              if (versionId && otherVersionIds.includes(versionId)) {
+                throw new NotFoundException('CONTRACT_VERSION_NOT_FOUND');
+              }
+              if (user.roles?.includes('ADMIN')) {
+                // Admin allowed
+              } else if (roles.get(user.sub)?.roles?.includes('CUSTOMER')) {
+                if (user.sub !== currentCustomer?.toString())
+                  throw new NotFoundException('CONTRACT_NOT_FOUND');
+              } else if (roles.get(user.sub)?.roles?.includes('PROVIDER')) {
+                if (!currentProviderUsers.includes(user.sub))
+                  throw new NotFoundException('CONTRACT_NOT_FOUND');
+              }
+              return Promise.resolve({
+                stream: Readable.from(
+                  Buffer.from('%PDF-1.4 test stream %%EOF'),
+                ),
+                filename: 'test-contract.pdf',
+                sha256:
+                  'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+                contentHash:
+                  '11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff',
+              });
+            },
+          ),
         getEvidence: jest.fn().mockResolvedValue({
           contractId: 'mock-contract-id',
           contractCode: 'DC-TEST-001',
@@ -691,7 +704,9 @@ const template = {
 
       // IDOR tamper check: requesting version belonging to another contract returns 404
       await request(server)
-        .get(`/contracts/${contractId}/versions/${otherData.versionIds[0].toString()}/pdf`)
+        .get(
+          `/contracts/${contractId}/versions/${otherData.versionIds[0].toString()}/pdf`,
+        )
         .set('Authorization', `Bearer ${token(data.customer)}`)
         .expect(404);
 

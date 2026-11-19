@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import {
   ChartSource,
   MeasurementType,
@@ -11,35 +15,29 @@ function setup() {
     getOwned: jest
       .fn()
       .mockResolvedValue({ version: 0, sizeChart: null, sizes: ['M'] }),
-    saveDraft: jest
-      .fn()
-      .mockImplementation((_u, _p, dto) =>
-        Promise.resolve({
-          version: dto.expectedVersion + 1,
-          sizeChart: { ...dto, status: 'DRAFT' },
-        }),
-      ),
+    saveDraft: jest.fn().mockImplementation((_u, _p, dto) =>
+      Promise.resolve({
+        version: dto.expectedVersion + 1,
+        sizeChart: { ...dto, status: 'DRAFT' },
+      }),
+    ),
   };
   const media = {
-    uploadImage: jest
-      .fn()
-      .mockResolvedValue({
-        url: 'https://res.cloudinary.com/example/image/upload/new.png',
-      }),
+    uploadImage: jest.fn().mockResolvedValue({
+      url: 'https://res.cloudinary.com/example/image/upload/new.png',
+    }),
     deleteByUrl: jest.fn().mockResolvedValue(undefined),
   };
   const config = { get: jest.fn().mockReturnValue('http://127.0.0.1:8000') };
-  const fetchMock = jest
-    .spyOn(global, 'fetch')
-    .mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        lengthUnit: 'CM',
-        weightUnit: null,
-        rows: [{ size: 'M', chest: { min: 86, max: 89 } }],
-        warnings: ['Kiểm tra lại'],
-      }),
-    } as Response);
+  const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      lengthUnit: 'CM',
+      weightUnit: null,
+      rows: [{ size: 'M', chest: { min: 86, max: 89 } }],
+      warnings: ['Kiểm tra lại'],
+    }),
+  } as Response);
   return {
     charts,
     media,
@@ -122,7 +120,11 @@ describe('provider image extraction', () => {
         lengthUnit: 'CM',
         rows: [
           { size: 'S', chest: { min: 80, max: 83 } },
-          { size: 'L', chest: { min: 90, max: 94 }, length: { min: 142, max: 142 } },
+          {
+            size: 'L',
+            chest: { min: 90, max: 94 },
+            length: { min: 142, max: 142 },
+          },
           { size: 'XL', chest: { min: 95, max: 99 } },
         ],
       }),
@@ -131,9 +133,15 @@ describe('provider image extraction', () => {
     expect(result.extractionFailed).toBe(false);
     expect(result.sizes).toEqual(['L']);
     expect(charts.saveDraft.mock.calls[0][2].rows).toEqual([
-      expect.objectContaining({ size: 'L', chest: { min: 90, max: 94 }, length: { min: 142, max: 142 } }),
+      expect.objectContaining({
+        size: 'L',
+        chest: { min: 90, max: 94 },
+        length: { min: 142, max: 142 },
+      }),
     ]);
-    expect(charts.saveDraft.mock.calls[0][2].requiredMeasurements).toEqual(['chest']);
+    expect(charts.saveDraft.mock.calls[0][2].requiredMeasurements).toEqual([
+      'chest',
+    ]);
     expect(result.warnings).toContain(
       'Đã bỏ qua 2 size trong ảnh vì sản phẩm không có biến thể tương ứng.',
     );
@@ -142,30 +150,49 @@ describe('provider image extraction', () => {
     const { service, charts, fetchMock } = setup();
     fetchMock.mockResolvedValue({
       ok: true,
-      json: async () => ({ lengthUnit: 'CM', rows: [{
-        size: 'M', chest: { min: 86, max: 89 }, shoulder: { min: 38, max: 40 }, bicep: { min: 27, max: 30 },
-      }] }),
+      json: async () => ({
+        lengthUnit: 'CM',
+        rows: [
+          {
+            size: 'M',
+            chest: { min: 86, max: 89 },
+            shoulder: { min: 38, max: 40 },
+            bicep: { min: 27, max: 30 },
+          },
+        ],
+      }),
     } as Response);
     await service.uploadAndExtract('u', 'p', dto, file);
     expect(charts.saveDraft.mock.calls[0][2].rows[0]).toMatchObject({
-      shoulder: { min: 38, max: 40 }, bicep: { min: 27, max: 30 },
+      shoulder: { min: 38, max: 40 },
+      bicep: { min: 27, max: 30 },
     });
   });
   it('preselects only measurements complete in every product size', async () => {
     const { service, charts, fetchMock } = setup();
-    charts.getOwned.mockResolvedValue({ version: 0, sizeChart: null, sizes: ['S', 'M'] });
+    charts.getOwned.mockResolvedValue({
+      version: 0,
+      sizeChart: null,
+      sizes: ['S', 'M'],
+    });
     fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({
         lengthUnit: 'CM',
         rows: [
-          { size: 'S', chest: { min: 80, max: 84 }, waist: { min: 62, max: 66 } },
+          {
+            size: 'S',
+            chest: { min: 80, max: 84 },
+            waist: { min: 62, max: 66 },
+          },
           { size: 'M', chest: { min: 84, max: 88 } },
         ],
       }),
     } as Response);
     await service.uploadAndExtract('u', 'p', dto, file);
-    expect(charts.saveDraft.mock.calls[0][2].requiredMeasurements).toEqual(['chest']);
+    expect(charts.saveDraft.mock.calls[0][2].requiredMeasurements).toEqual([
+      'chest',
+    ]);
   });
   it('preselects all three complete body circumferences from the image', async () => {
     const { service, charts, fetchMock } = setup();
@@ -173,18 +200,22 @@ describe('provider image extraction', () => {
       ok: true,
       json: async () => ({
         lengthUnit: 'CM',
-        rows: [{
-          size: 'M',
-          chest: { min: 84, max: 88 },
-          waist: { min: 66, max: 70 },
-          hip: { min: 90, max: 94 },
-          length: { min: 140, max: 140 },
-        }],
+        rows: [
+          {
+            size: 'M',
+            chest: { min: 84, max: 88 },
+            waist: { min: 66, max: 70 },
+            hip: { min: 90, max: 94 },
+            length: { min: 140, max: 140 },
+          },
+        ],
       }),
     } as Response);
     await service.uploadAndExtract('u', 'p', dto, file);
     expect(charts.saveDraft.mock.calls[0][2].requiredMeasurements).toEqual([
-      'chest', 'waist', 'hip',
+      'chest',
+      'waist',
+      'hip',
     ]);
   });
   it('uses height and weight only when both are complete and no body circumference is complete', async () => {
@@ -194,11 +225,20 @@ describe('provider image extraction', () => {
       json: async () => ({
         lengthUnit: 'CM',
         weightUnit: 'KG',
-        rows: [{ size: 'M', height: { min: 160, max: 165 }, weight: { min: 50, max: 55 } }],
+        rows: [
+          {
+            size: 'M',
+            height: { min: 160, max: 165 },
+            weight: { min: 50, max: 55 },
+          },
+        ],
       }),
     } as Response);
     await service.uploadAndExtract('u', 'p', dto, file);
-    expect(charts.saveDraft.mock.calls[0][2].requiredMeasurements).toEqual(['height', 'weight']);
+    expect(charts.saveDraft.mock.calls[0][2].requiredMeasurements).toEqual([
+      'height',
+      'weight',
+    ]);
   });
   it('keeps the existing chart when no extracted size matches the product', async () => {
     const { service, charts, fetchMock, media } = setup();
@@ -223,10 +263,22 @@ describe('provider image extraction', () => {
   });
   it('keeps the previous chart and version when AI times out', async () => {
     const { service, charts, fetchMock, media } = setup();
-    const previous = { status: 'CONFIRMED', rows: [{ size: 'M', chest: { min: 84, max: 88 } }] };
-    charts.getOwned.mockResolvedValue({ version: 3, sizeChart: previous, sizes: ['M'] });
+    const previous = {
+      status: 'CONFIRMED',
+      rows: [{ size: 'M', chest: { min: 84, max: 88 } }],
+    };
+    charts.getOwned.mockResolvedValue({
+      version: 3,
+      sizeChart: previous,
+      sizes: ['M'],
+    });
     fetchMock.mockRejectedValue(new Error('timeout'));
-    const result = await service.uploadAndExtract('u', 'p', { ...dto, expectedVersion: 3 }, file);
+    const result = await service.uploadAndExtract(
+      'u',
+      'p',
+      { ...dto, expectedVersion: 3 },
+      file,
+    );
     expect(result).toMatchObject({
       version: 3,
       sizes: ['M'],
@@ -241,7 +293,11 @@ describe('provider image extraction', () => {
     const { service, charts, fetchMock } = setup();
     fetchMock.mockRejectedValue(new TypeError('fetch failed'));
     const result = await service.uploadAndExtract('u', 'p', dto, file);
-    expect(result).toMatchObject({ extractionFailed: true, sizeChart: null, version: 0 });
+    expect(result).toMatchObject({
+      extractionFailed: true,
+      sizeChart: null,
+      version: 0,
+    });
     expect(result.warnings[0]).toContain('khởi động ai-service');
     expect(charts.saveDraft).not.toHaveBeenCalled();
   });
@@ -249,39 +305,58 @@ describe('provider image extraction', () => {
     const { service, charts, fetchMock } = setup();
     fetchMock.mockResolvedValue({ ok: false, status: 429 } as Response);
     const result = await service.uploadAndExtract('u', 'p', dto, file);
-    expect(result).toMatchObject({ extractionFailed: true, sizeChart: null, version: 0 });
+    expect(result).toMatchObject({
+      extractionFailed: true,
+      sizeChart: null,
+      version: 0,
+    });
     expect(result.warnings[0]).toContain('hết hạn mức AI');
     expect(charts.saveDraft).not.toHaveBeenCalled();
   });
   it.each([
     { status: 503, message: 'Gemini tạm quá tải hoặc không khả dụng (503)' },
     { status: 504, message: 'Gemini phản hồi quá thời gian (504)' },
-  ])('keeps the previous chart when AI returns $status', async ({ status, message }) => {
-    const { service, charts, fetchMock, media } = setup();
-    const previous = {
-      status: 'CONFIRMED',
-      imageUrl: 'https://res.cloudinary.com/example/image/upload/previous.png',
-      rows: [{ size: 'M', chest: { min: 84, max: 88 } }],
-    };
-    charts.getOwned.mockResolvedValue({ version: 3, sizeChart: previous, sizes: ['M'] });
-    fetchMock.mockResolvedValue({ ok: false, status } as Response);
+  ])(
+    'keeps the previous chart when AI returns $status',
+    async ({ status, message }) => {
+      const { service, charts, fetchMock, media } = setup();
+      const previous = {
+        status: 'CONFIRMED',
+        imageUrl:
+          'https://res.cloudinary.com/example/image/upload/previous.png',
+        rows: [{ size: 'M', chest: { min: 84, max: 88 } }],
+      };
+      charts.getOwned.mockResolvedValue({
+        version: 3,
+        sizeChart: previous,
+        sizes: ['M'],
+      });
+      fetchMock.mockResolvedValue({ ok: false, status } as Response);
 
-    const result = await service.uploadAndExtract('u', 'p', { ...dto, expectedVersion: 3 }, file);
+      const result = await service.uploadAndExtract(
+        'u',
+        'p',
+        { ...dto, expectedVersion: 3 },
+        file,
+      );
 
-    expect(result).toMatchObject({
-      version: 3,
-      sizeChart: previous,
-      extractionFailed: true,
-    });
-    expect(result.warnings[0]).toContain(message);
-    expect(result.warnings[0]).toContain('Ảnh mới chưa được lưu');
-    expect(charts.saveDraft).not.toHaveBeenCalled();
-    expect(media.uploadImage).not.toHaveBeenCalled();
-    expect(media.deleteByUrl).not.toHaveBeenCalled();
-  });
+      expect(result).toMatchObject({
+        version: 3,
+        sizeChart: previous,
+        extractionFailed: true,
+      });
+      expect(result.warnings[0]).toContain(message);
+      expect(result.warnings[0]).toContain('Ảnh mới chưa được lưu');
+      expect(charts.saveDraft).not.toHaveBeenCalled();
+      expect(media.uploadImage).not.toHaveBeenCalled();
+      expect(media.deleteByUrl).not.toHaveBeenCalled();
+    },
+  );
   it('does not report a database failure after OCR as an image reading failure', async () => {
     const { service, charts, media } = setup();
-    charts.saveDraft.mockRejectedValue(new BadRequestException('Invalid saved chart'));
+    charts.saveDraft.mockRejectedValue(
+      new BadRequestException('Invalid saved chart'),
+    );
     await expect(service.uploadAndExtract('u', 'p', dto, file)).rejects.toThrow(
       BadRequestException,
     );

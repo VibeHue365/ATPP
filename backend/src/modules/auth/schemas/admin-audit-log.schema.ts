@@ -27,7 +27,10 @@ export enum AdminAuditAction {
   SettlementRegenerated = 'SETTLEMENT_REGENERATED',
 }
 
-@Schema({ collection: 'admin_audit_logs', timestamps: { createdAt: true, updatedAt: false } })
+@Schema({
+  collection: 'admin_audit_logs',
+  timestamps: { createdAt: true, updatedAt: false },
+})
 export class AdminAuditLog {
   @Prop({ type: Types.ObjectId, ref: 'User', default: null, index: true })
   actorId?: Types.ObjectId | null;
@@ -35,7 +38,13 @@ export class AdminAuditLog {
   @Prop({ type: Types.ObjectId, ref: 'User', default: null, index: true })
   targetUserId?: Types.ObjectId | null;
 
-  @Prop({ type: String, default: null, trim: true, uppercase: true, index: true })
+  @Prop({
+    type: String,
+    default: null,
+    trim: true,
+    uppercase: true,
+    index: true,
+  })
   targetRoleCode?: string | null;
 
   @Prop({ type: Types.ObjectId, default: null, index: true })
@@ -68,8 +77,7 @@ export class AdminAuditLog {
   createdAt?: Date;
 }
 
-export const AdminAuditLogSchema =
-  SchemaFactory.createForClass(AdminAuditLog);
+export const AdminAuditLogSchema = SchemaFactory.createForClass(AdminAuditLog);
 AdminAuditLogSchema.index({ createdAt: -1 });
 AdminAuditLogSchema.index({ actorId: 1, createdAt: -1 });
 AdminAuditLogSchema.index({ targetUserId: 1, createdAt: -1 });

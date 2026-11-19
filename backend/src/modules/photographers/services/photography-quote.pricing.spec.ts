@@ -60,16 +60,13 @@ describe('calculatePhotographyQuote', () => {
 
   it('requires explicit session and day entitlements for PER_BOOKING', () => {
     expect(() =>
-      calculatePhotographyQuote(
-        { ...basePolicy, pricingUnit: 'PER_BOOKING' },
-        [
-          {
-            clientId: 's1',
-            providerLocalDate: '2026-07-20',
-            durationMinutes: 120,
-          },
-        ],
-      ),
+      calculatePhotographyQuote({ ...basePolicy, pricingUnit: 'PER_BOOKING' }, [
+        {
+          clientId: 's1',
+          providerLocalDate: '2026-07-20',
+          durationMinutes: 120,
+        },
+      ]),
     ).toThrow(PhotographyPricingPolicyError);
   });
 });

@@ -2,16 +2,17 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
-import {
-  ComboRescheduleCoordinatorService,
-} from './combo-reschedule-coordinator.service';
+import { ComboRescheduleCoordinatorService } from './combo-reschedule-coordinator.service';
 import {
   ProposalChangeType,
   ProposalStatus,
   WeatherProposal,
 } from '../schemas/weather-proposal.schema';
 import { Booking, BookingType } from '../../bookings/schemas/booking.schema';
-import { BookingItem, BookingItemType } from '../../bookings/schemas/booking-item.schema';
+import {
+  BookingItem,
+  BookingItemType,
+} from '../../bookings/schemas/booking-item.schema';
 import { BookingSchedule } from '../../bookings/schemas/booking-schedule.schema';
 import {
   InventoryReservation,
@@ -78,10 +79,19 @@ describe('ComboRescheduleCoordinatorService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ComboRescheduleCoordinatorService,
-        { provide: getModelToken(WeatherProposal.name), useValue: mockProposalModel },
+        {
+          provide: getModelToken(WeatherProposal.name),
+          useValue: mockProposalModel,
+        },
         { provide: getModelToken(Booking.name), useValue: mockBookingModel },
-        { provide: getModelToken(BookingItem.name), useValue: mockBookingItemModel },
-        { provide: getModelToken(BookingSchedule.name), useValue: mockBookingScheduleModel },
+        {
+          provide: getModelToken(BookingItem.name),
+          useValue: mockBookingItemModel,
+        },
+        {
+          provide: getModelToken(BookingSchedule.name),
+          useValue: mockBookingScheduleModel,
+        },
         {
           provide: getModelToken(InventoryReservation.name),
           useValue: mockInventoryReservationModel,
@@ -104,7 +114,10 @@ describe('ComboRescheduleCoordinatorService', () => {
 
   describe('isComboBooking', () => {
     it('should return true for BookingType.Combo', () => {
-      const booking: any = { bookingType: BookingType.Combo, providerIds: [photoProviderId] };
+      const booking: any = {
+        bookingType: BookingType.Combo,
+        providerIds: [photoProviderId],
+      };
       expect(service.isComboBooking(booking)).toBe(true);
     });
 
@@ -147,7 +160,10 @@ describe('ComboRescheduleCoordinatorService', () => {
 
   describe('checkCostumeAvailability', () => {
     it('should return available: true when no conflicting reservations exist', async () => {
-      const mockItem = { _id: new Types.ObjectId(), itemType: BookingItemType.Product };
+      const mockItem = {
+        _id: new Types.ObjectId(),
+        itemType: BookingItemType.Product,
+      };
       mockBookingItemModel.find.mockResolvedValueOnce([mockItem]);
 
       const mockRes = {
@@ -169,7 +185,10 @@ describe('ComboRescheduleCoordinatorService', () => {
     });
 
     it('should return available: false when another booking reserved the same inventory item in the new window', async () => {
-      const mockItem = { _id: new Types.ObjectId(), itemType: BookingItemType.Product };
+      const mockItem = {
+        _id: new Types.ObjectId(),
+        itemType: BookingItemType.Product,
+      };
       mockBookingItemModel.find.mockResolvedValueOnce([mockItem]);
 
       const mockRes = {
@@ -192,7 +211,9 @@ describe('ComboRescheduleCoordinatorService', () => {
   });
 
   describe('coordinateComboProposalResponse (All-or-Nothing State Machine)', () => {
-    const futureDateStr = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const futureDateStr = new Date(Date.now() + 48 * 60 * 60 * 1000)
+      .toISOString()
+      .split('T')[0];
 
     const createBaseComboProposal = (overrides?: any) => ({
       _id: new Types.ObjectId(),
@@ -202,7 +223,11 @@ describe('ComboRescheduleCoordinatorService', () => {
       additionalFeeDue: 0,
       changeType: ProposalChangeType.DATE_AND_SLOT,
       originalSchedule: { date: '2026-11-15', timeSlot: '14:00-16:00' },
-      proposedSchedule: { date: futureDateStr, timeSlot: '14:00-16:00', spotName: 'Đại Nội Huế' },
+      proposedSchedule: {
+        date: futureDateStr,
+        timeSlot: '14:00-16:00',
+        spotName: 'Đại Nội Huế',
+      },
       providerResponses: new Map(),
       temporaryHoldRef: 'hold:photographer:123',
       save: jest.fn().mockResolvedValue(true),
@@ -237,7 +262,9 @@ describe('ComboRescheduleCoordinatorService', () => {
       expect(result.allDecided).toBe(true);
       expect(result.overallStatus).toBe(ProposalStatus.REJECTED);
       expect(proposal.status).toBe(ProposalStatus.REJECTED);
-      expect(mockRedisService.del).toHaveBeenCalledWith('hold:photographer:123');
+      expect(mockRedisService.del).toHaveBeenCalledWith(
+        'hold:photographer:123',
+      );
       expect(mockBookingModel.updateOne).toHaveBeenCalledWith(
         { _id: bookingId },
         expect.objectContaining({
@@ -289,7 +316,9 @@ describe('ComboRescheduleCoordinatorService', () => {
       expect(result.allDecided).toBe(true);
       expect(result.overallStatus).toBe(ProposalStatus.APPLIED);
       expect(proposal.status).toBe(ProposalStatus.APPLIED);
-      expect(mockRedisService.del).toHaveBeenCalledWith('hold:photographer:123');
+      expect(mockRedisService.del).toHaveBeenCalledWith(
+        'hold:photographer:123',
+      );
       // Incremented weatherRescheduleCount exactly once for the combo
       expect(mockBookingModel.updateOne).toHaveBeenCalledWith(
         { _id: bookingId },
@@ -319,7 +348,10 @@ describe('ComboRescheduleCoordinatorService', () => {
 
       // Mock conflict in inventory
       mockInventoryReservationModel.findOne
-        .mockResolvedValueOnce({ inventoryItemId: new Types.ObjectId(), bookingItemId: mockItem._id })
+        .mockResolvedValueOnce({
+          inventoryItemId: new Types.ObjectId(),
+          bookingItemId: mockItem._id,
+        })
         .mockResolvedValueOnce({ _id: new Types.ObjectId() }); // Conflict!
 
       const result = await service.coordinateComboProposalResponse(
@@ -376,7 +408,9 @@ describe('ComboRescheduleCoordinatorService', () => {
 
       await service.applyComboProposalChanges(proposal, comboBooking);
 
-      expect(mockSlotLeaseService.acquireUpfrontBlockLease).toHaveBeenCalledWith(
+      expect(
+        mockSlotLeaseService.acquireUpfrontBlockLease,
+      ).toHaveBeenCalledWith(
         expect.objectContaining({
           inventoryItemId: invItemId,
           bookingId,

@@ -7,14 +7,43 @@ import { ContractPolicyService } from './contract-policy.service';
 import { ContractPreparationService } from './contract-preparation.service';
 import { ContractReadService } from './contract-read.service';
 import { ContractCheckoutGuard } from './contract-checkout-guard.service';
-import { Payment, PaymentPurpose, PaymentSchema, PaymentStatus } from '../payments/schemas/payment.schema';
-import { PaymentRecovery, PaymentRecoverySchema, PaymentRecoveryState } from '../payments/schemas/payment-recovery.schema';
-import { Booking, BookingSchema, BookingStatus } from '../bookings/schemas/booking.schema';
-import { BookingItem, BookingItemSchema } from '../bookings/schemas/booking-item.schema';
-import { BookingSchedule, BookingScheduleSchema } from '../bookings/schemas/booking-schedule.schema';
-import { InventoryReservation, InventoryReservationSchema, ReservationStatus } from '../products/schemas/inventory-reservation.schema';
-import { BookingEscrow, BookingEscrowSchema } from '../payments/schemas/booking-escrow.schema';
-import { Notification, NotificationSchema } from '../notifications/schemas/notification.schema';
+import {
+  Payment,
+  PaymentPurpose,
+  PaymentSchema,
+  PaymentStatus,
+} from '../payments/schemas/payment.schema';
+import {
+  PaymentRecovery,
+  PaymentRecoverySchema,
+  PaymentRecoveryState,
+} from '../payments/schemas/payment-recovery.schema';
+import {
+  Booking,
+  BookingSchema,
+  BookingStatus,
+} from '../bookings/schemas/booking.schema';
+import {
+  BookingItem,
+  BookingItemSchema,
+} from '../bookings/schemas/booking-item.schema';
+import {
+  BookingSchedule,
+  BookingScheduleSchema,
+} from '../bookings/schemas/booking-schedule.schema';
+import {
+  InventoryReservation,
+  InventoryReservationSchema,
+  ReservationStatus,
+} from '../products/schemas/inventory-reservation.schema';
+import {
+  BookingEscrow,
+  BookingEscrowSchema,
+} from '../payments/schemas/booking-escrow.schema';
+import {
+  Notification,
+  NotificationSchema,
+} from '../notifications/schemas/notification.schema';
 import { PaymentRecoveryService } from '../payments/services/payment-recovery.service';
 import { V2PaymentFinalizationService } from '../payments/services/v2-payment-finalization.service';
 import { contractIntentKey } from '../payments/services/contract-payment-binding';
@@ -107,13 +136,23 @@ interface Seed {
       bookings = connection.model(Booking.name, BookingSchema);
       bookingItems = connection.model(BookingItem.name, BookingItemSchema);
       schedules = connection.model(BookingSchedule.name, BookingScheduleSchema);
-      reservations = connection.model(InventoryReservation.name, InventoryReservationSchema);
+      reservations = connection.model(
+        InventoryReservation.name,
+        InventoryReservationSchema,
+      );
       payments = connection.model(Payment.name, PaymentSchema);
-      recoveries = connection.model(PaymentRecovery.name, PaymentRecoverySchema);
+      recoveries = connection.model(
+        PaymentRecovery.name,
+        PaymentRecoverySchema,
+      );
       escrows = connection.model(BookingEscrow.name, BookingEscrowSchema);
       notifications = connection.model(Notification.name, NotificationSchema);
-      await connection.db!.collection('payment_recoveries').createIndex({ paymentId: 1 }, { unique: true });
-      await connection.db!.collection('booking_escrows').createIndex({ bookingId: 1 }, { unique: true });
+      await connection
+        .db!.collection('payment_recoveries')
+        .createIndex({ paymentId: 1 }, { unique: true });
+      await connection
+        .db!.collection('booking_escrows')
+        .createIndex({ bookingId: 1 }, { unique: true });
       await connection
         .db!.collection('digital_contracts')
         .createIndex(
@@ -454,10 +493,19 @@ interface Seed {
 
     it('finalizes a paid V2 booking once with inventory, escrow and in-app notification in one transaction', async () => {
       const data = await seed();
-      await bookings.updateOne({ _id: data.bookingId }, { $set: {
-        pricingSummary: { grandTotal: 100, depositTotal: 0 },
-        paymentSummary: { totalPaid: 0, totalRefunded: 0, paymentStatus: 'UNPAID' },
-      } });
+      await bookings.updateOne(
+        { _id: data.bookingId },
+        {
+          $set: {
+            pricingSummary: { grandTotal: 100, depositTotal: 0 },
+            paymentSummary: {
+              totalPaid: 0,
+              totalRefunded: 0,
+              paymentStatus: 'UNPAID',
+            },
+          },
+        },
+      );
       const snapshot = data.snapshots.get(data.providerIds[0].toString())!;
       data.snapshots.set(data.providerIds[0].toString(), {
         ...snapshot,
@@ -465,48 +513,100 @@ interface Seed {
       });
       const offer = await offered(data);
       await offer.service.consent.decide(
-        user(data.customerId), offer.result.contractId,
+        user(data.customerId),
+        offer.result.contractId,
         dto(offer.version, ContractConsentAction.Accept),
       );
       const decision = await offer.service.checkout.evaluate(
-        data.bookingId.toString(), 100, PaymentPurpose.FullPayment,
+        data.bookingId.toString(),
+        100,
+        PaymentPurpose.FullPayment,
       );
       const binding = decision.binding!;
       const paymentId = oid();
       const key = contractIntentKey(binding);
       await payments.create({
-        _id: paymentId, bookingId: data.bookingId,
+        _id: paymentId,
+        bookingId: data.bookingId,
         paymentCode: `FINAL-${paymentId.toString()}`,
-        amount: 100, purpose: PaymentPurpose.FullPayment,
-        status: PaymentStatus.Success, paidAt: new Date(),
-        contractBinding: binding, contractIntentKey: key,
+        amount: 100,
+        purpose: PaymentPurpose.FullPayment,
+        status: PaymentStatus.Success,
+        paidAt: new Date(),
+        contractBinding: binding,
+        contractIntentKey: key,
       });
-      await bookings.updateOne({ _id: data.bookingId }, { $set: {
-        paymentExpiryClaim: {
-          phase: 'FINALIZING', token: randomUUID(),
-          claimedAt: new Date(), leaseUntil: new Date(Date.now() + 60000),
-          paymentId,
+      await bookings.updateOne(
+        { _id: data.bookingId },
+        {
+          $set: {
+            paymentExpiryClaim: {
+              phase: 'FINALIZING',
+              token: randomUUID(),
+              claimedAt: new Date(),
+              leaseUntil: new Date(Date.now() + 60000),
+              paymentId,
+            },
+          },
         },
-      } });
-      const recovery = new PaymentRecoveryService(true, recoveries, payments, bookings);
+      );
+      const recovery = new PaymentRecoveryService(
+        true,
+        recoveries,
+        payments,
+        bookings,
+      );
       await recovery.recordAcknowledged(paymentId, data.bookingId, key);
       const finalizer = new V2PaymentFinalizationService(
-        true, bookings, bookingItems, schedules, reservations, payments,
-        recoveries, escrows, notifications, contracts, versions, consents,
-        { confirmForBooking: jest.fn().mockResolvedValue({ confirmed: true }) } as never,
+        true,
+        bookings,
+        bookingItems,
+        schedules,
+        reservations,
+        payments,
+        recoveries,
+        escrows,
+        notifications,
+        contracts,
+        versions,
+        consents,
+        {
+          confirmForBooking: jest.fn().mockResolvedValue({ confirmed: true }),
+        } as never,
         { findRedemptionByBooking: jest.fn().mockResolvedValue(null) } as never,
-        recovery, offer.service.policy, offer.service.preparation,
+        recovery,
+        offer.service.policy,
+        offer.service.preparation,
         offer.service.snapshotService as never,
         { getApproved: () => template } as never,
       );
       expect(await finalizer.processDue()).toBe(1);
-      expect((await bookings.findById(data.bookingId).lean())?.status).toBe(BookingStatus.Confirmed);
-      expect((await recoveries.findOne({ paymentId }).lean())?.state).toBe(PaymentRecoveryState.Completed);
-      expect((await reservations.findOne({ bookingId: data.bookingId }).lean())?.status).toBe(ReservationStatus.Confirmed);
-      expect(await escrows.countDocuments({ bookingId: data.bookingId })).toBe(1);
-      expect(await notifications.countDocuments({ userId: data.customerId, 'metadata.paymentId': paymentId })).toBe(1);
+      expect((await bookings.findById(data.bookingId).lean())?.status).toBe(
+        BookingStatus.Confirmed,
+      );
+      expect((await recoveries.findOne({ paymentId }).lean())?.state).toBe(
+        PaymentRecoveryState.Completed,
+      );
+      expect(
+        (await reservations.findOne({ bookingId: data.bookingId }).lean())
+          ?.status,
+      ).toBe(ReservationStatus.Confirmed);
+      expect(await escrows.countDocuments({ bookingId: data.bookingId })).toBe(
+        1,
+      );
+      expect(
+        await notifications.countDocuments({
+          userId: data.customerId,
+          'metadata.paymentId': paymentId,
+        }),
+      ).toBe(1);
       expect(await finalizer.processDue()).toBe(0);
-      expect(await notifications.countDocuments({ userId: data.customerId, 'metadata.paymentId': paymentId })).toBe(1);
+      expect(
+        await notifications.countDocuments({
+          userId: data.customerId,
+          'metadata.paymentId': paymentId,
+        }),
+      ).toBe(1);
     });
 
     it('prepares one and two provider contracts, reuses versions and preserves prior snapshot on change', async () => {

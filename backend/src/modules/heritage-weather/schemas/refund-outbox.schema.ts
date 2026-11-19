@@ -46,7 +46,8 @@ export class RefundOutboxTask {
   refundRequestId?: Types.ObjectId | null;
 }
 
-export const RefundOutboxTaskSchema = SchemaFactory.createForClass(RefundOutboxTask);
+export const RefundOutboxTaskSchema =
+  SchemaFactory.createForClass(RefundOutboxTask);
 
 RefundOutboxTaskSchema.index({ status: 1, lastAttemptAt: 1 });
 RefundOutboxTaskSchema.index({ bookingId: 1, createdAt: -1 });

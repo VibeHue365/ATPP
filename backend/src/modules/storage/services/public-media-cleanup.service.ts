@@ -5,7 +5,12 @@ import { Connection } from 'mongoose';
 import { PublicMediaService } from './public-media.service';
 
 const MEDIA_COLLECTIONS = [
-  'users', 'products', 'reviews', 'booking_items', 'providers', 'portfolio_items',
+  'users',
+  'products',
+  'reviews',
+  'booking_items',
+  'providers',
+  'portfolio_items',
 ];
 
 @Injectable()
@@ -21,7 +26,9 @@ export class PublicMediaCleanupService {
   async removeUnreferencedUploads(): Promise<void> {
     const db = this.connection.db;
     if (!db) {
-      this.logger.warn('Skipping media cleanup because MongoDB is not connected');
+      this.logger.warn(
+        'Skipping media cleanup because MongoDB is not connected',
+      );
       return;
     }
 
@@ -30,9 +37,12 @@ export class PublicMediaCleanupService {
       const cursor = db.collection(collection).find({});
       for await (const document of cursor) this.collectUrls(document, urls);
     }
-    const olderThan = new Date(Date.now() - this.orphanGraceHours() * 60 * 60 * 1000);
+    const olderThan = new Date(
+      Date.now() - this.orphanGraceHours() * 60 * 60 * 1000,
+    );
     const removed = await this.publicMedia.removeUnreferenced(urls, olderThan);
-    if (removed) this.logger.log(`Removed ${removed} unreferenced public media object(s)`);
+    if (removed)
+      this.logger.log(`Removed ${removed} unreferenced public media object(s)`);
   }
 
   private orphanGraceHours(): number {
@@ -49,7 +59,9 @@ export class PublicMediaCleanupService {
       return;
     }
     if (value && typeof value === 'object') {
-      Object.values(value as Record<string, unknown>).forEach((entry) => this.collectUrls(entry, urls));
+      Object.values(value as Record<string, unknown>).forEach((entry) =>
+        this.collectUrls(entry, urls),
+      );
     }
   }
 }

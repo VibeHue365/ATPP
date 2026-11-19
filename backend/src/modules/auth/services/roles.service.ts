@@ -212,7 +212,6 @@ export class RolesService implements OnModuleInit {
     await this.seedRolesAndPermissions();
   }
 
-
   async getRoleCodesAndPermissions(
     userId: Types.ObjectId,
   ): Promise<{ roles: string[]; permissions: string[] }> {

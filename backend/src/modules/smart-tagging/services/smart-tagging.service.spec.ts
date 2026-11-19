@@ -133,11 +133,7 @@ describe('SmartTaggingService generation run ownership', () => {
       {} as never,
     );
 
-    await service.markAssignmentsStale(
-      SmartTagEntityType.Product,
-      entityId,
-      2,
-    );
+    await service.markAssignmentsStale(SmartTagEntityType.Product, entityId, 2);
 
     expect(assignmentModel.updateMany).toHaveBeenNthCalledWith(
       1,

@@ -5,7 +5,10 @@ import {
 } from './v2-payment-finalization.service';
 import { PaymentRecoveryState } from '../schemas/payment-recovery.schema';
 import { PaymentStatus } from '../schemas/payment.schema';
-import { BookingStatus, BookingType } from '../../bookings/schemas/booking.schema';
+import {
+  BookingStatus,
+  BookingType,
+} from '../../bookings/schemas/booking.schema';
 import { BookingItemType } from '../../bookings/schemas/booking-item.schema';
 import { ContractVersionState } from '../../contracts/schemas/contract-version.schema';
 import { ContractConsentAction } from '../../contracts/schemas/contract-consent.schema';
@@ -54,8 +57,16 @@ describe('V2PaymentFinalizationService unit tests', () => {
     mockItems = { find: jest.fn() };
     mockSchedules = { updateMany: jest.fn() };
     mockReservations = { countDocuments: jest.fn(), updateMany: jest.fn() };
-    mockPayments = { findById: jest.fn(), find: jest.fn(), updateOne: jest.fn() };
-    mockRecoveries = { find: jest.fn(), findOne: jest.fn(), updateOne: jest.fn() };
+    mockPayments = {
+      findById: jest.fn(),
+      find: jest.fn(),
+      updateOne: jest.fn(),
+    };
+    mockRecoveries = {
+      find: jest.fn(),
+      findOne: jest.fn(),
+      updateOne: jest.fn(),
+    };
     mockEscrows = { updateOne: jest.fn() };
     mockNotifications = { updateOne: jest.fn() };
     mockContracts = { findById: jest.fn() };
@@ -84,7 +95,11 @@ describe('V2PaymentFinalizationService unit tests', () => {
       build: jest.fn(),
     };
     mockTemplates = {
-      getApproved: jest.fn().mockReturnValue({ templateId: 'v1', version: 1, text: 'Sample policy' }),
+      getApproved: jest.fn().mockReturnValue({
+        templateId: 'v1',
+        version: 1,
+        text: 'Sample policy',
+      }),
     };
 
     mockLeases = {
@@ -94,7 +109,9 @@ describe('V2PaymentFinalizationService unit tests', () => {
         }),
       }),
       updateMany: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
-      countDocuments: jest.fn().mockReturnValue({ session: jest.fn().mockResolvedValue(0) }),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ session: jest.fn().mockResolvedValue(0) }),
     };
 
     service = new V2PaymentFinalizationService(
@@ -124,10 +141,24 @@ describe('V2PaymentFinalizationService unit tests', () => {
   it('processDue returns 0 when CONTRACTS_V2_ENABLED is false', async () => {
     const disabledService = new V2PaymentFinalizationService(
       false,
-      mockBookings, mockItems, mockSchedules, mockReservations, mockPayments,
-      mockRecoveries, mockEscrows, mockNotifications, mockContracts, mockVersions,
-      mockConsents, mockPhotoHolds, mockPromotions, mockRecoveryService,
-      mockContractPolicy, mockPreparation, mockSnapshots, mockTemplates,
+      mockBookings,
+      mockItems,
+      mockSchedules,
+      mockReservations,
+      mockPayments,
+      mockRecoveries,
+      mockEscrows,
+      mockNotifications,
+      mockContracts,
+      mockVersions,
+      mockConsents,
+      mockPhotoHolds,
+      mockPromotions,
+      mockRecoveryService,
+      mockContractPolicy,
+      mockPreparation,
+      mockSnapshots,
+      mockTemplates,
       mockLeases,
     );
     expect(await disabledService.processDue()).toBe(0);
@@ -140,7 +171,9 @@ describe('V2PaymentFinalizationService unit tests', () => {
     mockRecoveries.find.mockReturnValue({
       select: jest.fn().mockReturnValue({
         limit: jest.fn().mockReturnValue({
-          lean: jest.fn().mockResolvedValue([{ paymentId: p1 }, { paymentId: p2 }]),
+          lean: jest
+            .fn()
+            .mockResolvedValue([{ paymentId: p1 }, { paymentId: p2 }]),
         }),
       }),
     });
@@ -160,7 +193,9 @@ describe('V2PaymentFinalizationService unit tests', () => {
   it('marks REVIEW_REQUIRED when finalize encounters permanent FinalizationReviewError', async () => {
     const paymentId = oid();
     mockRecoveryService.claim.mockResolvedValueOnce({ token: 'tok-rev' });
-    jest.spyOn(service, 'finalize').mockRejectedValue(new FinalizationReviewError('RECOVERY_LEASE_LOST'));
+    jest
+      .spyOn(service, 'finalize')
+      .mockRejectedValue(new FinalizationReviewError('RECOVERY_LEASE_LOST'));
 
     // Test lease lost: skips
     const resLeaseLost = await service.processPayment(paymentId);
@@ -169,11 +204,17 @@ describe('V2PaymentFinalizationService unit tests', () => {
 
     // Test review error
     mockRecoveryService.claim.mockResolvedValueOnce({ token: 'tok-stale' });
-    jest.spyOn(service, 'finalize').mockRejectedValue(new FinalizationReviewError('CONTRACT_BINDING_STALE'));
+    jest
+      .spyOn(service, 'finalize')
+      .mockRejectedValue(new FinalizationReviewError('CONTRACT_BINDING_STALE'));
 
     const resReview = await service.processPayment(paymentId);
     expect(resReview).toBe(false);
-    expect(mockRecoveryService.requireReviewClaimed).toHaveBeenCalledWith(paymentId, 'tok-stale', 'CONTRACT_BINDING_STALE');
+    expect(mockRecoveryService.requireReviewClaimed).toHaveBeenCalledWith(
+      paymentId,
+      'tok-stale',
+      'CONTRACT_BINDING_STALE',
+    );
     expect(mockPayments.updateOne).toHaveBeenCalledWith(
       { _id: paymentId },
       { $set: { needsManualReview: true } },
@@ -183,11 +224,17 @@ describe('V2PaymentFinalizationService unit tests', () => {
   it('retries when finalize encounters unexpected transient error', async () => {
     const paymentId = oid();
     mockRecoveryService.claim.mockResolvedValueOnce({ token: 'tok-transient' });
-    jest.spyOn(service, 'finalize').mockRejectedValue(new Error('MongoNetworkTimeoutException'));
+    jest
+      .spyOn(service, 'finalize')
+      .mockRejectedValue(new Error('MongoNetworkTimeoutException'));
 
     const res = await service.processPayment(paymentId);
     expect(res).toBe(false);
-    expect(mockRecoveryService.retry).toHaveBeenCalledWith(paymentId, 'tok-transient', 'FINALIZATION_RETRY');
+    expect(mockRecoveryService.retry).toHaveBeenCalledWith(
+      paymentId,
+      'tok-transient',
+      'FINALIZATION_RETRY',
+    );
   });
 
   it('successfully finalizes a valid booking and executes all side effects idempotently', async () => {
@@ -201,8 +248,14 @@ describe('V2PaymentFinalizationService unit tests', () => {
 
     const template = { templateId: 'v1', version: 1, text: 'Template' };
     const snapshot = {
-      booking: { bookingCode: 'V2-BOOK-001', customerId, bookingType: 'AODAI_RENTAL' },
-      providerItems: [{ bookingItemId: oid(), productId: oid(), quantity: 1, unitPrice: 100 }],
+      booking: {
+        bookingCode: 'V2-BOOK-001',
+        customerId,
+        bookingType: 'AODAI_RENTAL',
+      },
+      providerItems: [
+        { bookingItemId: oid(), productId: oid(), quantity: 1, unitPrice: 100 },
+      ],
       pricing: { grandTotal: 100, depositTotal: 50, amountDueNow: 150 },
     };
     const bookingFingerprint = hashContract({
@@ -222,7 +275,15 @@ describe('V2PaymentFinalizationService unit tests', () => {
       currency: 'VND',
       purpose: 'FULL_PAYMENT',
       bookingFingerprint,
-      versions: [{ providerId, contractId, contractVersionId, contentHash, bookingFingerprint }],
+      versions: [
+        {
+          providerId,
+          contractId,
+          contractVersionId,
+          contentHash,
+          bookingFingerprint,
+        },
+      ],
     };
     const bindingKey = contractIntentKey(binding);
 
@@ -292,7 +353,9 @@ describe('V2PaymentFinalizationService unit tests', () => {
     });
     mockContracts.findById.mockReturnValue({
       session: jest.fn().mockReturnValue({
-        lean: jest.fn().mockResolvedValue({ currentVersionId: contractVersionId }),
+        lean: jest
+          .fn()
+          .mockResolvedValue({ currentVersionId: contractVersionId }),
       }),
     });
     mockVersions.findById.mockReturnValue({
@@ -320,7 +383,11 @@ describe('V2PaymentFinalizationService unit tests', () => {
     mockItems.find.mockReturnValue({
       session: jest.fn().mockReturnValue({
         lean: jest.fn().mockResolvedValue([
-          { _id: productItemId, itemType: BookingItemType.Product, quantity: 1 },
+          {
+            _id: productItemId,
+            itemType: BookingItemType.Product,
+            quantity: 1,
+          },
         ]),
       }),
     });
@@ -410,8 +477,14 @@ describe('V2PaymentFinalizationService unit tests', () => {
 
     const template = { templateId: 'v1', version: 1, text: 'Template' };
     const snapshot = {
-      booking: { bookingCode: 'V2-BOOK-002', customerId, bookingType: 'AODAI_RENTAL' },
-      providerItems: [{ bookingItemId: oid(), productId: oid(), quantity: 1, unitPrice: 100 }],
+      booking: {
+        bookingCode: 'V2-BOOK-002',
+        customerId,
+        bookingType: 'AODAI_RENTAL',
+      },
+      providerItems: [
+        { bookingItemId: oid(), productId: oid(), quantity: 1, unitPrice: 100 },
+      ],
       pricing: { grandTotal: 100, depositTotal: 50, amountDueNow: 150 },
     };
     const bookingFingerprint = hashContract({
@@ -431,7 +504,15 @@ describe('V2PaymentFinalizationService unit tests', () => {
       currency: 'VND',
       purpose: 'FULL_PAYMENT',
       bookingFingerprint,
-      versions: [{ providerId, contractId, contractVersionId, contentHash, bookingFingerprint }],
+      versions: [
+        {
+          providerId,
+          contractId,
+          contractVersionId,
+          contentHash,
+          bookingFingerprint,
+        },
+      ],
     };
     const bindingKey = contractIntentKey(binding);
 
@@ -501,7 +582,9 @@ describe('V2PaymentFinalizationService unit tests', () => {
     });
     mockContracts.findById.mockReturnValue({
       session: jest.fn().mockReturnValue({
-        lean: jest.fn().mockResolvedValue({ currentVersionId: contractVersionId }),
+        lean: jest
+          .fn()
+          .mockResolvedValue({ currentVersionId: contractVersionId }),
       }),
     });
     mockVersions.findById.mockReturnValue({
@@ -526,9 +609,11 @@ describe('V2PaymentFinalizationService unit tests', () => {
 
     mockItems.find.mockReturnValue({
       session: jest.fn().mockReturnValue({
-        lean: jest.fn().mockResolvedValue([
-          { _id: oid(), itemType: BookingItemType.Product, quantity: 1 },
-        ]),
+        lean: jest
+          .fn()
+          .mockResolvedValue([
+            { _id: oid(), itemType: BookingItemType.Product, quantity: 1 },
+          ]),
       }),
     });
     mockReservations.countDocuments.mockReturnValue({
@@ -628,7 +713,9 @@ describe('V2PaymentFinalizationService unit tests', () => {
       }),
     });
 
-    await expect(service.finalize(paymentId, token)).rejects.toThrow('BOOKING_CLAIM_INVALID');
+    await expect(service.finalize(paymentId, token)).rejects.toThrow(
+      'BOOKING_CLAIM_INVALID',
+    );
   });
 
   it('Phase 6: Decoupled PDF generation failure does NOT rollback payment transaction or affect Completed recovery state', async () => {
@@ -642,8 +729,14 @@ describe('V2PaymentFinalizationService unit tests', () => {
 
     const template = { templateId: 'v1', version: 1, text: 'Template' };
     const snapshot = {
-      booking: { bookingCode: 'V2-BOOK-PDF-001', customerId, bookingType: 'AODAI_RENTAL' },
-      providerItems: [{ bookingItemId: oid(), productId: oid(), quantity: 1, unitPrice: 100 }],
+      booking: {
+        bookingCode: 'V2-BOOK-PDF-001',
+        customerId,
+        bookingType: 'AODAI_RENTAL',
+      },
+      providerItems: [
+        { bookingItemId: oid(), productId: oid(), quantity: 1, unitPrice: 100 },
+      ],
       pricing: { grandTotal: 100, depositTotal: 50, amountDueNow: 150 },
     };
     const bookingFingerprint = hashContract({
@@ -663,12 +756,22 @@ describe('V2PaymentFinalizationService unit tests', () => {
       currency: 'VND',
       purpose: 'FULL_PAYMENT',
       bookingFingerprint,
-      versions: [{ providerId, contractId, contractVersionId, contentHash, bookingFingerprint }],
+      versions: [
+        {
+          providerId,
+          contractId,
+          contractVersionId,
+          contentHash,
+          bookingFingerprint,
+        },
+      ],
     };
     const bindingKey = contractIntentKey(binding);
 
     const mockEvidence = {
-      generateAndStorePdf: jest.fn().mockRejectedValue(new Error('REMOTE_STORAGE_DOWN')),
+      generateAndStorePdf: jest
+        .fn()
+        .mockRejectedValue(new Error('REMOTE_STORAGE_DOWN')),
     };
 
     const serviceWithEvidence = new V2PaymentFinalizationService(
@@ -766,7 +869,9 @@ describe('V2PaymentFinalizationService unit tests', () => {
     });
     mockContracts.findById.mockReturnValue({
       session: jest.fn().mockReturnValue({
-        lean: jest.fn().mockResolvedValue({ currentVersionId: contractVersionId }),
+        lean: jest
+          .fn()
+          .mockResolvedValue({ currentVersionId: contractVersionId }),
       }),
     });
     mockVersions.findById.mockReturnValue({
@@ -798,19 +903,25 @@ describe('V2PaymentFinalizationService unit tests', () => {
     mockRecoveries.updateOne.mockResolvedValue({ modifiedCount: 1 });
 
     // Finalize should succeed cleanly despite PDF generation throwing!
-    await expect(serviceWithEvidence.finalize(paymentId, token)).resolves.not.toThrow();
+    await expect(
+      serviceWithEvidence.finalize(paymentId, token),
+    ).resolves.not.toThrow();
 
     // Verify recovery was marked Completed in transaction
     expect(mockRecoveries.updateOne).toHaveBeenCalledWith(
       expect.objectContaining({ paymentId, leaseToken: token }),
       expect.objectContaining({
-        $set: expect.objectContaining({ state: PaymentRecoveryState.Completed }),
+        $set: expect.objectContaining({
+          state: PaymentRecoveryState.Completed,
+        }),
       }),
       expect.anything(),
     );
 
     // Verify evidence generation was attempted out-of-transaction
-    expect(mockEvidence.generateAndStorePdf).toHaveBeenCalledWith(contractVersionId);
+    expect(mockEvidence.generateAndStorePdf).toHaveBeenCalledWith(
+      contractVersionId,
+    );
   });
 
   it('skips processDue when module is destroyed or application is shutting down', async () => {
@@ -859,7 +970,7 @@ describe('V2PaymentFinalizationService unit tests', () => {
       mockSchedules,
       mockReservations,
       mockPayments,
-      disconnectedRecoveries as any,
+      disconnectedRecoveries,
       mockEscrows,
       mockNotifications,
       mockContracts,

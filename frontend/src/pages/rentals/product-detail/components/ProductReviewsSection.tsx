@@ -313,7 +313,7 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
         ) : (
           reviews.map((rev) => {
             const authorName =
-              rev.customerId?.profile?.fullName || 'Khách hàng VibeHue';
+              rev.customerId?.profile?.fullName || 'Khách hàng TàGo';
             const authorAvatar =
               rev.customerId?.profile?.avatarUrl ||
               rev.customerId?.profile?.avatar;

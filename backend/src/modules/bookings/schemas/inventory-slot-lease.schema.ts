@@ -16,7 +16,12 @@ export enum SlotLeaseStatus {
 
 @Schema({ collection: 'inventory_slot_leases', timestamps: true })
 export class InventorySlotLease {
-  @Prop({ type: Types.ObjectId, ref: 'InventoryItem', required: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'InventoryItem',
+    required: true,
+    index: true,
+  })
   inventoryItemId: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'Provider', required: true, index: true })
@@ -25,7 +30,12 @@ export class InventorySlotLease {
   @Prop({ type: Types.ObjectId, ref: 'Booking', required: true, index: true })
   bookingId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'BookingItem', required: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'BookingItem',
+    required: true,
+    index: true,
+  })
   bookingItemId: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'InventoryReservation', default: null })
@@ -40,7 +50,12 @@ export class InventorySlotLease {
   @Prop({ type: String, enum: Object.values(SlotLeasePurpose), required: true })
   purpose: SlotLeasePurpose;
 
-  @Prop({ type: String, enum: Object.values(SlotLeaseStatus), required: true, index: true })
+  @Prop({
+    type: String,
+    enum: Object.values(SlotLeaseStatus),
+    required: true,
+    index: true,
+  })
   status: SlotLeaseStatus;
 
   @Prop({ type: Date, default: null, index: true })
@@ -50,10 +65,17 @@ export class InventorySlotLease {
   releasedAt?: Date | null;
 
   @Prop({ type: String, default: null })
-  releaseReason?: 'CANCELLED' | 'EXPIRED' | 'COMPLETED' | 'EARLY_READY' | 'RETURN_RESTRUCTURED' | null;
+  releaseReason?:
+    | 'CANCELLED'
+    | 'EXPIRED'
+    | 'COMPLETED'
+    | 'EARLY_READY'
+    | 'RETURN_RESTRUCTURED'
+    | null;
 }
 
-export const InventorySlotLeaseSchema = SchemaFactory.createForClass(InventorySlotLease);
+export const InventorySlotLeaseSchema =
+  SchemaFactory.createForClass(InventorySlotLease);
 
 InventorySlotLeaseSchema.index(
   { inventoryItemId: 1, dateStr: 1, slotIndex: 1 },

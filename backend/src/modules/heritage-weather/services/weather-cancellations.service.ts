@@ -100,7 +100,9 @@ export class WeatherCancellationsService {
 
     // Customer authorization
     if (booking.customerId.toString() !== customerIdStr) {
-      throw new ForbiddenException('Bạn không có quyền thao tác trên đơn hàng này.');
+      throw new ForbiddenException(
+        'Bạn không có quyền thao tác trên đơn hàng này.',
+      );
     }
 
     // Booking status eligibility
@@ -116,7 +118,10 @@ export class WeatherCancellationsService {
     }
 
     // Prevent duplicate pending weather actions
-    if (booking.hasPendingWeatherAction || booking.activeWeatherCancellationId) {
+    if (
+      booking.hasPendingWeatherAction ||
+      booking.activeWeatherCancellationId
+    ) {
       throw new ConflictException(
         'Đơn hàng đang có một yêu cầu thời tiết hoặc yêu cầu hủy đang chờ xử lý.',
       );
@@ -127,7 +132,9 @@ export class WeatherCancellationsService {
       status: CancellationReviewStatus.PENDING_ADMIN_REVIEW,
     });
     if (existingPending) {
-      throw new ConflictException('Đơn hàng đã có yêu cầu hủy đang chờ Admin xét duyệt.');
+      throw new ConflictException(
+        'Đơn hàng đã có yêu cầu hủy đang chờ Admin xét duyệt.',
+      );
     }
 
     // Extract photoshoot item and schedule
@@ -143,8 +150,9 @@ export class WeatherCancellationsService {
 
     const shootDateStr = photoItem?.shootDate
       ? new Date(photoItem.shootDate).toISOString().split('T')[0]
-      : (schedule?.providerLocalDate || '');
-    const timeSlot = photoItem?.shootTimeSlot || schedule?.timeSlot || '09:00-11:00';
+      : schedule?.providerLocalDate || '';
+    const timeSlot =
+      photoItem?.shootTimeSlot || schedule?.timeSlot || '09:00-11:00';
     const spotLocation = photoItem?.shootLocation || 'Trung tâm TP. Huế';
 
     // Resolve Spot Coordinates
@@ -153,7 +161,11 @@ export class WeatherCancellationsService {
     let lng = 107.5909;
     let spaceType = HeritageSpotSpaceType.OUTDOOR;
 
-    if (photoItem && (photoItem as any).spotId && Types.ObjectId.isValid((photoItem as any).spotId)) {
+    if (
+      photoItem &&
+      (photoItem as any).spotId &&
+      Types.ObjectId.isValid((photoItem as any).spotId)
+    ) {
       spot = await this.spotModel.findById((photoItem as any).spotId);
     } else if (spotLocation) {
       spot = await this.spotModel.findOne({
@@ -230,7 +242,9 @@ export class WeatherCancellationsService {
     // Atomically lock booking from cancellation penalties and defer auto-dispute
     booking.hasPendingWeatherAction = true;
     booking.activeWeatherCancellationId = cancellationRequest._id;
-    booking.disputeDeferredUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days deferral
+    booking.disputeDeferredUntil = new Date(
+      Date.now() + 7 * 24 * 60 * 60 * 1000,
+    ); // 7 days deferral
     await booking.save();
 
     this.logger.log(
@@ -257,7 +271,9 @@ export class WeatherCancellationsService {
     }
 
     if (customerIdStr && booking.customerId.toString() !== customerIdStr) {
-      throw new ForbiddenException('Bạn không có quyền xem thông tin đơn hàng này.');
+      throw new ForbiddenException(
+        'Bạn không có quyền xem thông tin đơn hàng này.',
+      );
     }
 
     return this.cancellationModel
@@ -294,7 +310,12 @@ export class WeatherCancellationsService {
    */
   async listCancellationRequests(
     query: ListWeatherCancellationsQueryDto,
-  ): Promise<{ items: WeatherCancellationRequestDocument[]; total: number; page: number; limit: number }> {
+  ): Promise<{
+    items: WeatherCancellationRequestDocument[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
     const filter: Record<string, any> = {};
 
     if (query.status) {
@@ -315,7 +336,10 @@ export class WeatherCancellationsService {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate('bookingId', 'bookingCode status pricingSummary paymentSummary')
+        .populate(
+          'bookingId',
+          'bookingCode status pricingSummary paymentSummary',
+        )
         .populate('customerId', 'profile.fullName auth.email phone')
         .exec(),
       this.cancellationModel.countDocuments(filter).exec(),
@@ -344,7 +368,9 @@ export class WeatherCancellationsService {
     }
 
     if (request.status !== CancellationReviewStatus.PENDING_ADMIN_REVIEW) {
-      throw new ConflictException('Yêu cầu hủy đơn này đã được xét duyệt trước đó.');
+      throw new ConflictException(
+        'Yêu cầu hủy đơn này đã được xét duyệt trước đó.',
+      );
     }
 
     const booking = await this.bookingModel.findById(request.bookingId);
@@ -371,13 +397,21 @@ export class WeatherCancellationsService {
       await booking.save();
       await request.save();
 
-      this.logger.log(`Weather cancellation request ${request._id} was REJECTED by admin ${adminIdStr}`);
+      this.logger.log(
+        `Weather cancellation request ${request._id} was REJECTED by admin ${adminIdStr}`,
+      );
 
       if (this.weatherNotificationService) {
-        await this.weatherNotificationService.sendWeatherCancellationReviewed({
-          cancellation: request,
-          booking,
-        }).catch((e) => this.logger.warn(`Failed to send cancellation reviewed notification: ${e?.message}`));
+        await this.weatherNotificationService
+          .sendWeatherCancellationReviewed({
+            cancellation: request,
+            booking,
+          })
+          .catch((e) =>
+            this.logger.warn(
+              `Failed to send cancellation reviewed notification: ${e?.message}`,
+            ),
+          );
       }
 
       return request;
@@ -389,11 +423,22 @@ export class WeatherCancellationsService {
       .lean();
 
     const capturedAmount = payments.reduce((sum, p) => sum + p.amount, 0);
-    const completedRefund = payments.reduce((sum, p) => sum + (p.refundedAmount || 0), 0);
-    const reservedRefund = payments.reduce((sum, p) => sum + (p.refundReservedAmount || 0), 0);
-    const maxRefundable = Math.max(capturedAmount - completedRefund - reservedRefund, 0);
+    const completedRefund = payments.reduce(
+      (sum, p) => sum + (p.refundedAmount || 0),
+      0,
+    );
+    const reservedRefund = payments.reduce(
+      (sum, p) => sum + (p.refundReservedAmount || 0),
+      0,
+    );
+    const maxRefundable = Math.max(
+      capturedAmount - completedRefund - reservedRefund,
+      0,
+    );
     const fallbackAmount =
-      booking.paymentSummary?.totalPaid || booking.pricingSummary?.grandTotal || 0;
+      booking.paymentSummary?.totalPaid ||
+      booking.pricingSummary?.grandTotal ||
+      0;
     const baseAmount = maxRefundable > 0 ? maxRefundable : fallbackAmount;
 
     let approvedRefundAmount = dto.approvedRefundAmount;
@@ -419,7 +464,8 @@ export class WeatherCancellationsService {
 
     const finalApprovedRefundAmount = approvedRefundAmount;
     const penaltyDeducted =
-      dto.penaltyDeducted ?? Math.max(0, baseAmount - finalApprovedRefundAmount);
+      dto.penaltyDeducted ??
+      Math.max(0, baseAmount - finalApprovedRefundAmount);
 
     // Cancel Booking and update cancellation record
     booking.status = BookingStatus.Cancelled;
@@ -457,7 +503,9 @@ export class WeatherCancellationsService {
           approvedAmount: finalApprovedRefundAmount,
           processedAmount: 0,
           reservedAmount: finalApprovedRefundAmount,
-          reason: dto.notes || `Hoàn tiền do thời tiết bất khả kháng (${dto.decision})`,
+          reason:
+            dto.notes ||
+            `Hoàn tiền do thời tiết bất khả kháng (${dto.decision})`,
           status: RefundStatus.Approved,
           adminNotes: dto.notes,
           decidedBy: adminObjectId,
@@ -465,14 +513,17 @@ export class WeatherCancellationsService {
           version: 0,
         });
       } catch (e: any) {
-        this.logger.warn(`Could not create RefundRequest record directly: ${e?.message}`);
+        this.logger.warn(
+          `Could not create RefundRequest record directly: ${e?.message}`,
+        );
       }
 
       // Enqueue refund task in Durable Transactional Outbox
       await this.refundOutboxService.enqueueRefund({
         bookingId: booking._id,
         amount: finalApprovedRefundAmount,
-        reason: dto.notes || `Hoàn tiền do thời tiết bất khả kháng (${dto.decision})`,
+        reason:
+          dto.notes || `Hoàn tiền do thời tiết bất khả kháng (${dto.decision})`,
         sourceEventId: `refund:weather_cancel:${request._id.toString()}`,
         refundRequestId: refundRequestDoc?._id ?? null,
       });
@@ -497,10 +548,16 @@ export class WeatherCancellationsService {
     );
 
     if (this.weatherNotificationService) {
-      await this.weatherNotificationService.sendWeatherCancellationReviewed({
-        cancellation: request,
-        booking,
-      }).catch((e) => this.logger.warn(`Failed to send cancellation reviewed notification: ${e?.message}`));
+      await this.weatherNotificationService
+        .sendWeatherCancellationReviewed({
+          cancellation: request,
+          booking,
+        })
+        .catch((e) =>
+          this.logger.warn(
+            `Failed to send cancellation reviewed notification: ${e?.message}`,
+          ),
+        );
     }
 
     return request;

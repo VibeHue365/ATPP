@@ -7,7 +7,14 @@ import {
 import { SizeChart } from '../schemas/size-chart.schema';
 import { isSizeChartReady } from './size-chart.rules';
 
-export type BodyKey = 'chest' | 'waist' | 'hip' | 'shoulder' | 'bicep' | 'height' | 'weight';
+export type BodyKey =
+  | 'chest'
+  | 'waist'
+  | 'hip'
+  | 'shoulder'
+  | 'bicep'
+  | 'height'
+  | 'weight';
 export type Measurements = Partial<Record<BodyKey, number | null>> & {
   fitPreference?: FitPreference | string | null;
 };
@@ -246,7 +253,10 @@ export function recommendSize(
     result.status = result.evaluations.some((row) => row.outcome === 'MISSING')
       ? 'INSUFFICIENT_DATA'
       : 'NO_MATCH';
-  if (result.status === 'INSUFFICIENT_DATA' || result.status === 'PRELIMINARY') {
+  if (
+    result.status === 'INSUFFICIENT_DATA' ||
+    result.status === 'PRELIMINARY'
+  ) {
     const viable = result.evaluations.filter(
       (row) => row.outcome === 'MISSING' || row.outcome === 'PRELIMINARY',
     );
@@ -277,10 +287,7 @@ export function recommendSize(
         'Một số size thiếu số đo để đối chiếu. Hãy hỏi cửa hàng trước khi chọn.',
       );
   }
-  if (
-    result.status === 'NO_MATCH' &&
-    critical.length > 0
-  ) {
+  if (result.status === 'NO_MATCH' && critical.length > 0) {
     result.closestSizes = result.evaluations
       .filter((row) => row.outcome === 'REJECTED' && row.missing.length === 0)
       .sort((a, b) => {

@@ -28,8 +28,8 @@ interface RentalInfoColumnsProps {
 export const RentalInfoColumns: React.FC<RentalInfoColumnsProps> = ({
   pickupDate = 'Chưa xác định',
   pickupTime = 'Theo giờ hẹn',
-  storeName = 'Cửa hàng LUMÉ',
-  storeAddress = 'TP. Huế',
+  storeName = 'Cửa hàng đối tác',
+  storeAddress = 'Đang cập nhật địa chỉ',
   rentalPrice = 0,
   cleaningFee = 0,
   depositFee = 0,

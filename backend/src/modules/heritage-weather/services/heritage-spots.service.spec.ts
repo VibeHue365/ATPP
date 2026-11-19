@@ -70,7 +70,9 @@ describe('HeritageSpotsService', () => {
       const seededCount = await service.seedInitialSpots();
 
       expect(mockHeritageSpotModel.countDocuments).toHaveBeenCalled();
-      expect(mockHeritageSpotModel.updateOne).toHaveBeenCalledTimes(HUE_HERITAGE_SPOTS_SEED.length);
+      expect(mockHeritageSpotModel.updateOne).toHaveBeenCalledTimes(
+        HUE_HERITAGE_SPOTS_SEED.length,
+      );
       expect(seededCount).toBe(10);
     });
 
@@ -86,7 +88,9 @@ describe('HeritageSpotsService', () => {
 
   describe('findAll', () => {
     it('nên tìm kiếm với chỉ mục địa không gian $near khi có tọa độ lat, lng', async () => {
-      const execMock = jest.fn().mockResolvedValue([mockSpotOutdoor, mockSpotSemiIndoor]);
+      const execMock = jest
+        .fn()
+        .mockResolvedValue([mockSpotOutdoor, mockSpotSemiIndoor]);
       const leanMock = jest.fn().mockReturnValue({ exec: execMock });
       mockHeritageSpotModel.find.mockReturnValue({ lean: leanMock });
 
@@ -116,7 +120,9 @@ describe('HeritageSpotsService', () => {
     });
 
     it('nên sắp xếp theo tên khi không truyền tọa độ GPS', async () => {
-      const execMock = jest.fn().mockResolvedValue([mockSpotSemiIndoor, mockSpotOutdoor]);
+      const execMock = jest
+        .fn()
+        .mockResolvedValue([mockSpotSemiIndoor, mockSpotOutdoor]);
       const leanMock = jest.fn().mockReturnValue({ exec: execMock });
       const sortMock = jest.fn().mockReturnValue({ lean: leanMock });
       mockHeritageSpotModel.find.mockReturnValue({ sort: sortMock });
@@ -130,7 +136,9 @@ describe('HeritageSpotsService', () => {
 
   describe('findById & findBySlug', () => {
     it('ném lỗi BadRequestException nếu id không hợp lệ', async () => {
-      await expect(service.findById('invalid-id')).rejects.toThrow(BadRequestException);
+      await expect(service.findById('invalid-id')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('ném lỗi NotFoundException nếu không tìm thấy di tích', async () => {
@@ -139,7 +147,9 @@ describe('HeritageSpotsService', () => {
         exec: jest.fn().mockResolvedValue(null),
       });
 
-      await expect(service.findById(validId)).rejects.toThrow(NotFoundException);
+      await expect(service.findById(validId)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('trả về di tích nếu tìm thấy theo slug', async () => {
@@ -157,12 +167,24 @@ describe('HeritageSpotsService', () => {
       // Đổi từ Lăng Minh Mạng (120k) sang Cung An Định (20k)
       mockHeritageSpotModel.findById.mockImplementation((id: string) => {
         if (id === mockSpotDistant._id.toString()) {
-          return { select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue({ baseTravelFee: 120000 }) }) };
+          return {
+            select: jest.fn().mockReturnValue({
+              lean: jest.fn().mockResolvedValue({ baseTravelFee: 120000 }),
+            }),
+          };
         }
         if (id === mockSpotSemiIndoor._id.toString()) {
-          return { select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue({ baseTravelFee: 20000 }) }) };
+          return {
+            select: jest.fn().mockReturnValue({
+              lean: jest.fn().mockResolvedValue({ baseTravelFee: 20000 }),
+            }),
+          };
         }
-        return { select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }) };
+        return {
+          select: jest
+            .fn()
+            .mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }),
+        };
       });
 
       const delta = await service.calculateTravelFeeDelta(
@@ -180,12 +202,24 @@ describe('HeritageSpotsService', () => {
       // Đổi từ Đại Nội (0k) sang Lăng Minh Mạng (120k)
       mockHeritageSpotModel.findById.mockImplementation((id: string) => {
         if (id === mockSpotOutdoor._id.toString()) {
-          return { select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue({ baseTravelFee: 0 }) }) };
+          return {
+            select: jest.fn().mockReturnValue({
+              lean: jest.fn().mockResolvedValue({ baseTravelFee: 0 }),
+            }),
+          };
         }
         if (id === mockSpotDistant._id.toString()) {
-          return { select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue({ baseTravelFee: 120000 }) }) };
+          return {
+            select: jest.fn().mockReturnValue({
+              lean: jest.fn().mockResolvedValue({ baseTravelFee: 120000 }),
+            }),
+          };
         }
-        return { select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }) };
+        return {
+          select: jest
+            .fn()
+            .mockReturnValue({ lean: jest.fn().mockResolvedValue(null) }),
+        };
       });
 
       const delta = await service.calculateTravelFeeDelta(
@@ -201,7 +235,11 @@ describe('HeritageSpotsService', () => {
 
     it('AD-01: Cùng mức phí di chuyển -> additionalFeeDue = 0', async () => {
       mockHeritageSpotModel.findById.mockImplementation(() => {
-        return { select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue({ baseTravelFee: 50000 }) }) };
+        return {
+          select: jest.fn().mockReturnValue({
+            lean: jest.fn().mockResolvedValue({ baseTravelFee: 50000 }),
+          }),
+        };
       });
 
       const delta = await service.calculateTravelFeeDelta(

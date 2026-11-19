@@ -28,7 +28,10 @@ import {
   FaultParty,
 } from '../schemas/dispute.schema';
 import { Booking, BookingStatus } from '../../bookings/schemas/booking.schema';
-import { BookingItem, BookingItemType } from '../../bookings/schemas/booking-item.schema';
+import {
+  BookingItem,
+  BookingItemType,
+} from '../../bookings/schemas/booking-item.schema';
 import {
   RentalIssueStatus,
   DepositSettlementStatus,
@@ -98,13 +101,18 @@ export class DisputesService {
       if (!booking) return;
 
       const recipientUserIds: string[] = [];
-      if (booking.customerId) recipientUserIds.push(booking.customerId.toString());
+      if (booking.customerId)
+        recipientUserIds.push(booking.customerId.toString());
 
-      const providerDocIds = (booking.providerIds || []).map((id: any) => (id?._id || id).toString());
+      const providerDocIds = (booking.providerIds || []).map((id: any) =>
+        (id?._id || id).toString(),
+      );
       if (providerDocIds.length > 0) {
         const providerModel = this.bookingModel.db.model('Provider');
         const providers = await providerModel
-          .find({ _id: { $in: providerDocIds.map((id) => new Types.ObjectId(id)) } })
+          .find({
+            _id: { $in: providerDocIds.map((id) => new Types.ObjectId(id)) },
+          })
           .select({ userId: 1 })
           .lean()
           .exec();
@@ -167,9 +175,12 @@ export class DisputesService {
       bookingItem.itemType === ('PHOTOGRAPHY_PACKAGE' as any);
 
     const maxCompensationLimit =
-      booking.pricingSummary?.depositTotal && booking.pricingSummary.depositTotal > 0
+      booking.pricingSummary?.depositTotal &&
+      booking.pricingSummary.depositTotal > 0
         ? booking.pricingSummary.depositTotal
-        : (booking.pricingSummary?.grandTotal || booking.pricingSummary?.subTotal || 0);
+        : booking.pricingSummary?.grandTotal ||
+          booking.pricingSummary?.subTotal ||
+          0;
 
     if (dto.requestedAmount > maxCompensationLimit) {
       throw new BadRequestException(
@@ -250,7 +261,9 @@ export class DisputesService {
         actionType: dto.actionType,
         evidencePhotos: dto.evidencePhotos,
         requestedAmount: dto.requestedAmount,
-        status: isPhotoOrNoShow ? IncidentStatus.Disputed : IncidentStatus.PendingCustomer,
+        status: isPhotoOrNoShow
+          ? IncidentStatus.Disputed
+          : IncidentStatus.PendingCustomer,
       });
     } catch (error: any) {
       if (error?.code === 11000) {
@@ -275,7 +288,8 @@ export class DisputesService {
         {
           $set: {
             'rentalFulfillment.issueStatus': RentalIssueStatus.Reported,
-            'rentalFulfillment.depositSettlementStatus': DepositSettlementStatus.Held,
+            'rentalFulfillment.depositSettlementStatus':
+              DepositSettlementStatus.Held,
           },
         },
       );
@@ -352,7 +366,10 @@ export class DisputesService {
           { $set: { status: EscrowStatus.Held } },
         );
     } catch (escrowErr) {
-      console.warn('Could not update escrow to Held upon incident creation:', escrowErr);
+      console.warn(
+        'Could not update escrow to Held upon incident creation:',
+        escrowErr,
+      );
     }
 
     // Gửi thông báo cho khách hàng về sự cố hỏng đồ & yêu cầu đền bù
@@ -368,7 +385,10 @@ export class DisputesService {
         isRead: false,
       });
     } catch (notifErr) {
-      console.error('Failed to create incident report notification for customer:', notifErr);
+      console.error(
+        'Failed to create incident report notification for customer:',
+        notifErr,
+      );
     }
 
     await this.emitBookingUpdateHelper(booking._id, booking.status);
@@ -663,12 +683,10 @@ export class DisputesService {
     }
 
     // 1. Cập nhật trạng thái Escrow sang DisputedResolved một cách atomic trước nếu có
-    const escrow = await this.bookingModel.db
-      .model('BookingEscrow')
-      .findOne({
-        bookingId: booking._id,
-        status: { $in: [EscrowStatus.Held, EscrowStatus.Settled] },
-      });
+    const escrow = await this.bookingModel.db.model('BookingEscrow').findOne({
+      bookingId: booking._id,
+      status: { $in: [EscrowStatus.Held, EscrowStatus.Settled] },
+    });
 
     if (!escrow) {
       throw new ConflictException(
@@ -676,13 +694,19 @@ export class DisputesService {
       );
     }
 
-    const targetItem = await this.bookingItemModel.findById(incident.bookingItemId);
+    const targetItem = await this.bookingItemModel.findById(
+      incident.bookingItemId,
+    );
     if (!targetItem) {
       throw new NotFoundException('Không tìm thấy sản phẩm gặp sự cố');
     }
 
-    const targetDeposit = (targetItem.depositAmount || 0) * (targetItem.quantity || 1);
-    const deductAmount = Math.min(incident.requestedAmount, targetDeposit > 0 ? targetDeposit : incident.requestedAmount);
+    const targetDeposit =
+      (targetItem.depositAmount || 0) * (targetItem.quantity || 1);
+    const deductAmount = Math.min(
+      incident.requestedAmount,
+      targetDeposit > 0 ? targetDeposit : incident.requestedAmount,
+    );
     const remainingRefund = Math.max(targetDeposit - deductAmount, 0);
     const settlementStatus =
       remainingRefund > 0
@@ -743,8 +767,8 @@ export class DisputesService {
         incident.actionType === 'MAINTENANCE'
           ? RentalInventoryStatus.Maintenance
           : incident.actionType === 'CLEANING'
-          ? RentalInventoryStatus.Cleaning
-          : RentalInventoryStatus.Available;
+            ? RentalInventoryStatus.Cleaning
+            : RentalInventoryStatus.Available;
 
       await this.bookingItemModel.updateOne(
         { _id: targetItem._id },
@@ -761,7 +785,10 @@ export class DisputesService {
           $push: {
             'rentalFulfillment.history': {
               action: 'INCIDENT_RESOLVED',
-              actor: { role: 'CUSTOMER', userId: new Types.ObjectId(customerUserId) },
+              actor: {
+                role: 'CUSTOMER',
+                userId: new Types.ObjectId(customerUserId),
+              },
               occurredAt: new Date(),
               note: `Khách hàng đồng ý bồi thường ${deductAmount.toLocaleString('vi-VN')}đ`,
               metadata: { deductAmount, remainingRefund, settlementStatus },
@@ -771,12 +798,16 @@ export class DisputesService {
       );
 
       // 5. Cập nhật InventoryItem và Reservation của targetItem
-      const reservationModel = this.bookingModel.db.model('InventoryReservation');
+      const reservationModel = this.bookingModel.db.model(
+        'InventoryReservation',
+      );
       const reservations = await reservationModel
         .find({ bookingItemId: targetItem._id })
         .lean()
         .exec();
-      const invIds = (reservations as any[]).map((r) => r.inventoryItemId).filter(Boolean);
+      const invIds = (reservations as any[])
+        .map((r) => r.inventoryItemId)
+        .filter(Boolean);
       if (invIds.length === 0 && (targetItem as any).inventoryItemId) {
         invIds.push((targetItem as any).inventoryItemId);
       }
@@ -785,14 +816,15 @@ export class DisputesService {
           incident.actionType === 'MAINTENANCE'
             ? InventoryItemStatus.Maintenance
             : incident.actionType === 'CLEANING'
-            ? InventoryItemStatus.Cleaning
-            : InventoryItemStatus.Available;
+              ? InventoryItemStatus.Cleaning
+              : InventoryItemStatus.Available;
 
         const inventoryUpdate =
           invStatus === InventoryItemStatus.Cleaning
             ? {
                 status: invStatus,
-                operationalAvailableFrom: this.cleaningAvailableFrom(targetItem),
+                operationalAvailableFrom:
+                  this.cleaningAvailableFrom(targetItem),
                 activeTurnaroundBookingItemId: targetItem._id,
               }
             : {
@@ -808,7 +840,10 @@ export class DisputesService {
       }
 
       await reservationModel.updateMany(
-        { bookingItemId: targetItem._id, status: { $in: ['PENDING', 'CONFIRMED'] } },
+        {
+          bookingItemId: targetItem._id,
+          status: { $in: ['PENDING', 'CONFIRMED'] },
+        },
         { $set: { status: 'COMPLETED' } },
       );
 
@@ -827,17 +862,21 @@ export class DisputesService {
       const allItemsSettled = allProductItems.every(
         (it: any) =>
           it.rentalFulfillment?.depositSettlementStatus &&
-          finalSettlementStatuses.includes(it.rentalFulfillment.depositSettlementStatus),
+          finalSettlementStatuses.includes(
+            it.rentalFulfillment.depositSettlementStatus,
+          ),
       );
 
       const allItemsCompleted = allProductItems.every(
-        (it: any) => it.rentalFulfillment?.status === RentalFulfillmentStatus.Completed,
+        (it: any) =>
+          it.rentalFulfillment?.status === RentalFulfillmentStatus.Completed,
       );
 
       // Chỉ thực hiện hoàn cọc toàn booking khi TẤT CẢ các áo đã có final settlement
       if (allItemsSettled) {
         const totalRefundAmount = allProductItems.reduce(
-          (sum: number, it: any) => sum + (it.rentalFulfillment?.depositRefundAmount || 0),
+          (sum: number, it: any) =>
+            sum + (it.rentalFulfillment?.depositRefundAmount || 0),
           0,
         );
 
@@ -852,14 +891,19 @@ export class DisputesService {
               sourceEventId: `refund:dispute:${incident._id}:customer-agree`,
             });
           } catch (rfErr) {
-            console.warn('createFromDispute warning in customerAgreeIncident:', rfErr);
+            console.warn(
+              'createFromDispute warning in customerAgreeIncident:',
+              rfErr,
+            );
           }
 
           try {
-            const existingRefundPayment = await this.bookingModel.db.model('Payment').findOne({
-              bookingId: booking._id,
-              purpose: 'DEPOSIT_REFUND',
-            });
+            const existingRefundPayment = await this.bookingModel.db
+              .model('Payment')
+              .findOne({
+                bookingId: booking._id,
+                purpose: 'DEPOSIT_REFUND',
+              });
             if (!existingRefundPayment) {
               const refundPaymentCode = `REF${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
               await this.bookingModel.db.model('Payment').create({
@@ -877,7 +921,10 @@ export class DisputesService {
               await existingRefundPayment.save();
             }
           } catch (errPayment) {
-            console.error('Error ensuring DEPOSIT_REFUND payment record:', errPayment);
+            console.error(
+              'Error ensuring DEPOSIT_REFUND payment record:',
+              errPayment,
+            );
           }
 
           (booking as any).rentalDepositRefund = {
@@ -897,24 +944,30 @@ export class DisputesService {
               purpose: 'DEPOSIT_REFUND',
             });
           } catch (delErr) {
-            console.warn('Could not delete old DEPOSIT_REFUND payment records:', delErr);
+            console.warn(
+              'Could not delete old DEPOSIT_REFUND payment records:',
+              delErr,
+            );
           }
 
           (booking as any).rentalDepositRefund = {
             status: 'NO_REFUND',
             amount: 0,
             completedAt: new Date(),
-            rentalDepositReason: 'Khấu trừ toàn bộ cọc để bồi thường hư hỏng trang phục',
+            rentalDepositReason:
+              'Khấu trừ toàn bộ cọc để bồi thường hư hỏng trang phục',
             refundRequestId: null,
           };
           if (!booking.paymentSummary) (booking as any).paymentSummary = {};
           booking.paymentSummary.totalRefunded = 0;
         }
 
-        await this.bookingModel.db.model('BookingEscrow').updateOne(
-          { bookingId: booking._id },
-          { $set: { status: EscrowStatus.DisputedResolved } },
-        );
+        await this.bookingModel.db
+          .model('BookingEscrow')
+          .updateOne(
+            { bookingId: booking._id },
+            { $set: { status: EscrowStatus.DisputedResolved } },
+          );
       }
 
       // Chỉ đánh dấu Booking COMPLETED khi TẤT CẢ các áo đã COMPLETED
@@ -964,7 +1017,10 @@ export class DisputesService {
           });
         }
       } catch (notifErr) {
-        console.error('Failed to create agree incident notifications:', notifErr);
+        console.error(
+          'Failed to create agree incident notifications:',
+          notifErr,
+        );
       }
     } catch (err) {
       // Revert lại trạng thái Held nếu gặp lỗi
@@ -1035,7 +1091,8 @@ export class DisputesService {
         {
           $set: {
             'rentalFulfillment.issueStatus': RentalIssueStatus.UnderReview,
-            'rentalFulfillment.depositSettlementStatus': DepositSettlementStatus.Held,
+            'rentalFulfillment.depositSettlementStatus':
+              DepositSettlementStatus.Held,
           },
         },
       );
@@ -1059,7 +1116,9 @@ export class DisputesService {
     }
 
     // Tạo hoặc cập nhật Dispute record
-    const customerNote = body?.reason?.trim() ? ` - Lý do: ${body.reason.trim()}` : '';
+    const customerNote = body?.reason?.trim()
+      ? ` - Lý do: ${body.reason.trim()}`
+      : '';
     await this.disputeModel.findOneAndUpdate(
       { bookingId: booking._id },
       {
@@ -1069,7 +1128,10 @@ export class DisputesService {
           openedBy: new Types.ObjectId(customerUserId),
           againstProviderId: incident.reportedBy,
           reason: `Khách hàng khiếu nại yêu cầu đền bù của Shop: ${incident.description}${customerNote}`,
-          evidencePhotos: [...(incident.evidencePhotos || []), ...(body?.evidencePhotos || [])],
+          evidencePhotos: [
+            ...(incident.evidencePhotos || []),
+            ...(body?.evidencePhotos || []),
+          ],
           status: DisputeStatus.Open,
         },
       },
@@ -1089,7 +1151,9 @@ export class DisputesService {
         isRead: false,
       });
 
-      const provider = await this.bookingModel.db.model('Provider').findById(incident.reportedBy);
+      const provider = await this.bookingModel.db
+        .model('Provider')
+        .findById(incident.reportedBy);
       if (provider && provider.userId) {
         await notificationModel.create({
           userId: provider.userId,
@@ -1101,7 +1165,10 @@ export class DisputesService {
         });
       }
     } catch (notifErr) {
-      console.error('Failed to create disagree incident notifications:', notifErr);
+      console.error(
+        'Failed to create disagree incident notifications:',
+        notifErr,
+      );
     }
 
     await this.emitBookingUpdateHelper(booking._id, BookingStatus.Disputed);
@@ -1130,7 +1197,7 @@ export class DisputesService {
       throw new NotFoundException('Không tìm thấy đơn đặt lịch');
     }
 
-    let incident = await this.incidentModel.findOne({ bookingId });
+    const incident = await this.incidentModel.findOne({ bookingId });
     let isDirectDispute = false;
     let reportedBy: any = null;
     let requestedAmount = 0;
@@ -1170,26 +1237,38 @@ export class DisputesService {
     }
 
     const depositTotal = booking.pricingSummary?.depositTotal || 0;
-    const grandTotal = booking.pricingSummary?.grandTotal || booking.pricingSummary?.subTotal || 0;
+    const grandTotal =
+      booking.pricingSummary?.grandTotal ||
+      booking.pricingSummary?.subTotal ||
+      0;
     // Tiền thuê = tổng đơn hàng trừ tiền cọc
     const rentalFee = Math.max(grandTotal - depositTotal, 0);
 
     // Tính số tiền thực sự đã thanh toán (loại bỏ refund đã thực hiện)
     let actualPaidTotal = grandTotal;
     try {
-      const paidPayments = await this.bookingModel.db.model('Payment').find({
-        bookingId: booking._id,
-        status: { $in: ['SUCCESS', 'success', 'CONFIRMED'] },
-        purpose: { $nin: ['DEPOSIT_REFUND', 'COMPENSATION'] },
-      }).lean() as any[];
+      const paidPayments = (await this.bookingModel.db
+        .model('Payment')
+        .find({
+          bookingId: booking._id,
+          status: { $in: ['SUCCESS', 'success', 'CONFIRMED'] },
+          purpose: { $nin: ['DEPOSIT_REFUND', 'COMPENSATION'] },
+        })
+        .lean()) as any[];
       actualPaidTotal = Math.max(
-        paidPayments.reduce((s: number, p: any) => s + (p.amount || 0), 0)
-          - paidPayments.reduce((s: number, p: any) => s + (p.refundedAmount || 0), 0),
+        paidPayments.reduce((s: number, p: any) => s + (p.amount || 0), 0) -
+          paidPayments.reduce(
+            (s: number, p: any) => s + (p.refundedAmount || 0),
+            0,
+          ),
         0,
       );
       if (actualPaidTotal === 0) actualPaidTotal = grandTotal;
     } catch (e) {
-      console.warn('Could not compute actualPaidTotal, falling back to grandTotal:', e);
+      console.warn(
+        'Could not compute actualPaidTotal, falling back to grandTotal:',
+        e,
+      );
       actualPaidTotal = grandTotal;
     }
 
@@ -1205,12 +1284,14 @@ export class DisputesService {
     let refundAmount: number;
     let compensationAmount: number;
 
-    const isPhotography = booking.bookingType === 'PHOTOGRAPHY' || (booking as any).itemType === 'PHOTOGRAPHY_PACKAGE';
-    const isPhotosDeliveredPhase = isPhotography && (
-      booking.status === BookingStatus.AwaitingReview ||
-      Boolean((booking as any).deliveredPhotos?.length) ||
-      Boolean((booking as any).deliveryDriveUrl)
-    );
+    const isPhotography =
+      booking.bookingType === 'PHOTOGRAPHY' ||
+      (booking as any).itemType === 'PHOTOGRAPHY_PACKAGE';
+    const isPhotosDeliveredPhase =
+      isPhotography &&
+      (booking.status === BookingStatus.AwaitingReview ||
+        Boolean((booking as any).deliveredPhotos?.length) ||
+        Boolean((booking as any).deliveryDriveUrl));
 
     if (decision === 'SPLIT') {
       refundAmount = splitRefundAmount ?? -1;
@@ -1219,7 +1300,9 @@ export class DisputesService {
       if (decision === 'CUSTOMER_RIGHT') {
         if (isPhotosDeliveredPhase) {
           refundAmount = splitRefundAmount ?? Math.round(actualPaidTotal * 0.5);
-          compensationAmount = splitCompensationAmount ?? Math.max(0, actualPaidTotal - refundAmount);
+          compensationAmount =
+            splitCompensationAmount ??
+            Math.max(0, actualPaidTotal - refundAmount);
         } else {
           refundAmount = actualPaidTotal;
           compensationAmount = 0;
@@ -1232,28 +1315,35 @@ export class DisputesService {
     } else if (isDirectDispute) {
       // Luồng 1 — Khách tố trong 30p nhận đồ hoặc trước buổi chụp
       if (decision === 'CUSTOMER_RIGHT') {
-        refundAmount = actualPaidTotal;   // hoàn tất cả (thuê + cọc)
+        refundAmount = actualPaidTotal; // hoàn tất cả (thuê + cọc)
         compensationAmount = 0;
       } else {
         // SHOP_RIGHT — chỉ hoàn tiền thuê, provider giữ tiền cọc
         refundAmount = Math.min(rentalFee, actualPaidTotal);
-        compensationAmount = Math.min(depositTotal, actualPaidTotal - refundAmount);
+        compensationAmount = Math.min(
+          depositTotal,
+          actualPaidTotal - refundAmount,
+        );
       }
     } else {
       // Luồng 2 — Provider tố sau khi trả đồ (incident)
       if (decision === 'CUSTOMER_RIGHT') {
-        refundAmount = depositTotal;      // hoàn tiền cọc cho khách
+        refundAmount = depositTotal; // hoàn tiền cọc cho khách
         compensationAmount = 0;
       } else {
         // SHOP_RIGHT — provider lấy tiền đền bù theo yêu cầu (tối đa bằng tiền cọc), khách nhận lại phần cọc còn lại (nếu có)
-        const claimed = Math.min(incident?.requestedAmount ?? depositTotal, depositTotal);
+        const claimed = Math.min(
+          incident?.requestedAmount ?? depositTotal,
+          depositTotal,
+        );
         compensationAmount = claimed;
         refundAmount = Math.max(depositTotal - claimed, 0);
       }
     }
 
     // Giới hạn tổng không vượt quá số tiền thực tế có thể chi trả
-    const limitTotal = (isPhotography || isDirectDispute) ? actualPaidTotal : depositTotal;
+    const limitTotal =
+      isPhotography || isDirectDispute ? actualPaidTotal : depositTotal;
     if (
       refundAmount < 0 ||
       compensationAmount < 0 ||
@@ -1265,19 +1355,27 @@ export class DisputesService {
     }
 
     // 1. Cập nhật trạng thái Escrow sang DisputedResolved
-    let escrow = await this.bookingModel.db
+    const escrow = await this.bookingModel.db
       .model('BookingEscrow')
       .findOneAndUpdate(
         {
           bookingId: booking._id,
-          status: { $in: [EscrowStatus.Held, EscrowStatus.Settled, EscrowStatus.Disputed] },
+          status: {
+            $in: [
+              EscrowStatus.Held,
+              EscrowStatus.Settled,
+              EscrowStatus.Disputed,
+            ],
+          },
         },
         { $set: { status: EscrowStatus.DisputedResolved } },
         { new: false },
       );
 
     if (!escrow) {
-      throw new ConflictException('Khoản ký quỹ (escrow) đang được xử lý hoặc không khả dụng.');
+      throw new ConflictException(
+        'Khoản ký quỹ (escrow) đang được xử lý hoặc không khả dụng.',
+      );
     }
 
     let transferResult = null;
@@ -1335,14 +1433,19 @@ export class DisputesService {
             sourceEventId: `refund:dispute:${incident?._id || booking._id}:admin-resolution`,
           });
         } catch (rfErr) {
-          console.warn('createFromDispute error, creating direct DEPOSIT_REFUND payment fallback:', rfErr);
+          console.warn(
+            'createFromDispute error, creating direct DEPOSIT_REFUND payment fallback:',
+            rfErr,
+          );
         }
 
         try {
-          const existingRefundPayment = await this.bookingModel.db.model('Payment').findOne({
-            bookingId: booking._id,
-            purpose: 'DEPOSIT_REFUND',
-          });
+          const existingRefundPayment = await this.bookingModel.db
+            .model('Payment')
+            .findOne({
+              bookingId: booking._id,
+              purpose: 'DEPOSIT_REFUND',
+            });
           if (!existingRefundPayment) {
             const refundPaymentCode = `REF${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
             await this.bookingModel.db.model('Payment').create({
@@ -1360,7 +1463,10 @@ export class DisputesService {
             await existingRefundPayment.save();
           }
         } catch (errPayment) {
-          console.error('Error ensuring DEPOSIT_REFUND payment record:', errPayment);
+          console.error(
+            'Error ensuring DEPOSIT_REFUND payment record:',
+            errPayment,
+          );
         }
 
         // Cập nhật rentalDepositRefund & paymentSummary trên Booking khi khách được hoàn tiền
@@ -1382,7 +1488,10 @@ export class DisputesService {
             purpose: 'DEPOSIT_REFUND',
           });
         } catch (delErr) {
-          console.warn('Could not delete old DEPOSIT_REFUND payment records:', delErr);
+          console.warn(
+            'Could not delete old DEPOSIT_REFUND payment records:',
+            delErr,
+          );
         }
 
         // 2. Cập nhật rentalDepositRefund = NO_REFUND & totalRefunded = 0
@@ -1390,7 +1499,8 @@ export class DisputesService {
           status: 'NO_REFUND',
           amount: 0,
           completedAt: new Date(),
-          rentalDepositReason: 'Khấu trừ đền bù hỏng đồ (Provider thắng tranh chấp)',
+          rentalDepositReason:
+            'Khấu trừ đền bù hỏng đồ (Provider thắng tranh chấp)',
         };
         if (!booking.paymentSummary) (booking as any).paymentSummary = {};
         booking.paymentSummary.totalRefunded = 0;
@@ -1405,8 +1515,13 @@ export class DisputesService {
       }
 
       let disputeBookingItemId = incident?.bookingItemId || null;
-      if (!disputeBookingItemId && typeof this.bookingItemModel?.findOne === 'function') {
-        const item = await this.bookingItemModel.findOne({ bookingId: booking._id });
+      if (
+        !disputeBookingItemId &&
+        typeof this.bookingItemModel?.findOne === 'function'
+      ) {
+        const item = await this.bookingItemModel.findOne({
+          bookingId: booking._id,
+        });
         disputeBookingItemId = item?._id || null;
       }
       const resolvedDispute = await this.disputeModel.findOneAndUpdate(
@@ -1417,7 +1532,8 @@ export class DisputesService {
           $set: {
             bookingItemId: disputeBookingItemId || new Types.ObjectId(),
             openedBy: (booking as any).customerId?._id || booking.customerId,
-            againstProviderId: reportedBy || (booking.providerIds?.[0] || new Types.ObjectId()),
+            againstProviderId:
+              reportedBy || booking.providerIds?.[0] || new Types.ObjectId(),
             reason: notes || 'Khách hàng khiếu nại',
             status: DisputeStatus.Resolved,
             adminDecision: {
@@ -1456,14 +1572,16 @@ export class DisputesService {
         decisionLabel = 'Thỏa thuận chia tiền';
       } else if (isDirectDispute) {
         // Luồng 1: khách tố trong 30p nhận đồ
-        decisionLabel = decision === 'CUSTOMER_RIGHT'
-          ? 'Khách hàng đúng — Hoàn toàn bộ tiền (thuê + cọc)'
-          : 'Shop đúng — Hoàn tiền thuê cho khách, provider giữ tiền cọc';
+        decisionLabel =
+          decision === 'CUSTOMER_RIGHT'
+            ? 'Khách hàng đúng — Hoàn toàn bộ tiền (thuê + cọc)'
+            : 'Shop đúng — Hoàn tiền thuê cho khách, provider giữ tiền cọc';
       } else {
         // Luồng 2: provider tố sau khi trả đồ
-        decisionLabel = decision === 'CUSTOMER_RIGHT'
-          ? 'Khách hàng đúng — Hoàn tiền cọc cho khách'
-          : 'Provider đúng — Provider giữ tiền cọc';
+        decisionLabel =
+          decision === 'CUSTOMER_RIGHT'
+            ? 'Khách hàng đúng — Hoàn tiền cọc cho khách'
+            : 'Provider đúng — Provider giữ tiền cọc';
       }
 
       (booking as any).disputeResult = {
@@ -1476,22 +1594,27 @@ export class DisputesService {
       };
 
       // Cập nhật trạng thái hoàn thành, cọc & tồn kho cho ĐÚNG áo dài trong tranh chấp (không updateMany bừa bãi)
-      let targetItemId: Types.ObjectId | null | undefined = incident?.bookingItemId;
+      let targetItemId: Types.ObjectId | null | undefined =
+        incident?.bookingItemId;
       if (!targetItemId && typeof this.disputeModel?.findOne === 'function') {
         try {
-          const dispute = await this.disputeModel.findOne({ bookingId: booking._id });
+          const dispute = await this.disputeModel.findOne({
+            bookingId: booking._id,
+          });
           targetItemId = (dispute as any)?.bookingItemId;
         } catch {
           targetItemId = null;
         }
       }
 
-      const targetItem = targetItemId && typeof this.bookingItemModel?.findById === 'function'
-        ? await this.bookingItemModel.findById(targetItemId)
-        : null;
+      const targetItem =
+        targetItemId && typeof this.bookingItemModel?.findById === 'function'
+          ? await this.bookingItemModel.findById(targetItemId)
+          : null;
 
       if (targetItem) {
-        const targetDeposit = (targetItem.depositAmount || 0) * (targetItem.quantity || 1);
+        const targetDeposit =
+          (targetItem.depositAmount || 0) * (targetItem.quantity || 1);
         let itemDeduct = 0;
         let itemRefund = 0;
         let itemSettlement = DepositSettlementStatus.FullyReleased;
@@ -1503,28 +1626,50 @@ export class DisputesService {
           itemSettlement = DepositSettlementStatus.FullyReleased;
           itemInventoryStatus = RentalInventoryStatus.Available;
         } else if (decision === 'SHOP_RIGHT') {
-          itemDeduct = Math.min(incident?.requestedAmount || targetDeposit, targetDeposit);
+          itemDeduct = Math.min(
+            incident?.requestedAmount || targetDeposit,
+            targetDeposit,
+          );
           itemRefund = Math.max(targetDeposit - itemDeduct, 0);
-          itemSettlement = itemRefund > 0 ? DepositSettlementStatus.PartiallyDeducted : DepositSettlementStatus.FullyDeducted;
-          itemInventoryStatus = incident?.actionType === 'MAINTENANCE' ? RentalInventoryStatus.Maintenance : RentalInventoryStatus.Available;
+          itemSettlement =
+            itemRefund > 0
+              ? DepositSettlementStatus.PartiallyDeducted
+              : DepositSettlementStatus.FullyDeducted;
+          itemInventoryStatus =
+            incident?.actionType === 'MAINTENANCE'
+              ? RentalInventoryStatus.Maintenance
+              : RentalInventoryStatus.Available;
         } else {
           // SPLIT
           itemDeduct = Math.min(compensationAmount, targetDeposit);
           itemRefund = Math.max(targetDeposit - itemDeduct, 0);
           itemSettlement = DepositSettlementStatus.PartiallyDeducted;
-          itemInventoryStatus = incident?.actionType === 'MAINTENANCE' ? RentalInventoryStatus.Maintenance : RentalInventoryStatus.Available;
+          itemInventoryStatus =
+            incident?.actionType === 'MAINTENANCE'
+              ? RentalInventoryStatus.Maintenance
+              : RentalInventoryStatus.Available;
         }
 
         // Cập nhật InventoryItem của targetItem
         try {
-          const reservationModel = this.bookingModel.db.model('InventoryReservation');
+          const reservationModel = this.bookingModel.db.model(
+            'InventoryReservation',
+          );
           if (reservationModel && typeof reservationModel.find === 'function') {
-            const reservations = await reservationModel.find({ bookingItemId: targetItem._id }).lean().exec();
-            const invIds = (reservations as any[]).map((r) => r.inventoryItemId).filter(Boolean);
+            const reservations = await reservationModel
+              .find({ bookingItemId: targetItem._id })
+              .lean()
+              .exec();
+            const invIds = (reservations as any[])
+              .map((r) => r.inventoryItemId)
+              .filter(Boolean);
             if (invIds.length === 0 && (targetItem as any).inventoryItemId) {
               invIds.push((targetItem as any).inventoryItemId);
             }
-            if (invIds.length > 0 && typeof this.inventoryModel?.updateMany === 'function') {
+            if (
+              invIds.length > 0 &&
+              typeof this.inventoryModel?.updateMany === 'function'
+            ) {
               const invStatus =
                 itemInventoryStatus === RentalInventoryStatus.Maintenance
                   ? InventoryItemStatus.Maintenance
@@ -1537,7 +1682,10 @@ export class DisputesService {
 
             if (typeof reservationModel.updateMany === 'function') {
               await reservationModel.updateMany(
-                { bookingItemId: targetItem._id, status: { $in: ['PENDING', 'CONFIRMED'] } },
+                {
+                  bookingItemId: targetItem._id,
+                  status: { $in: ['PENDING', 'CONFIRMED'] },
+                },
                 { $set: { status: 'COMPLETED' } },
               );
             }
@@ -1563,10 +1711,17 @@ export class DisputesService {
               $push: {
                 'rentalFulfillment.history': {
                   action: 'INCIDENT_RESOLVED',
-                  actor: { role: 'ADMIN', userId: new Types.ObjectId(adminUserId) },
+                  actor: {
+                    role: 'ADMIN',
+                    userId: new Types.ObjectId(adminUserId),
+                  },
                   occurredAt: new Date(),
                   note: `Admin giải quyết tranh chấp: ${decisionLabel}`,
-                  metadata: { decision, refundAmount: itemRefund, compensationAmount: itemDeduct },
+                  metadata: {
+                    decision,
+                    refundAmount: itemRefund,
+                    compensationAmount: itemDeduct,
+                  },
                 },
               },
             },
@@ -1583,11 +1738,15 @@ export class DisputesService {
 
         if (typeof this.bookingItemModel?.updateMany === 'function') {
           await this.bookingItemModel.updateMany(
-            { bookingId: (booking as any)._id, itemType: 'PRODUCT' as any } as any,
+            {
+              bookingId: (booking as any)._id,
+              itemType: 'PRODUCT' as any,
+            },
             {
               $set: {
                 'rentalFulfillment.status': RentalFulfillmentStatus.Completed,
-                'rentalFulfillment.inventoryStatus': RentalInventoryStatus.Available,
+                'rentalFulfillment.inventoryStatus':
+                  RentalInventoryStatus.Available,
                 'rentalFulfillment.completedAt': new Date(),
                 'rentalFulfillment.depositSettlementStatus': settlementStatus,
                 'rentalFulfillment.depositRefundAmount': refundAmount,
@@ -1609,7 +1768,9 @@ export class DisputesService {
             .exec();
 
           allItemsCompleted = (allProductItems || []).every(
-            (it: any) => it.rentalFulfillment?.status === RentalFulfillmentStatus.Completed,
+            (it: any) =>
+              it.rentalFulfillment?.status ===
+              RentalFulfillmentStatus.Completed,
           );
         } catch {
           allItemsCompleted = true;
@@ -1639,12 +1800,17 @@ export class DisputesService {
         await booking.save();
 
         try {
-          await this.bookingModel.db.model('BookingSchedule').updateMany(
-            { bookingId: booking._id },
-            { $set: { status: finalScheduleStatus } },
-          );
+          await this.bookingModel.db
+            .model('BookingSchedule')
+            .updateMany(
+              { bookingId: booking._id },
+              { $set: { status: finalScheduleStatus } },
+            );
         } catch (schErr) {
-          console.warn('Lỗi đồng bộ BookingSchedule khi giải quyết tranh chấp:', schErr);
+          console.warn(
+            'Lỗi đồng bộ BookingSchedule khi giải quyết tranh chấp:',
+            schErr,
+          );
         }
 
         if (decision === 'CUSTOMER_RIGHT') {
@@ -1654,6 +1820,40 @@ export class DisputesService {
             adminUserId,
           );
         } else {
+          try {
+            await this.settlementsService.createSettlementsForBooking(
+              booking._id.toString(),
+            );
+          } catch (createErr) {
+            console.warn(
+              'Lỗi tạo settlements cho booking khi giải quyết tranh chấp:',
+              createErr,
+            );
+          }
+
+          if (compensationAmount > 0) {
+            try {
+              const targetProviderId =
+                targetItem?.providerId ||
+                reportedBy ||
+                booking.providerIds?.[0];
+              if (
+                targetProviderId &&
+                typeof this.settlementsService.applyCompensationForBooking ===
+                  'function'
+              ) {
+                await this.settlementsService.applyCompensationForBooking(
+                  booking._id.toString(),
+                  targetProviderId.toString(),
+                  compensationAmount,
+                  notes,
+                );
+              }
+            } catch (compErr) {
+              console.warn('Lỗi áp dụng bồi thường vào settlement:', compErr);
+            }
+          }
+
           await this.settlementsService.releaseSettlementsForBooking(
             booking._id.toString(),
             notes,
@@ -1663,7 +1863,10 @@ export class DisputesService {
             await this.paymentsService.executeProfitSplit(booking);
             await this.paymentsService.creditWalletsForBooking(booking._id);
           } catch (walletErr) {
-            console.warn('Lỗi chia lợi nhuận ví khi giải quyết tranh chấp:', walletErr);
+            console.warn(
+              'Lỗi chia lợi nhuận ví khi giải quyết tranh chấp:',
+              walletErr,
+            );
           }
         }
       } else {
@@ -1682,11 +1885,15 @@ export class DisputesService {
           const provider = await providerModel.findById(reportedBy);
           if (provider) {
             const newViolationCount = (provider.violationCount || 0) + 1;
-            const updateData: Record<string, any> = { violationCount: newViolationCount };
+            const updateData: Record<string, any> = {
+              violationCount: newViolationCount,
+            };
             if (newViolationCount >= 3) {
               updateData.status = 'SUSPENDED';
             }
-            await providerModel.findByIdAndUpdate(reportedBy, { $set: updateData });
+            await providerModel.findByIdAndUpdate(reportedBy, {
+              $set: updateData,
+            });
           }
         } catch (pErr) {
           console.error('Lỗi tự động ghi nhận vi phạm/đình chỉ đối tác:', pErr);
@@ -1706,20 +1913,32 @@ export class DisputesService {
           compensationAmount,
           adminNotes: notes,
         };
-        const customerUserId = (booking.customerId as any)?._id || booking.customerId;
+        const customerUserId =
+          (booking.customerId as any)?._id || booking.customerId;
         const customerContent = `Admin đã đưa ra phán quyết cho đơn hàng ${booking.bookingCode}. Quyết định: ${decisionLabel}. Số tiền hoàn lại cho bạn: ${refundAmount.toLocaleString('vi-VN')}đ. Ghi chú của Admin: ${notes}`;
 
         // Use NotificationsService so the result is both persisted and pushed
         // through the socket to an already-open customer/provider session.
         if (this.notificationsService && customerUserId) {
           await this.notificationsService.createNotification(
-            customerUserId.toString(), title, customerContent, 'SYSTEM' as any, metadata,
+            customerUserId.toString(),
+            title,
+            customerContent,
+            'SYSTEM' as any,
+            metadata,
           );
         } else {
-          await notificationModel.create({ userId: customerUserId, title, content: customerContent, type: 'SYSTEM', metadata, isRead: false });
+          await notificationModel.create({
+            userId: customerUserId,
+            title,
+            content: customerContent,
+            type: 'SYSTEM',
+            metadata,
+            isRead: false,
+          });
         }
 
-        for (const pId of (booking.providerIds || [])) {
+        for (const pId of booking.providerIds || []) {
           const provider = await this.bookingModel.db
             .model('Provider')
             .findById((pId as any)?._id || pId);
@@ -1727,10 +1946,21 @@ export class DisputesService {
             const providerContent = `Admin đã đưa ra phán quyết cho đơn hàng ${booking.bookingCode}. Quyết định: ${decisionLabel}. Số tiền bồi thường giải ngân cho Shop: ${compensationAmount.toLocaleString('vi-VN')}đ. Ghi chú của Admin: ${notes}`;
             if (this.notificationsService) {
               await this.notificationsService.createNotification(
-                provider.userId.toString(), title, providerContent, 'SYSTEM' as any, metadata,
+                provider.userId.toString(),
+                title,
+                providerContent,
+                'SYSTEM' as any,
+                metadata,
               );
             } else {
-              await notificationModel.create({ userId: provider.userId, title, content: providerContent, type: 'SYSTEM', metadata, isRead: false });
+              await notificationModel.create({
+                userId: provider.userId,
+                title,
+                content: providerContent,
+                type: 'SYSTEM',
+                metadata,
+                isRead: false,
+              });
             }
           }
         }
@@ -1763,12 +1993,20 @@ export class DisputesService {
 
   async getDisputedIncidents(): Promise<any[]> {
     const incidents = await this.incidentModel
-      .find({ status: { $in: [IncidentStatus.Disputed, IncidentStatus.Resolved] } })
+      .find({
+        status: { $in: [IncidentStatus.Disputed, IncidentStatus.Resolved] },
+      })
       .populate({
         path: 'bookingId',
         populate: [
-          { path: 'customerId', select: 'fullName profile email phone phoneNumber avatar' },
-          { path: 'providerIds', select: 'businessName fullName profile phone' },
+          {
+            path: 'customerId',
+            select: 'fullName profile email phone phoneNumber avatar',
+          },
+          {
+            path: 'providerIds',
+            select: 'businessName fullName profile phone',
+          },
         ],
       })
       .populate('bookingItemId')
@@ -1778,13 +2016,25 @@ export class DisputesService {
 
     const disputes = await this.disputeModel
       .find({
-        status: { $in: [DisputeStatus.Open, DisputeStatus.UnderReview, DisputeStatus.Resolved] },
+        status: {
+          $in: [
+            DisputeStatus.Open,
+            DisputeStatus.UnderReview,
+            DisputeStatus.Resolved,
+          ],
+        },
       })
       .populate({
         path: 'bookingId',
         populate: [
-          { path: 'customerId', select: 'fullName profile email phone phoneNumber avatar' },
-          { path: 'providerIds', select: 'businessName fullName profile phone' },
+          {
+            path: 'customerId',
+            select: 'fullName profile email phone phoneNumber avatar',
+          },
+          {
+            path: 'providerIds',
+            select: 'businessName fullName profile phone',
+          },
         ],
       })
       .populate('bookingItemId')
@@ -1794,7 +2044,8 @@ export class DisputesService {
 
     const mappedDisputes = disputes.map((d: any) => {
       const pricingSummary = d.bookingId?.pricingSummary || {};
-      const isResolved = d.status === DisputeStatus.Resolved || d.status === 'RESOLVED';
+      const isResolved =
+        d.status === DisputeStatus.Resolved || d.status === 'RESOLVED';
       return {
         _id: d._id,
         bookingId: d.bookingId,
@@ -1804,23 +2055,24 @@ export class DisputesService {
         description: d.reason,
         actionType: 'REJECT_HANDOVER',
         evidencePhotos: d.evidencePhotos || [],
-        customerEvidencePhotos: (d as any).customerEvidencePhotos || [],
+        customerEvidencePhotos: d.customerEvidencePhotos || [],
         customerReason: d.reason,
         requestedAmount:
           pricingSummary.grandTotal || pricingSummary.subTotal || 0,
         status: isResolved ? 'RESOLVED' : IncidentStatus.Disputed,
         isDirectDispute: true,
         openedBy: d.openedBy,
-        adminDecision: (d as any).adminDecision || null,
-        adminNotes: (d as any).adminDecision?.decisionNote || null,
-        resolvedAt: (d as any).adminDecision?.decidedAt || null,
+        adminDecision: d.adminDecision || null,
+        adminNotes: d.adminDecision?.decisionNote || null,
+        resolvedAt: d.adminDecision?.decidedAt || null,
         createdAt: d.createdAt,
       };
     });
 
     const mappedIncidents = incidents.map((i: any) => {
       const pricingSummary = i.bookingId?.pricingSummary || {};
-      const isResolved = i.status === IncidentStatus.Resolved || i.status === 'RESOLVED';
+      const isResolved =
+        i.status === IncidentStatus.Resolved || i.status === 'RESOLVED';
       const customer = i.bookingId?.customerId || null;
       return {
         _id: i._id,
@@ -1833,7 +2085,11 @@ export class DisputesService {
         evidencePhotos: i.evidencePhotos || [],
         customerEvidencePhotos: i.customerEvidencePhotos || [],
         customerReason: i.customerReason || null,
-        requestedAmount: i.requestedAmount || i.compensationAmount || pricingSummary.depositTotal || 0,
+        requestedAmount:
+          i.requestedAmount ||
+          i.compensationAmount ||
+          pricingSummary.depositTotal ||
+          0,
         status: isResolved ? 'RESOLVED' : IncidentStatus.Disputed,
         isDirectDispute: false,
         openedBy: customer,
@@ -1845,8 +2101,12 @@ export class DisputesService {
 
     // Thêm các Booking có trạng thái DISPUTED hoặc có disputeResult chưa có record trong dispute/incident
     const existingBookingIds = [
-      ...incidents.map((i: any) => i.bookingId?._id?.toString() || i.bookingId?.toString()),
-      ...disputes.map((d: any) => d.bookingId?._id?.toString() || d.bookingId?.toString()),
+      ...incidents.map(
+        (i: any) => i.bookingId?._id?.toString() || i.bookingId?.toString(),
+      ),
+      ...disputes.map(
+        (d: any) => d.bookingId?._id?.toString() || d.bookingId?.toString(),
+      ),
     ].filter(Boolean);
 
     const bookingModel = this.incidentModel.db.model('Booking');
@@ -1859,12 +2119,16 @@ export class DisputesService {
           { status: BookingStatus.Disputed },
           { disputeResult: { $exists: true } },
         ],
-        _id: { $nin: existingBookingIds.map((id: string) => new Types.ObjectId(id)) },
+        _id: {
+          $nin: existingBookingIds.map((id: string) => new Types.ObjectId(id)),
+        },
       })
       .populate('customerId')
       .exec();
 
-    const disputedBookingIds = disputedBookings.map((booking: any) => booking._id);
+    const disputedBookingIds = disputedBookings.map(
+      (booking: any) => booking._id,
+    );
     const disputedProviderIds = disputedBookings
       .map((booking: any) => booking.providerIds?.[0])
       .filter(Boolean);
@@ -1888,51 +2152,65 @@ export class DisputesService {
     );
 
     const mappedDisputedBookings = disputedBookings.map((b: any) => {
-        const item = itemByBookingId.get(b._id.toString());
-        const lastTimeline = [...(b.statusTimeline || [])]
-          .reverse()
-          .find((t: any) => t.status === BookingStatus.Disputed);
-        const reason = lastTimeline?.note || 'Khách hàng gửi khiếu nại đơn hàng';
+      const item = itemByBookingId.get(b._id.toString());
+      const lastTimeline = [...(b.statusTimeline || [])]
+        .reverse()
+        .find((t: any) => t.status === BookingStatus.Disputed);
+      const reason = lastTimeline?.note || 'Khách hàng gửi khiếu nại đơn hàng';
 
-        const providerId = b.providerIds?.[0] || null;
-        const providerDoc = providerId
-          ? providerById.get(providerId.toString()) ?? null
-          : null;
+      const providerId = b.providerIds?.[0] || null;
+      const providerDoc = providerId
+        ? (providerById.get(providerId.toString()) ?? null)
+        : null;
 
-        const isResolved = Boolean(b.disputeResult) || b.status !== BookingStatus.Disputed;
+      const isResolved =
+        Boolean(b.disputeResult) || b.status !== BookingStatus.Disputed;
 
-        return {
-          _id: `bdispute_${b._id}`,
-          bookingId: b,
-          bookingItemId: item || null,
-          productId: item?.productId || item?.photographyPackageId || null,
-          reportedBy: providerDoc || null,
-          description: reason,
-          actionType: b.bookingType === 'PHOTOGRAPHY' ? 'PHOTOGRAPHY_DISPUTE' : 'CUSTOMER_DISPUTE',
-          evidencePhotos:
-            (b as any).disputeEvidencePhotos?.length
-              ? (b as any).disputeEvidencePhotos
-              : (b as any).evidencePhotos?.length
-              ? (b as any).evidencePhotos
-              : b.deliveredPhotos || b.handoverPhotos || [],
-          customerEvidencePhotos: (b as any).customerEvidencePhotos || [],
-          requestedAmount: b.pricingSummary?.grandTotal || b.pricingSummary?.subTotal || 0,
-          status: isResolved ? 'RESOLVED' : IncidentStatus.Disputed,
-          isDirectDispute: true,
-          openedBy: b.customerId,
-          isBookingDisputeOnly: true,
-          createdAt: b.createdAt,
-        };
-      });
+      return {
+        _id: `bdispute_${b._id}`,
+        bookingId: b,
+        bookingItemId: item || null,
+        productId: item?.productId || item?.photographyPackageId || null,
+        reportedBy: providerDoc || null,
+        description: reason,
+        actionType:
+          b.bookingType === 'PHOTOGRAPHY'
+            ? 'PHOTOGRAPHY_DISPUTE'
+            : 'CUSTOMER_DISPUTE',
+        evidencePhotos: b.disputeEvidencePhotos?.length
+          ? b.disputeEvidencePhotos
+          : b.evidencePhotos?.length
+            ? b.evidencePhotos
+            : b.deliveredPhotos || b.handoverPhotos || [],
+        customerEvidencePhotos: b.customerEvidencePhotos || [],
+        requestedAmount:
+          b.pricingSummary?.grandTotal || b.pricingSummary?.subTotal || 0,
+        status: isResolved ? 'RESOLVED' : IncidentStatus.Disputed,
+        isDirectDispute: true,
+        openedBy: b.customerId,
+        isBookingDisputeOnly: true,
+        createdAt: b.createdAt,
+      };
+    });
 
     // A customer rejection can create both the original IncidentReport and a
     // Dispute document. They are two records for one business case, not two
     // separate admin tasks. Collapse them by booking + booking item while
     // retaining all evidence and the most actionable fields.
     const mergedByCase = new Map<string, any>();
-    for (const entry of [...mappedIncidents, ...mappedDisputes, ...mappedDisputedBookings] as any[]) {
-      const bookingId = entry.bookingId?._id?.toString?.() || entry.bookingId?.toString?.() || '';
-      const itemId = entry.bookingItemId?._id?.toString?.() || entry.bookingItemId?.toString?.() || 'booking';
+    for (const entry of [
+      ...mappedIncidents,
+      ...mappedDisputes,
+      ...mappedDisputedBookings,
+    ] as any[]) {
+      const bookingId =
+        entry.bookingId?._id?.toString?.() ||
+        entry.bookingId?.toString?.() ||
+        '';
+      const itemId =
+        entry.bookingItemId?._id?.toString?.() ||
+        entry.bookingItemId?.toString?.() ||
+        'booking';
       const key = `${bookingId}:${itemId}`;
       const previous = mergedByCase.get(key);
       if (!previous) {
@@ -1940,7 +2218,9 @@ export class DisputesService {
         continue;
       }
 
-      const unique = (values: any[]) => [...new Set((values || []).filter(Boolean))];
+      const unique = (values: any[]) => [
+        ...new Set((values || []).filter(Boolean)),
+      ];
       const previousResolved = previous.status === 'RESOLVED';
       const entryResolved = entry.status === 'RESOLVED';
       mergedByCase.set(key, {
@@ -1949,20 +2229,36 @@ export class DisputesService {
         // that is the record the admin resolves by bookingId.
         _id: entry.isDirectDispute ? entry._id : previous._id,
         isDirectDispute: previous.isDirectDispute || entry.isDirectDispute,
-        isBookingDisputeOnly: previous.isBookingDisputeOnly || entry.isBookingDisputeOnly,
-        status: previousResolved && entryResolved ? 'RESOLVED' : IncidentStatus.Disputed,
-        actionType: entry.isDirectDispute ? entry.actionType : previous.actionType,
-        description: entry.isDirectDispute ? entry.description : previous.description,
-        evidencePhotos: unique([...(previous.evidencePhotos || []), ...(entry.evidencePhotos || [])]),
-        customerEvidencePhotos: unique([...(previous.customerEvidencePhotos || []), ...(entry.customerEvidencePhotos || [])]),
+        isBookingDisputeOnly:
+          previous.isBookingDisputeOnly || entry.isBookingDisputeOnly,
+        status:
+          previousResolved && entryResolved
+            ? 'RESOLVED'
+            : IncidentStatus.Disputed,
+        actionType: entry.isDirectDispute
+          ? entry.actionType
+          : previous.actionType,
+        description: entry.isDirectDispute
+          ? entry.description
+          : previous.description,
+        evidencePhotos: unique([
+          ...(previous.evidencePhotos || []),
+          ...(entry.evidencePhotos || []),
+        ]),
+        customerEvidencePhotos: unique([
+          ...(previous.customerEvidencePhotos || []),
+          ...(entry.customerEvidencePhotos || []),
+        ]),
         adminNotes: entry.adminNotes || previous.adminNotes || null,
         resolvedAt: entry.resolvedAt || previous.resolvedAt || null,
         createdAt: previous.createdAt || entry.createdAt,
       });
     }
 
-    return [...mergedByCase.values()].sort((a, b) =>
-      new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime(),
+    return [...mergedByCase.values()].sort(
+      (a, b) =>
+        new Date(b.createdAt || 0).getTime() -
+        new Date(a.createdAt || 0).getTime(),
     );
   }
 

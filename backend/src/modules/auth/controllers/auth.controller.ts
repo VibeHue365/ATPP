@@ -69,10 +69,7 @@ export class AuthController {
 
   @Throttle({ auth: { limit: 5, ttl: 60000 } })
   @Post('login')
-  login(
-    @Body() dto: LoginDto,
-    @Req() request: RequestMeta,
-  ): Promise<object> {
+  login(@Body() dto: LoginDto, @Req() request: RequestMeta): Promise<object> {
     return this.authService.login(dto, this.context(request));
   }
 
@@ -98,7 +95,10 @@ export class AuthController {
     @Body() dto: GoogleMobileLoginDto,
     @Req() request: RequestMeta,
   ): Promise<object> {
-    return this.authService.loginGoogleMobile(dto.idToken, this.context(request));
+    return this.authService.loginGoogleMobile(
+      dto.idToken,
+      this.context(request),
+    );
   }
 
   @Post('logout')
@@ -109,7 +109,9 @@ export class AuthController {
 
   @Get('me/permissions')
   @UseGuards(JwtAuthGuard)
-  getMePermissions(@CurrentUser() user: AuthUser): Promise<Record<string, unknown>> {
+  getMePermissions(
+    @CurrentUser() user: AuthUser,
+  ): Promise<Record<string, unknown>> {
     return this.authService.getPermissions(user.sub);
   }
 
@@ -120,7 +122,11 @@ export class AuthController {
     @Body() dto: ChangePasswordDto,
     @Req() request: RequestMeta,
   ): Promise<Record<string, unknown>> {
-    return this.authService.changePassword(user.sub, dto, this.context(request));
+    return this.authService.changePassword(
+      user.sub,
+      dto,
+      this.context(request),
+    );
   }
 
   @Throttle({ auth: { limit: 3, ttl: 60000 } })

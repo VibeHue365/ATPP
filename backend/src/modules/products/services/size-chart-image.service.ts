@@ -58,25 +58,31 @@ export class SizeChartImageService {
       if (!response.ok) {
         switch (response.status) {
           case 422:
-            failureMessage = 'AI không đọc được bảng trong ảnh. Bảng cũ được giữ nguyên; hãy thử ảnh rõ hơn hoặc nhập tay.';
+            failureMessage =
+              'AI không đọc được bảng trong ảnh. Bảng cũ được giữ nguyên; hãy thử ảnh rõ hơn hoặc nhập tay.';
             break;
           case 429:
-            failureMessage = 'Đã hết hạn mức AI đọc ảnh hôm nay. Bảng cũ được giữ nguyên; hãy thử lại sau khi hạn mức được đặt lại.';
+            failureMessage =
+              'Đã hết hạn mức AI đọc ảnh hôm nay. Bảng cũ được giữ nguyên; hãy thử lại sau khi hạn mức được đặt lại.';
             break;
           case 503:
-            failureMessage = 'Gemini tạm quá tải hoặc không khả dụng (503). Ảnh mới chưa được lưu; bảng size cũ được giữ nguyên. Hãy thử lại sau hoặc nhập tay.';
+            failureMessage =
+              'Gemini tạm quá tải hoặc không khả dụng (503). Ảnh mới chưa được lưu; bảng size cũ được giữ nguyên. Hãy thử lại sau hoặc nhập tay.';
             break;
           case 504:
-            failureMessage = 'Gemini phản hồi quá thời gian (504). Ảnh mới chưa được lưu; bảng size cũ được giữ nguyên. Hãy thử lại sau hoặc nhập tay.';
+            failureMessage =
+              'Gemini phản hồi quá thời gian (504). Ảnh mới chưa được lưu; bảng size cũ được giữ nguyên. Hãy thử lại sau hoặc nhập tay.';
             break;
           default:
-            failureMessage = 'Dịch vụ AI tạm thời chưa xử lý được ảnh. Bảng cũ được giữ nguyên; hãy thử lại sau hoặc nhập tay.';
+            failureMessage =
+              'Dịch vụ AI tạm thời chưa xử lý được ảnh. Bảng cũ được giữ nguyên; hãy thử lại sau hoặc nhập tay.';
         }
         throw new ServiceUnavailableException();
       }
       const extracted = (await response.json()) as Record<string, unknown>;
       if (!Array.isArray(extracted.rows) || extracted.rows.length > 30) {
-        failureMessage = 'AI trả bảng size không hợp lệ. Hãy thử lại ảnh hoặc nhập số đo bằng tay.';
+        failureMessage =
+          'AI trả bảng size không hợp lệ. Hãy thử lại ảnh hoặc nhập số đo bằng tay.';
         throw new BadRequestException();
       }
       const allRows = extracted.rows.map((row) =>
@@ -91,7 +97,8 @@ export class SizeChartImageService {
           )
         ).some((errors) => errors.length)
       ) {
-        failureMessage = 'AI trả số đo không hợp lệ. Hãy thử lại ảnh hoặc nhập số đo bằng tay.';
+        failureMessage =
+          'AI trả số đo không hợp lệ. Hãy thử lại ảnh hoặc nhập số đo bằng tay.';
         throw new BadRequestException();
       }
       // A printed chart commonly contains more sizes than this product offers.
@@ -120,20 +127,20 @@ export class SizeChartImageService {
         !['CM', 'IN'].includes(String(extracted.lengthUnit)) &&
         rows.some((row) => numericKeys.some((key) => row[key]))
       ) {
-        failureMessage = 'AI chưa xác định được đơn vị chiều dài của ảnh. Hãy thử ảnh rõ hơn hoặc nhập tay.';
+        failureMessage =
+          'AI chưa xác định được đơn vị chiều dài của ảnh. Hãy thử ảnh rõ hơn hoặc nhập tay.';
         throw new BadRequestException();
       }
       if (
         !['KG', 'LB'].includes(String(extracted.weightUnit)) &&
         rows.some((row) => row.weight)
       ) {
-        failureMessage = 'AI chưa xác định được đơn vị cân nặng của ảnh. Hãy thử ảnh rõ hơn hoặc nhập tay.';
+        failureMessage =
+          'AI chưa xác định được đơn vị cân nặng của ảnh. Hãy thử ảnh rõ hơn hoặc nhập tay.';
         throw new BadRequestException();
       }
       if (
-        !rows.some(
-          (row) => numericKeys.some((key) => row[key]) || row.weight,
-        )
+        !rows.some((row) => numericKeys.some((key) => row[key]) || row.weight)
       ) {
         failureMessage =
           'AI tìm thấy size nhưng chưa đọc được khoảng số đo hợp lệ. Hãy kiểm tra ảnh hoặc nhập các khoảng bên dưới.';
@@ -197,13 +204,26 @@ export class SizeChartImageService {
         await this.media.deleteByUrl(uploaded.url).catch(() => undefined);
         throw error;
       }
-      return { ...saved, sizes: current.sizes, warnings, extractionFailed: false };
+      return {
+        ...saved,
+        sizes: current.sizes,
+        warnings,
+        extractionFailed: false,
+      };
     } catch (error) {
       if (error instanceof ConflictException || savingExtraction) throw error;
-      if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError'))
-        failureMessage = 'Đọc ảnh quá thời gian chờ. Bảng cũ được giữ nguyên; hãy thử lại sau hoặc nhập tay.';
-      else if (error instanceof TypeError && /fetch failed/i.test(error.message))
-        failureMessage = 'Không kết nối được dịch vụ AI đọc ảnh (cổng 8000). Bảng cũ được giữ nguyên; hãy khởi động ai-service rồi thử lại.';
+      if (
+        error instanceof Error &&
+        (error.name === 'TimeoutError' || error.name === 'AbortError')
+      )
+        failureMessage =
+          'Đọc ảnh quá thời gian chờ. Bảng cũ được giữ nguyên; hãy thử lại sau hoặc nhập tay.';
+      else if (
+        error instanceof TypeError &&
+        /fetch failed/i.test(error.message)
+      )
+        failureMessage =
+          'Không kết nối được dịch vụ AI đọc ảnh (cổng 8000). Bảng cũ được giữ nguyên; hãy khởi động ai-service rồi thử lại.';
       return {
         ...current,
         warnings: [failureMessage],

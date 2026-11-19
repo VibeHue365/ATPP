@@ -5,9 +5,16 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, ClientSession } from 'mongoose';
-import { SecurityRequestContext, SecurityLogService } from '../../auth/services/security-log.service';
+import {
+  SecurityRequestContext,
+  SecurityLogService,
+} from '../../auth/services/security-log.service';
 import { AdminAuditAction } from '../../auth/schemas/admin-audit-log.schema';
-import { Booking, BookingStatus, PaymentStatus as BookingPaymentStatus } from '../../bookings/schemas/booking.schema';
+import {
+  Booking,
+  BookingStatus,
+  PaymentStatus as BookingPaymentStatus,
+} from '../../bookings/schemas/booking.schema';
 import { BookingItem } from '../../bookings/schemas/booking-item.schema';
 import { Payment, PaymentStatus } from '../../payments/schemas/payment.schema';
 import { Provider } from '../../providers/schemas/provider.schema';
@@ -57,9 +64,7 @@ export class SettlementsService {
     }
 
     if (!this.isEligibleForSettlement(booking)) {
-      throw new BadRequestException(
-        SETTLEMENT_ERROR_CODES.BookingNotCompleted,
-      );
+      throw new BadRequestException(SETTLEMENT_ERROR_CODES.BookingNotCompleted);
     }
 
     const validPaymentStatuses = [
@@ -68,7 +73,7 @@ export class SettlementsService {
       BookingPaymentStatus.Refunded,
     ];
     const isPaid =
-      validPaymentStatuses.includes(booking.paymentSummary?.paymentStatus as any) &&
+      validPaymentStatuses.includes(booking.paymentSummary?.paymentStatus) &&
       (booking.paymentSummary?.totalPaid || 0) > 0;
     if (!isPaid) {
       throw new BadRequestException(SETTLEMENT_ERROR_CODES.BookingNotPaid);
@@ -79,7 +84,9 @@ export class SettlementsService {
       throw new BadRequestException(SETTLEMENT_ERROR_CODES.NoBookingItems);
     }
 
-    const existing = await this.settlementModel.find({ bookingId: bookingObjectId });
+    const existing = await this.settlementModel.find({
+      bookingId: bookingObjectId,
+    });
     const existingProviderMap = new Map(
       existing.map((s) => [s.providerId.toString(), s]),
     );
@@ -91,24 +98,25 @@ export class SettlementsService {
       })
       .sort({ paidAt: -1, createdAt: -1 });
 
-    const payloads = await this.calculationService.calculateSettlementsForBooking(
-      {
-        _id: booking._id,
-        bookingCode: booking.bookingCode,
-        status: booking.status,
-        paymentSummary: booking.paymentSummary,
-      },
-      items,
-      latestPayment
-        ? {
-            _id: latestPayment._id,
-            amount: latestPayment.amount,
-            status: latestPayment.status,
-            paidAt: latestPayment.paidAt,
-          }
-        : null,
-      false,
-    );
+    const payloads =
+      await this.calculationService.calculateSettlementsForBooking(
+        {
+          _id: booking._id,
+          bookingCode: booking.bookingCode,
+          status: booking.status,
+          paymentSummary: booking.paymentSummary,
+        },
+        items,
+        latestPayment
+          ? {
+              _id: latestPayment._id,
+              amount: latestPayment.amount,
+              status: latestPayment.status,
+              paidAt: latestPayment.paidAt,
+            }
+          : null,
+        false,
+      );
 
     const missingPayloads = payloads.filter(
       (p) => !existingProviderMap.has(p.providerId.toString()),
@@ -161,9 +169,7 @@ export class SettlementsService {
     }
 
     if (booking.status !== BookingStatus.Completed) {
-      throw new BadRequestException(
-        SETTLEMENT_ERROR_CODES.BookingNotCompleted,
-      );
+      throw new BadRequestException(SETTLEMENT_ERROR_CODES.BookingNotCompleted);
     }
 
     const items = await this.loadBookingItems(bookingObjectId);
@@ -350,14 +356,15 @@ export class SettlementsService {
               settledAt: new Date(),
               walletDebitedAt: new Date(),
               payoutReference: dto.payoutReference ?? null,
-              note: [
-                dto.note,
-                adjustmentAmount > 0
-                  ? `Applied refund adjustment: ${adjustmentAmount}`
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(' | ') || null,
+              note:
+                [
+                  dto.note,
+                  adjustmentAmount > 0
+                    ? `Applied refund adjustment: ${adjustmentAmount}`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' | ') || null,
             },
           },
           { new: true, session },
@@ -438,10 +445,14 @@ export class SettlementsService {
     }
   }
 
-  private async applyPendingAdjustments(settlement: Settlement): Promise<number> {
+  private async applyPendingAdjustments(
+    settlement: Settlement,
+  ): Promise<number> {
     let remainingPayable = settlement.payableAmount;
     let appliedTotal = 0;
-    const adjustments = await this.adjustmentModel.find({ providerId: settlement.providerId, status: 'PENDING' }).sort({ createdAt: 1 });
+    const adjustments = await this.adjustmentModel
+      .find({ providerId: settlement.providerId, status: 'PENDING' })
+      .sort({ createdAt: 1 });
     for (const adjustment of adjustments) {
       if (remainingPayable <= 0) break;
       const outstanding = adjustment.amount - (adjustment.appliedAmount || 0);
@@ -449,15 +460,28 @@ export class SettlementsService {
       if (applied <= 0) continue;
       const nextApplied = (adjustment.appliedAmount || 0) + applied;
       await this.adjustmentModel.updateOne(
-        { _id: adjustment._id, status: 'PENDING', appliedAmount: adjustment.appliedAmount || 0 },
-        { $set: { appliedAmount: nextApplied, status: nextApplied >= adjustment.amount ? 'APPLIED' : 'PENDING' } },
+        {
+          _id: adjustment._id,
+          status: 'PENDING',
+          appliedAmount: adjustment.appliedAmount || 0,
+        },
+        {
+          $set: {
+            appliedAmount: nextApplied,
+            status: nextApplied >= adjustment.amount ? 'APPLIED' : 'PENDING',
+          },
+        },
       );
       remainingPayable -= applied;
       appliedTotal += applied;
     }
     if (appliedTotal > 0) {
       await this.settlementModel.updateOne(
-        { _id: (settlement as any)._id, status: SettlementStatus.ReadyToSettle, payableAmount: { $gte: appliedTotal } },
+        {
+          _id: (settlement as any)._id,
+          status: SettlementStatus.ReadyToSettle,
+          payableAmount: { $gte: appliedTotal },
+        },
         { $inc: { payableAmount: -appliedTotal, refundAmount: appliedTotal } },
       );
     }
@@ -528,6 +552,63 @@ export class SettlementsService {
     }
   }
 
+  async applyCompensationForBooking(
+    bookingId: string,
+    providerId: string | Types.ObjectId,
+    compensationAmount: number,
+    note?: string,
+  ): Promise<void> {
+    if (!compensationAmount || compensationAmount <= 0) return;
+    const bookingObjectId = this.toObjectId(bookingId);
+    const providerObjectId =
+      typeof providerId === 'string' ? this.toObjectId(providerId) : providerId;
+
+    const settlement = await this.settlementModel.findOne({
+      bookingId: bookingObjectId,
+      providerId: providerObjectId,
+    });
+
+    if (!settlement) {
+      return;
+    }
+
+    const currentCompensation = settlement.compensationAmount || 0;
+    const additionalCompensation = Math.max(
+      0,
+      compensationAmount - currentCompensation,
+    );
+
+    settlement.compensationAmount = compensationAmount;
+    settlement.payableAmount = Math.max(
+      0,
+      settlement.netAmount -
+        (settlement.refundAmount || 0) -
+        (settlement.penaltyAmount || 0) +
+        compensationAmount,
+    );
+    if (note) {
+      settlement.note = settlement.note ? `${settlement.note} | ${note}` : note;
+    }
+
+    if (settlement.walletCreditedAt && additionalCompensation > 0) {
+      const now = new Date();
+      settlement.walletCreditedAmount =
+        (settlement.walletCreditedAmount || 0) + additionalCompensation;
+      await this.providerModel.updateOne(
+        { _id: providerObjectId },
+        {
+          $inc: {
+            'wallet.availableBalance': additionalCompensation,
+            'wallet.totalEarned': additionalCompensation,
+          },
+          $set: { 'wallet.lastUpdatedAt': now },
+        },
+      );
+    }
+
+    await settlement.save();
+  }
+
   async cancelSettlementsForBooking(
     bookingId: string,
     reason: string,
@@ -536,7 +617,9 @@ export class SettlementsService {
     await this.settlementModel.updateMany(
       {
         bookingId: this.toObjectId(bookingId),
-        status: { $in: [SettlementStatus.ReadyToSettle, SettlementStatus.OnHold] },
+        status: {
+          $in: [SettlementStatus.ReadyToSettle, SettlementStatus.OnHold],
+        },
       },
       {
         $set: {
@@ -566,7 +649,9 @@ export class SettlementsService {
       .populate('photographyPackageId');
   }
 
-  private countDistinctProviders(items: Array<{ providerId: Types.ObjectId }>): number {
+  private countDistinctProviders(
+    items: Array<{ providerId: Types.ObjectId }>,
+  ): number {
     return new Set(items.map((item) => item.providerId.toString())).size;
   }
 
@@ -586,9 +671,7 @@ export class SettlementsService {
       return existing;
     }
 
-    throw new BadRequestException(
-      SETTLEMENT_ERROR_CODES.PartialStateDetected,
-    );
+    throw new BadRequestException(SETTLEMENT_ERROR_CODES.PartialStateDetected);
   }
 
   private isEligibleForSettlement(booking: Booking): boolean {
@@ -600,11 +683,17 @@ export class SettlementsService {
       Boolean((booking as any).photosApproved) ||
       Boolean((booking as any).deliveredPhotos?.length > 0) ||
       Boolean((booking as any).deliveryDriveUrl) ||
-      booking.statusTimeline?.some((t) => t.status === BookingStatus.ComboPhotosApproved || t.status === BookingStatus.Completed);
+      booking.statusTimeline?.some(
+        (t) =>
+          t.status === BookingStatus.ComboPhotosApproved ||
+          t.status === BookingStatus.Completed,
+      );
     return (booking.bookingType as string) === 'COMBO' && isComboPhotoDelivered;
   }
 
-  private async markGenerationSuccess(bookingId: Types.ObjectId): Promise<void> {
+  private async markGenerationSuccess(
+    bookingId: Types.ObjectId,
+  ): Promise<void> {
     await this.bookingModel.updateOne(
       { _id: bookingId },
       {

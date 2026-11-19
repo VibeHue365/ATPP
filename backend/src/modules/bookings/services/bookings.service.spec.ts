@@ -14,7 +14,10 @@ import {
   InventoryReservation,
   ReservationStatus,
 } from '../../products/schemas/inventory-reservation.schema';
-import { InventorySlotLease, SlotLeaseStatus } from '../schemas/inventory-slot-lease.schema';
+import {
+  InventorySlotLease,
+  SlotLeaseStatus,
+} from '../schemas/inventory-slot-lease.schema';
 import { Provider } from '../../providers/schemas/provider.schema';
 import { PaymentsService } from '../../payments/services/payments.service';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -70,7 +73,9 @@ describe('Bookings Service Unit Tests', () => {
 
     mockBookingModel = {
       findById: jest.fn(),
-      findByIdAndUpdate: jest.fn().mockReturnValue({ session: jest.fn().mockResolvedValue({}) }),
+      findByIdAndUpdate: jest
+        .fn()
+        .mockReturnValue({ session: jest.fn().mockResolvedValue({}) }),
       find: jest.fn(),
       updateMany: jest.fn(),
       db: mockDb,
@@ -539,7 +544,9 @@ describe('Bookings Service Unit Tests', () => {
       });
 
       mockLeaseModel.updateMany.mockReturnValue({
-        session: jest.fn().mockRejectedValue(new Error('Lease release DB failure')),
+        session: jest
+          .fn()
+          .mockRejectedValue(new Error('Lease release DB failure')),
       });
 
       await expect(

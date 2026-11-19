@@ -11,23 +11,19 @@ function createService(
   options: { existing?: Row | null; pkg?: Row | null; quote?: Row } = {},
 ) {
   const bookingModel = {
-    findOne: jest
-      .fn()
-      .mockReturnValue({
-        exec: () => Promise.resolve(options.existing ?? null),
-      }),
+    findOne: jest.fn().mockReturnValue({
+      exec: () => Promise.resolve(options.existing ?? null),
+    }),
   };
   const packageModel = {
-    findOne: jest
-      .fn()
-      .mockResolvedValue(
-        options.pkg === undefined
-          ? {
-              _id: new Types.ObjectId(packageId),
-              providerId: new Types.ObjectId(),
-            }
-          : options.pkg,
-      ),
+    findOne: jest.fn().mockResolvedValue(
+      options.pkg === undefined
+        ? {
+            _id: new Types.ObjectId(packageId),
+            providerId: new Types.ObjectId(),
+          }
+        : options.pkg,
+    ),
   };
   const quoteService = {
     quote: jest
@@ -147,18 +143,15 @@ describe('UC-41 Booking Photographer - hold request (NgocL)', () => {
     expect(transaction).not.toHaveBeenCalled();
   });
 
-  it(
-    'UT-41 UTCID14 returns a readable Vietnamese message for an invalid package',
-    async () => {
-      const { service } = createService();
+  it('UT-41 UTCID14 returns a readable Vietnamese message for an invalid package', async () => {
+    const { service } = createService();
 
-      await expect(
-        service.createHold(
-          customerId,
-          { ...dto, packageId: 'package-1' },
-          'key-1',
-        ),
-      ).rejects.toThrow('Gói chụp không hợp lệ.');
-    },
-  );
+    await expect(
+      service.createHold(
+        customerId,
+        { ...dto, packageId: 'package-1' },
+        'key-1',
+      ),
+    ).rejects.toThrow('Gói chụp không hợp lệ.');
+  });
 });

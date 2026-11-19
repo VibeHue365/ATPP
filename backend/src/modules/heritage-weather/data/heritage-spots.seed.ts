@@ -40,7 +40,8 @@ export const HUE_HERITAGE_SPOTS_SEED: HeritageSpotSeedItem[] = [
     samplePhotos: [
       'https://images.unsplash.com/photo-1599707367072-cd6ada2bc375?auto=format&fit=crop&w=1200&q=80',
     ],
-    description: 'Trái tim của Di sản Cố đô Huế, bối cảnh uy nghiêm tráng lệ nhất cho các bộ cổ phục cung đình.',
+    description:
+      'Trái tim của Di sản Cố đô Huế, bối cảnh uy nghiêm tráng lệ nhất cho các bộ cổ phục cung đình.',
     isActive: true,
   },
   {
@@ -60,7 +61,8 @@ export const HUE_HERITAGE_SPOTS_SEED: HeritageSpotSeedItem[] = [
     samplePhotos: [
       'https://images.unsplash.com/photo-1599707367072-cd6ada2bc375?auto=format&fit=crop&w=1200&q=80',
     ],
-    description: 'Khuôn viên có hệ thống hành lang mái che nối liền các cung điện, phù hợp chụp chân dung cổ phục khi có mưa nhỏ.',
+    description:
+      'Khuôn viên có hệ thống hành lang mái che nối liền các cung điện, phù hợp chụp chân dung cổ phục khi có mưa nhỏ.',
     isActive: true,
   },
   {
@@ -80,7 +82,8 @@ export const HUE_HERITAGE_SPOTS_SEED: HeritageSpotSeedItem[] = [
     samplePhotos: [
       'https://images.unsplash.com/photo-1599707367072-cd6ada2bc375?auto=format&fit=crop&w=1200&q=80',
     ],
-    description: 'Quần thể lăng tẩm mang vẻ đẹp trữ tình, thơ mộng như một công viên hoàng gia nép mình bên rừng thông.',
+    description:
+      'Quần thể lăng tẩm mang vẻ đẹp trữ tình, thơ mộng như một công viên hoàng gia nép mình bên rừng thông.',
     isActive: true,
   },
   {
@@ -100,7 +103,8 @@ export const HUE_HERITAGE_SPOTS_SEED: HeritageSpotSeedItem[] = [
     samplePhotos: [
       'https://images.unsplash.com/photo-1599707367072-cd6ada2bc375?auto=format&fit=crop&w=1200&q=80',
     ],
-    description: 'Kiến trúc đỉnh cao khảm sành sứ trong nhà tại Cung Thiên Định, có mái che kiên cố chụp ảnh bất chấp mưa phùn.',
+    description:
+      'Kiến trúc đỉnh cao khảm sành sứ trong nhà tại Cung Thiên Định, có mái che kiên cố chụp ảnh bất chấp mưa phùn.',
     isActive: true,
   },
   {
@@ -120,7 +124,8 @@ export const HUE_HERITAGE_SPOTS_SEED: HeritageSpotSeedItem[] = [
     samplePhotos: [
       'https://images.unsplash.com/photo-1599707367072-cd6ada2bc375?auto=format&fit=crop&w=1200&q=80',
     ],
-    description: 'Bạch Dinh hoàng gia tráng lệ của vua Khải Định và Nam Phương Hoàng hậu, không gian hành lang và sảnh chụp ảnh tuyệt mỹ.',
+    description:
+      'Bạch Dinh hoàng gia tráng lệ của vua Khải Định và Nam Phương Hoàng hậu, không gian hành lang và sảnh chụp ảnh tuyệt mỹ.',
     isActive: true,
   },
   {
@@ -140,7 +145,8 @@ export const HUE_HERITAGE_SPOTS_SEED: HeritageSpotSeedItem[] = [
     samplePhotos: [
       'https://images.unsplash.com/photo-1599707367072-cd6ada2bc375?auto=format&fit=crop&w=1200&q=80',
     ],
-    description: 'Biểu tượng tâm linh cổ kính nhất xứ Huế, đón trọn ánh hoàng hôn buông xuống dòng sông Hương thơ mộng.',
+    description:
+      'Biểu tượng tâm linh cổ kính nhất xứ Huế, đón trọn ánh hoàng hôn buông xuống dòng sông Hương thơ mộng.',
     isActive: true,
   },
   {
@@ -160,7 +166,8 @@ export const HUE_HERITAGE_SPOTS_SEED: HeritageSpotSeedItem[] = [
     samplePhotos: [
       'https://images.unsplash.com/photo-1599707367072-cd6ada2bc375?auto=format&fit=crop&w=1200&q=80',
     ],
-    description: 'Kiến trúc đăng đối chuẩn mực Nho giáo, kết hợp hài hòa giữa hồ nước và đồi thông bạt ngàn.',
+    description:
+      'Kiến trúc đăng đối chuẩn mực Nho giáo, kết hợp hài hòa giữa hồ nước và đồi thông bạt ngàn.',
     isActive: true,
   },
   {
@@ -180,7 +187,8 @@ export const HUE_HERITAGE_SPOTS_SEED: HeritageSpotSeedItem[] = [
     samplePhotos: [
       'https://images.unsplash.com/photo-1599707367072-cd6ada2bc375?auto=format&fit=crop&w=1200&q=80',
     ],
-    description: 'Điểm ngắm khúc quanh sông Hương đẹp nhất xứ Huế, không gian khoáng đạt chụp ảnh hoàng hôn tự nhiên.',
+    description:
+      'Điểm ngắm khúc quanh sông Hương đẹp nhất xứ Huế, không gian khoáng đạt chụp ảnh hoàng hôn tự nhiên.',
     isActive: true,
   },
   {
@@ -200,7 +208,8 @@ export const HUE_HERITAGE_SPOTS_SEED: HeritageSpotSeedItem[] = [
     samplePhotos: [
       'https://images.unsplash.com/photo-1599707367072-cd6ada2bc375?auto=format&fit=crop&w=1200&q=80',
     ],
-    description: 'Cây cầu 6 vài 12 nhịp nối đôi bờ sông Hương, địa điểm chụp áo dài biểu tượng không thể bỏ qua khi đến Huế.',
+    description:
+      'Cây cầu 6 vài 12 nhịp nối đôi bờ sông Hương, địa điểm chụp áo dài biểu tượng không thể bỏ qua khi đến Huế.',
     isActive: true,
   },
   {
@@ -216,11 +225,16 @@ export const HUE_HERITAGE_SPOTS_SEED: HeritageSpotSeedItem[] = [
     operatingHours: { openTime: '08:00', closeTime: '21:00' },
     standardAdmissionFee: 100000,
     baseTravelFee: 0,
-    bestOutfitCategories: ['NHAT_BINH_HOANG_HAU', 'NGU_THAN_QUY_TOC', 'AO_TAC_CUOI'],
+    bestOutfitCategories: [
+      'NHAT_BINH_HOANG_HAU',
+      'NGU_THAN_QUY_TOC',
+      'AO_TAC_CUOI',
+    ],
     samplePhotos: [
       'https://images.unsplash.com/photo-1599707367072-cd6ada2bc375?auto=format&fit=crop&w=1200&q=80',
     ],
-    description: 'Phim trường hoàng cung trong nhà 100% cách âm, điều hòa trung tâm và ánh sáng điện ảnh, an toàn tuyệt đối khi có bão.',
+    description:
+      'Phim trường hoàng cung trong nhà 100% cách âm, điều hòa trung tâm và ánh sáng điện ảnh, an toàn tuyệt đối khi có bão.',
     isActive: true,
   },
 ];

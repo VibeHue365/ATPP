@@ -24,27 +24,30 @@ export class MailService {
 
     this.from =
       this.configService.get<string>('MAIL_FROM') ||
-      (user ? `VibeHue <${user}>` : 'VibeHue <no-reply@localhost>');
+      (user ? `TàGo <${user}>` : 'TàGo <no-reply@localhost>');
 
     this.transporter =
       host && user && pass
         ? nodemailer.createTransport({
-          host,
-          port,
-          secure,
-          auth: { user, pass },
-          connectionTimeout: this.timeout('MAIL_CONNECTION_TIMEOUT_MS', 10000),
-          greetingTimeout: this.timeout('MAIL_GREETING_TIMEOUT_MS', 10000),
-          socketTimeout: this.timeout('MAIL_SOCKET_TIMEOUT_MS', 20000),
-        })
+            host,
+            port,
+            secure,
+            auth: { user, pass },
+            connectionTimeout: this.timeout(
+              'MAIL_CONNECTION_TIMEOUT_MS',
+              10000,
+            ),
+            greetingTimeout: this.timeout('MAIL_GREETING_TIMEOUT_MS', 10000),
+            socketTimeout: this.timeout('MAIL_SOCKET_TIMEOUT_MS', 20000),
+          })
         : null;
   }
 
   async sendEmailVerificationOtp(email: string, otp: string): Promise<void> {
-    const subject = 'Verify your VibeHue email';
-    const text = `Your VibeHue verification OTP is ${otp}. This OTP expires in 10 minutes.`;
+    const subject = 'Verify your TàGo email';
+    const text = `Your TàGo verification OTP is ${otp}. This OTP expires in 10 minutes.`;
     const html = `
-      <p>Your VibeHue verification OTP is:</p>
+      <p>Your TàGo verification OTP is:</p>
       <h2>${otp}</h2>
       <p>This OTP expires in 10 minutes.</p>
     `;
@@ -59,10 +62,10 @@ export class MailService {
     );
     const frontendUrl = getPrimaryFrontendUrl(rawFrontendUrl);
     const resetUrl = `${frontendUrl}/auth/reset-password?token=${encodeURIComponent(token)}`;
-    const subject = 'Reset your VibeHue password';
+    const subject = 'Reset your TàGo password';
     const text = `Reset your password here: ${resetUrl}. This link expires in 15 minutes.`;
     const html = `
-      <p>Reset your VibeHue password using this link:</p>
+      <p>Reset your TàGo password using this link:</p>
       <p><a href="${resetUrl}">${resetUrl}</a></p>
       <p>This link expires in 15 minutes.</p>
     `;

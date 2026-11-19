@@ -1,6 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { OpenMeteoClientService, OpenMeteoHourlyData } from './open-meteo-client.service';
+import {
+  OpenMeteoClientService,
+  OpenMeteoHourlyData,
+} from './open-meteo-client.service';
 import { RedisService } from '../../../common/redis/redis.service';
 
 describe('OpenMeteoClientService', () => {
@@ -52,21 +55,25 @@ describe('OpenMeteoClientService', () => {
 
       const result = await service.getHourlyForecast(16.4637, 107.5909);
 
-      expect(mockRedisService.get).toHaveBeenCalledWith('weather:forecast:16.46:107.59');
+      expect(mockRedisService.get).toHaveBeenCalledWith(
+        'weather:forecast:16.46:107.59',
+      );
       expect(result).toEqual(mockHourlyData);
     });
 
     it('should fetch from Open-Meteo API on cache miss and save to Redis', async () => {
       mockRedisService.get.mockResolvedValueOnce(null);
 
-      const globalFetchMock = jest.spyOn(global, 'fetch').mockImplementationOnce(
-        async () =>
-          ({
-            ok: true,
-            status: 200,
-            json: async () => ({ hourly: mockHourlyData }),
-          } as any),
-      );
+      const globalFetchMock = jest
+        .spyOn(global, 'fetch')
+        .mockImplementationOnce(
+          async () =>
+            ({
+              ok: true,
+              status: 200,
+              json: async () => ({ hourly: mockHourlyData }),
+            }) as any,
+        );
 
       const result = await service.getHourlyForecast(16.4637, 107.5909);
 
@@ -84,17 +91,19 @@ describe('OpenMeteoClientService', () => {
     it('should throw error when API call fails and no cached data is available', async () => {
       mockRedisService.get.mockResolvedValueOnce(null);
 
-      const globalFetchMock = jest.spyOn(global, 'fetch').mockImplementationOnce(
-        async () =>
-          ({
-            ok: false,
-            status: 500,
-          } as any),
-      );
+      const globalFetchMock = jest
+        .spyOn(global, 'fetch')
+        .mockImplementationOnce(
+          async () =>
+            ({
+              ok: false,
+              status: 500,
+            }) as any,
+        );
 
-      await expect(service.getHourlyForecast(16.4637, 107.5909)).rejects.toThrow(
-        'Open-Meteo responded with status 500',
-      );
+      await expect(
+        service.getHourlyForecast(16.4637, 107.5909),
+      ).rejects.toThrow('Open-Meteo responded with status 500');
 
       globalFetchMock.mockRestore();
     });
@@ -102,14 +111,16 @@ describe('OpenMeteoClientService', () => {
     it('should serve from L1 in-memory cache when Redis miss but memory cache has valid entry', async () => {
       mockRedisService.get.mockResolvedValue(null);
 
-      const globalFetchMock = jest.spyOn(global, 'fetch').mockImplementationOnce(
-        async () =>
-          ({
-            ok: true,
-            status: 200,
-            json: async () => ({ hourly: mockHourlyData }),
-          } as any),
-      );
+      const globalFetchMock = jest
+        .spyOn(global, 'fetch')
+        .mockImplementationOnce(
+          async () =>
+            ({
+              ok: true,
+              status: 200,
+              json: async () => ({ hourly: mockHourlyData }),
+            }) as any,
+        );
 
       // First call populates in-memory cache
       await service.getHourlyForecast(16.4637, 107.5909);
@@ -132,13 +143,15 @@ describe('OpenMeteoClientService', () => {
         expiresAt: Date.now() - 1000, // expired
       });
 
-      const globalFetchMock = jest.spyOn(global, 'fetch').mockImplementationOnce(
-        async () =>
-          ({
-            ok: false,
-            status: 503,
-          } as any),
-      );
+      const globalFetchMock = jest
+        .spyOn(global, 'fetch')
+        .mockImplementationOnce(
+          async () =>
+            ({
+              ok: false,
+              status: 503,
+            }) as any,
+        );
 
       const staleResult = await service.getHourlyForecast(16.4637, 107.5909);
       expect(staleResult).toEqual(mockHourlyData);

@@ -969,7 +969,7 @@ export const ProductModerationPanel: React.FC = () => {
                   <th>Loại</th>
                   <th>Danh mục</th>
                   <th>Đối tác</th>
-                  <th>Ngày đăng ˅</th>
+                  <th>Ngày gửi duyệt ˅</th>
                   <th>Giá (VNĐ)</th>
                   <th>Trạng thái</th>
                 </tr>
@@ -991,7 +991,13 @@ export const ProductModerationPanel: React.FC = () => {
                   items.map((item, idx) => {
                     const isSelected = activeProduct?._id === item._id && isDetailOpen;
                     const rowNumber = (page - 1) * limit + idx + 1;
-                    const { date, time } = formatDateTime(item.createdAt);
+                    const isEdited = Boolean(
+                      item.updatedAt &&
+                      item.createdAt &&
+                      new Date(item.updatedAt).getTime() - new Date(item.createdAt).getTime() > 1000
+                    );
+                    const lastActiveDate = item.updatedAt || item.createdAt;
+                    const { date, time } = formatDateTime(lastActiveDate);
                     const rawThumb = item.images && item.images.length > 0 ? item.images[0] : '';
                     const thumbUrl = resolveImageUrl(rawThumb, fallbackThumb);
 
@@ -1048,16 +1054,35 @@ export const ProductModerationPanel: React.FC = () => {
                         <td>
                           <div className="lume-partner-block">
                             <span className="lume-partner-name">
-                              {item.providerId?.businessName || 'Đối tác VibeHue'}
+                              {item.providerId?.businessName || 'Đối tác TàGo'}
                             </span>
                             <span className="lume-partner-code">{item.partnerCode}</span>
                           </div>
                         </td>
 
-                        {/* Ngày đăng */}
+                        {/* Ngày gửi duyệt */}
                         <td>
                           <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontWeight: 600, color: '#0f172a' }}>{date}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <span style={{ fontWeight: 600, color: '#0f172a' }}>{date}</span>
+                              {isEdited && (
+                                <span
+                                  style={{
+                                    fontSize: '10px',
+                                    lineHeight: '1',
+                                    padding: '2px 5px',
+                                    borderRadius: '4px',
+                                    background: '#e0f2fe',
+                                    color: '#0369a1',
+                                    fontWeight: 700,
+                                    border: '1px solid #bae6fd',
+                                  }}
+                                  title={`Tạo lúc: ${formatDateTime(item.createdAt).date} ${formatDateTime(item.createdAt).time}`}
+                                >
+                                  Đã sửa
+                                </span>
+                              )}
+                            </div>
                             <span style={{ fontSize: '11px', color: '#94a3b8' }}>{time}</span>
                           </div>
                         </td>
@@ -1323,7 +1348,7 @@ export const ProductModerationPanel: React.FC = () => {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#f8fafc', borderRadius: 8, fontSize: 12 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#334155', fontWeight: 500 }}>
                         <ShieldCheck size={16} color="#16a34a" />
-                        <span>5. Tuân thủ chính sách VibeHue Escrow</span>
+                        <span>5. Tuân thủ chính sách TàGo Escrow</span>
                       </div>
                       <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '2px 8px', borderRadius: 10 }}>Đạt</span>
                     </div>
@@ -1417,7 +1442,7 @@ export const ProductModerationPanel: React.FC = () => {
                         />
                         <div>
                           <div className="lume-product-partner-profile-name">
-                            {activeProduct.providerId?.businessName || 'Đối tác VibeHue'}
+                            {activeProduct.providerId?.businessName || 'Đối tác TàGo'}
                           </div>
                           <div className="lume-product-partner-profile-code">
                             Mã đối tác: {activeProduct.partnerCode} • ★ 4.9 uy tín
@@ -1611,11 +1636,22 @@ export const ProductModerationPanel: React.FC = () => {
                       )}
 
                       <div className="lume-product-spec-row">
-                        <span className="lume-product-spec-label">Thời gian đăng ký</span>
+                        <span className="lume-product-spec-label">Thời gian đăng ban đầu</span>
                         <span className="lume-product-spec-val">
                           {formatDateTime(activeProduct.createdAt).date} {formatDateTime(activeProduct.createdAt).time}
                         </span>
                       </div>
+
+                      {activeProduct.updatedAt &&
+                        activeProduct.createdAt &&
+                        new Date(activeProduct.updatedAt).getTime() - new Date(activeProduct.createdAt).getTime() > 1000 && (
+                          <div className="lume-product-spec-row">
+                            <span className="lume-product-spec-label">Chỉnh sửa gửi duyệt lại</span>
+                            <span className="lume-product-spec-val" style={{ color: '#0284c7', fontWeight: 600 }}>
+                              {formatDateTime(activeProduct.updatedAt).date} {formatDateTime(activeProduct.updatedAt).time}
+                            </span>
+                          </div>
+                        )}
                     </div>
 
                     {activeProduct.itemType === 'AODAI' && (activeProduct.customTags?.length || 0) > 0 && (
@@ -1711,7 +1747,7 @@ export const ProductModerationPanel: React.FC = () => {
                         Cam kết chất lượng LUMÉ Quality Guarantee
                       </h4>
                       <p style={{ margin: 0, fontSize: 13, color: '#475569', lineHeight: 1.6 }}>
-                        Sản phẩm & dịch vụ đăng tải phải tuân thủ nghiêm ngặt bảng giá niêm yết công khai trên VibeHue. Đối tác cam kết phục vụ đúng cam kết thời gian, trang phục sạch mới và thái độ chuyên nghiệp, tôn trọng di sản văn hóa xứ Huế.
+                        Sản phẩm & dịch vụ đăng tải phải tuân thủ nghiêm ngặt bảng giá niêm yết công khai trên TàGo. Đối tác cam kết phục vụ đúng cam kết thời gian, trang phục sạch mới và thái độ chuyên nghiệp, tôn trọng di sản văn hóa xứ Huế.
                       </p>
                     </div>
                   </div>
@@ -1722,10 +1758,10 @@ export const ProductModerationPanel: React.FC = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 16px' }}>
                       <strong style={{ display: 'block', color: '#0f172a', marginBottom: 4, fontSize: 13 }}>
-                        1. Thanh toán an toàn qua VibeHue Escrow
+                        1. Thanh toán an toàn qua TàGo Escrow
                       </strong>
                       <span style={{ fontSize: 13, color: '#475569', lineHeight: 1.6 }}>
-                        Toàn bộ tiền thuê và dịch vụ được tạm giữ tại cổng thanh toán VibeHue Escrow. Khoản tiền chỉ được giải ngân cho đối tác sau khi khách hàng hoàn tất buổi chụp hoặc xác nhận đã hoàn trả trang phục nguyên vẹn.
+                        Toàn bộ tiền thuê và dịch vụ được tạm giữ tại cổng thanh toán TàGo Escrow. Khoản tiền chỉ được giải ngân cho đối tác sau khi khách hàng hoàn tất buổi chụp hoặc xác nhận đã hoàn trả trang phục nguyên vẹn.
                       </span>
                     </div>
 
@@ -1743,7 +1779,7 @@ export const ProductModerationPanel: React.FC = () => {
                         3. Xử lý tranh chấp & đền bù hư hỏng
                       </strong>
                       <span style={{ fontSize: 13, color: '#475569', lineHeight: 1.6 }}>
-                        Nếu có khiếu nại về chất lượng ảnh hoặc hư hại trang phục, bộ phận VibeHue Trust & Safety sẽ đứng ra làm trọng tài đối soát căn cứ trên hợp đồng và biên bản bàn giao.
+                        Nếu có khiếu nại về chất lượng ảnh hoặc hư hại trang phục, bộ phận TàGo Trust & Safety sẽ đứng ra làm trọng tài đối soát căn cứ trên hợp đồng và biên bản bàn giao.
                       </span>
                     </div>
                   </div>
@@ -2169,7 +2205,7 @@ export const ProductModerationPanel: React.FC = () => {
                   lineHeight: 1.5,
                 }}
               >
-                <strong>Mục tiêu:</strong> Đảm bảo tất cả sản phẩm Áo dài và Gói dịch vụ chụp ảnh xuất hiện trên nền tảng VibeHue đều có chất lượng hình ảnh sắc nét, mô tả chân thực, đúng giá niêm yết và không vi phạm thuần phong mỹ tục.
+                <strong>Mục tiêu:</strong> Đảm bảo tất cả sản phẩm Áo dài và Gói dịch vụ chụp ảnh xuất hiện trên nền tảng TàGo đều có chất lượng hình ảnh sắc nét, mô tả chân thực, đúng giá niêm yết và không vi phạm thuần phong mỹ tục.
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>

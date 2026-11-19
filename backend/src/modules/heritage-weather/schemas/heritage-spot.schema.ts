@@ -4,9 +4,9 @@ import { HydratedDocument } from 'mongoose';
 export type HeritageSpotDocument = HydratedDocument<HeritageSpot>;
 
 export enum HeritageSpotSpaceType {
-  OUTDOOR = 'OUTDOOR',               // Ngoài trời: Đại Nội, Lăng Tự Đức, Đồi Vọng Cảnh
-  SEMI_INDOOR = 'SEMI_INDOOR',       // Bán trong nhà/Mái che: Cung Diên Thọ, Cung An Định, Lăng Khải Định
-  INDOOR_STUDIO = 'INDOOR_STUDIO',   // Phim trường/Studio kín: Phim trường Cổ Trang Cố Đô
+  OUTDOOR = 'OUTDOOR', // Ngoài trời: Đại Nội, Lăng Tự Đức, Đồi Vọng Cảnh
+  SEMI_INDOOR = 'SEMI_INDOOR', // Bán trong nhà/Mái che: Cung Diên Thọ, Cung An Định, Lăng Khải Định
+  INDOOR_STUDIO = 'INDOOR_STUDIO', // Phim trường/Studio kín: Phim trường Cổ Trang Cố Đô
 }
 
 export interface GeoJSONPoint {

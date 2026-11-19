@@ -98,7 +98,7 @@ describe('UC-14 Manage Portfolio (HoangLVM)', () => {
     await service.createPortfolioItem(userId, {
       title: 'Áo dài Huế',
       images: ['p1.jpg'],
-    } as any);
+    });
 
     expect(portfolioItemModel.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -189,7 +189,7 @@ describe('UC-14 Manage Portfolio (HoangLVM)', () => {
     await service.moderatePortfolioItem(
       new Types.ObjectId().toString(),
       itemId,
-      { action: ProductModerationStatus.Approved } as any,
+      { action: ProductModerationStatus.Approved },
     );
     expect(portfolioItemModel.findOneAndUpdate.mock.calls[0][0]).toMatchObject({
       moderationStatus: ProductModerationStatus.PendingReview,

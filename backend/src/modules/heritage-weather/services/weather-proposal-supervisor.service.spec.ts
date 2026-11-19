@@ -30,7 +30,10 @@ describe('WeatherProposalSupervisorService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WeatherProposalSupervisorService,
-        { provide: getModelToken(WeatherProposal.name), useValue: mockProposalModel },
+        {
+          provide: getModelToken(WeatherProposal.name),
+          useValue: mockProposalModel,
+        },
         { provide: getModelToken(Booking.name), useValue: mockBookingModel },
         { provide: RedisService, useValue: mockRedisService },
       ],
@@ -60,7 +63,9 @@ describe('WeatherProposalSupervisorService', () => {
 
       expect(count).toBe(1);
       expect(expiredProposal.status).toBe(ProposalStatus.EXPIRED);
-      expect(mockRedisService.del).toHaveBeenCalledWith('hold:photographer:123');
+      expect(mockRedisService.del).toHaveBeenCalledWith(
+        'hold:photographer:123',
+      );
       expect(mockBookingModel.updateOne).toHaveBeenCalledWith(
         { _id: expiredProposal.bookingId },
         expect.objectContaining({
@@ -86,7 +91,9 @@ describe('WeatherProposalSupervisorService', () => {
 
       expect(count).toBe(1);
       expect(expiredPaymentProposal.status).toBe(ProposalStatus.EXPIRED);
-      expect(mockRedisService.del).toHaveBeenCalledWith('hold:photographer:456');
+      expect(mockRedisService.del).toHaveBeenCalledWith(
+        'hold:photographer:456',
+      );
     });
 
     it('should return 0 when no proposals are expired', async () => {

@@ -43,7 +43,8 @@ export class GoogleAuthGuard extends AuthGuard('google') {
         throw new UnauthorizedException('OAuth state is expired or invalid');
       }
 
-      request.oauthStateDoc = await this.authService.validateGoogleOAuthState(state);
+      request.oauthStateDoc =
+        await this.authService.validateGoogleOAuthState(state);
     } else {
       await this.rateLimitService.assertRateLimit(
         `auth:google:redirect:ip:${this.rateLimitService.ipKey(request.ip)}`,
@@ -51,10 +52,13 @@ export class GoogleAuthGuard extends AuthGuard('google') {
         5 * 60,
       );
       const redirectUri = this.getQueryString(request.query.redirect_uri);
-      request.oauthState = await this.authService.createGoogleOAuthState({
-        ipAddress: request.ip,
-        userAgent: this.getHeaderString(request.headers['user-agent']),
-      }, redirectUri);
+      request.oauthState = await this.authService.createGoogleOAuthState(
+        {
+          ipAddress: request.ip,
+          userAgent: this.getHeaderString(request.headers['user-agent']),
+        },
+        redirectUri,
+      );
     }
 
     return (await super.canActivate(context)) as boolean;
@@ -72,8 +76,8 @@ export class GoogleAuthGuard extends AuthGuard('google') {
   private isCallbackRequest(request: GoogleOAuthRequest): boolean {
     return Boolean(
       request.route?.path === 'google/callback' ||
-        request.path?.endsWith('/auth/google/callback') ||
-        request.originalUrl?.startsWith('/auth/google/callback'),
+      request.path?.endsWith('/auth/google/callback') ||
+      request.originalUrl?.startsWith('/auth/google/callback'),
     );
   }
 

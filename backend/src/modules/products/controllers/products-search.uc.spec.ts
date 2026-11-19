@@ -313,14 +313,11 @@ describe('UC-22 Search AoDai (DaiBLL)', () => {
     expect(productsRepository.findActivePage).toHaveBeenCalledTimes(1);
   });
 
-  it(
-    'UT-22 UTCID13 accepts a location containing regular-expression characters',
-    async () => {
-      const { repository } = createRepository([]);
+  it('UT-22 UTCID13 accepts a location containing regular-expression characters', async () => {
+    const { repository } = createRepository([]);
 
-      await expect(
-        repository.findAllActive({ providerLocation: 'Huế (' }),
-      ).resolves.toEqual([]);
-    },
-  );
+    await expect(
+      repository.findAllActive({ providerLocation: 'Huế (' }),
+    ).resolves.toEqual([]);
+  });
 });

@@ -87,6 +87,7 @@ export function OrderDetailDrawer({
   toast,
   fetchOrders,
 }: OrderDetailDrawerProps) {
+  void onOpenFulfillmentModal;
   const [isMaximized, setIsMaximized] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'details' | 'schedule' | 'payment' | 'incidents'>('overview');
   const [selectedEvidenceImage, setSelectedEvidenceImage] = useState<string | null>(null);
@@ -94,7 +95,7 @@ export function OrderDetailDrawer({
   const [isConfirming, setIsConfirming] = useState(false);
   const [internalNoteInput, setInternalNoteInput] = useState('');
   const [internalNotesList, setInternalNotesList] = useState<Array<{ author: string; time: string; text: string }>>([
-    { author: 'Hệ thống VibeHue Escrow', time: order?.orderDate || 'Khi xác nhận', text: 'Khách hàng hoàn tất đặt cọc qua VibeHue Escrow. Đơn được xác nhận tự động.' },
+    { author: 'Hệ thống TàGo Escrow', time: order?.orderDate || 'Khi xác nhận', text: 'Khách hàng hoàn tất đặt cọc qua TàGo Escrow. Đơn được xác nhận tự động.' },
   ]);
   const [locallySubmittedPickupIds, setLocallySubmittedPickupIds] = useState<Set<string>>(new Set());
   const [locallyReturnedIds, setLocallyReturnedIds] = useState<Set<string>>(new Set());
@@ -263,6 +264,7 @@ export function OrderDetailDrawer({
     rawStatus === 'DISPUTED';
 
   const isSingleCleaning =
+    ['RETURNED', 'COMPLETED'].includes(singleFulfillmentStatus) &&
     (singleRf?.inventoryStatus === 'CLEANING' ||
       singleRentalItem?.inventoryItem?.status === 'CLEANING' ||
       (singleFulfillmentStatus === 'RETURNED' && isSingleSettledLocally)) &&
@@ -359,9 +361,9 @@ export function OrderDetailDrawer({
       { label: 'Chuẩn bị áo', key: 'PREPARE_PENDING', time: rf?.readyAt ? formatShortTime(rf.readyAt) : 'Chuẩn bị' },
       { label: 'Khách nhận áo', key: 'PICKUP_PENDING', time: rf?.pickedUpAt ? formatShortTime(rf.pickedUpAt) : (rf?.pickupDueAt ? formatShortTime(rf.pickupDueAt) : 'Nhận đồ') },
       { label: 'Đang chụp', key: 'IN_PROGRESS', time: shootDate ? formatShortTime(shootDate) : 'Chụp ảnh', icon: Camera },
-      { label: 'Khách trả áo', key: 'RETURN_PENDING', time: rf?.returnedAt ? formatShortTime(rf.returnedAt) : (rf?.returnDueAt ? formatShortTime(rf.returnDueAt) : 'Trả đồ') },
       { label: 'Bàn giao ảnh', key: 'AWAITING_REVIEW', time: (order.deliveredPhotos?.length || order.deliveryDriveUrl || ['AWAITING_REVIEW', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(rawStatus) || isOrderCompleted) ? 'Đã giao' : 'Trả ảnh' },
       { label: 'Khách duyệt ảnh', key: 'COMBO_PHOTOS_APPROVED', time: (order.photosApproved || isOrderCompleted) ? 'Đã duyệt' : 'Chờ duyệt', icon: Sparkles },
+      { label: 'Khách trả áo', key: 'RETURN_PENDING', time: rf?.returnedAt ? formatShortTime(rf.returnedAt) : (rf?.returnDueAt ? formatShortTime(rf.returnDueAt) : 'Trả đồ') },
       { label: 'Hoàn tất', key: 'COMPLETED', time: rawStatus === 'COMPLETED' ? (formatShortTime(rf?.completedAt, order.updatedDate || 'Hoàn tất')) : 'Dự kiến' },
     ];
   }, [isAoDai, isPhoto, order, rf, shootDate, rawStatus, isOrderCompleted]);
@@ -401,15 +403,17 @@ export function OrderDetailDrawer({
       return 0;
     }
 
-    // COMBO
+    // COMBO:
+    // 0: Xác nhận | 1: Chuẩn bị áo | 2: Khách nhận áo | 3: Đang chụp | 4: Bàn giao ảnh | 5: Khách duyệt ảnh | 6: Khách trả áo | 7: Hoàn tất
     if (rawStatus === 'PENDING' || rawStatus === 'PENDING_PAYMENT') return 0;
     if (rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') return 1;
     if (rawStatus === 'PICKUP_PENDING') return 2;
     if (rawStatus === 'PICKED_UP') return 3;
     if (rawStatus === 'IN_PROGRESS') return 3;
-    if (rawStatus === 'RETURN_PENDING' || rawStatus === 'RETURNED') return 4;
-    if (rawStatus === 'AWAITING_REVIEW') return 5;
-    if (rawStatus === 'COMBO_PHOTOS_APPROVED' || order.photosApproved) return 6;
+    if (rawStatus === 'AWAITING_REVIEW') return 4;
+    if (rawStatus === 'COMBO_PHOTOS_APPROVED') return 6; // Đã duyệt ảnh -> đang chờ trả áo & nhận lại
+    if (rawStatus === 'RETURN_PENDING' || rawStatus === 'RETURNED') return 6;
+    if (rawStatus === 'COMPLETED') return 7;
     return 0;
   }, [isOrderCompleted, isAoDai, isPhoto, rawStatus, masterSteps.length, order.photosApproved]);
 
@@ -417,12 +421,28 @@ export function OrderDetailDrawer({
 
   // Sub-steppers: clean sequential progress without broken gaps
   let aoDaiCurrentIdx = 2;
-  if (isOrderCompleted) aoDaiCurrentIdx = 5;
-  else if (rawStatus === 'PENDING' || rawStatus === 'PENDING_PAYMENT' || rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') aoDaiCurrentIdx = 0;
-  else if (rawStatus === 'PICKUP_PENDING') aoDaiCurrentIdx = 1;
-  else if (rawStatus === 'PICKED_UP' || rawStatus === 'IN_PROGRESS' || rawStatus === 'AWAITING_REVIEW') aoDaiCurrentIdx = 2;
-  else if (rawStatus === 'RETURN_PENDING') aoDaiCurrentIdx = 3;
-  else if (rawStatus === 'RETURNED' || rawStatus === 'COMBO_PHOTOS_APPROVED') aoDaiCurrentIdx = 4;
+  const allRentalsReturned = rentalItems.length > 0 && rentalItems.every((i) => ['RETURNED', 'COMPLETED'].includes(i.rentalFulfillment?.status));
+  const allRentalsRequested = rentalItems.length > 0 && rentalItems.every((i) => ['CUSTOMER_RETURN_REQUESTED', 'RETURNED', 'COMPLETED'].includes(i.rentalFulfillment?.status));
+
+  if (isOrderCompleted) {
+    aoDaiCurrentIdx = 5;
+  } else if (rawStatus === 'PENDING' || rawStatus === 'PENDING_PAYMENT' || rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') {
+    aoDaiCurrentIdx = 0;
+  } else if (rawStatus === 'PICKUP_PENDING') {
+    aoDaiCurrentIdx = 1;
+  } else if (rawStatus === 'PICKED_UP' || rawStatus === 'IN_PROGRESS' || rawStatus === 'AWAITING_REVIEW') {
+    aoDaiCurrentIdx = 2;
+  } else if (rawStatus === 'COMBO_PHOTOS_APPROVED') {
+    if (allRentalsReturned) {
+      aoDaiCurrentIdx = 3;
+    } else if (allRentalsRequested) {
+      aoDaiCurrentIdx = 3;
+    } else {
+      aoDaiCurrentIdx = 2;
+    }
+  } else if (rawStatus === 'RETURN_PENDING' || rawStatus === 'RETURNED') {
+    aoDaiCurrentIdx = 3;
+  }
 
   const aoDaiStepsConfig = ['Chuẩn bị', 'Chờ nhận', 'Đang thuê', 'Nhận lại', 'Hoàn tất'];
   const aoDaiSubsteps = aoDaiStepsConfig.map((label, idx) => {
@@ -519,14 +539,45 @@ export function OrderDetailDrawer({
     };
   }, [order?._id, singleRentalItem?._id]);
 
-  const handleMarkReady = async () => {
-    if (!order?._id) return;
-    const targetItem = singleRentalItem || order.items?.[0];
-    if (!targetItem?._id) return;
+  const handleMarkItemReady = async (item: any) => {
+    if (!order?._id || !item?._id) return;
+    if (item.rentalFulfillment?.status && item.rentalFulfillment?.status !== 'PENDING') {
+      toast.info('Áo dài này đã ở trạng thái sẵn sàng bàn giao.');
+      return;
+    }
     setIsMarkingReady(true);
     try {
-      await httpClient.post(`/api/bookings/${order._id}/items/${targetItem._id}/rental/ready`, {});
-      toast.success('Đã chuẩn bị áo xong! Sẵn sàng bàn giao cho khách.');
+      await httpClient.post(`/api/bookings/${order._id}/items/${item._id}/rental/ready`, {});
+      toast.success(`Đã chuẩn bị áo "${item.productName || item.product?.name || 'trang phục'}" xong!`);
+      if (fetchOrders) await fetchOrders(true, true);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || 'Không thể cập nhật chuẩn bị áo');
+    } finally {
+      setIsMarkingReady(false);
+    }
+  };
+
+  const handleMarkReady = async () => {
+    if (!order?._id) return;
+    const pendingRentalItems = rentalItems.filter(
+      (it: any) => !it.rentalFulfillment?.status || it.rentalFulfillment?.status === 'PENDING'
+    );
+    if (pendingRentalItems.length === 0) {
+      toast.info('Tất cả trang phục trong đơn đã được chuẩn bị xong.');
+      return;
+    }
+    setIsMarkingReady(true);
+    try {
+      await Promise.all(
+        pendingRentalItems.map((item: any) =>
+          httpClient.post(`/api/bookings/${order._id}/items/${item._id}/rental/ready`, {})
+        )
+      );
+      toast.success(
+        pendingRentalItems.length > 1
+          ? `Đã chuẩn bị xong ${pendingRentalItems.length} áo dài! Sẵn sàng bàn giao cho khách.`
+          : 'Đã chuẩn bị áo xong! Sẵn sàng bàn giao cho khách.'
+      );
       if (fetchOrders) await fetchOrders(true, true);
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err.message || 'Không thể cập nhật chuẩn bị áo');
@@ -539,7 +590,7 @@ export function OrderDetailDrawer({
     if (!order?._id) return;
     const targetItem = singleRentalItem || order.items?.[0];
     if (!targetItem?._id) return;
-    if (isSendingPickupEvidence || locallySubmittedPickupIds.has(targetItem._id) || hasSubmittedPickupEvidence(targetItem)) return;
+    if (isSendingPickupEvidence || (rentalItems.length > 0 && allRentalHandoverEvidenceSubmitted)) return;
 
     const result = await Swal.fire({
       title: 'Chụp ảnh bàn giao áo',
@@ -606,33 +657,42 @@ export function OrderDetailDrawer({
 
     setIsSendingPickupEvidence(true);
     try {
-      const formData = new FormData();
-      (result.value as File[]).forEach((file) => formData.append('images', file));
-      const uploaded = await httpClient.post<{ files: Array<{ fileId: string }> }>(
-        `/api/bookings/${order._id}/items/${targetItem._id}/rental/evidence`,
-        formData,
+      const pendingHandoverItems = rentalItems.filter(
+        (it: any) => !locallySubmittedPickupIds.has(it._id) && !hasSubmittedPickupEvidence(it)
       );
-      const fileIds = (uploaded.files || []).map((file) => file.fileId);
-      await httpClient.post(`/api/bookings/${order._id}/items/${targetItem._id}/rental/picked-up`, {
-        fileIds,
-      });
+      const itemsToSubmit = pendingHandoverItems.length > 0 ? pendingHandoverItems : [targetItem];
+
+      let lastFileIds: string[] = [];
+      for (const item of itemsToSubmit) {
+        const formData = new FormData();
+        (result.value as File[]).forEach((file) => formData.append('images', file));
+        const uploaded = await httpClient.post<{ files: Array<{ fileId: string }> }>(
+          `/api/bookings/${order._id}/items/${item._id}/rental/evidence`,
+          formData,
+        );
+        const fileIds = (uploaded.files || []).map((file) => file.fileId);
+        lastFileIds = fileIds;
+        await httpClient.post(`/api/bookings/${order._id}/items/${item._id}/rental/picked-up`, {
+          fileIds,
+        });
+        setLocallySubmittedPickupIds((previous) => new Set(previous).add(item._id));
+      }
+
       toast.success('Đã gửi ảnh bàn giao. Đang chờ khách xác nhận nhận áo.');
-      setLocallySubmittedPickupIds((previous) => new Set(previous).add(targetItem._id));
-      // Update this drawer immediately. List endpoints may omit private evidence
-      // fields, so waiting only for a list refresh used to leave the handover
-      // button visible even though the server had accepted the evidence.
       onSelectOrderRef.current({
         ...order,
-        handoverPhotos: fileIds,
-        items: (order.items || []).map((item: any) => item._id === targetItem._id
-          ? {
-              ...item,
-              rentalFulfillment: {
-                ...item.rentalFulfillment,
-                pickupEvidence: { files: fileIds.map((fileId) => ({ fileId })) },
-              },
-            }
-          : item),
+        handoverPhotos: lastFileIds,
+        items: (order.items || []).map((item: any) =>
+          itemsToSubmit.some((sub: any) => sub._id === item._id)
+            ? {
+                ...item,
+                rentalFulfillment: {
+                  ...item.rentalFulfillment,
+                  pickupEvidence: { files: lastFileIds.map((fileId) => ({ fileId })) },
+                },
+              }
+            : item
+        ),
       });
       await fetchOrders?.(true, true);
       const fresh = await httpClient.get<any>(`/api/bookings/${order._id}`);
@@ -723,6 +783,92 @@ export function OrderDetailDrawer({
         }
       } catch (e) {
         console.warn('Failed to refetch fresh booking:', e);
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Không thể xác nhận hoàn cọc.');
+    } finally {
+      setIsConfirmingNoIncident(false);
+    }
+  };
+
+  const handleReceiveAllRentalReturns = async () => {
+    if (!order?._id || !rentalItems.length) return;
+    const pendingReturns = rentalItems.filter(
+      (item) => !['RETURNED', 'COMPLETED'].includes(item.rentalFulfillment?.status),
+    );
+    if (!pendingReturns.length) return;
+
+    const result = await Swal.fire({
+      title: 'Xác nhận đã nhận lại áo dài',
+      text: 'Xác nhận shop đã nhận lại áo để kiểm tra. Không cần gửi ảnh ở bước này. Nếu phát hiện hư hỏng hoặc thiếu phụ kiện, hãy chọn “Yêu cầu đền bù” ở bước kế tiếp và gửi ảnh bằng chứng khi đó.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#881337',
+      cancelButtonColor: '#9CA3AF',
+      confirmButtonText: 'Xác nhận đã nhận & Kiểm tra',
+      cancelButtonText: 'Đóng',
+      background: 'white',
+    });
+
+    if (!result.isConfirmed) return;
+
+    setIsReceivingReturn(true);
+    try {
+      for (const item of pendingReturns) {
+        await httpClient.post(
+          `/bookings/${order._id}/items/${item._id}/rental/returned`,
+          { fileIds: [], note: 'Shop đã nhận lại áo và bắt đầu kiểm tra' }
+        );
+        setLocallyReturnedIds((prev) => new Set(prev).add(item._id));
+      }
+      toast.success('Đã xác nhận nhận lại áo! Hãy kiểm tra kỹ trang phục và chọn Hoàn cọc hoặc Yêu cầu đền bù.');
+      if (fetchOrders) await fetchOrders(true, true);
+      const fresh = await httpClient.get<any>('/api/bookings/' + order._id);
+      if (fresh && onSelectOrderRef.current) {
+        onSelectOrderRef.current(fresh);
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Không thể xác nhận nhận lại áo.');
+    } finally {
+      setIsReceivingReturn(false);
+    }
+  };
+
+  const handleConfirmAllNoIncident = async () => {
+    if (!order?._id || !rentalItems.length) return;
+    const returnedItems = rentalItems.filter(
+      (item) => item.rentalFulfillment?.status === 'RETURNED' &&
+        !['FULLY_RELEASED', 'PARTIALLY_DEDUCTED', 'FULLY_DEDUCTED'].includes(item.rentalFulfillment?.depositSettlementStatus),
+    );
+    if (!returnedItems.length) return;
+
+    const res = await Swal.fire({
+      title: 'Xác nhận không có sự cố?',
+      text: 'Áo dài và phụ kiện nguyên vẹn. Hệ thống sẽ tạo yêu cầu hoàn cọc cho khách hàng và chuyển trang phục sang trạng thái Giặt ủi (CLEANING).',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: '✓ Xác nhận hoàn cọc',
+      cancelButtonText: 'Kiểm tra lại',
+      confirmButtonColor: '#059669',
+      cancelButtonColor: '#6B7280',
+    });
+
+    if (!res.isConfirmed) return;
+
+    setIsConfirmingNoIncident(true);
+    try {
+      for (const item of returnedItems) {
+        await httpClient.post(
+          `/api/bookings/${order._id}/items/${item._id}/rental/confirm-no-incident`,
+          { note: 'Không có sự cố từ thanh tác vụ nhanh' }
+        );
+        setLocallySettledIds((prev) => new Set(prev).add(item._id));
+      }
+      toast.success('Đã xác nhận không có sự cố và hoàn tất thủ tục hoàn cọc cho khách hàng!');
+      if (fetchOrders) await fetchOrders(true, true);
+      const fresh = await httpClient.get<any>('/api/bookings/' + order._id);
+      if (fresh && onSelectOrderRef.current) {
+        onSelectOrderRef.current(fresh);
       }
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err?.message || 'Không thể xác nhận hoàn cọc.');
@@ -978,8 +1124,8 @@ export function OrderDetailDrawer({
       time: orderTimeStr,
       title: 'Khách hàng đặt lịch & Thanh toán cọc giữ chỗ',
       desc: isPaid
-        ? `Hệ thống xác nhận đã nhận cọc ${depositAmt > 0 ? `${depositAmt.toLocaleString('vi-VN')}đ` : 'giữ chỗ'} qua VibeHue Escrow QR.`
-        : `Đang chờ khách hàng thanh toán cọc ${depositAmt > 0 ? `${depositAmt.toLocaleString('vi-VN')}đ` : ''} qua VibeHue Escrow.`,
+        ? `Hệ thống xác nhận đã nhận cọc ${depositAmt > 0 ? `${depositAmt.toLocaleString('vi-VN')}đ` : 'giữ chỗ'} qua TàGo Escrow QR.`
+        : `Đang chờ khách hàng thanh toán cọc ${depositAmt > 0 ? `${depositAmt.toLocaleString('vi-VN')}đ` : ''} qua TàGo Escrow.`,
       icon: CheckCircle,
       color: '#10B981',
       bg: '#ECFDF5',
@@ -1112,8 +1258,8 @@ export function OrderDetailDrawer({
         : 'Sau khi kiểm tra và nghiệm thu toàn bộ',
       title: 'Nghiệm thu dịch vụ & Tất toán Escrow',
       desc: isOrderCompleted
-        ? `Đơn hàng đã hoàn tất thành công trọn vẹn. Hệ thống VibeHue Escrow đã giải ngân doanh thu cho nhà cung cấp${rf?.depositRefundAmount ? ` và hoàn lại ${rf.depositRefundAmount.toLocaleString('vi-VN')}đ cọc cho khách hàng.` : '.'}`
-        : 'Khách hàng nghiệm thu dịch vụ và hệ thống VibeHue Escrow tự động giải ngân doanh thu cho nhà cung cấp.',
+        ? `Đơn hàng đã hoàn tất thành công trọn vẹn. Hệ thống TàGo Escrow đã giải ngân doanh thu cho nhà cung cấp${rf?.depositRefundAmount ? ` và hoàn lại ${rf.depositRefundAmount.toLocaleString('vi-VN')}đ cọc cho khách hàng.` : '.'}`
+        : 'Khách hàng nghiệm thu dịch vụ và hệ thống TàGo Escrow tự động giải ngân doanh thu cho nhà cung cấp.',
       icon: CheckCircle,
       color: isOrderCompleted ? '#10B981' : '#64748B',
       bg: isOrderCompleted ? '#ECFDF5' : '#F8FAFC',
@@ -1836,17 +1982,32 @@ export function OrderDetailDrawer({
                             }}>
                               {isOrderCompleted ? '✓ Đã hoàn tất' : (item.rentalFulfillment?.status ? `Trạng thái: ${item.rentalFulfillment.status}` : 'Đang xử lý')}
                             </span>
-                            {isProd && !isSingleRentalItem && !isOrderCompleted && (
+                            {isProd && !isSingleRentalItem && !isCombo && !isOrderCompleted && (
                               <div style={{ marginTop: '8px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                                {item.rentalFulfillment?.status === 'CUSTOMER_RETURN_REQUESTED' && (
+                                {(!item.rentalFulfillment?.status || item.rentalFulfillment?.status === 'PENDING') && (
                                   <button
                                     type="button"
                                     className="p-drawer-primary-btn"
-                                    style={{ padding: '5px 10px', fontSize: '11.5px' }}
+                                    style={{ padding: '5px 10px', fontSize: '11.5px', backgroundColor: '#8E1B2E', color: '#FFFFFF' }}
+                                    onClick={() => handleMarkItemReady(item)}
+                                    disabled={isMarkingReady}
+                                  >
+                                    <Package size={12} />
+                                    <span>✓ Chuẩn bị xong</span>
+                                  </button>
+                                )}
+                                {(item.rentalFulfillment?.status === 'CUSTOMER_RETURN_REQUESTED' ||
+                                  (['PICKED_UP', 'IN_PROGRESS'].includes(item.rentalFulfillment?.status) &&
+                                    ['COMBO_PHOTOS_APPROVED', 'RETURN_PENDING'].includes(rawStatus))) && (
+                                  <button
+                                    type="button"
+                                    className="p-drawer-primary-btn"
+                                    style={{ padding: '5px 10px', fontSize: '11.5px', backgroundColor: '#881337', color: '#FFFFFF' }}
                                     onClick={() => handleReceiveReturn(item)}
+                                    disabled={isReceivingReturn}
                                   >
                                     <PackageCheck size={12} />
-                                    <span>Xác nhận nhận lại áo</span>
+                                    <span>{item.rentalFulfillment?.status === 'CUSTOMER_RETURN_REQUESTED' ? 'Xác nhận nhận lại áo' : 'Nhận lại áo & Kiểm tra'}</span>
                                   </button>
                                 )}
                                 {item.rentalFulfillment?.status === 'RETURNED' && !['FULLY_RELEASED', 'PARTIALLY_DEDUCTED', 'FULLY_DEDUCTED'].includes(item.rentalFulfillment?.depositSettlementStatus) && (
@@ -1871,12 +2032,12 @@ export function OrderDetailDrawer({
                                     </button>
                                   </>
                                 )}
-                                {(item.rentalFulfillment?.inventoryStatus === 'CLEANING' ||
-                                  item.inventoryItem?.status === 'CLEANING' ||
-                                  (item.rentalFulfillment?.status === 'RETURNED' &&
+                                {['RETURNED', 'COMPLETED'].includes(item.rentalFulfillment?.status || '') &&
+                                  (item.rentalFulfillment?.inventoryStatus === 'CLEANING' ||
+                                    item.inventoryItem?.status === 'CLEANING' ||
                                     ['FULLY_RELEASED', 'PARTIALLY_DEDUCTED', 'FULLY_DEDUCTED'].includes(
                                       item.rentalFulfillment?.depositSettlementStatus,
-                                    ))) && (
+                                    )) && (
                                   <button
                                     type="button"
                                     className="p-drawer-primary-btn"
@@ -1995,7 +2156,7 @@ export function OrderDetailDrawer({
                           <ShieldCheck size={16} />
                         </div>
                         <div className="p-quick-doc-info">
-                          <span className="p-quick-doc-title">Hợp đồng ký quỹ VibeHue Escrow</span>
+                          <span className="p-quick-doc-title">Hợp đồng ký quỹ TàGo Escrow</span>
                           <span className="p-quick-doc-meta">Bảo đảm tiền cọc và giải ngân an toàn</span>
                         </div>
                       </div>
@@ -2384,13 +2545,13 @@ export function OrderDetailDrawer({
                 <div className="p-card-header">
                   <h3 className="p-card-title">
                     <ShieldCheck size={16} color="#881337" />
-                    <span>Chính sách bảo chứng VibeHue Escrow</span>
+                    <span>Chính sách bảo chứng TàGo Escrow</span>
                   </h3>
                 </div>
                 <div style={{ fontSize: '12.5px', color: '#475569', lineHeight: 1.6 }}>
-                  • <strong>Bảo vệ tiền cọc:</strong> Khoản tiền cọc dịch vụ 1.400.000đ và cọc trang phục 1.000.000đ được khóa an toàn trên hợp đồng thông minh ký quỹ VibeHue Escrow.<br />
+                  • <strong>Bảo vệ tiền cọc:</strong> Khoản tiền cọc dịch vụ 1.400.000đ và cọc trang phục 1.000.000đ được khóa an toàn trên hợp đồng thông minh ký quỹ TàGo Escrow.<br />
                   • <strong>Giải ngân doanh thu:</strong> Doanh thu được tự động chuyển về ví đối tác của bạn ngay sau khi khách hàng xác nhận nhận đủ ảnh và hoàn trả áo dài nguyên vẹn.<br />
-                  • <strong>Bảo hiểm sự cố:</strong> Trường hợp phát sinh hư hỏng, hệ thống trọng tài VibeHue sẽ thụ lý bằng chứng hình ảnh trong vòng 24 giờ.
+                  • <strong>Bảo hiểm sự cố:</strong> Trường hợp phát sinh hư hỏng, hệ thống trọng tài TàGo sẽ thụ lý bằng chứng hình ảnh trong vòng 24 giờ.
                 </div>
               </div>
 
@@ -2585,7 +2746,7 @@ export function OrderDetailDrawer({
                     </div>
 
                     <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
-                      Cổng ký quỹ: <strong>VibeHue Escrow Banking</strong> &nbsp;|&nbsp; Mã đơn: <strong>{order.id || `#VH-${order._id.slice(-5).toUpperCase()}`}</strong>
+                      Cổng ký quỹ: <strong>TàGo Escrow Banking</strong> &nbsp;|&nbsp; Mã đơn: <strong>{order.id || `#VH-${order._id.slice(-5).toUpperCase()}`}</strong>
                     </div>
                   </div>
                 );
@@ -3003,7 +3164,10 @@ export function OrderDetailDrawer({
               </>
             )}
 
-            {(rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') && !isPhoto && (
+            {((rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') &&
+              !isPhoto &&
+              (rentalItems.length === 0 ||
+                rentalItems.some((it: any) => !it.rentalFulfillment?.status || it.rentalFulfillment?.status === 'PENDING'))) && (
               <button
                 type="button"
                 className="p-drawer-primary-btn"
@@ -3015,7 +3179,12 @@ export function OrderDetailDrawer({
               </button>
             )}
 
-            {(rawStatus === 'PICKUP_PENDING' || rawStatus === 'READY_FOR_PICKUP') && !isPhoto && (
+            {(rawStatus === 'PICKUP_PENDING' ||
+              rawStatus === 'READY_FOR_PICKUP' ||
+              ((rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') &&
+                rentalItems.length > 0 &&
+                rentalItems.every((it: any) => it.rentalFulfillment?.status && it.rentalFulfillment?.status !== 'PENDING'))) &&
+              !isPhoto && (
               <>
                 <span
                   style={{
@@ -3097,18 +3266,71 @@ export function OrderDetailDrawer({
               </span>
             )}
 
-            {rawStatus === 'RETURN_PENDING' && !isSingleRentalItem && !hasIncidentPending && !hasDispute && (
-              <button
-                type="button"
-                className="p-drawer-primary-btn"
-                onClick={() => onOpenFulfillmentModal ? onOpenFulfillmentModal(order._id) : void changeOrderStatus(order._id, 'RETURNED')}
-              >
-                <PackageCheck size={14} />
-                <span>Kiểm tra &amp; Nhận lại áo dài</span>
-              </button>
+            {/* Đơn có nhiều áo dài hoặc đơn Combo: Khi có áo dài chưa nhận lại */}
+            {!isSingleRentalItem && !hasIncidentPending && !hasDispute && !isOrderCompleted &&
+              rentalItems.length > 0 &&
+              rentalItems.some((i) => !['RETURNED', 'COMPLETED'].includes(i.rentalFulfillment?.status)) &&
+              ['COMBO_PHOTOS_APPROVED', 'RETURN_PENDING'].includes(rawStatus) && (
+              <>
+                <span
+                  style={{
+                    fontSize: '12.5px',
+                    fontWeight: 650,
+                    color: '#D97706',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    backgroundColor: '#FEF3C7',
+                    padding: '7px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid #FDE68A',
+                  }}
+                >
+                  <Clock size={14} />
+                  <span>Khách đã trả áo - Chờ shop nhận &amp; kiểm tra</span>
+                </span>
+                <button
+                  type="button"
+                  className="p-drawer-primary-btn"
+                  disabled={isReceivingReturn}
+                  onClick={() => void handleReceiveAllRentalReturns()}
+                >
+                  <PackageCheck size={14} />
+                  <span>{isReceivingReturn ? 'Đang xử lý...' : 'Xác nhận đã nhận lại áo & kiểm tra'}</span>
+                </button>
+              </>
             )}
 
-            {(rawStatus === 'RETURNED' || rawStatus === 'COMBO_PHOTOS_APPROVED') && !isSingleRentalItem && !isOrderCompleted && !isSingleCleaning && !hasIncidentPending && !hasDispute && (
+            {/* Đơn có nhiều áo dài hoặc đơn Combo: Khi đã nhận lại tất cả áo dài -> Tất toán cọc */}
+            {!isSingleRentalItem && !hasIncidentPending && !hasDispute && !isOrderCompleted &&
+              rentalItems.length > 0 &&
+              rentalItems.every((i) => ['RETURNED', 'COMPLETED'].includes(i.rentalFulfillment?.status)) &&
+              rentalItems.some((i) => i.rentalFulfillment?.status === 'RETURNED' && !['FULLY_RELEASED', 'PARTIALLY_DEDUCTED', 'FULLY_DEDUCTED'].includes(i.rentalFulfillment?.depositSettlementStatus)) && (
+              <>
+                <button
+                  type="button"
+                  className="p-drawer-danger-btn"
+                  onClick={() => onOpenIncidentReport(order)}
+                  style={{ padding: '8px 14px', fontSize: '13px' }}
+                  title="Yêu cầu đền bù sự cố hư hỏng hoặc vi phạm"
+                >
+                  <AlertTriangle size={14} />
+                  <span>⚠️ Yêu cầu đền bù</span>
+                </button>
+                <button
+                  type="button"
+                  className="p-drawer-primary-btn"
+                  style={{ backgroundColor: '#059669', border: 'none', color: '#FFFFFF' }}
+                  onClick={() => void handleConfirmAllNoIncident()}
+                  disabled={isConfirmingNoIncident}
+                >
+                  <CheckCircle size={14} />
+                  <span>{isConfirmingNoIncident ? 'Đang xử lý...' : '✓ Không có sự cố (Hoàn cọc)'}</span>
+                </button>
+              </>
+            )}
+
+            {rawStatus === 'RETURNED' && !isSingleRentalItem && !isOrderCompleted && !isSingleCleaning && !hasIncidentPending && !hasDispute && (
               <span
                 style={{
                   fontSize: '12.5px',
@@ -3161,7 +3383,7 @@ export function OrderDetailDrawer({
                 <img src={selectedEvidenceImage} alt="Phóng to bằng chứng" />
               </div>
               <div className="p-lightbox-footer">
-                <span>VibeHue Escrow • Bằng chứng xác thực</span>
+                <span>TàGo Escrow • Bằng chứng xác thực</span>
                 <a
                   href={selectedEvidenceImage}
                   target="_blank"

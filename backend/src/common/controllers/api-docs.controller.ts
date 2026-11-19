@@ -9,7 +9,7 @@ export class ApiDocsController {
     return {
       openapi: '3.0.0',
       info: {
-        title: 'VibeHue Auth and Users API',
+        title: 'TàGo Auth and Users API',
         version: '1.0.0',
       },
       components: {
@@ -160,7 +160,8 @@ export class ApiDocsController {
         },
         '/admin/categories/{id}': {
           get: {
-            summary: 'Admin get service category detail, requires category:read',
+            summary:
+              'Admin get service category detail, requires category:read',
             security: [{ bearerAuth: [] }],
           },
           patch: {
@@ -168,7 +169,8 @@ export class ApiDocsController {
             security: [{ bearerAuth: [] }],
           },
           delete: {
-            summary: 'Admin soft delete service category, requires category:manage',
+            summary:
+              'Admin soft delete service category, requires category:manage',
             security: [{ bearerAuth: [] }],
           },
         },

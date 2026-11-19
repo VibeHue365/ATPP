@@ -18,6 +18,8 @@ type Dependencies = Pick<ReturnType<typeof useProviderCalendarState>,
   | 'setBlockReason'
 > &
 {
+  hasPhotographyCapability?: boolean;
+  hasAodaiCapability?: boolean;
   toast: ReturnType<typeof useToast>;
   fetchProviderData: () => Promise<void>;
 };
@@ -25,9 +27,18 @@ type Dependencies = Pick<ReturnType<typeof useProviderCalendarState>,
 /** Recreated each render so handlers retain the dashboard's existing closure semantics. */
 export function createCalendarActions({
   setSelectedScheduleDays, setWorkingHourRanges, selectedScheduleDays, toast, workingHourRanges,
-  scheduleCapability, setEditingScheduleDay, fetchProviderData, blockedDate, setBlockedDate,
+  scheduleCapability, hasPhotographyCapability, hasAodaiCapability, setEditingScheduleDay,
+  fetchProviderData, blockedDate, setBlockedDate,
   blockType, blockSlotStart, blockSlotEnd, blockReason, setBlockReason,
 }: Dependencies) {
+  const isPurePhoto = Boolean(hasPhotographyCapability && !hasAodaiCapability);
+  const isPureAodai = Boolean(hasAodaiCapability && !hasPhotographyCapability);
+
+  const effectiveCapability = isPurePhoto
+    ? 'PHOTOGRAPHY'
+    : isPureAodai
+    ? 'AODAI_RENTAL'
+    : scheduleCapability;
   const toggleScheduleDay = (day: number) => {
     setSelectedScheduleDays((current) => current.includes(day)
       ? current.filter((item) => item !== day)
@@ -68,9 +79,14 @@ export function createCalendarActions({
       await providerApi.saveRecurringSchedules({
         dayOfWeeks: selectedScheduleDays,
         workingHours: sortedRanges,
-        capability: scheduleCapability,
+        capability: effectiveCapability as any,
       });
-      toast.success(`Đã lưu lịch cho ${selectedScheduleDays.length} ngày làm việc.`);
+      const successMsg = isPurePhoto
+        ? `Đã lưu ca chụp cho ${selectedScheduleDays.length} ngày làm việc.`
+        : isPureAodai
+        ? `Đã lưu giờ mở cửa cho ${selectedScheduleDays.length} ngày hoạt động.`
+        : `Đã lưu lịch cho ${selectedScheduleDays.length} ngày làm việc.`;
+      toast.success(successMsg);
       setEditingScheduleDay(null);
       fetchProviderData();
     } catch (err: any) {
@@ -97,7 +113,7 @@ export function createCalendarActions({
 
   const handleBlockDate = async () => {
     if (!blockedDate) {
-      toast.error('Vui lòng chọn ngày cần chặn.');
+      toast.error(isPureAodai ? 'Vui lòng chọn ngày đóng cửa tiệm.' : 'Vui lòng chọn ngày cần chặn.');
       return;
     }
 
@@ -111,15 +127,20 @@ export function createCalendarActions({
         date: blockedDate,
         isOffDay: isFullDay,
         customSlots,
-        capability: scheduleCapability,
+        capability: effectiveCapability as any,
         reason: blockReason,
       });
-      toast.success(`Đã cập nhật chặn lịch ngày ${blockedDate}!`);
+      const blockSuccessMsg = isPurePhoto
+        ? `Đã cập nhật chặn ca ngày ${blockedDate}!`
+        : isPureAodai
+        ? `Đã cập nhật ngày đóng cửa tiệm ${blockedDate}!`
+        : `Đã cập nhật chặn lịch ngày ${blockedDate}!`;
+      toast.success(blockSuccessMsg);
       setBlockedDate('');
       setBlockReason('');
       fetchProviderData();
     } catch (err: any) {
-      toast.error(err.message || 'Không thể chặn lịch ngày bận');
+      toast.error(err.message || (isPureAodai ? 'Không thể thiết lập ngày đóng cửa' : 'Không thể chặn lịch ngày bận'));
     }
   };
 
@@ -129,9 +150,12 @@ export function createCalendarActions({
         date: dateStr,
         isOffDay: false,
         customSlots: [],
-        capability: scheduleCapability,
+        capability: effectiveCapability as any,
       });
-      toast.success(`Đã mở chặn ngày ${new Date(dateStr).toLocaleDateString('vi-VN')}!`);
+      const unblockSuccessMsg = isPureAodai
+        ? `Đã mở cửa lại tiệm ngày ${new Date(dateStr).toLocaleDateString('vi-VN')}!`
+        : `Đã mở chặn ngày ${new Date(dateStr).toLocaleDateString('vi-VN')}!`;
+      toast.success(unblockSuccessMsg);
       fetchProviderData();
     } catch (err: any) {
       toast.error(err.message || 'Không thể mở chặn ngày này');

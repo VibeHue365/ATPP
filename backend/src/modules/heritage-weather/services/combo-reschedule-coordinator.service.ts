@@ -15,8 +15,16 @@ import {
   WeatherProposal,
   WeatherProposalDocument,
 } from '../schemas/weather-proposal.schema';
-import { Booking, BookingDocument, BookingType } from '../../bookings/schemas/booking.schema';
-import { BookingItem, BookingItemDocument, BookingItemType } from '../../bookings/schemas/booking-item.schema';
+import {
+  Booking,
+  BookingDocument,
+  BookingType,
+} from '../../bookings/schemas/booking.schema';
+import {
+  BookingItem,
+  BookingItemDocument,
+  BookingItemType,
+} from '../../bookings/schemas/booking-item.schema';
 import {
   BookingSchedule,
   BookingScheduleDocument,
@@ -180,8 +188,12 @@ export class ComboRescheduleCoordinatorService {
     );
 
     const shiftMs = shiftDays * 24 * 60 * 60 * 1000;
-    const newRentalFrom = new Date(new Date(originalRentalFrom).getTime() + shiftMs);
-    const newRentalTo = new Date(new Date(originalRentalTo).getTime() + shiftMs);
+    const newRentalFrom = new Date(
+      new Date(originalRentalFrom).getTime() + shiftMs,
+    );
+    const newRentalTo = new Date(
+      new Date(originalRentalTo).getTime() + shiftMs,
+    );
 
     return {
       newRentalFrom,
@@ -198,7 +210,11 @@ export class ComboRescheduleCoordinatorService {
     bookingId: Types.ObjectId | string,
     newRentalFrom: Date,
     newRentalTo: Date,
-  ): Promise<{ available: boolean; conflictingItemIds: string[]; reason?: string }> {
+  ): Promise<{
+    available: boolean;
+    conflictingItemIds: string[];
+    reason?: string;
+  }> {
     const rentalItems = await this.bookingItemModel.find({
       bookingId: new Types.ObjectId(bookingId.toString()),
       itemType: BookingItemType.Product,
@@ -310,7 +326,9 @@ export class ComboRescheduleCoordinatorService {
       (pId) => pId.toString() === providerIdStr,
     );
     if (!isAuthorized) {
-      throw new ForbiddenException('Bạn không phải đối tác của đơn đặt lịch này.');
+      throw new ForbiddenException(
+        'Bạn không phải đối tác của đơn đặt lịch này.',
+      );
     }
 
     const booking = await this.bookingModel.findById(proposal.bookingId);
@@ -479,13 +497,19 @@ export class ComboRescheduleCoordinatorService {
 
     // Additional fee required (AD-01)
     const oldDateStr = proposal.originalSchedule.date;
-    const [sH, sM] = proposal.originalSchedule.timeSlot.split('-')[0].trim().split(':').map(Number);
+    const [sH, sM] = proposal.originalSchedule.timeSlot
+      .split('-')[0]
+      .trim()
+      .split(':')
+      .map(Number);
     const oldStartsAt = new Date(
       `${oldDateStr}T${String(sH || 9).padStart(2, '0')}:${String(sM || 0).padStart(2, '0')}:00+07:00`,
     );
 
     const fifteenMinsLater = new Date(now.getTime() + 15 * 60 * 1000);
-    const paymentExpiresAt = new Date(Math.min(fifteenMinsLater.getTime(), oldStartsAt.getTime()));
+    const paymentExpiresAt = new Date(
+      Math.min(fifteenMinsLater.getTime(), oldStartsAt.getTime()),
+    );
 
     if (paymentExpiresAt.getTime() <= now.getTime()) {
       proposal.status = ProposalStatus.REJECTED;
@@ -508,8 +532,13 @@ export class ComboRescheduleCoordinatorService {
       );
     }
 
-    const orderCode = Number(String(Date.now()).slice(-6) + Math.floor(Math.random() * 1000));
-    const frontendBase = this.configService.get<string>('FRONTEND_URL', 'https://vibe-hue.vn');
+    const orderCode = Number(
+      String(Date.now()).slice(-6) + Math.floor(Math.random() * 1000),
+    );
+    const frontendBase = this.configService.get<string>(
+      'FRONTEND_URL',
+      'https://vibe-hue.vn',
+    );
     const checkoutUrl = `${frontendBase}/checkout/payment?orderCode=${orderCode}&amount=${proposal.additionalFeeDue}`;
 
     proposal.status = ProposalStatus.APPROVED_PENDING_PAYMENT;
@@ -523,7 +552,10 @@ export class ComboRescheduleCoordinatorService {
     };
 
     if (proposal.temporaryHoldRef) {
-      const ttlSec = Math.max(60, Math.floor((paymentExpiresAt.getTime() - now.getTime()) / 1000));
+      const ttlSec = Math.max(
+        60,
+        Math.floor((paymentExpiresAt.getTime() - now.getTime()) / 1000),
+      );
       await this.redisService.set(
         proposal.temporaryHoldRef,
         { bookingId: booking._id.toString(), orderCode },
@@ -572,8 +604,16 @@ export class ComboRescheduleCoordinatorService {
     );
 
     // 2. Shift Photoshoot BookingSchedule
-    const [sH, sM] = proposed.timeSlot.split('-')[0].trim().split(':').map(Number);
-    const [eH, eM] = proposed.timeSlot.split('-')[1].trim().split(':').map(Number);
+    const [sH, sM] = proposed.timeSlot
+      .split('-')[0]
+      .trim()
+      .split(':')
+      .map(Number);
+    const [eH, eM] = proposed.timeSlot
+      .split('-')[1]
+      .trim()
+      .split(':')
+      .map(Number);
     const startsAt = new Date(
       `${proposed.date}T${String(sH || 9).padStart(2, '0')}:${String(sM || 0).padStart(2, '0')}:00+07:00`,
     );
@@ -623,18 +663,25 @@ export class ComboRescheduleCoordinatorService {
         );
 
         // Update InventoryReservation dates
-        const existingReservation = await this.inventoryReservationModel.findOne({
-          bookingItemId: item._id,
-          status: {
-            $in: [ReservationStatus.TempReserved, ReservationStatus.Confirmed],
-          },
-        });
+        const existingReservation =
+          await this.inventoryReservationModel.findOne({
+            bookingItemId: item._id,
+            status: {
+              $in: [
+                ReservationStatus.TempReserved,
+                ReservationStatus.Confirmed,
+              ],
+            },
+          });
 
         await this.inventoryReservationModel.updateMany(
           {
             bookingItemId: item._id,
             status: {
-              $in: [ReservationStatus.TempReserved, ReservationStatus.Confirmed],
+              $in: [
+                ReservationStatus.TempReserved,
+                ReservationStatus.Confirmed,
+              ],
             },
           },
           {
@@ -701,10 +748,16 @@ export class ComboRescheduleCoordinatorService {
         });
 
         for (const s of rentalSchedules) {
-          const newStart = s.startsAt ? new Date(s.startsAt.getTime() + shiftMs) : null;
-          const newEnd = s.endsAt ? new Date(s.endsAt.getTime() + shiftMs) : null;
+          const newStart = s.startsAt
+            ? new Date(s.startsAt.getTime() + shiftMs)
+            : null;
+          const newEnd = s.endsAt
+            ? new Date(s.endsAt.getTime() + shiftMs)
+            : null;
           const newLocalDate = s.providerLocalDate
-            ? new Date(new Date(s.providerLocalDate).getTime() + shiftMs).toISOString().split('T')[0]
+            ? new Date(new Date(s.providerLocalDate).getTime() + shiftMs)
+                .toISOString()
+                .split('T')[0]
             : null;
 
           await this.bookingScheduleModel.updateOne(

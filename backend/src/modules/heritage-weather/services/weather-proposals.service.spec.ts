@@ -10,7 +10,10 @@ import {
   WeatherProposal,
 } from '../schemas/weather-proposal.schema';
 import { Booking, BookingStatus } from '../../bookings/schemas/booking.schema';
-import { BookingItem, BookingItemType } from '../../bookings/schemas/booking-item.schema';
+import {
+  BookingItem,
+  BookingItemType,
+} from '../../bookings/schemas/booking-item.schema';
 import {
   BookingSchedule,
   BookingScheduleType,
@@ -113,15 +116,27 @@ describe('WeatherProposalsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WeatherProposalsService,
-        { provide: getModelToken(WeatherProposal.name), useValue: mockProposalModel },
+        {
+          provide: getModelToken(WeatherProposal.name),
+          useValue: mockProposalModel,
+        },
         { provide: getModelToken(Booking.name), useValue: mockBookingModel },
-        { provide: getModelToken(BookingItem.name), useValue: mockBookingItemModel },
-        { provide: getModelToken(BookingSchedule.name), useValue: mockBookingScheduleModel },
+        {
+          provide: getModelToken(BookingItem.name),
+          useValue: mockBookingItemModel,
+        },
+        {
+          provide: getModelToken(BookingSchedule.name),
+          useValue: mockBookingScheduleModel,
+        },
         { provide: HeritageSpotsService, useValue: mockHeritageSpotsService },
         { provide: RefundOutboxService, useValue: mockRefundOutboxService },
         { provide: RedisService, useValue: mockRedisService },
         { provide: ConfigService, useValue: mockConfigService },
-        { provide: ComboRescheduleCoordinatorService, useValue: mockComboCoordinator },
+        {
+          provide: ComboRescheduleCoordinatorService,
+          useValue: mockComboCoordinator,
+        },
       ],
     }).compile();
 
@@ -133,7 +148,9 @@ describe('WeatherProposalsService', () => {
       const exhaustedBooking = createMockBooking({ weatherRescheduleCount: 2 });
       mockBookingModel.findById.mockResolvedValueOnce(exhaustedBooking);
       mockBookingItemModel.findOne.mockResolvedValueOnce(createMockPhotoItem());
-      mockBookingScheduleModel.findOne.mockResolvedValueOnce(createMockSchedule());
+      mockBookingScheduleModel.findOne.mockResolvedValueOnce(
+        createMockSchedule(),
+      );
 
       // Target spot is closer (e.g. old travel fee 50000, new 20000 -> delta -30000 -> additionalFeeDue = 0)
       mockHeritageSpotsService.findById.mockResolvedValueOnce({
@@ -179,31 +196,27 @@ describe('WeatherProposalsService', () => {
       mockBookingModel.findById.mockResolvedValueOnce(exhaustedBooking);
 
       await expect(
-        service.createProposal(
-          bookingId.toString(),
-          customerId.toString(),
-          {
-            changeType: ProposalChangeType.DATE_AND_SLOT,
-            proposedDate: '2026-11-20',
-            proposedTimeSlot: '09:00-11:00',
-          },
-        ),
+        service.createProposal(bookingId.toString(), customerId.toString(), {
+          changeType: ProposalChangeType.DATE_AND_SLOT,
+          proposedDate: '2026-11-20',
+          proposedTimeSlot: '09:00-11:00',
+        }),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('should reject proposal if booking already has hasPendingWeatherAction = true', async () => {
-      const lockedBooking = createMockBooking({ hasPendingWeatherAction: true });
+      const lockedBooking = createMockBooking({
+        hasPendingWeatherAction: true,
+      });
       mockBookingModel.findById.mockResolvedValueOnce(lockedBooking);
 
       await expect(
-        service.createProposal(
-          bookingId.toString(),
-          customerId.toString(),
-          {
-            changeType: ProposalChangeType.LOCATION_ONLY,
-          },
-        ),
-      ).rejects.toThrow('Đơn hàng đang có một đề xuất đổi lịch hoặc yêu cầu hủy thời tiết đang chờ xử lý.');
+        service.createProposal(bookingId.toString(), customerId.toString(), {
+          changeType: ProposalChangeType.LOCATION_ONLY,
+        }),
+      ).rejects.toThrow(
+        'Đơn hàng đang có một đề xuất đổi lịch hoặc yêu cầu hủy thời tiết đang chờ xử lý.',
+      );
     });
   });
 
@@ -228,7 +241,9 @@ describe('WeatherProposalsService', () => {
       );
 
       expect(result.status).toBe(ProposalStatus.REJECTED);
-      expect(mockRedisService.del).toHaveBeenCalledWith('hold:photographer:123');
+      expect(mockRedisService.del).toHaveBeenCalledWith(
+        'hold:photographer:123',
+      );
       expect(mockBookingModel.updateOne).toHaveBeenCalledWith(
         { _id: bookingId },
         expect.objectContaining({
@@ -363,7 +378,9 @@ describe('WeatherProposalsService', () => {
       expect(res.success).toBe(true);
       expect(mockProposal.status).toBe(ProposalStatus.APPLIED);
       expect(mockProposal.additionalPayment.status).toBe('PAID');
-      expect(mockRedisService.del).toHaveBeenCalledWith('hold:photographer:123');
+      expect(mockRedisService.del).toHaveBeenCalledWith(
+        'hold:photographer:123',
+      );
     });
 
     it('Late Webhook captures fee after paymentExpiresAt -> enqueues auto-refund via RefundOutbox', async () => {
@@ -412,7 +429,9 @@ describe('WeatherProposalsService', () => {
       );
 
       expect(result.status).toBe(ProposalStatus.CANCELLED);
-      expect(mockRedisService.del).toHaveBeenCalledWith('hold:photographer:123');
+      expect(mockRedisService.del).toHaveBeenCalledWith(
+        'hold:photographer:123',
+      );
       expect(mockBookingModel.updateOne).toHaveBeenCalledWith(
         { _id: bookingId },
         expect.objectContaining({

@@ -196,7 +196,9 @@ const oid = () => new Types.ObjectId();
         acceptances,
         accessService,
         draftMechanismService,
-        { getApproved: () => approvedTemplate } as unknown as ContractTemplateService,
+        {
+          getApproved: () => approvedTemplate,
+        } as unknown as ContractTemplateService,
         {
           currentPoliciesForProvider: jest.fn().mockResolvedValue({
             rentalPolicy: 'Bao quan trang phuc can than.',
@@ -219,8 +221,13 @@ const oid = () => new Types.ObjectId();
 
       // Accept attempt is rejected with 422
       await expect(
-        approvalService.accept(providerUser, draftMechanismService.getDraft().hash),
-      ).rejects.toThrow(new UnprocessableEntityException('CONTRACT_MECHANISM_NOT_APPROVED'));
+        approvalService.accept(
+          providerUser,
+          draftMechanismService.getDraft().hash,
+        ),
+      ).rejects.toThrow(
+        new UnprocessableEntityException('CONTRACT_MECHANISM_NOT_APPROVED'),
+      );
     });
 
     it('3, 4, 5 & 6. With APPROVED mechanism fixture: Provider accepts -> records ACTIVE with policyFingerprint and returns status ACTIVE', async () => {
@@ -238,7 +245,7 @@ const oid = () => new Types.ObjectId();
       const approvedMechanismService = {
         getDraft: () => syntheticApprovedMechanism,
         getApproved: () => syntheticApprovedMechanism,
-      } as unknown as ContractMechanismService;
+      };
 
       const policySnapshot = {
         rentalPolicy: 'Bao quan trang phuc can than.',
@@ -256,7 +263,9 @@ const oid = () => new Types.ObjectId();
         acceptances,
         accessService,
         approvedMechanismService,
-        { getApproved: () => approvedTemplate } as unknown as ContractTemplateService,
+        {
+          getApproved: () => approvedTemplate,
+        } as unknown as ContractTemplateService,
         snapshotService,
       );
 
@@ -289,7 +298,9 @@ const oid = () => new Types.ObjectId();
       expect(statusAfter.status).toBe('ACTIVE');
       expect(statusAfter.isStale).toBe(false);
       expect(statusAfter.active).toBeDefined();
-      expect(statusAfter.active?.mechanismVersion).toBe(syntheticApprovedMechanism.version);
+      expect(statusAfter.active?.mechanismVersion).toBe(
+        syntheticApprovedMechanism.version,
+      );
     });
 
     it('7 & 8. Provider changes shop policies -> status reflects STALE and readiness detects stale acceptance', async () => {
@@ -307,14 +318,16 @@ const oid = () => new Types.ObjectId();
       const approvedMechanismService = {
         getDraft: () => syntheticApprovedMechanism,
         getApproved: () => syntheticApprovedMechanism,
-      } as unknown as ContractMechanismService;
+      };
 
       const initialPolicy = { rentalPolicy: 'Chinh sach goc' };
       const updatedPolicy = { rentalPolicy: 'Chinh sach moi da cap nhat gia' };
 
       let currentPolicy = initialPolicy;
       const snapshotService = {
-        currentPoliciesForProvider: jest.fn().mockImplementation(() => Promise.resolve(currentPolicy)),
+        currentPoliciesForProvider: jest
+          .fn()
+          .mockImplementation(() => Promise.resolve(currentPolicy)),
       } as unknown as ContractSnapshotService;
 
       const approvalService = new ProviderContractApprovalService(
@@ -323,7 +336,9 @@ const oid = () => new Types.ObjectId();
         acceptances,
         accessService,
         approvedMechanismService,
-        { getApproved: () => approvedTemplate } as unknown as ContractTemplateService,
+        {
+          getApproved: () => approvedTemplate,
+        } as unknown as ContractTemplateService,
         snapshotService,
       );
 
@@ -336,7 +351,10 @@ const oid = () => new Types.ObjectId();
       };
 
       // Accept with initial policy
-      await approvalService.accept(providerUser, syntheticApprovedMechanism.hash);
+      await approvalService.accept(
+        providerUser,
+        syntheticApprovedMechanism.hash,
+      );
 
       // Provider changes policy
       currentPolicy = updatedPolicy;
@@ -363,10 +381,12 @@ const oid = () => new Types.ObjectId();
       const approvedMechanismService = {
         getDraft: () => syntheticApprovedMechanism,
         getApproved: () => syntheticApprovedMechanism,
-      } as unknown as ContractMechanismService;
+      };
 
       const snapshotService = {
-        currentPoliciesForProvider: jest.fn().mockResolvedValue({ rentalPolicy: 'Chinh sach shop' }),
+        currentPoliciesForProvider: jest
+          .fn()
+          .mockResolvedValue({ rentalPolicy: 'Chinh sach shop' }),
       } as unknown as ContractSnapshotService;
 
       const approvalService = new ProviderContractApprovalService(
@@ -375,7 +395,9 @@ const oid = () => new Types.ObjectId();
         acceptances,
         accessService,
         approvedMechanismService,
-        { getApproved: () => approvedTemplate } as unknown as ContractTemplateService,
+        {
+          getApproved: () => approvedTemplate,
+        } as unknown as ContractTemplateService,
         snapshotService,
       );
 
@@ -388,14 +410,19 @@ const oid = () => new Types.ObjectId();
       };
 
       // 1. Accept first
-      await approvalService.accept(providerUser, syntheticApprovedMechanism.hash);
+      await approvalService.accept(
+        providerUser,
+        syntheticApprovedMechanism.hash,
+      );
 
       // 2. Revoke
       const revokeRes = await approvalService.revoke(providerUser);
       expect(revokeRes.revoked).toBe(true);
 
       // 3. Verify in MongoDB
-      const doc = await acceptances.findOne({ providerId: fixtures.providerId }).lean();
+      const doc = await acceptances
+        .findOne({ providerId: fixtures.providerId })
+        .lean();
       expect(doc?.status).toBe(ProviderAcceptanceStatus.Revoked);
       expect(doc?.revokedAt).toBeDefined();
 
@@ -408,8 +435,13 @@ const oid = () => new Types.ObjectId();
       // 5. Customer readiness fails closed
       const policyService = new ContractPolicyService(connection, acceptances);
       await expect(
-        policyService.requireAutoAcceptance(fixtures.providerId, approvedTemplate.version),
-      ).rejects.toThrow(new UnprocessableEntityException('PROVIDER_AUTO_ACCEPTANCE_MISSING'));
+        policyService.requireAutoAcceptance(
+          fixtures.providerId,
+          approvedTemplate.version,
+        ),
+      ).rejects.toThrow(
+        new UnprocessableEntityException('PROVIDER_AUTO_ACCEPTANCE_MISSING'),
+      );
     });
   },
 );

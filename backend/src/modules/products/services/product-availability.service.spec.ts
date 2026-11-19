@@ -1,7 +1,10 @@
 ﻿import { Types } from 'mongoose';
 import { ProductAvailabilityService } from './product-availability.service';
 import { TimeSlotEngineService } from '../../bookings/services/time-slot-engine.service';
-import { ScheduleCapability, ScheduleType } from '../schemas/provider-schedule.schema';
+import {
+  ScheduleCapability,
+  ScheduleType,
+} from '../schemas/provider-schedule.schema';
 
 describe('ProductAvailabilityService - Phase 1 Availability & Cleaning', () => {
   let productId: Types.ObjectId;
@@ -82,7 +85,9 @@ describe('ProductAvailabilityService - Phase 1 Availability & Cleaning', () => {
       findById: jest.fn().mockReturnValue({
         select: jest.fn().mockReturnValue({
           lean: jest.fn().mockReturnValue({
-            exec: jest.fn().mockResolvedValue({ _id: providerId, useSlotLeases: false }),
+            exec: jest
+              .fn()
+              .mockResolvedValue({ _id: providerId, useSlotLeases: false }),
           }),
         }),
       }),
@@ -129,15 +134,45 @@ describe('ProductAvailabilityService - Phase 1 Availability & Cleaning', () => {
 
   it('rejects an invalid hourly range or non-2h multiple', async () => {
     await expect(
-      service.check(productId.toString(), 'M', 'RED', '2026-08-01', '2026-08-01', 1, 'HOURLY', '12:00', '10:00'),
+      service.check(
+        productId.toString(),
+        'M',
+        'RED',
+        '2026-08-01',
+        '2026-08-01',
+        1,
+        'HOURLY',
+        '12:00',
+        '10:00',
+      ),
     ).rejects.toThrow();
 
     await expect(
-      service.check(productId.toString(), 'M', 'RED', '2026-08-01', '2026-08-01', 1, 'HOURLY', '07:00', '10:00'),
+      service.check(
+        productId.toString(),
+        'M',
+        'RED',
+        '2026-08-01',
+        '2026-08-01',
+        1,
+        'HOURLY',
+        '07:00',
+        '10:00',
+      ),
     ).rejects.toThrow();
 
     await expect(
-      service.check(productId.toString(), 'M', 'RED', '2026-08-01', '2026-08-01', 1, 'HOURLY', '08:00', '10:00'),
+      service.check(
+        productId.toString(),
+        'M',
+        'RED',
+        '2026-08-01',
+        '2026-08-01',
+        1,
+        'HOURLY',
+        '08:00',
+        '10:00',
+      ),
     ).rejects.toThrow();
   });
 
@@ -147,7 +182,14 @@ describe('ProductAvailabilityService - Phase 1 Availability & Cleaning', () => {
       exec: jest.fn().mockResolvedValue([item1]),
     });
 
-    const result = await service.check(productId.toString(), 'M', 'RED', '2026-08-01', '2026-08-02', 1);
+    const result = await service.check(
+      productId.toString(),
+      'M',
+      'RED',
+      '2026-08-01',
+      '2026-08-02',
+      1,
+    );
 
     expect(result.available).toBe(true);
     expect(result.availableQuantity).toBe(1);
@@ -204,7 +246,8 @@ describe('ProductAvailabilityService - Phase 1 Availability & Cleaning', () => {
         operationalAvailableFrom: new Date('2026-08-01T05:00:00.000Z'), // 12:00 VN
       };
       const maxAllowed = query?.$or?.[1]?.operationalAvailableFrom?.$lte;
-      const resultItems = (maxAllowed && item.operationalAvailableFrom > maxAllowed) ? [] : [item];
+      const resultItems =
+        maxAllowed && item.operationalAvailableFrom > maxAllowed ? [] : [item];
       return {
         exec: jest.fn().mockResolvedValue(resultItems),
       };
@@ -230,7 +273,9 @@ describe('ProductAvailabilityService - Phase 1 Availability & Cleaning', () => {
     mockProviderModel.findById.mockReturnValue({
       select: jest.fn().mockReturnValue({
         lean: jest.fn().mockReturnValue({
-          exec: jest.fn().mockResolvedValue({ _id: providerId, useSlotLeases: true }),
+          exec: jest
+            .fn()
+            .mockResolvedValue({ _id: providerId, useSlotLeases: true }),
         }),
       }),
     });
@@ -272,7 +317,9 @@ describe('ProductAvailabilityService - Phase 1 Availability & Cleaning', () => {
     mockProviderModel.findById.mockReturnValue({
       select: jest.fn().mockReturnValue({
         lean: jest.fn().mockReturnValue({
-          exec: jest.fn().mockResolvedValue({ _id: providerId, useSlotLeases: true }),
+          exec: jest
+            .fn()
+            .mockResolvedValue({ _id: providerId, useSlotLeases: true }),
         }),
       }),
     });
@@ -338,7 +385,9 @@ describe('ProductAvailabilityService - Phase 1 Availability & Cleaning', () => {
     expect(mockLeaseModel.find).toHaveBeenCalledWith(
       expect.objectContaining({
         inventoryItemId: { $in: [item1._id] },
-        dateStr: { $in: ['2026-08-01', '2026-08-02', '2026-08-03', '2026-08-04'] },
+        dateStr: {
+          $in: ['2026-08-01', '2026-08-02', '2026-08-03', '2026-08-04'],
+        },
       }),
     );
   });
@@ -357,7 +406,14 @@ describe('ProductAvailabilityService - Phase 1 Availability & Cleaning', () => {
       }),
     });
 
-    const result = await service.check(productId.toString(), 'M', 'RED', '2026-08-01', '2026-08-02', 1);
+    const result = await service.check(
+      productId.toString(),
+      'M',
+      'RED',
+      '2026-08-01',
+      '2026-08-02',
+      1,
+    );
 
     expect(result.available).toBe(false);
     expect(result.reason).toBe('OFF_DAY');
@@ -378,7 +434,14 @@ describe('ProductAvailabilityService - Phase 1 Availability & Cleaning', () => {
       }),
     });
 
-    const result = await service.check(productId.toString(), 'M', 'RED', '2026-08-01', '2026-08-03', 1);
+    const result = await service.check(
+      productId.toString(),
+      'M',
+      'RED',
+      '2026-08-01',
+      '2026-08-03',
+      1,
+    );
 
     expect(result.available).toBe(false);
     expect(result.reason).toBe('OFF_DAY');
@@ -397,7 +460,8 @@ describe('ProductAvailabilityService - Phase 1 Availability & Cleaning', () => {
           operationalAvailableFrom: availableFromUtc,
         };
         const maxAllowed = query?.$or?.[1]?.operationalAvailableFrom?.$lte;
-        const match = !maxAllowed || item.operationalAvailableFrom <= maxAllowed;
+        const match =
+          !maxAllowed || item.operationalAvailableFrom <= maxAllowed;
         return {
           exec: jest.fn().mockResolvedValue(match ? [item] : []),
         };
@@ -427,7 +491,8 @@ describe('ProductAvailabilityService - Phase 1 Availability & Cleaning', () => {
           operationalAvailableFrom: availableFromUtc,
         };
         const maxAllowed = query?.$or?.[1]?.operationalAvailableFrom?.$lte;
-        const match = !maxAllowed || item.operationalAvailableFrom <= maxAllowed;
+        const match =
+          !maxAllowed || item.operationalAvailableFrom <= maxAllowed;
         return {
           exec: jest.fn().mockResolvedValue(match ? [item] : []),
         };
@@ -457,7 +522,8 @@ describe('ProductAvailabilityService - Phase 1 Availability & Cleaning', () => {
           operationalAvailableFrom: availableFromUtc,
         };
         const maxAllowed = query?.$or?.[1]?.operationalAvailableFrom?.$lte;
-        const match = !maxAllowed || item.operationalAvailableFrom <= maxAllowed;
+        const match =
+          !maxAllowed || item.operationalAvailableFrom <= maxAllowed;
         return {
           exec: jest.fn().mockResolvedValue(match ? [item] : []),
         };
@@ -487,18 +553,23 @@ describe('ProductAvailabilityService - Phase 1 Availability & Cleaning', () => {
       };
 
       mockInventory.find = jest.fn().mockImplementation((query: any) => {
-        const isExcluded =
-          query.conditionStatus?.$nin?.includes(itemCompleted.conditionStatus);
+        const isExcluded = query.conditionStatus?.$nin?.includes(
+          itemCompleted.conditionStatus,
+        );
         if (isExcluded) return { exec: jest.fn().mockResolvedValue([]) };
 
         const matchesStatus = query.$or?.some((cond: any) => {
-          if (cond.status === 'AVAILABLE') return itemCompleted.status === 'AVAILABLE';
-          if (cond.status === 'CLEANING') return itemCompleted.status === 'CLEANING';
+          if (cond.status === 'AVAILABLE')
+            return itemCompleted.status === 'AVAILABLE';
+          if (cond.status === 'CLEANING')
+            return itemCompleted.status === 'CLEANING';
           return false;
         });
 
         return {
-          exec: jest.fn().mockResolvedValue(matchesStatus ? [itemCompleted] : []),
+          exec: jest
+            .fn()
+            .mockResolvedValue(matchesStatus ? [itemCompleted] : []),
         };
       });
 
@@ -540,7 +611,10 @@ describe('ProductAvailabilityService - Phase 1 Availability & Cleaning', () => {
           const matchesStatus = query.$or?.some((cond: any) => {
             if (cond.status === it.status) {
               if (cond.status === 'CLEANING') {
-                return cond.operationalAvailableFrom?.$lte >= it.operationalAvailableFrom;
+                return (
+                  cond.operationalAvailableFrom?.$lte >=
+                  it.operationalAvailableFrom
+                );
               }
               return true;
             }

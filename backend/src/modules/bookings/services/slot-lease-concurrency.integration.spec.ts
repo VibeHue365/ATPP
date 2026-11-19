@@ -1,9 +1,4 @@
-import {
-  createConnection,
-  Connection,
-  Model,
-  Types,
-} from 'mongoose';
+import { createConnection, Connection, Model, Types } from 'mongoose';
 import {
   InventorySlotLease,
   InventorySlotLeaseDocument,
@@ -22,9 +17,19 @@ import {
   BookingStatus,
   BookingType,
 } from '../schemas/booking.schema';
-import { BookingItem, BookingItemSchema, BookingItemType } from '../schemas/booking-item.schema';
-import { BookingSchedule, BookingScheduleSchema } from '../schemas/booking-schedule.schema';
-import { Provider, ProviderSchema } from '../../providers/schemas/provider.schema';
+import {
+  BookingItem,
+  BookingItemSchema,
+  BookingItemType,
+} from '../schemas/booking-item.schema';
+import {
+  BookingSchedule,
+  BookingScheduleSchema,
+} from '../schemas/booking-schedule.schema';
+import {
+  Provider,
+  ProviderSchema,
+} from '../../providers/schemas/provider.schema';
 import { BookingsService } from './bookings.service';
 import { ProductBusyCacheService } from './product-busy-cache.service';
 import { InventorySlotLeaseService } from './inventory-slot-lease.service';
@@ -58,7 +63,9 @@ describe('InventorySlotLease Concurrency & ACID Integration', () => {
   beforeAll(async () => {
     try {
       assertSafeTestMongoUri(defaultReplicaUri);
-      console.log(`[Safe Guard] Connecting to replica set: ${sanitizeMongoUriForLogging(defaultReplicaUri)}`);
+      console.log(
+        `[Safe Guard] Connecting to replica set: ${sanitizeMongoUriForLogging(defaultReplicaUri)}`,
+      );
       connection = await createConnection(defaultReplicaUri, {
         serverSelectionTimeoutMS: 3000,
       }).asPromise();
@@ -169,7 +176,7 @@ describe('InventorySlotLease Concurrency & ACID Integration', () => {
       ): Promise<{ bookingId: Types.ObjectId; status: string }> => {
         const session = await connection!.startSession();
         try {
-          let outcome = 'committed';
+          const outcome = 'committed';
           await session.withTransaction(async () => {
             // Step 1: Create inventory reservation
             await reservationModel.create(
@@ -231,7 +238,7 @@ describe('InventorySlotLease Concurrency & ACID Integration', () => {
 
       // Invariant 2: Exactly one transaction fails with HTTP 409 ConflictException (E11000)
       expect(rejected).toHaveLength(1);
-      const rejectedError = (rejected[0] as PromiseRejectedResult).reason;
+      const rejectedError = rejected[0].reason;
       expect(rejectedError).toBeInstanceOf(ConflictException);
 
       // Invariant 3: Verify zero orphaned leases (only the winning bookingId has a lease)
@@ -255,7 +262,9 @@ describe('InventorySlotLease Concurrency & ACID Integration', () => {
         })
         .lean();
       expect(survivingReservations).toHaveLength(1);
-      expect(survivingReservations[0].bookingId.toString()).toBe(winnerBookingId);
+      expect(survivingReservations[0].bookingId.toString()).toBe(
+        winnerBookingId,
+      );
     });
   });
 
@@ -453,7 +462,9 @@ describe('InventorySlotLease Concurrency & ACID Integration', () => {
       expect(newLeases).toHaveLength(0);
 
       // Booking item schedule was not modified
-      const fetchedItem = await bookingItemModel.findById(bookingItem._id).lean();
+      const fetchedItem = await bookingItemModel
+        .findById(bookingItem._id)
+        .lean();
       expect(fetchedItem?.shootTimeSlot).toBe('07:00-09:00');
     });
 
@@ -535,7 +546,9 @@ describe('InventorySlotLease Concurrency & ACID Integration', () => {
 
       // Mock scheduleModel.updateMany to throw an error inside the transaction
       jest.spyOn(scheduleModel, 'updateMany').mockImplementationOnce(() => {
-        throw new Error('Simulated booking schedule failure inside transaction');
+        throw new Error(
+          'Simulated booking schedule failure inside transaction',
+        );
       });
 
       await expect(
@@ -548,7 +561,9 @@ describe('InventorySlotLease Concurrency & ACID Integration', () => {
             newShootTimeSlot: '15:00-17:00',
           },
         ),
-      ).rejects.toThrow('Simulated booking schedule failure inside transaction');
+      ).rejects.toThrow(
+        'Simulated booking schedule failure inside transaction',
+      );
 
       // Verify in real MongoDB replica set:
       // Old lease MUST still be CONFIRMED!

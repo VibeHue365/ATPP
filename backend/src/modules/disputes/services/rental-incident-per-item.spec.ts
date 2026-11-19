@@ -1,6 +1,9 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { BookingStatus, BookingType } from '../../bookings/schemas/booking.schema';
+import {
+  BookingStatus,
+  BookingType,
+} from '../../bookings/schemas/booking.schema';
 import { BookingItemType } from '../../bookings/schemas/booking-item.schema';
 import {
   RentalFulfillmentStatus,
@@ -34,14 +37,22 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
 
   describe('1. markPickedUp updates InventoryItem.status = RENTED only for the handed over item', () => {
     it('sets inventory status to RENTED for item A and leaves item B unaffected', async () => {
-      const mockInventoryUpdateMany = jest.fn().mockReturnValue(query({ modifiedCount: 1 }));
-      const mockReservationFind = jest.fn().mockReturnValue(query([{ inventoryItemId: invAId }]));
-      const mockBookingItemFindById = jest.fn().mockReturnValue(query({ _id: itemAId, inventoryItemId: invAId }));
+      const mockInventoryUpdateMany = jest
+        .fn()
+        .mockReturnValue(query({ modifiedCount: 1 }));
+      const mockReservationFind = jest
+        .fn()
+        .mockReturnValue(query([{ inventoryItemId: invAId }]));
+      const mockBookingItemFindById = jest
+        .fn()
+        .mockReturnValue(query({ _id: itemAId, inventoryItemId: invAId }));
 
       const mockDb = {
         model: (name: string) => {
-          if (name === 'InventoryItem') return { updateMany: mockInventoryUpdateMany };
-          if (name === 'InventoryReservation') return { find: mockReservationFind };
+          if (name === 'InventoryItem')
+            return { updateMany: mockInventoryUpdateMany };
+          if (name === 'InventoryReservation')
+            return { find: mockReservationFind };
           return {};
         },
       };
@@ -52,11 +63,17 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
       };
 
       const mockRentalFulfillment: any = {
-        submitPickupEvidence: jest.fn().mockResolvedValue({ status: RentalFulfillmentStatus.ReadyForPickup }),
-        markPickedUp: jest.fn().mockResolvedValue({ status: RentalFulfillmentStatus.PickedUp }),
+        submitPickupEvidence: jest.fn().mockResolvedValue({
+          status: RentalFulfillmentStatus.ReadyForPickup,
+        }),
+        markPickedUp: jest
+          .fn()
+          .mockResolvedValue({ status: RentalFulfillmentStatus.PickedUp }),
       };
 
-      const workflow = Object.create(RentalFulfillmentWorkflowService.prototype);
+      const workflow = Object.create(
+        RentalFulfillmentWorkflowService.prototype,
+      );
       workflow.bookingItemModel = mockBookingItemModel;
       workflow.rentalFulfillment = mockRentalFulfillment;
       workflow.requireProviderOrAdmin = jest.fn().mockResolvedValue({
@@ -66,7 +83,9 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
         bookingStatus: BookingStatus.Confirmed,
       });
       workflow.requireOperationalBooking = jest.fn();
-      workflow.resolveEvidence = jest.fn().mockResolvedValue({ files: [{ fileId: 'f1', type: 'IMAGE' }] });
+      workflow.resolveEvidence = jest
+        .fn()
+        .mockResolvedValue({ files: [{ fileId: 'f1', type: 'IMAGE' }] });
       workflow.syncBookingProgress = jest.fn().mockResolvedValue(undefined);
 
       await workflow.markPickedUp(
@@ -188,7 +207,8 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
             if (name === 'Provider') return mockProviderModel;
             if (name === 'InventoryReservation') return mockReservationModel;
             if (name === 'Payment') return mockPaymentModel;
-            if (name === 'Notification') return { create: jest.fn().mockResolvedValue({}) };
+            if (name === 'Notification')
+              return { create: jest.fn().mockResolvedValue({}) };
             return {};
           },
         },
@@ -196,14 +216,25 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
 
       mockBookingItemModel = {
         findById: jest.fn().mockImplementation((id) => {
-          if (id.toString() === itemAId.toString()) return Promise.resolve(itemA);
-          if (id.toString() === itemBId.toString()) return Promise.resolve(itemB);
+          if (id.toString() === itemAId.toString())
+            return Promise.resolve(itemA);
+          if (id.toString() === itemBId.toString())
+            return Promise.resolve(itemB);
           return Promise.resolve(null);
         }),
         find: jest.fn().mockReturnValue({
           lean: () => ({
             exec: async () => [
-              { ...itemA, rentalFulfillment: { ...itemA.rentalFulfillment, status: RentalFulfillmentStatus.Completed, depositSettlementStatus: DepositSettlementStatus.PartiallyDeducted, depositRefundAmount: 60000 } },
+              {
+                ...itemA,
+                rentalFulfillment: {
+                  ...itemA.rentalFulfillment,
+                  status: RentalFulfillmentStatus.Completed,
+                  depositSettlementStatus:
+                    DepositSettlementStatus.PartiallyDeducted,
+                  depositRefundAmount: 60000,
+                },
+              },
               itemB, // Item B is still PICKED_UP
             ],
           }),
@@ -228,13 +259,21 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
       disputesService.inventoryModel = mockInventoryModel;
       disputesService.paymentsService = mockPaymentsService;
       disputesService.refundWorkflowService = mockRefundWorkflowService;
-      disputesService.getCustomerIdStr = (b: any) => (b.customerId?._id || b.customerId).toString();
-      disputesService.executeCompensationTransfer = jest.fn().mockResolvedValue({ success: true });
-      disputesService.emitBookingUpdateHelper = jest.fn().mockResolvedValue(undefined);
+      disputesService.getCustomerIdStr = (b: any) =>
+        (b.customerId?._id || b.customerId).toString();
+      disputesService.executeCompensationTransfer = jest
+        .fn()
+        .mockResolvedValue({ success: true });
+      disputesService.emitBookingUpdateHelper = jest
+        .fn()
+        .mockResolvedValue(undefined);
     });
 
     it('deducts ONLY item A, leaves item B untouched, and does NOT complete Booking because item B is still active', async () => {
-      const res = await disputesService.customerAgreeIncident(incident._id.toString(), customerId);
+      const res = await disputesService.customerAgreeIncident(
+        incident._id.toString(),
+        customerId,
+      );
 
       expect(res.success).toBe(true);
 
@@ -244,10 +283,12 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
         expect.objectContaining({
           $set: expect.objectContaining({
             'rentalFulfillment.status': RentalFulfillmentStatus.Completed,
-            'rentalFulfillment.depositSettlementStatus': DepositSettlementStatus.PartiallyDeducted,
+            'rentalFulfillment.depositSettlementStatus':
+              DepositSettlementStatus.PartiallyDeducted,
             'rentalFulfillment.depositDeductedAmount': 40000,
             'rentalFulfillment.depositRefundAmount': 60000,
-            'rentalFulfillment.inventoryStatus': RentalInventoryStatus.Maintenance,
+            'rentalFulfillment.inventoryStatus':
+              RentalInventoryStatus.Maintenance,
           }),
         }),
       );
@@ -278,7 +319,9 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
       expect(mockPaymentsService.executeProfitSplit).not.toHaveBeenCalled();
 
       // Entire booking refund was NOT finalized early because item B is not settled
-      expect(mockRefundWorkflowService.createFromDispute).not.toHaveBeenCalled();
+      expect(
+        mockRefundWorkflowService.createFromDispute,
+      ).not.toHaveBeenCalled();
     });
   });
 
@@ -305,7 +348,9 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
 
       const mockIncidentModel = {
         findById: jest.fn().mockResolvedValue(incident),
-        findOneAndUpdate: jest.fn().mockResolvedValue({ ...incident, status: IncidentStatus.Disputed }),
+        findOneAndUpdate: jest
+          .fn()
+          .mockResolvedValue({ ...incident, status: IncidentStatus.Disputed }),
       };
 
       const mockBookingItemModel = {
@@ -320,7 +365,9 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
         db: {
           model: (name: string) => ({
             create: jest.fn().mockResolvedValue({}),
-            findById: jest.fn().mockResolvedValue({ userId: new Types.ObjectId() }),
+            findById: jest
+              .fn()
+              .mockResolvedValue({ userId: new Types.ObjectId() }),
           }),
         },
       };
@@ -329,17 +376,25 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
         findOneAndUpdate: jest.fn().mockResolvedValue({}),
       };
       disputesService.policyResolverService = {
-        getDisputePolicy: jest.fn().mockResolvedValue({ holdSettlementWhenDisputed: true }),
+        getDisputePolicy: jest
+          .fn()
+          .mockResolvedValue({ holdSettlementWhenDisputed: true }),
       };
       disputesService.settlementsService = {
         holdSettlementsForBooking: jest.fn().mockResolvedValue({}),
       };
       disputesService.getCustomerIdStr = () => customerId;
-      disputesService.emitBookingUpdateHelper = jest.fn().mockResolvedValue(undefined);
+      disputesService.emitBookingUpdateHelper = jest
+        .fn()
+        .mockResolvedValue(undefined);
 
-      const res = await disputesService.customerDisagreeIncident(incident._id.toString(), customerId, {
-        reason: 'Tôi nhận áo đã bị rách sẵn',
-      });
+      const res = await disputesService.customerDisagreeIncident(
+        incident._id.toString(),
+        customerId,
+        {
+          reason: 'Tôi nhận áo đã bị rách sẵn',
+        },
+      );
 
       expect(res.success).toBe(true);
 
@@ -349,7 +404,8 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
         {
           $set: {
             'rentalFulfillment.issueStatus': RentalIssueStatus.UnderReview,
-            'rentalFulfillment.depositSettlementStatus': DepositSettlementStatus.Held,
+            'rentalFulfillment.depositSettlementStatus':
+              DepositSettlementStatus.Held,
           },
         },
       );
@@ -421,7 +477,8 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
       const mockBookingItemModel = {
         findOne: jest.fn().mockResolvedValue(itemA),
         findById: jest.fn().mockImplementation((id) => {
-          if (id.toString() === itemAId.toString()) return Promise.resolve(itemA);
+          if (id.toString() === itemAId.toString())
+            return Promise.resolve(itemA);
           return Promise.resolve(null);
         }),
         updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
@@ -429,7 +486,13 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
         find: jest.fn().mockReturnValue({
           lean: () => ({
             exec: async () => [
-              { ...itemA, rentalFulfillment: { ...itemA.rentalFulfillment, status: RentalFulfillmentStatus.Completed } },
+              {
+                ...itemA,
+                rentalFulfillment: {
+                  ...itemA.rentalFulfillment,
+                  status: RentalFulfillmentStatus.Completed,
+                },
+              },
               itemB, // itemB is still active
             ],
           }),
@@ -458,12 +521,32 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
         findById: jest.fn().mockResolvedValue(booking),
         db: {
           model: (name: string) => {
-            if (name === 'BookingEscrow') return { findOneAndUpdate: jest.fn().mockResolvedValue({ status: 'RESOLVED' }), updateOne: jest.fn().mockResolvedValue({}) };
-            if (name === 'Provider') return { findById: jest.fn().mockResolvedValue({ _id: providerId, userId: new Types.ObjectId() }) };
+            if (name === 'BookingEscrow')
+              return {
+                findOneAndUpdate: jest
+                  .fn()
+                  .mockResolvedValue({ status: 'RESOLVED' }),
+                updateOne: jest.fn().mockResolvedValue({}),
+              };
+            if (name === 'Provider')
+              return {
+                findById: jest.fn().mockResolvedValue({
+                  _id: providerId,
+                  userId: new Types.ObjectId(),
+                }),
+              };
             if (name === 'InventoryReservation') return mockReservationModel;
-            if (name === 'Payment') return { find: jest.fn().mockReturnValue({ lean: () => [] }), findOne: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}), deleteMany: jest.fn().mockResolvedValue({}) };
-            if (name === 'BookingSchedule') return { updateMany: jest.fn().mockResolvedValue({}) };
-            if (name === 'Notification') return { create: jest.fn().mockResolvedValue({}) };
+            if (name === 'Payment')
+              return {
+                find: jest.fn().mockReturnValue({ lean: () => [] }),
+                findOne: jest.fn().mockResolvedValue(null),
+                create: jest.fn().mockResolvedValue({}),
+                deleteMany: jest.fn().mockResolvedValue({}),
+              };
+            if (name === 'BookingSchedule')
+              return { updateMany: jest.fn().mockResolvedValue({}) };
+            if (name === 'Notification')
+              return { create: jest.fn().mockResolvedValue({}) };
             return {};
           },
         },
@@ -480,8 +563,12 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
         createFromDispute: jest.fn().mockResolvedValue({}),
       };
       disputesService.getCustomerIdStr = () => customerId;
-      disputesService.executeCompensationTransfer = jest.fn().mockResolvedValue({ success: true });
-      disputesService.emitBookingUpdateHelper = jest.fn().mockResolvedValue(undefined);
+      disputesService.executeCompensationTransfer = jest
+        .fn()
+        .mockResolvedValue({ success: true });
+      disputesService.emitBookingUpdateHelper = jest
+        .fn()
+        .mockResolvedValue(undefined);
 
       await disputesService.adminResolveIncident(
         bookingId.toString(),
@@ -496,8 +583,10 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
         expect.objectContaining({
           $set: expect.objectContaining({
             'rentalFulfillment.status': RentalFulfillmentStatus.Completed,
-            'rentalFulfillment.inventoryStatus': RentalInventoryStatus.Maintenance,
-            'rentalFulfillment.depositSettlementStatus': DepositSettlementStatus.FullyDeducted,
+            'rentalFulfillment.inventoryStatus':
+              RentalInventoryStatus.Maintenance,
+            'rentalFulfillment.depositSettlementStatus':
+              DepositSettlementStatus.FullyDeducted,
             'rentalFulfillment.depositDeductedAmount': 100000,
             'rentalFulfillment.depositRefundAmount': 0,
             'rentalFulfillment.issueStatus': RentalIssueStatus.Resolved,
@@ -555,7 +644,10 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
           { userId: new Types.ObjectId().toString(), role: 'ADMIN' } as any,
           bookingId.toString(),
           itemAId.toString(),
-          { deductAmount: 50000, inventoryStatus: RentalInventoryStatus.Available } as any,
+          {
+            deductAmount: 50000,
+            inventoryStatus: RentalInventoryStatus.Available,
+          } as any,
         ),
       ).toThrow(BadRequestException);
     });
@@ -579,10 +671,14 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
           to: jest.fn().mockReturnThis(),
           emit: jest.fn(),
         },
-        getActiveConnections: jest.fn().mockReturnValue(new Map([[customerId, ['socket-1', 'socket-2']]])),
+        getActiveConnections: jest
+          .fn()
+          .mockReturnValue(new Map([[customerId, ['socket-1', 'socket-2']]])),
       };
 
-      const notificationsService = Object.create(NotificationsService.prototype);
+      const notificationsService = Object.create(
+        NotificationsService.prototype,
+      );
       notificationsService.chatGateway = mockChatGateway;
 
       notificationsService.emitBookingUpdate(
@@ -594,7 +690,9 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
       );
 
       // Verify emit to room user:customerId
-      expect(mockChatGateway.server.to).toHaveBeenCalledWith(`user:${customerId}`);
+      expect(mockChatGateway.server.to).toHaveBeenCalledWith(
+        `user:${customerId}`,
+      );
       // Verify emit to room role:admin
       expect(mockChatGateway.server.to).toHaveBeenCalledWith('role:admin');
       // Verify socket-1 and socket-2 were NOT targeted directly (preventing duplicates)

@@ -78,19 +78,18 @@ export const ServiceFinderBar: React.FC = () => {
   };
 
   return (
-    <section id="service-finder" className="w-full mt-6 md:mt-8 relative z-30">
+    <section id="service-finder" className="w-full relative z-30">
       <form
         onSubmit={handleSearch}
-        className="w-full rounded-2xl p-3 bg-[#FDF2F4] border border-[#EFE8DF] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-center shadow-2xs"
+        className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1.05fr_1.35fr_1.05fr_1.4fr_1.05fr_minmax(140px,0.95fr)] gap-2.5 items-stretch"
       >
         {/* Field 1: DỊCH VỤ */}
-        <div className="flex flex-col justify-center bg-white rounded-xl px-3.5 py-2.5 border border-stone-200 shadow-2xs min-w-0 relative">
+        <div className="flex flex-col justify-center rounded-xl px-3.5 py-2 min-w-0 relative h-[62px]">
           <label htmlFor="finder-service" className="text-[10px] font-bold uppercase tracking-wider text-[#8E1B2E] leading-none mb-1 whitespace-nowrap">
             Dịch vụ
           </label>
           <CustomSelect
             id="finder-service"
-            size="sm"
             value={serviceType}
             onChange={(val) => setServiceType(val as 'aodai' | 'photographer' | 'combo')}
             options={[
@@ -102,7 +101,7 @@ export const ServiceFinderBar: React.FC = () => {
         </div>
 
         {/* Field 2: TỪ KHÓA TÌM KIẾM */}
-        <div className="flex flex-col justify-center bg-white rounded-xl px-3.5 py-2.5 border border-stone-200 shadow-2xs min-w-0 relative">
+        <div className="flex flex-col justify-center rounded-xl px-3.5 py-2 min-w-0 relative h-[62px]">
           <label htmlFor="finder-keyword" className="text-[10px] font-bold uppercase tracking-wider text-[#8E1B2E] leading-none mb-1 whitespace-nowrap">
             Từ khóa
           </label>
@@ -111,19 +110,18 @@ export const ServiceFinderBar: React.FC = () => {
             type="text"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            placeholder="Tên áo, thợ ảnh..."
-            className="text-xs font-semibold bg-transparent border-none outline-none p-0 text-[#292324] w-full truncate placeholder:text-stone-400 placeholder:font-normal"
+            placeholder="Tên áo, thợ ảnh, phong cách..."
+            className="h-[24px] text-[13.5px] font-semibold bg-transparent border-none outline-none p-0 text-[#292324] w-full truncate placeholder:text-stone-400 placeholder:font-normal leading-[24px]"
           />
         </div>
 
         {/* Field 3: NHU CẦU */}
-        <div className="flex flex-col justify-center bg-white rounded-xl px-3.5 py-2.5 border border-stone-200 shadow-2xs min-w-0 relative">
+        <div className="flex flex-col justify-center rounded-xl px-3.5 py-2 min-w-0 relative h-[62px]">
           <label htmlFor="finder-concept" className="text-[10px] font-bold uppercase tracking-wider text-[#8E1B2E] leading-none mb-1 whitespace-nowrap">
             Nhu cầu
           </label>
           <CustomSelect
             id="finder-concept"
-            size="sm"
             value={concept}
             onChange={(val) => setConcept(val)}
             options={[
@@ -138,7 +136,7 @@ export const ServiceFinderBar: React.FC = () => {
         </div>
 
         {/* Field 4: NGÀY CHỤP/THUÊ (Traveloka Dual Month & Hourly) */}
-        <div className="flex flex-col justify-center bg-white rounded-xl px-3.5 py-2 border border-stone-200 shadow-2xs min-w-0 relative">
+        <div className="flex flex-col justify-center rounded-xl px-3.5 py-2 min-w-0 relative h-[62px]">
           <label htmlFor="finder-date" className="text-[10px] font-bold uppercase tracking-wider text-[#8E1B2E] leading-none mb-1 whitespace-nowrap">
             {serviceType === 'photographer'
               ? 'Ngày & Ca chụp'
@@ -157,13 +155,12 @@ export const ServiceFinderBar: React.FC = () => {
         </div>
 
         {/* Field 5: ĐỊA ĐIỂM */}
-        <div className="flex flex-col justify-center bg-white rounded-xl px-3.5 py-2.5 border border-stone-200 shadow-2xs min-w-0 relative">
+        <div className="flex flex-col justify-center rounded-xl px-3.5 py-2 min-w-0 relative h-[62px]">
           <label htmlFor="finder-location" className="text-[10px] font-bold uppercase tracking-wider text-[#8E1B2E] leading-none mb-1 whitespace-nowrap">
             Địa điểm
           </label>
           <CustomSelect
             id="finder-location"
-            size="sm"
             value={location}
             onChange={(val) => setLocation(val)}
             options={[
@@ -180,10 +177,10 @@ export const ServiceFinderBar: React.FC = () => {
         {/* Submit Button: Tìm dịch vụ */}
         <button
           type="submit"
-          className="w-full sm:col-span-2 lg:col-span-1 h-full min-h-[44px] py-2.5 px-6 rounded-xl text-xs md:text-sm font-bold text-white flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs hover:opacity-95 hover:shadow-md active:scale-95 border-none shrink-0 whitespace-nowrap"
-          style={{ backgroundColor: 'var(--landing-primary)' }}
+          className="w-full sm:col-span-2 lg:col-span-1 h-[62px] min-h-[62px] px-6 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 cursor-pointer transition-all border-none shrink-0 whitespace-nowrap shadow-sm hover:shadow-md active:scale-[0.98]"
+          style={{ backgroundColor: 'var(--landing-primary, #8E1B2E)' }}
         >
-          <Search size={16} />
+          <Search size={16} strokeWidth={2.5} />
           <span>Tìm dịch vụ</span>
         </button>
       </form>

@@ -56,7 +56,11 @@ export class AiController {
     @CurrentUser() user: AuthUser,
     @Body() dto: ChatWithImageRequestDto,
   ): Promise<ChatResponse> {
-    await this.rateLimitService.assertRateLimit(`ai_chat_img_${user.sub}`, 10, 60);
+    await this.rateLimitService.assertRateLimit(
+      `ai_chat_img_${user.sub}`,
+      10,
+      60,
+    );
     return this.aiService.chatWithImage(
       dto.message || '',
       dto.image_base64,
@@ -69,7 +73,11 @@ export class AiController {
     @CurrentUser() user: AuthUser,
     @Body() body: any,
   ): Promise<any> {
-    await this.rateLimitService.assertRateLimit(`ai_inspect_${user.sub}`, 10, 60);
+    await this.rateLimitService.assertRateLimit(
+      `ai_inspect_${user.sub}`,
+      10,
+      60,
+    );
     return this.aiService.analyzeDamage(body);
   }
 
@@ -78,7 +86,11 @@ export class AiController {
     @CurrentUser() user: AuthUser,
     @Body() body: any,
   ): Promise<any> {
-    await this.rateLimitService.assertRateLimit(`ai_visual_${user.sub}`, 20, 60);
+    await this.rateLimitService.assertRateLimit(
+      `ai_visual_${user.sub}`,
+      20,
+      60,
+    );
     return this.aiService.contextRecommend(body);
   }
 
@@ -92,7 +104,11 @@ export class AiController {
     @CurrentUser() user: AuthUser,
     @Body() body: any,
   ): Promise<any> {
-    await this.rateLimitService.assertRateLimit(`ai_culling_${user.sub}`, 10, 60);
+    await this.rateLimitService.assertRateLimit(
+      `ai_culling_${user.sub}`,
+      10,
+      60,
+    );
     return this.aiService.cullingAnalyze(body);
   }
 
@@ -103,7 +119,11 @@ export class AiController {
     @CurrentUser() user: AuthUser,
     @Body() body: { provider_id: string; photos: any[] },
   ): Promise<any> {
-    await this.rateLimitService.assertRateLimit(`ai_antifraud_${user.sub}`, 10, 60);
+    await this.rateLimitService.assertRateLimit(
+      `ai_antifraud_${user.sub}`,
+      10,
+      60,
+    );
     return this.aiService.antiFraudInspect(body.provider_id, body.photos || []);
   }
 
@@ -118,4 +138,3 @@ export class AiController {
     return this.aiService.suggestCombo(dto);
   }
 }
-

@@ -5,9 +5,7 @@ import { contractObjectId } from './contract-source.types';
 
 @Controller(['contracts/public', 'api/contracts/public'])
 export class PublicContractsController {
-  constructor(
-    private readonly providerPolicy: ProviderContractPolicyService,
-  ) {}
+  constructor(private readonly providerPolicy: ProviderContractPolicyService) {}
 
   @Get('provider/:providerId/active-policy')
   async getPublicProviderActivePolicy(@Param('providerId') providerId: string) {
@@ -18,7 +16,8 @@ export class PublicContractsController {
       throw new NotFoundException('PROVIDER_NOT_FOUND');
     }
 
-    const policy = await this.providerPolicy.getActiveApprovedPolicy(provObjectId);
+    const policy =
+      await this.providerPolicy.getActiveApprovedPolicy(provObjectId);
     if (!policy) {
       return null;
     }

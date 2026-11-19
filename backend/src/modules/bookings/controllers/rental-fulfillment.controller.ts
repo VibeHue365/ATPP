@@ -40,45 +40,88 @@ export class RentalFulfillmentController {
   ) {}
 
   @Post(':bookingId/items/:itemId/rental/evidence')
-  @UseInterceptors(FilesInterceptor('images', 5, {
-    limits: { fileSize: 5 * 1024 * 1024 },
-    storage: memoryStorage(),
-    fileFilter: (_request, file, callback) => {
-      const accepted = ['image/jpeg', 'image/png', 'image/webp'];
-      if (!accepted.includes(file.mimetype)) {
-        callback(new UnsupportedMediaTypeException('Chỉ nhận ảnh JPG, PNG hoặc WEBP.'), false);
-        return;
-      }
-      callback(null, true);
-    },
-  }))
+  @UseInterceptors(
+    FilesInterceptor('images', 5, {
+      limits: { fileSize: 5 * 1024 * 1024 },
+      storage: memoryStorage(),
+      fileFilter: (_request, file, callback) => {
+        const accepted = ['image/jpeg', 'image/png', 'image/webp'];
+        if (!accepted.includes(file.mimetype)) {
+          callback(
+            new UnsupportedMediaTypeException(
+              'Chỉ nhận ảnh JPG, PNG hoặc WEBP.',
+            ),
+            false,
+          );
+          return;
+        }
+        callback(null, true);
+      },
+    }),
+  )
   async uploadEvidence(
     @CurrentUser() user: AuthUser,
     @Param('bookingId') bookingId: string,
     @Param('itemId') itemId: string,
     @UploadedFiles() files: Express.Multer.File[],
   ) {
-    if (!files?.length) throw new BadRequestException('Vui lòng chọn ít nhất một ảnh bằng chứng.');
-    const access = await this.workflow.authorizeEvidenceUpload(bookingId, itemId, user);
-    const extensionByMime: Record<string, string> = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
-    const uploads = await Promise.all(files.map(async (file) => {
-      if (!this.hasValidImageSignature(file)) throw new UnsupportedMediaTypeException('Nội dung tệp không phải là ảnh hợp lệ.');
-      const fileId = randomUUID();
-      const bucket = 'rental-fulfillment-private';
-      const storageKey = `rental-fulfillment/${bookingId}/${itemId}/${new Date().toISOString().slice(0, 10)}/${fileId}${extensionByMime[file.mimetype]}`;
-      await this.privateStorage.uploadPrivateFile(bucket, storageKey, file.buffer, file.mimetype);
-      return this.workflow.registerEvidenceUpload(access, user, { fileId, bucket, storageKey, mimeType: file.mimetype });
-    }));
+    if (!files?.length)
+      throw new BadRequestException(
+        'Vui lòng chọn ít nhất một ảnh bằng chứng.',
+      );
+    const access = await this.workflow.authorizeEvidenceUpload(
+      bookingId,
+      itemId,
+      user,
+    );
+    const extensionByMime: Record<string, string> = {
+      'image/jpeg': '.jpg',
+      'image/png': '.png',
+      'image/webp': '.webp',
+    };
+    const uploads = await Promise.all(
+      files.map(async (file) => {
+        if (!this.hasValidImageSignature(file))
+          throw new UnsupportedMediaTypeException(
+            'Nội dung tệp không phải là ảnh hợp lệ.',
+          );
+        const fileId = randomUUID();
+        const bucket = 'rental-fulfillment-private';
+        const storageKey = `rental-fulfillment/${bookingId}/${itemId}/${new Date().toISOString().slice(0, 10)}/${fileId}${extensionByMime[file.mimetype]}`;
+        await this.privateStorage.uploadPrivateFile(
+          bucket,
+          storageKey,
+          file.buffer,
+          file.mimetype,
+        );
+        return this.workflow.registerEvidenceUpload(access, user, {
+          fileId,
+          bucket,
+          storageKey,
+          mimeType: file.mimetype,
+        });
+      }),
+    );
     return { files: uploads };
   }
 
   @Post(':bookingId/items/:itemId/rental/ready')
-  markReady(@CurrentUser() user: AuthUser, @Param('bookingId') bookingId: string, @Param('itemId') itemId: string, @Body() dto: MarkRentalReadyDto) {
+  markReady(
+    @CurrentUser() user: AuthUser,
+    @Param('bookingId') bookingId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: MarkRentalReadyDto,
+  ) {
     return this.workflow.markReady(bookingId, itemId, user, dto?.note);
   }
 
   @Post(':bookingId/items/:itemId/rental/picked-up')
-  markPickedUp(@CurrentUser() user: AuthUser, @Param('bookingId') bookingId: string, @Param('itemId') itemId: string, @Body() dto: RentalEvidenceDto) {
+  markPickedUp(
+    @CurrentUser() user: AuthUser,
+    @Param('bookingId') bookingId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: RentalEvidenceDto,
+  ) {
     return this.workflow.markPickedUp(bookingId, itemId, user, dto);
   }
 
@@ -93,7 +136,12 @@ export class RentalFulfillmentController {
   }
 
   @Post(':bookingId/items/:itemId/rental/returned')
-  markReturned(@CurrentUser() user: AuthUser, @Param('bookingId') bookingId: string, @Param('itemId') itemId: string, @Body() dto: MarkRentalReturnedDto) {
+  markReturned(
+    @CurrentUser() user: AuthUser,
+    @Param('bookingId') bookingId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: MarkRentalReturnedDto,
+  ) {
     return this.workflow.markReturned(bookingId, itemId, user, dto);
   }
 
@@ -114,27 +162,62 @@ export class RentalFulfillmentController {
     @Param('itemId') itemId: string,
     @Body() dto?: { note?: string },
   ) {
-    return this.workflow.markCleaningCompleted(bookingId, itemId, user, dto?.note);
+    return this.workflow.markCleaningCompleted(
+      bookingId,
+      itemId,
+      user,
+      dto?.note,
+    );
   }
 
   @Post(':bookingId/items/:itemId/rental/charges')
-  proposeCharge(@CurrentUser() user: AuthUser, @Param('bookingId') bookingId: string, @Param('itemId') itemId: string, @Body() dto: ProposeRentalChargeDto) {
-    throw new BadRequestException('Chức năng đề xuất phí cũ đã ngừng hoạt động. Vui lòng sử dụng tính năng Báo cáo sự cố (Incident) để thỏa thuận với khách hàng trước khi Admin xử lý.');
+  proposeCharge(
+    @CurrentUser() user: AuthUser,
+    @Param('bookingId') bookingId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: ProposeRentalChargeDto,
+  ) {
+    throw new BadRequestException(
+      'Chức năng đề xuất phí cũ đã ngừng hoạt động. Vui lòng sử dụng tính năng Báo cáo sự cố (Incident) để thỏa thuận với khách hàng trước khi Admin xử lý.',
+    );
   }
 
   @Post(':bookingId/items/:itemId/rental/charges/:chargeType/review')
-  reviewCharge(@CurrentUser() user: AuthUser, @Param('bookingId') bookingId: string, @Param('itemId') itemId: string, @Param('chargeType') chargeType: 'lateFee' | 'damageFee' | 'compensationAmount', @Body() dto: ReviewRentalChargeDto) {
-    throw new BadRequestException('Chức năng duyệt phí cũ đã ngừng hoạt động. Vui lòng giải quyết qua luồng Báo cáo sự cố (Incident) hoặc Tranh chấp (Dispute).');
+  reviewCharge(
+    @CurrentUser() user: AuthUser,
+    @Param('bookingId') bookingId: string,
+    @Param('itemId') itemId: string,
+    @Param('chargeType')
+    chargeType: 'lateFee' | 'damageFee' | 'compensationAmount',
+    @Body() dto: ReviewRentalChargeDto,
+  ) {
+    throw new BadRequestException(
+      'Chức năng duyệt phí cũ đã ngừng hoạt động. Vui lòng giải quyết qua luồng Báo cáo sự cố (Incident) hoặc Tranh chấp (Dispute).',
+    );
   }
 
   @Post(':bookingId/items/:itemId/rental/deposit/settle')
-  settleDeposit(@CurrentUser() user: AuthUser, @Param('bookingId') bookingId: string, @Param('itemId') itemId: string, @Body() dto: SettleRentalDepositDto) {
-    throw new BadRequestException('Chức năng tất toán cọc cũ đã ngừng hoạt động. Vui lòng sử dụng tính năng Báo cáo sự cố (Incident) hoặc xác nhận Không có sự cố.');
+  settleDeposit(
+    @CurrentUser() user: AuthUser,
+    @Param('bookingId') bookingId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: SettleRentalDepositDto,
+  ) {
+    throw new BadRequestException(
+      'Chức năng tất toán cọc cũ đã ngừng hoạt động. Vui lòng sử dụng tính năng Báo cáo sự cố (Incident) hoặc xác nhận Không có sự cố.',
+    );
   }
 
   @Post(':bookingId/items/:itemId/rental/complete')
-  markCompleted(@CurrentUser() user: AuthUser, @Param('bookingId') bookingId: string, @Param('itemId') itemId: string, @Body() dto: CompleteRentalFulfillmentDto) {
-    throw new BadRequestException('Chức năng hoàn tất đơn trực tiếp cũ đã ngừng hoạt động. Vui lòng hoàn tất qua quy trình Xác nhận không có sự cố (Confirm No Incident) và Giặt ủi (Cleaning).');
+  markCompleted(
+    @CurrentUser() user: AuthUser,
+    @Param('bookingId') bookingId: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: CompleteRentalFulfillmentDto,
+  ) {
+    throw new BadRequestException(
+      'Chức năng hoàn tất đơn trực tiếp cũ đã ngừng hoạt động. Vui lòng hoàn tất qua quy trình Xác nhận không có sự cố (Confirm No Incident) và Giặt ủi (Cleaning).',
+    );
   }
 
   @Get(':bookingId/items/:itemId/rental/evidence')
@@ -154,11 +237,27 @@ export class RentalFulfillmentController {
     @Param('fileId') fileId: string,
     @Res({ passthrough: true }) response: Response,
   ): Promise<StreamableFile> {
-    const evidence = await this.workflow.getEvidenceForViewing(bookingId, itemId, fileId, user);
-    const file = await this.privateStorage.readPrivateFile(evidence.bucket, evidence.storageKey);
-    const extension = evidence.mimeType === 'image/png' ? 'png' : evidence.mimeType === 'image/webp' ? 'webp' : 'jpg';
+    const evidence = await this.workflow.getEvidenceForViewing(
+      bookingId,
+      itemId,
+      fileId,
+      user,
+    );
+    const file = await this.privateStorage.readPrivateFile(
+      evidence.bucket,
+      evidence.storageKey,
+    );
+    const extension =
+      evidence.mimeType === 'image/png'
+        ? 'png'
+        : evidence.mimeType === 'image/webp'
+          ? 'webp'
+          : 'jpg';
     response.setHeader('Content-Type', evidence.mimeType);
-    response.setHeader('Content-Disposition', `inline; filename="rental-evidence.${extension}"`);
+    response.setHeader(
+      'Content-Disposition',
+      `inline; filename="rental-evidence.${extension}"`,
+    );
     response.setHeader('Cache-Control', 'private, no-store, max-age=0');
     response.setHeader('X-Content-Type-Options', 'nosniff');
     return new StreamableFile(file);
@@ -167,8 +266,19 @@ export class RentalFulfillmentController {
   private hasValidImageSignature(file: Express.Multer.File): boolean {
     const header = file.buffer?.subarray(0, 12);
     if (!header?.length) return false;
-    if (file.mimetype === 'image/jpeg') return header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
-    if (file.mimetype === 'image/png') return header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4e && header[3] === 0x47;
-    return file.mimetype === 'image/webp' && header.toString('ascii', 0, 4) === 'RIFF' && header.toString('ascii', 8, 12) === 'WEBP';
+    if (file.mimetype === 'image/jpeg')
+      return header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+    if (file.mimetype === 'image/png')
+      return (
+        header[0] === 0x89 &&
+        header[1] === 0x50 &&
+        header[2] === 0x4e &&
+        header[3] === 0x47
+      );
+    return (
+      file.mimetype === 'image/webp' &&
+      header.toString('ascii', 0, 4) === 'RIFF' &&
+      header.toString('ascii', 8, 12) === 'WEBP'
+    );
   }
 }

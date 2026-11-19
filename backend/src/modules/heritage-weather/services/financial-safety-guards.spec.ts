@@ -66,7 +66,8 @@ describe('Financial Safety Guards (PR 3)', () => {
       const shouldSkipAutoDispute = (b: any, currentTime: Date): boolean => {
         if (
           b.hasPendingWeatherAction ||
-          (b.disputeDeferredUntil && currentTime < new Date(b.disputeDeferredUntil))
+          (b.disputeDeferredUntil &&
+            currentTime < new Date(b.disputeDeferredUntil))
         ) {
           return true;
         }
@@ -88,7 +89,8 @@ describe('Financial Safety Guards (PR 3)', () => {
       const shouldSkipAutoDispute = (b: any, currentTime: Date): boolean => {
         if (
           b.hasPendingWeatherAction ||
-          (b.disputeDeferredUntil && currentTime < new Date(b.disputeDeferredUntil))
+          (b.disputeDeferredUntil &&
+            currentTime < new Date(b.disputeDeferredUntil))
         ) {
           return true;
         }
@@ -110,7 +112,8 @@ describe('Financial Safety Guards (PR 3)', () => {
       const shouldSkipAutoDispute = (b: any, currentTime: Date): boolean => {
         if (
           b.hasPendingWeatherAction ||
-          (b.disputeDeferredUntil && currentTime < new Date(b.disputeDeferredUntil))
+          (b.disputeDeferredUntil &&
+            currentTime < new Date(b.disputeDeferredUntil))
         ) {
           return true;
         }

@@ -20,7 +20,10 @@ import type { AuthUser } from '../../../common/decorators/current-user.decorator
 import { UpdateProfileDto } from '../dto/update-profile.dto';
 import { UpdatePreferencesDto } from '../dto/update-preferences.dto';
 import { UpdateNotificationSettingsDto } from '../dto/update-notification-settings.dto';
-import { CreateUserAddressDto, UpdateUserAddressDto } from '../dto/user-address.dto';
+import {
+  CreateUserAddressDto,
+  UpdateUserAddressDto,
+} from '../dto/user-address.dto';
 import { UsersService } from '../services/users.service';
 
 interface RequestMeta {
@@ -54,7 +57,9 @@ export class UsersController {
   }
 
   @Get('me/addresses')
-  listAddresses(@CurrentUser() user: AuthUser): Promise<Record<string, unknown>[]> {
+  listAddresses(
+    @CurrentUser() user: AuthUser,
+  ): Promise<Record<string, unknown>[]> {
     return this.usersService.listAddresses(user.sub);
   }
 
@@ -131,11 +136,7 @@ export class UsersController {
     @CurrentUser() user: AuthUser,
     @Body() dto: UpdatePreferencesDto,
   ): Promise<Record<string, unknown>> {
-    return this.usersService.updatePreferences(
-      user.sub,
-      dto,
-      user.roles,
-    );
+    return this.usersService.updatePreferences(user.sub, dto, user.roles);
   }
 
   @Get('notification-settings')

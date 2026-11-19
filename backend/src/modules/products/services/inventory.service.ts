@@ -1,18 +1,35 @@
 import { createSafeRegex } from '../../../common/utils/regex.util';
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model, Types } from 'mongoose';
-import { InventoryItem, InventoryItemDocument } from '../schemas/inventory-item.schema';
-import { InventoryReservation, ReservationStatus } from '../schemas/inventory-reservation.schema';
+import {
+  InventoryItem,
+  InventoryItemDocument,
+} from '../schemas/inventory-item.schema';
+import {
+  InventoryReservation,
+  ReservationStatus,
+} from '../schemas/inventory-reservation.schema';
 import { Product } from '../schemas/product.schema';
 import { Provider } from '../../providers/schemas/provider.schema';
 import { UsersRepository } from '../../users/repositories/users.repository';
 import { CreateInventoryItemDto } from '../dto/create-inventory-item.dto';
 import { UpdateInventoryItemDto } from '../dto/update-inventory-item.dto';
-import { AdjustVariantQuantityDto, VariantKeyDto } from '../dto/variant-inventory.dto';
+import {
+  AdjustVariantQuantityDto,
+  VariantKeyDto,
+} from '../dto/variant-inventory.dto';
 import { normalizeColor } from '../utils/color.util';
 import { PublicMediaService } from '../../storage/services/public-media.service';
-import { ConditionStatus, InventoryItemStatus } from '../schemas/inventory-item.schema';
+import {
+  ConditionStatus,
+  InventoryItemStatus,
+} from '../schemas/inventory-item.schema';
 
 /** Kết quả một thao tác trên biến thể — luôn nêu rõ đã đụng vào SKU nào để đối tác kiểm chứng được. */
 export interface VariantOperationResult {
@@ -28,8 +45,10 @@ export interface VariantOperationResult {
 @Injectable()
 export class InventoryService {
   constructor(
-    @InjectModel(InventoryItem.name) private readonly inventoryItemModel: Model<InventoryItemDocument>,
-    @InjectModel(InventoryReservation.name) private readonly inventoryReservationModel: Model<InventoryReservation>,
+    @InjectModel(InventoryItem.name)
+    private readonly inventoryItemModel: Model<InventoryItemDocument>,
+    @InjectModel(InventoryReservation.name)
+    private readonly inventoryReservationModel: Model<InventoryReservation>,
     @InjectModel(Product.name) private readonly productModel: Model<Product>,
     @InjectModel(Provider.name) private readonly providerModel: Model<Provider>,
     private readonly usersRepository: UsersRepository,
@@ -38,9 +57,13 @@ export class InventoryService {
   ) {}
 
   private async getProviderId(userId: string): Promise<string> {
-    const user = await this.usersRepository.findUserById(new Types.ObjectId(userId));
+    const user = await this.usersRepository.findUserById(
+      new Types.ObjectId(userId),
+    );
     if (!user || !user.provider || !user.provider.providerId) {
-      throw new ForbiddenException('Tài khoản không phải là đối tác hoặc không có ID đối tác.');
+      throw new ForbiddenException(
+        'Tài khoản không phải là đối tác hoặc không có ID đối tác.',
+      );
     }
     return user.provider.providerId.toString();
   }
@@ -77,7 +100,10 @@ export class InventoryService {
     const hasColor = colors.some((color) => normalizeColor(color) === colorVal);
     const hasSize = sizes.some((size) => size.trim().toUpperCase() === sizeVal);
     const hasMaterial =
-      materialVal === null || materials.some((material) => this.normalizeMaterial(material) === materialVal);
+      materialVal === null ||
+      materials.some(
+        (material) => this.normalizeMaterial(material) === materialVal,
+      );
     return hasColor && hasSize && hasMaterial;
   }
 
@@ -130,8 +156,14 @@ export class InventoryService {
    * Cấp số thứ tự bằng findOneAndUpdate $inc để loại bỏ race condition khi nhập kho đồng thời.
    */
   private sanitizeBucketKey(size: string, color: string): string {
-    const safeSize = (size || 'DEFAULT').trim().toUpperCase().replace(/[^A-Z0-9]/g, '_');
-    const safeColor = (color || 'DEFAULT').trim().toUpperCase().replace(/[^A-Z0-9]/g, '_');
+    const safeSize = (size || 'DEFAULT')
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '_');
+    const safeColor = (color || 'DEFAULT')
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '_');
     return `${safeSize}_${safeColor}`;
   }
 
@@ -165,7 +197,8 @@ export class InventoryService {
     for (let i = 0; i < count; i++) {
       const currentSeq = startSeq + i;
       const seqStr = currentSeq.toString().padStart(3, '0');
-      const sku = `AD-${productId.toString().slice(-6)}-${sizeVal}-${colorVal}-${seqStr}`.toUpperCase();
+      const sku =
+        `AD-${productId.toString().slice(-6)}-${sizeVal}-${colorVal}-${seqStr}`.toUpperCase();
 
       itemsToInsert.push({
         productId,
@@ -180,8 +213,10 @@ export class InventoryService {
     }
 
     try {
-      const created = await this.inventoryItemModel.insertMany(itemsToInsert, { session });
-      return created as unknown as InventoryItemDocument[];
+      const created = await this.inventoryItemModel.insertMany(itemsToInsert, {
+        session,
+      });
+      return created;
     } catch (err: any) {
       if (err.code === 11000) {
         throw new BadRequestException(
@@ -200,11 +235,16 @@ export class InventoryService {
     colorVal: string,
     materialVal: string | null,
   ): Promise<void> {
-    const addToSet: Record<string, string> = { sizes: sizeVal, colors: colorVal };
+    const addToSet: Record<string, string> = {
+      sizes: sizeVal,
+      colors: colorVal,
+    };
     if (materialVal) {
       addToSet.materials = materialVal;
     }
-    await this.productModel.updateOne({ _id: productId }, { $addToSet: addToSet }).session(session);
+    await this.productModel
+      .updateOne({ _id: productId }, { $addToSet: addToSet })
+      .session(session);
   }
 
   /** Kiểm quyền sở hữu sản phẩm rồi chuẩn hoá khoá biến thể. */
@@ -212,13 +252,17 @@ export class InventoryService {
     const providerId = await this.getProviderId(userId);
     const product = await this.productModel.findById(dto.productId);
     if (!product || product.providerId.toString() !== providerId) {
-      throw new NotFoundException('Sản phẩm không tồn tại hoặc không thuộc quyền quản lý của bạn.');
+      throw new NotFoundException(
+        'Sản phẩm không tồn tại hoặc không thuộc quyền quản lý của bạn.',
+      );
     }
     const sizeVal = dto.size.trim().toUpperCase();
     const colorVal = normalizeColor(dto.color);
     // @IsNotEmpty của class-validator vẫn cho lọt chuỗi toàn khoảng trắng
     if (!sizeVal || !colorVal) {
-      throw new BadRequestException('Size và màu của biến thể không được để trống.');
+      throw new BadRequestException(
+        'Size và màu của biến thể không được để trống.',
+      );
     }
     return {
       product,
@@ -228,8 +272,14 @@ export class InventoryService {
     };
   }
 
-  private variantLabel(sizeVal: string, colorVal: string, materialVal: string | null): string {
-    return materialVal ? `${sizeVal} / ${colorVal} / ${materialVal}` : `${sizeVal} / ${colorVal}`;
+  private variantLabel(
+    sizeVal: string,
+    colorVal: string,
+    materialVal: string | null,
+  ): string {
+    return materialVal
+      ? `${sizeVal} / ${colorVal} / ${materialVal}`
+      : `${sizeVal} / ${colorVal}`;
   }
 
   async getInventory(
@@ -245,7 +295,9 @@ export class InventoryService {
     const providerId = await this.getProviderId(userId);
 
     const filter: any = {};
-    const products = await this.productModel.find({ providerId: new Types.ObjectId(providerId) });
+    const products = await this.productModel.find({
+      providerId: new Types.ObjectId(providerId),
+    });
     let productIds = products.map((p) => p._id);
 
     if (productId) {
@@ -254,7 +306,9 @@ export class InventoryService {
       }
       const prodId = new Types.ObjectId(productId);
       if (!productIds.some((id) => id.toString() === prodId.toString())) {
-        throw new NotFoundException('Sản phẩm không tồn tại hoặc không thuộc quyền quản lý của bạn.');
+        throw new NotFoundException(
+          'Sản phẩm không tồn tại hoặc không thuộc quyền quản lý của bạn.',
+        );
       }
       productIds = [prodId];
     }
@@ -272,7 +326,9 @@ export class InventoryService {
     if (search) {
       const searchRegex = createSafeRegex(search);
       if (searchRegex) {
-        const matchingProducts = products.filter((p) => searchRegex.test(p.name));
+        const matchingProducts = products.filter((p) =>
+          searchRegex.test(p.name),
+        );
         const matchingProductIds = matchingProducts.map((p) => p._id);
 
         filter.$or = [
@@ -306,7 +362,9 @@ export class InventoryService {
 
   async getInventorySummary(userId: string): Promise<any[]> {
     const providerId = await this.getProviderId(userId);
-    const products = await this.productModel.find({ providerId: new Types.ObjectId(providerId) });
+    const products = await this.productModel.find({
+      providerId: new Types.ObjectId(providerId),
+    });
     const productIds = products.map((p) => p._id);
 
     // Lấy CẢ hiện vật đã thanh lý: biến thể bị đưa về 0 chiếc vẫn phải hiện một dòng
@@ -318,7 +376,9 @@ export class InventoryService {
 
     const itemIds = items.map((i) => i._id);
     const now = new Date();
-    const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+    const todayStr = now.toLocaleDateString('en-CA', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+    });
 
     // 1. Lấy tất cả active reservations (hỗ trợ legacy reservation)
     const reservations =
@@ -326,10 +386,21 @@ export class InventoryService {
         ? await this.inventoryReservationModel
             .find({
               inventoryItemId: { $in: itemIds },
-              status: { $in: [ReservationStatus.TempReserved, ReservationStatus.Confirmed] },
+              status: {
+                $in: [
+                  ReservationStatus.TempReserved,
+                  ReservationStatus.Confirmed,
+                ],
+              },
               $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
             })
-            .select({ inventoryItemId: 1, bookingId: 1, bookingItemId: 1, reservedFrom: 1, reservedTo: 1 })
+            .select({
+              inventoryItemId: 1,
+              bookingId: 1,
+              bookingItemId: 1,
+              reservedFrom: 1,
+              reservedTo: 1,
+            })
             .lean()
             .exec()
         : [];
@@ -344,39 +415,57 @@ export class InventoryService {
               status: { $in: ['TEMP', 'CONFIRMED'] },
               $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
             })
-            .project({ inventoryItemId: 1, bookingId: 1, bookingItemId: 1, dateStr: 1, slotIndex: 1 })
+            .project({
+              inventoryItemId: 1,
+              bookingId: 1,
+              bookingItemId: 1,
+              dateStr: 1,
+              slotIndex: 1,
+            })
             .toArray()
         : [];
 
     // 3. Map booking status to filter inactive / completed bookings
     const allBookingIds = Array.from(
-      new Set([
-        ...reservations.map((r) => r.bookingId?.toString()),
-        ...slotLeases.map((l) => l.bookingId?.toString()),
-      ].filter(Boolean)),
+      new Set(
+        [
+          ...reservations.map((r) => r.bookingId?.toString()),
+          ...slotLeases.map((l) => l.bookingId?.toString()),
+        ].filter(Boolean),
+      ),
     );
 
     const bookingModel = this.connection.model('Booking');
-    const bookings = allBookingIds.length > 0
-      ? await bookingModel
-          .find({
-            _id: { $in: allBookingIds.map((id) => new Types.ObjectId(id)) },
-          })
-          .select({ _id: 1, status: 1 })
-          .lean()
-          .exec()
-      : [];
+    const bookings =
+      allBookingIds.length > 0
+        ? await bookingModel
+            .find({
+              _id: { $in: allBookingIds.map((id) => new Types.ObjectId(id)) },
+            })
+            .select({ _id: 1, status: 1 })
+            .lean()
+            .exec()
+        : [];
     const bookingStatusMap = new Map<string, string>();
-    bookings.forEach((b: any) => bookingStatusMap.set(b._id.toString(), b.status));
+    bookings.forEach((b: any) =>
+      bookingStatusMap.set(b._id.toString(), b.status),
+    );
 
     // 4. Sets for rented and future booked items (deduped by inventoryItemId)
     const activeRentedItemIds = new Set<string>();
     const futureBookedItemIds = new Set<string>();
 
     reservations.forEach((r) => {
-      const bStatus = r.bookingId ? bookingStatusMap.get(r.bookingId.toString()) : null;
+      const bStatus = r.bookingId
+        ? bookingStatusMap.get(r.bookingId.toString())
+        : null;
       if (bStatus === 'CANCELLED' || bStatus === 'REFUNDED') return;
-      if (bStatus === 'COMPLETED' && r.reservedTo && new Date(r.reservedTo) <= now) return;
+      if (
+        bStatus === 'COMPLETED' &&
+        r.reservedTo &&
+        new Date(r.reservedTo) <= now
+      )
+        return;
 
       const itemIdStr = r.inventoryItemId.toString();
       if (bStatus === 'PICKED_UP') {
@@ -387,7 +476,9 @@ export class InventoryService {
     });
 
     slotLeases.forEach((l) => {
-      const bStatus = l.bookingId ? bookingStatusMap.get(l.bookingId.toString()) : null;
+      const bStatus = l.bookingId
+        ? bookingStatusMap.get(l.bookingId.toString())
+        : null;
       if (bStatus === 'CANCELLED' || bStatus === 'REFUNDED') return;
       if (bStatus === 'COMPLETED' && l.dateStr < todayStr) return;
 
@@ -400,21 +491,26 @@ export class InventoryService {
     });
 
     // Grouping by productId, size, color
-    const summaryMap = new Map<string, {
-      productId: string;
-      productName: string;
-      size: string;
-      color: string;
-      material: string | null;
-      total: number;
-      available: number;
-      bookedAhead: number;
-      rented: number;
-      maintenance: number;
-    }>();
+    const summaryMap = new Map<
+      string,
+      {
+        productId: string;
+        productName: string;
+        size: string;
+        color: string;
+        material: string | null;
+        total: number;
+        available: number;
+        bookedAhead: number;
+        rented: number;
+        maintenance: number;
+      }
+    >();
 
     items.forEach((item) => {
-      const prod = products.find((p) => p._id.toString() === item.productId.toString());
+      const prod = products.find(
+        (p) => p._id.toString() === item.productId.toString(),
+      );
       const productName = prod ? prod.name : 'Sản phẩm không tên';
       const sizeVal = item.size.trim().toUpperCase();
       const colorVal = normalizeColor(item.color);
@@ -424,7 +520,12 @@ export class InventoryService {
       // Hiện vật đã thanh lý chỉ dùng để đánh dấu biến thể "còn đăng bán nhưng hết hàng".
       // Bỏ qua nếu biến thể đã bị xoá hẳn (có dấu variantRemovedAt) hoặc sản phẩm không
       // còn khai báo size/màu/chất liệu đó nữa.
-      if (isRetired && (item.variantRemovedAt || !prod || !this.isDeclaredVariant(prod, sizeVal, colorVal, materialVal))) {
+      if (
+        isRetired &&
+        (item.variantRemovedAt ||
+          !prod ||
+          !this.isDeclaredVariant(prod, sizeVal, colorVal, materialVal))
+      ) {
         return;
       }
 
@@ -472,12 +573,17 @@ export class InventoryService {
     return Array.from(summaryMap.values());
   }
 
-  async createInventoryItems(userId: string, dto: CreateInventoryItemDto): Promise<InventoryItem[]> {
+  async createInventoryItems(
+    userId: string,
+    dto: CreateInventoryItemDto,
+  ): Promise<InventoryItem[]> {
     const providerId = await this.getProviderId(userId);
 
     const product = await this.productModel.findById(dto.productId);
     if (!product || product.providerId.toString() !== providerId) {
-      throw new NotFoundException('Sản phẩm không tồn tại hoặc không thuộc quyền quản lý của bạn.');
+      throw new NotFoundException(
+        'Sản phẩm không tồn tại hoặc không thuộc quyền quản lý của bạn.',
+      );
     }
 
     const sizeVal = dto.size.trim().toUpperCase();
@@ -502,13 +608,23 @@ export class InventoryService {
       createdItems.push(...newItems);
 
       // Sync Product sizes/colors (and materials when provided)
-      await this.syncProductAttributes(session, product._id, sizeVal, colorVal, materialVal);
+      await this.syncProductAttributes(
+        session,
+        product._id,
+        sizeVal,
+        colorVal,
+        materialVal,
+      );
     });
 
     return createdItems;
   }
 
-  async updateInventoryItem(userId: string, itemId: string, dto: UpdateInventoryItemDto): Promise<InventoryItem> {
+  async updateInventoryItem(
+    userId: string,
+    itemId: string,
+    dto: UpdateInventoryItemDto,
+  ): Promise<InventoryItem> {
     const providerId = await this.getProviderId(userId);
 
     const item = await this.inventoryItemModel.findById(itemId);
@@ -517,20 +633,31 @@ export class InventoryService {
     }
 
     if (item.conditionStatus === ConditionStatus.Retired) {
-      throw new BadRequestException('Hiện vật đã thanh lý, không thể cập nhật.');
+      throw new BadRequestException(
+        'Hiện vật đã thanh lý, không thể cập nhật.',
+      );
     }
 
     const product = await this.productModel.findById(item.productId);
     if (!product || product.providerId.toString() !== providerId) {
-      throw new ForbiddenException('Bạn không có quyền quản lý hiện vật tồn kho này.');
+      throw new ForbiddenException(
+        'Bạn không có quyền quản lý hiện vật tồn kho này.',
+      );
     }
 
     if (dto.status === InventoryItemStatus.Rented) {
-      throw new BadRequestException('Không được tự động đặt trạng thái RENTED bằng tay.');
+      throw new BadRequestException(
+        'Không được tự động đặt trạng thái RENTED bằng tay.',
+      );
     }
 
-    if (item.status === InventoryItemStatus.Rented && dto.status !== undefined) {
-      throw new BadRequestException('Hiện vật đang được khách thuê, quy trình nhận áo phải thực hiện tại Đơn đặt lịch.');
+    if (
+      item.status === InventoryItemStatus.Rented &&
+      dto.status !== undefined
+    ) {
+      throw new BadRequestException(
+        'Hiện vật đang được khách thuê, quy trình nhận áo phải thực hiện tại Đơn đặt lịch.',
+      );
     }
 
     // Thanh lý qua đường cập nhật cũng phải qua cùng một hàng rào như nút "Thanh lý",
@@ -538,15 +665,17 @@ export class InventoryService {
     if (dto.conditionStatus === ConditionStatus.Retired) {
       const blocked = await this.findBlockedItemIds([item]);
       if (blocked.size > 0) {
-        throw new BadRequestException('Áo đang có lịch thuê hoạt động, không thể thanh lý.');
+        throw new BadRequestException(
+          'Áo đang có lịch thuê hoạt động, không thể thanh lý.',
+        );
       }
     }
 
     if (dto.status !== undefined) {
       item.status = dto.status;
       if (dto.status === InventoryItemStatus.Available) {
-        item.operationalAvailableFrom = null as any;
-        item.activeTurnaroundBookingItemId = null as any;
+        item.operationalAvailableFrom = null;
+        item.activeTurnaroundBookingItemId = null;
       }
     }
     if (dto.conditionStatus !== undefined) {
@@ -559,7 +688,10 @@ export class InventoryService {
     return item.save();
   }
 
-  async deleteInventoryItem(userId: string, itemId: string): Promise<Record<string, unknown>> {
+  async deleteInventoryItem(
+    userId: string,
+    itemId: string,
+  ): Promise<Record<string, unknown>> {
     const providerId = await this.getProviderId(userId);
 
     const item = await this.inventoryItemModel.findById(itemId);
@@ -569,13 +701,17 @@ export class InventoryService {
 
     const product = await this.productModel.findById(item.productId);
     if (!product || product.providerId.toString() !== providerId) {
-      throw new ForbiddenException('Bạn không có quyền quản lý hiện vật tồn kho này.');
+      throw new ForbiddenException(
+        'Bạn không có quyền quản lý hiện vật tồn kho này.',
+      );
     }
 
     // Check if there are active bookings/reservations in future
     const blocked = await this.findBlockedItemIds([item]);
     if (blocked.size > 0) {
-      throw new BadRequestException('Áo đang có lịch thuê hoạt động, không thể thanh lý.');
+      throw new BadRequestException(
+        'Áo đang có lịch thuê hoạt động, không thể thanh lý.',
+      );
     }
 
     // Soft delete
@@ -591,8 +727,12 @@ export class InventoryService {
    * Cố ý KHÔNG đụng vào product.colors/sizes khi giảm — biến thể vẫn tồn tại và khách vẫn
    * thấy nó ở trạng thái hết hàng, để sau này nhập thêm là bán lại được ngay.
    */
-  async adjustVariantQuantity(userId: string, dto: AdjustVariantQuantityDto): Promise<VariantOperationResult> {
-    const { product, sizeVal, colorVal, materialVal } = await this.loadVariantContext(userId, dto);
+  async adjustVariantQuantity(
+    userId: string,
+    dto: AdjustVariantQuantityDto,
+  ): Promise<VariantOperationResult> {
+    const { product, sizeVal, colorVal, materialVal } =
+      await this.loadVariantContext(userId, dto);
     const target = dto.targetQuantity;
     const label = this.variantLabel(sizeVal, colorVal, materialVal);
 
@@ -608,7 +748,14 @@ export class InventoryService {
       const current = live.length;
 
       if (target === current) {
-        return { message: 'Số lượng không thay đổi.', quantity: current, created: [], retired: [], skipped: [], shortfall: 0 };
+        return {
+          message: 'Số lượng không thay đổi.',
+          quantity: current,
+          created: [],
+          retired: [],
+          skipped: [],
+          shortfall: 0,
+        };
       }
 
       if (target > current) {
@@ -620,7 +767,13 @@ export class InventoryService {
           materialVal,
           target - current,
         );
-        await this.syncProductAttributes(session, product._id, sizeVal, colorVal, materialVal);
+        await this.syncProductAttributes(
+          session,
+          product._id,
+          sizeVal,
+          colorVal,
+          materialVal,
+        );
         return {
           message: `Đã nhập thêm ${created.length} chiếc cho biến thể ${label}.`,
           quantity: current + created.length,
@@ -641,8 +794,12 @@ export class InventoryService {
           const rankDiff = this.retireRank(a) - this.retireRank(b);
           if (rankDiff !== 0) return rankDiff;
           // ObjectId luon chua thoi diem tao nen dung lam nguon du phong khi thieu createdAt
-          const aTime = new Date((a as any).createdAt ?? a._id.getTimestamp()).getTime();
-          const bTime = new Date((b as any).createdAt ?? b._id.getTimestamp()).getTime();
+          const aTime = new Date(
+            (a as any).createdAt ?? a._id.getTimestamp(),
+          ).getTime();
+          const bTime = new Date(
+            (b as any).createdAt ?? b._id.getTimestamp(),
+          ).getTime();
           return bTime - aTime;
         });
 
@@ -650,12 +807,17 @@ export class InventoryService {
       if (chosen.length > 0) {
         const result = await this.inventoryItemModel
           .updateMany(
-            { _id: { $in: chosen.map((item) => item._id) }, conditionStatus: { $ne: ConditionStatus.Retired } },
+            {
+              _id: { $in: chosen.map((item) => item._id) },
+              conditionStatus: { $ne: ConditionStatus.Retired },
+            },
             { $set: { conditionStatus: ConditionStatus.Retired } },
           )
           .session(session);
         if (result.modifiedCount !== chosen.length) {
-          throw new BadRequestException('Dữ liệu tồn kho vừa thay đổi, vui lòng tải lại trang và thử lại.');
+          throw new BadRequestException(
+            'Dữ liệu tồn kho vừa thay đổi, vui lòng tải lại trang và thử lại.',
+          );
         }
       }
 
@@ -683,8 +845,12 @@ export class InventoryService {
    * Chỉ gỡ đúng giá trị được yêu cầu và chỉ khi không còn hiện vật sống nào dùng tới nó —
    * cố ý không tính lại toàn bộ mảng từ tồn kho, tránh xoá oan dữ liệu của sản phẩm cũ.
    */
-  async removeVariant(userId: string, dto: VariantKeyDto): Promise<VariantOperationResult> {
-    const { product, sizeVal, colorVal, materialVal } = await this.loadVariantContext(userId, dto);
+  async removeVariant(
+    userId: string,
+    dto: VariantKeyDto,
+  ): Promise<VariantOperationResult> {
+    const { product, sizeVal, colorVal, materialVal } =
+      await this.loadVariantContext(userId, dto);
     const label = this.variantLabel(sizeVal, colorVal, materialVal);
 
     // Xoá file chỉ được làm SAU khi transaction commit — nếu transaction abort mà file đã bay
@@ -694,33 +860,46 @@ export class InventoryService {
     const result = await this.runInTransaction(async (session) => {
       // Đọc lại sản phẩm BÊN TRONG transaction: nếu đọc ngoài rồi $set đè cả mảng thì
       // thay đổi của request chạy song song sẽ bị ghi mất (lost update).
-      const fresh = await this.productModel.findById(product._id).session(session);
+      const fresh = await this.productModel
+        .findById(product._id)
+        .session(session);
       if (!fresh) {
-        throw new NotFoundException('Sản phẩm không tồn tại hoặc không thuộc quyền quản lý của bạn.');
+        throw new NotFoundException(
+          'Sản phẩm không tồn tại hoặc không thuộc quyền quản lý của bạn.',
+        );
       }
-      const currentColors = ((fresh.colors as string[]) || []).slice();
-      const currentSizes = ((fresh.sizes as string[]) || []).slice();
-      const currentMaterials = ((fresh.materials as string[]) || []).slice();
+      const currentColors = (fresh.colors || []).slice();
+      const currentSizes = (fresh.sizes || []).slice();
+      const currentMaterials = (fresh.materials || []).slice();
 
       const productItems = await this.inventoryItemModel
         .find({ productId: product._id })
         .session(session);
-      const matching = productItems.filter((item) => this.matchesVariant(item, sizeVal, colorVal, materialVal));
-      const targetItems = matching.filter((item) => item.conditionStatus !== ConditionStatus.Retired);
+      const matching = productItems.filter((item) =>
+        this.matchesVariant(item, sizeVal, colorVal, materialVal),
+      );
+      const targetItems = matching.filter(
+        (item) => item.conditionStatus !== ConditionStatus.Retired,
+      );
       // Các biến thể KHÁC, tính cả hiện vật đã thanh lý: một biến thể đang để "hết hàng"
       // (0 chiếc sống) vẫn đang được đăng bán nên size/màu/chất liệu của nó phải được giữ lại.
       // Hiện vật của biến thể đã bị xoá thì không được giữ hộ nữa.
       const otherItems = productItems.filter(
-        (item) => !this.matchesVariant(item, sizeVal, colorVal, materialVal) && !item.variantRemovedAt,
+        (item) =>
+          !this.matchesVariant(item, sizeVal, colorVal, materialVal) &&
+          !item.variantRemovedAt,
       );
 
       // Biến thể còn tồn tại khi: còn hiện vật chưa bị đánh dấu xoá, hoặc chưa từng có hiện vật
       // nào nhưng sản phẩm vẫn khai báo (sản phẩm cũ tạo trước khi có quản lý tồn kho).
       const stillExists =
         matching.some((item) => !item.variantRemovedAt) ||
-        (matching.length === 0 && this.isDeclaredVariant(fresh, sizeVal, colorVal, materialVal));
+        (matching.length === 0 &&
+          this.isDeclaredVariant(fresh, sizeVal, colorVal, materialVal));
       if (!stillExists) {
-        throw new NotFoundException(`Biến thể ${label} không tồn tại trên sản phẩm này.`);
+        throw new NotFoundException(
+          `Biến thể ${label} không tồn tại trên sản phẩm này.`,
+        );
       }
 
       const blocked = await this.findBlockedItemIds(targetItems, session);
@@ -743,8 +922,12 @@ export class InventoryService {
           this.normalizeMaterial(item.material),
         ),
       );
-      const liveColors = new Set(declaredOthers.map((item) => normalizeColor(item.color)));
-      const liveSizes = new Set(declaredOthers.map((item) => item.size.trim().toUpperCase()));
+      const liveColors = new Set(
+        declaredOthers.map((item) => normalizeColor(item.color)),
+      );
+      const liveSizes = new Set(
+        declaredOthers.map((item) => item.size.trim().toUpperCase()),
+      );
       const liveMaterials = new Set(
         declaredOthers
           .map((item) => this.normalizeMaterial(item.material))
@@ -760,7 +943,9 @@ export class InventoryService {
       const nextMaterials =
         materialVal === null || liveMaterials.has(materialVal)
           ? currentMaterials
-          : currentMaterials.filter((material) => this.normalizeMaterial(material) !== materialVal);
+          : currentMaterials.filter(
+              (material) => this.normalizeMaterial(material) !== materialVal,
+            );
 
       if (nextColors.length === 0 || nextSizes.length === 0) {
         throw new BadRequestException(
@@ -771,18 +956,30 @@ export class InventoryService {
       if (targetItems.length > 0) {
         const result = await this.inventoryItemModel
           .updateMany(
-            { _id: { $in: targetItems.map((item) => item._id) }, conditionStatus: { $ne: ConditionStatus.Retired } },
-            { $set: { conditionStatus: ConditionStatus.Retired, variantRemovedAt: new Date() } },
+            {
+              _id: { $in: targetItems.map((item) => item._id) },
+              conditionStatus: { $ne: ConditionStatus.Retired },
+            },
+            {
+              $set: {
+                conditionStatus: ConditionStatus.Retired,
+                variantRemovedAt: new Date(),
+              },
+            },
           )
           .session(session);
         if (result.modifiedCount !== targetItems.length) {
-          throw new BadRequestException('Dữ liệu tồn kho vừa thay đổi, vui lòng tải lại trang và thử lại.');
+          throw new BadRequestException(
+            'Dữ liệu tồn kho vừa thay đổi, vui lòng tải lại trang và thử lại.',
+          );
         }
       }
       // Hiện vật đã thanh lý trước đó của chính biến thể này cũng phải mang dấu đã xoá,
       // nếu không nó sẽ tiếp tục hiện dòng "hết hàng" sau khi biến thể đã bị gỡ.
       const alreadyRetired = matching.filter(
-        (item) => item.conditionStatus === ConditionStatus.Retired && !item.variantRemovedAt,
+        (item) =>
+          item.conditionStatus === ConditionStatus.Retired &&
+          !item.variantRemovedAt,
       );
       if (alreadyRetired.length > 0) {
         await this.inventoryItemModel
@@ -796,11 +993,16 @@ export class InventoryService {
       // Màu bị gỡ hẳn khỏi sản phẩm thì ảnh riêng của nó cũng phải đi theo, nếu không
       // ảnh nằm lại vĩnh viễn: cron dọn rác thấy URL còn trong document nên không bao giờ thu hồi.
       const colorRemoved = !liveColors.has(colorVal);
-      const currentColorImages = ((fresh.colorImages as { color: string; images: string[] }[]) || []).map(
-        (entry) => ({ color: entry.color, images: [...(entry.images || [])] }),
-      );
+      const currentColorImages = (
+        (fresh.colorImages as { color: string; images: string[] }[]) || []
+      ).map((entry) => ({
+        color: entry.color,
+        images: [...(entry.images || [])],
+      }));
       const nextColorImages = colorRemoved
-        ? currentColorImages.filter((entry) => normalizeColor(entry.color) !== colorVal)
+        ? currentColorImages.filter(
+            (entry) => normalizeColor(entry.color) !== colorVal,
+          )
         : currentColorImages;
 
       const orphanUrls = colorRemoved
@@ -809,9 +1011,13 @@ export class InventoryService {
             .flatMap((entry) => entry.images)
         : [];
       // Chỉ xoá ảnh không còn ai dùng: màu khác có thể đang dùng chung tấm ảnh đó.
-      const stillUsed = new Set(nextColorImages.flatMap((entry) => entry.images));
+      const stillUsed = new Set(
+        nextColorImages.flatMap((entry) => entry.images),
+      );
       const droppedUrls = orphanUrls.filter((url) => !stillUsed.has(url));
-      const nextImages = ((fresh.images as string[]) || []).filter((url) => !droppedUrls.includes(url));
+      const nextImages = (fresh.images || []).filter(
+        (url) => !droppedUrls.includes(url),
+      );
       imagesToDelete = droppedUrls;
 
       await this.productModel
@@ -841,13 +1047,17 @@ export class InventoryService {
 
     if (imagesToDelete.length > 0) {
       await Promise.all(
-        imagesToDelete.map((url) => this.publicMedia.deleteByUrl(url).catch(() => undefined)),
+        imagesToDelete.map((url) =>
+          this.publicMedia.deleteByUrl(url).catch(() => undefined),
+        ),
       );
     }
     return result;
   }
 
-  private async runInTransaction<T>(work: (session: any) => Promise<T>): Promise<T> {
+  private async runInTransaction<T>(
+    work: (session: any) => Promise<T>,
+  ): Promise<T> {
     const session = await this.connection.startSession();
     session.startTransaction();
     try {

@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { DiscountType, Promotion, PromotionStatus } from '../schemas/promotion.schema';
+import {
+  DiscountType,
+  Promotion,
+  PromotionStatus,
+} from '../schemas/promotion.schema';
 
 export const PAYOS_MIN_PAYABLE_AMOUNT = 2000;
 
@@ -102,12 +106,14 @@ export class VoucherPricingService {
 
     const normalizedItems = items.map((item, index) => {
       const qty = item.quantity > 0 ? item.quantity : 1;
-      const sAmt = item.serviceAmount !== undefined
-        ? item.serviceAmount
-        : Math.round((item.unitPrice || 0) * qty);
-      const dAmt = item.depositAmount !== undefined
-        ? Math.round(item.depositAmount * qty)
-        : 0;
+      const sAmt =
+        item.serviceAmount !== undefined
+          ? item.serviceAmount
+          : Math.round((item.unitPrice || 0) * qty);
+      const dAmt =
+        item.depositAmount !== undefined
+          ? Math.round(item.depositAmount * qty)
+          : 0;
       const cDiscount = item.comboDiscountAmount || 0;
 
       rawSubTotal += sAmt;
@@ -138,7 +144,12 @@ export class VoucherPricingService {
       travelFee,
       serviceFee,
       platformSubsidyAmount: 0,
-      grandTotal: rawSubTotal + rawDepositTotal + travelFee + serviceFee - rawComboDiscountTotal,
+      grandTotal:
+        rawSubTotal +
+        rawDepositTotal +
+        travelFee +
+        serviceFee -
+        rawComboDiscountTotal,
       amountDueNow: 0,
       amountRemaining: 0,
       itemAllocations: normalizedItems.map((i) => ({
@@ -204,7 +215,8 @@ export class VoucherPricingService {
         ...baseResult,
         isValid: false,
         errorReason: 'NEW_CUSTOMER_ONLY',
-        errorMessage: 'Mã khuyến mãi chỉ dành cho khách hàng mới đặt đơn lần đầu.',
+        errorMessage:
+          'Mã khuyến mãi chỉ dành cho khách hàng mới đặt đơn lần đầu.',
       };
     }
 
@@ -212,7 +224,9 @@ export class VoucherPricingService {
       Array.isArray(promoAny.requiredTiers) &&
       promoAny.requiredTiers.length > 0
     ) {
-      const userTier = (userContext?.membershipTier || 'STANDARD').toUpperCase();
+      const userTier = (
+        userContext?.membershipTier || 'STANDARD'
+      ).toUpperCase();
       const tiers = promoAny.requiredTiers.map((t: string) => t.toUpperCase());
       if (!tiers.includes(userTier)) {
         return {
@@ -259,7 +273,10 @@ export class VoucherPricingService {
     }
 
     // Eligible subtotal = sum of net service amounts (excluding deposits)
-    const eligibleSubTotal = eligibleItems.reduce((sum, item) => sum + item.lineNet, 0);
+    const eligibleSubTotal = eligibleItems.reduce(
+      (sum, item) => sum + item.lineNet,
+      0,
+    );
 
     if (promotion.minOrderValue && eligibleSubTotal < promotion.minOrderValue) {
       return {
@@ -273,7 +290,9 @@ export class VoucherPricingService {
     // 4. Calculate Discount Amount
     let rawDiscount = 0;
     if (promotion.discountType === DiscountType.Percentage) {
-      rawDiscount = Math.round((eligibleSubTotal * promotion.discountValue) / 100);
+      rawDiscount = Math.round(
+        (eligibleSubTotal * promotion.discountValue) / 100,
+      );
       if (promotion.maxDiscountAmount && promotion.maxDiscountAmount > 0) {
         rawDiscount = Math.min(rawDiscount, promotion.maxDiscountAmount);
       }
@@ -287,7 +306,10 @@ export class VoucherPricingService {
 
     // 5. Apportion Discount across Eligible Items (LineNet Proportional)
     let distributedDiscount = 0;
-    const allocationsMap = new Map<string, { shopVoucher: number; platformVoucher: number }>();
+    const allocationsMap = new Map<
+      string,
+      { shopVoucher: number; platformVoucher: number }
+    >();
 
     eligibleItems.forEach((item, index) => {
       let itemDiscount = 0;
@@ -295,7 +317,9 @@ export class VoucherPricingService {
         // Last item absorbs rounding remainder
         itemDiscount = finalVoucherDiscount - distributedDiscount;
       } else if (eligibleSubTotal > 0) {
-        itemDiscount = Math.floor((item.lineNet / eligibleSubTotal) * finalVoucherDiscount);
+        itemDiscount = Math.floor(
+          (item.lineNet / eligibleSubTotal) * finalVoucherDiscount,
+        );
       }
       distributedDiscount += itemDiscount;
 
@@ -305,14 +329,19 @@ export class VoucherPricingService {
       });
     });
 
-    const finalItemAllocations: VoucherItemAllocation[] = normalizedItems.map((item) => {
-      const discount = allocationsMap.get(item.id) || { shopVoucher: 0, platformVoucher: 0 };
-      return {
-        ...item,
-        shopVoucherDiscountAmount: discount.shopVoucher,
-        platformVoucherDiscountAmount: discount.platformVoucher,
-      };
-    });
+    const finalItemAllocations: VoucherItemAllocation[] = normalizedItems.map(
+      (item) => {
+        const discount = allocationsMap.get(item.id) || {
+          shopVoucher: 0,
+          platformVoucher: 0,
+        };
+        return {
+          ...item,
+          shopVoucherDiscountAmount: discount.shopVoucher,
+          platformVoucherDiscountAmount: discount.platformVoucher,
+        };
+      },
+    );
 
     const shopVoucherTotal = isShopVoucher ? finalVoucherDiscount : 0;
     const platformVoucherTotal = !isShopVoucher ? finalVoucherDiscount : 0;
@@ -330,7 +359,12 @@ export class VoucherPricingService {
       platformSubsidyAmount: 0,
       grandTotal: Math.max(
         0,
-        rawSubTotal + rawDepositTotal + travelFee + serviceFee - rawComboDiscountTotal - finalVoucherDiscount,
+        rawSubTotal +
+          rawDepositTotal +
+          travelFee +
+          serviceFee -
+          rawComboDiscountTotal -
+          finalVoucherDiscount,
       ),
       amountDueNow: 0,
       amountRemaining: 0,
@@ -348,7 +382,11 @@ export class VoucherPricingService {
     };
 
     // 6. Compute Due Amounts & Handle PayOS Min Threshold Subsidy
-    this.computeDueAmounts(resultWithDiscount, bookingType, isInitialDepositOnly);
+    this.computeDueAmounts(
+      resultWithDiscount,
+      bookingType,
+      isInitialDepositOnly,
+    );
 
     return resultWithDiscount;
   }
@@ -364,13 +402,23 @@ export class VoucherPricingService {
   ): void {
     if (bookingType === 'PHOTOGRAPHY') {
       // Photography shoot deposit is 20% on the net shoot service price after voucher
-      const photoServiceNet = Math.max(0, result.subTotal - result.voucherDiscountTotal);
+      const photoServiceNet = Math.max(
+        0,
+        result.subTotal - result.voucherDiscountTotal,
+      );
       const shootDeposit = Math.round(photoServiceNet * 0.2);
-      const requiredDue = shootDeposit + result.depositTotal + result.travelFee + result.serviceFee;
+      const requiredDue =
+        shootDeposit +
+        result.depositTotal +
+        result.travelFee +
+        result.serviceFee;
 
       if (isInitialDepositOnly) {
         result.amountDueNow = Math.min(requiredDue, result.grandTotal);
-        result.amountRemaining = Math.max(0, result.grandTotal - result.amountDueNow);
+        result.amountRemaining = Math.max(
+          0,
+          result.grandTotal - result.amountDueNow,
+        );
       } else {
         result.amountDueNow = result.grandTotal;
         result.amountRemaining = 0;
@@ -385,7 +433,10 @@ export class VoucherPricingService {
         for (const item of result.itemAllocations) {
           const itemNet = Math.max(
             0,
-            item.serviceAmount - item.comboDiscountAmount - item.shopVoucherDiscountAmount - item.platformVoucherDiscountAmount,
+            item.serviceAmount -
+              item.comboDiscountAmount -
+              item.shopVoucherDiscountAmount -
+              item.platformVoucherDiscountAmount,
           );
           if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
             photoNet += itemNet;
@@ -395,9 +446,17 @@ export class VoucherPricingService {
           }
         }
 
-        const requiredDue = rentalNet + rentalDeposit + Math.round(photoNet * 0.2) + result.travelFee + result.serviceFee;
+        const requiredDue =
+          rentalNet +
+          rentalDeposit +
+          Math.round(photoNet * 0.2) +
+          result.travelFee +
+          result.serviceFee;
         result.amountDueNow = Math.min(requiredDue, result.grandTotal);
-        result.amountRemaining = Math.max(0, result.grandTotal - result.amountDueNow);
+        result.amountRemaining = Math.max(
+          0,
+          result.grandTotal - result.amountDueNow,
+        );
       } else {
         result.amountDueNow = result.grandTotal;
         result.amountRemaining = 0;
@@ -409,7 +468,10 @@ export class VoucherPricingService {
     }
 
     // 7. PayOS Minimum Threshold Check: (0, 2000đ]
-    if (result.amountDueNow > 0 && result.amountDueNow <= PAYOS_MIN_PAYABLE_AMOUNT) {
+    if (
+      result.amountDueNow > 0 &&
+      result.amountDueNow <= PAYOS_MIN_PAYABLE_AMOUNT
+    ) {
       result.platformSubsidyAmount = result.amountDueNow;
       result.amountDueNow = 0;
     } else {

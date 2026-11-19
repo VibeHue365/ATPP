@@ -12,7 +12,12 @@ export enum RefundAttemptStatus {
 
 @Schema({ collection: 'refund_attempts', timestamps: true })
 export class RefundAttempt {
-  @Prop({ type: Types.ObjectId, ref: 'RefundRequest', required: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'RefundRequest',
+    required: true,
+    index: true,
+  })
   refundRequestId: Types.ObjectId;
 
   @Prop({ required: true, min: 1 })
@@ -27,7 +32,11 @@ export class RefundAttempt {
   @Prop({ required: true, min: 0 })
   amount: number;
 
-  @Prop({ type: String, enum: Object.values(RefundAttemptStatus), required: true })
+  @Prop({
+    type: String,
+    enum: Object.values(RefundAttemptStatus),
+    required: true,
+  })
   status: RefundAttemptStatus;
 
   @Prop({ type: String, default: null })
@@ -38,4 +47,7 @@ export class RefundAttempt {
 }
 
 export const RefundAttemptSchema = SchemaFactory.createForClass(RefundAttempt);
-RefundAttemptSchema.index({ refundRequestId: 1, attemptNo: 1 }, { unique: true });
+RefundAttemptSchema.index(
+  { refundRequestId: 1, attemptNo: 1 },
+  { unique: true },
+);

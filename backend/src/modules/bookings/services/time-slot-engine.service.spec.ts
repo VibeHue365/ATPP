@@ -57,7 +57,9 @@ describe('TimeSlotEngineService', () => {
     it('rollovers across weekly off-day (Sunday) to Monday 07:00', () => {
       // 2026-11-21 is Saturday. Next day is Sunday (off). Monday is 2026-11-23.
       const tSatNight = engine.makeVnDate(2026, 11, 21, 21, 10);
-      const rounded = engine.roundUpToSlotBoundary(tSatNight, { weeklyOffDays: [0] });
+      const rounded = engine.roundUpToSlotBoundary(tSatNight, {
+        weeklyOffDays: [0],
+      });
       const parts = engine.getVnParts(rounded);
       expect(parts.dateStr).toBe('2026-11-23');
       expect(parts.hour).toBe(7);
@@ -102,7 +104,9 @@ describe('TimeSlotEngineService', () => {
 
     it('Case 4: Saturday 19:00-21:00 with K=1, Sunday closed -> turnaround Monday 07:00-09:00', () => {
       // 2026-11-21 is Saturday, Sunday 22 is closed
-      const block = engine.calculateUpfrontBlock('2026-11-21', 7, 1, 1, { weeklyOffDays: [0] });
+      const block = engine.calculateUpfrontBlock('2026-11-21', 7, 1, 1, {
+        weeklyOffDays: [0],
+      });
       expect(block.turnaroundSlots[0].dateStr).toBe('2026-11-23');
       expect(block.turnaroundSlots[0].slotIndex).toBe(1);
       const availParts = engine.getVnParts(block.availableFrom);
@@ -142,7 +146,11 @@ describe('TimeSlotEngineService', () => {
     it('Case 5: Monday 07:00-09:00, returned late at 10:00 with K=1 -> availableFrom = 13:00', () => {
       const rentalTo = engine.makeVnDate(2026, 11, 16, 9, 0);
       const returnedAt = engine.makeVnDate(2026, 11, 16, 10, 0);
-      const availableFrom = engine.calculateReturnAvailableFrom(rentalTo, returnedAt, 1);
+      const availableFrom = engine.calculateReturnAvailableFrom(
+        rentalTo,
+        returnedAt,
+        1,
+      );
       const parts = engine.getVnParts(availableFrom);
       expect(parts.dateStr).toBe('2026-11-16');
       expect(parts.hour).toBe(13);
@@ -152,7 +160,11 @@ describe('TimeSlotEngineService', () => {
     it('Case 6: Monday 07:00-11:00, returned early at 08:15 with K=1 -> availableFrom = 11:00', () => {
       const rentalTo = engine.makeVnDate(2026, 11, 16, 11, 0);
       const returnedAt = engine.makeVnDate(2026, 11, 16, 8, 15);
-      const availableFrom = engine.calculateReturnAvailableFrom(rentalTo, returnedAt, 1);
+      const availableFrom = engine.calculateReturnAvailableFrom(
+        rentalTo,
+        returnedAt,
+        1,
+      );
       const parts = engine.getVnParts(availableFrom);
       expect(parts.dateStr).toBe('2026-11-16');
       expect(parts.hour).toBe(11);
@@ -162,7 +174,11 @@ describe('TimeSlotEngineService', () => {
     it('Case 10: Monday 09:00-11:00, returned late at 11:30 with K=1 -> availableFrom = 15:00', () => {
       const rentalTo = engine.makeVnDate(2026, 11, 16, 11, 0);
       const returnedAt = engine.makeVnDate(2026, 11, 16, 11, 30);
-      const availableFrom = engine.calculateReturnAvailableFrom(rentalTo, returnedAt, 1);
+      const availableFrom = engine.calculateReturnAvailableFrom(
+        rentalTo,
+        returnedAt,
+        1,
+      );
       const parts = engine.getVnParts(availableFrom);
       expect(parts.dateStr).toBe('2026-11-16');
       expect(parts.hour).toBe(15);
@@ -174,38 +190,62 @@ describe('TimeSlotEngineService', () => {
         const rentalTo = engine.makeVnDate(2026, 11, 16, 11, 0); // Monday 11:00
         // On-time return: available immediately at 11:00
         const onTime = engine.makeVnDate(2026, 11, 16, 11, 0);
-        const avail0OnTime = engine.calculateReturnAvailableFrom(rentalTo, onTime, 0);
+        const avail0OnTime = engine.calculateReturnAvailableFrom(
+          rentalTo,
+          onTime,
+          0,
+        );
         expect(engine.getVnParts(avail0OnTime).hour).toBe(11);
 
         // Early return (09:30): available at contractualRentalTo 11:00
         const early = engine.makeVnDate(2026, 11, 16, 9, 30);
-        const avail0Early = engine.calculateReturnAvailableFrom(rentalTo, early, 0);
+        const avail0Early = engine.calculateReturnAvailableFrom(
+          rentalTo,
+          early,
+          0,
+        );
         expect(engine.getVnParts(avail0Early).hour).toBe(11);
 
         // Late return (11:15): rounded up to next boundary 13:00
         const late = engine.makeVnDate(2026, 11, 16, 11, 15);
-        const avail0Late = engine.calculateReturnAvailableFrom(rentalTo, late, 0);
+        const avail0Late = engine.calculateReturnAvailableFrom(
+          rentalTo,
+          late,
+          0,
+        );
         expect(engine.getVnParts(avail0Late).hour).toBe(13);
       });
 
       it('K=1: advances by 1 slot (2 hours) -> 13:00', () => {
         const rentalTo = engine.makeVnDate(2026, 11, 16, 11, 0);
         const returnedAt = engine.makeVnDate(2026, 11, 16, 11, 0);
-        const avail = engine.calculateReturnAvailableFrom(rentalTo, returnedAt, 1);
+        const avail = engine.calculateReturnAvailableFrom(
+          rentalTo,
+          returnedAt,
+          1,
+        );
         expect(engine.getVnParts(avail).hour).toBe(13);
       });
 
       it('K=2: advances by 2 slots (4 hours) -> 15:00', () => {
         const rentalTo = engine.makeVnDate(2026, 11, 16, 11, 0);
         const returnedAt = engine.makeVnDate(2026, 11, 16, 11, 0);
-        const avail = engine.calculateReturnAvailableFrom(rentalTo, returnedAt, 2);
+        const avail = engine.calculateReturnAvailableFrom(
+          rentalTo,
+          returnedAt,
+          2,
+        );
         expect(engine.getVnParts(avail).hour).toBe(15);
       });
 
       it('K=3: advances by 3 slots (6 hours) -> 17:00', () => {
         const rentalTo = engine.makeVnDate(2026, 11, 16, 11, 0);
         const returnedAt = engine.makeVnDate(2026, 11, 16, 11, 0);
-        const avail = engine.calculateReturnAvailableFrom(rentalTo, returnedAt, 3);
+        const avail = engine.calculateReturnAvailableFrom(
+          rentalTo,
+          returnedAt,
+          3,
+        );
         expect(engine.getVnParts(avail).hour).toBe(17);
       });
     });
@@ -216,7 +256,12 @@ describe('TimeSlotEngineService', () => {
         const rentalTo = engine.makeVnDate(2026, 11, 21, 19, 0);
         const returnedAt = engine.makeVnDate(2026, 11, 21, 19, 0);
         const schedule = { weeklyOffDays: [0] }; // Sunday closed
-        const avail = engine.calculateReturnAvailableFrom(rentalTo, returnedAt, 2, schedule);
+        const avail = engine.calculateReturnAvailableFrom(
+          rentalTo,
+          returnedAt,
+          2,
+          schedule,
+        );
         const parts = engine.getVnParts(avail);
         // 19:00-21:00 on Sat uses 2h. Sun is skipped. Mon 07:00 + 2h = Mon 09:00.
         expect(parts.dateStr).toBe('2026-11-23'); // Monday
@@ -229,7 +274,12 @@ describe('TimeSlotEngineService', () => {
         const rentalTo = engine.makeVnDate(2026, 11, 16, 19, 0);
         const returnedAt = engine.makeVnDate(2026, 11, 16, 19, 0);
         const schedule = { offDays: ['2026-11-17'] }; // Tuesday closed
-        const avail = engine.calculateReturnAvailableFrom(rentalTo, returnedAt, 2, schedule);
+        const avail = engine.calculateReturnAvailableFrom(
+          rentalTo,
+          returnedAt,
+          2,
+          schedule,
+        );
         const parts = engine.getVnParts(avail);
         // 19:00-21:00 on Mon uses 2h. Tue 2026-11-17 is skipped. Wed 2026-11-18 07:00 + 2h = 09:00.
         expect(parts.dateStr).toBe('2026-11-18'); // Wednesday

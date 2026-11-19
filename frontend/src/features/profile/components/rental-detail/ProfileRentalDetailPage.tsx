@@ -71,14 +71,81 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     };
   }, [socket, booking?._id, fetchIncidentDetails, onRefreshBooking]);
 
-  const item = booking?.items?.[0] || {};
+  const items = booking?.items || [];
+  const item = items[0] || {};
   const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE';
   const pkgObj = item.photographyPackageId && typeof item.photographyPackageId === 'object' ? item.photographyPackageId : null;
   const prodObj = !isPhoto && item.productId && typeof item.productId === 'object' ? item.productId : null;
-  const provider =
+
+  const resolvedProvider =
     (booking?.providerIds && booking.providerIds[0] && typeof booking.providerIds[0] === 'object' ? booking.providerIds[0] : null) ||
     (item.providerId && typeof item.providerId === 'object' ? item.providerId : null) ||
-    {};
+    (prodObj?.providerId && typeof prodObj.providerId === 'object' ? prodObj.providerId : null) ||
+    (pkgObj?.providerId && typeof pkgObj.providerId === 'object' ? pkgObj.providerId : null) ||
+    null;
+
+  const [cachedProvider, setCachedProvider] = React.useState<any>(resolvedProvider);
+
+  React.useEffect(() => {
+    if (resolvedProvider && (resolvedProvider.businessName || resolvedProvider.fullName)) {
+      setCachedProvider(resolvedProvider);
+    } else {
+      const p0 = booking?.providerIds?.[0];
+      const provId =
+        (typeof p0 === 'string' ? p0 : (p0?._id ? String(p0._id) : null)) ||
+        (typeof item?.providerId === 'string' ? item.providerId : (item?.providerId?._id ? String(item.providerId._id) : null)) ||
+        (typeof prodObj?.providerId === 'string' ? prodObj.providerId : (prodObj?.providerId?._id ? String(prodObj.providerId._id) : null));
+      if (provId) {
+        httpClient.get<any>(`/api/providers/${provId}`)
+          .then((p) => {
+            if (p) setCachedProvider(p);
+          })
+          .catch(() => {});
+      }
+    }
+  }, [resolvedProvider, booking?.providerIds, item?.providerId, prodObj?.providerId]);
+
+  const provider = (resolvedProvider && (resolvedProvider.businessName || resolvedProvider.fullName)) ? resolvedProvider : (cachedProvider || {});
+
+  const dressItems = items.map((it: any) => {
+    const itProd = it.productId && typeof it.productId === 'object' ? it.productId : null;
+    const itPkg = it.photographyPackageId && typeof it.photographyPackageId === 'object' ? it.photographyPackageId : null;
+    const itName = itProd?.name || itPkg?.name || it.packageSnapshot?.name || it.name || it.productName || 'Áo Dài Di Sản';
+    const itImage =
+      itProd?.images?.[0] ||
+      itProd?.coverImage ||
+      itPkg?.coverImage ||
+      it.images?.[0] ||
+      it.coverImage ||
+      it.image ||
+      it.productImage;
+    const itSize = it.selectedSize || it.size || 'M';
+    const itColor = it.selectedColor || it.color || itProd?.color || 'Đa sắc';
+    const itMaterial =
+      (Array.isArray(itProd?.materials) ? itProd.materials.join(', ') : itProd?.material) ||
+      it.material ||
+      'Lụa cao cấp';
+    const itBrand = itProd?.brand || provider?.businessName || provider?.fullName || 'TàGo Premium';
+    const itAccessories =
+      (Array.isArray(it.accessories) ? it.accessories.join(', ') : it.accessories) ||
+      (Array.isArray(itProd?.accessories) ? itProd.accessories.join(', ') : itProd?.accessories) ||
+      'Mấn đội đầu';
+    const itPrice = it.unitPrice || it.price || itProd?.rentalPrice;
+    const itQty = it.quantity || 1;
+
+    return {
+      id: it._id,
+      title: itName,
+      image: itImage,
+      size: itSize,
+      color: itColor,
+      material: itMaterial,
+      brand: itBrand,
+      accessories: itAccessories,
+      price: itPrice,
+      quantity: itQty
+    };
+  });
 
   const itemName =
     prodObj?.name ||
@@ -96,14 +163,14 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     item.image ||
     item.productImage;
 
-  const itemCode = booking?.bookingCode || (booking?._id ? 'RT-' + String(booking._id).slice(-4) : 'RT-LUME');
+  const itemCode = booking?.bookingCode || (booking?._id ? 'RT-' + String(booking._id).slice(-4) : 'RT-TAGO');
   const itemSize = isPhoto ? '' : (item.selectedSize || item.size || '');
   const itemColor =
     item.selectedColor ||
     item.color ||
     (Array.isArray(prodObj?.colors) ? prodObj.colors.join(', ') : prodObj?.color) ||
     'Đa sắc';
-  const itemBrand = prodObj?.brand || provider?.businessName || provider?.fullName || 'LUMÉ Premium';
+  const itemBrand = prodObj?.brand || provider?.businessName || provider?.fullName || 'TàGo Premium';
   const itemMaterial =
     (Array.isArray(prodObj?.materials) ? prodObj.materials.join(', ') : prodObj?.material) ||
     'Lụa cao cấp';
@@ -211,7 +278,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
   };
 
   // Store information
-  const storeName = provider?.businessName || provider?.fullName || 'Cửa hàng LUMÉ';
+  const storeName = provider?.businessName || provider?.fullName || 'Cửa hàng đối tác';
   const rawAddress =
     item.pickupReturnLocationSnapshot?.address ||
     item.pickupReturnLocationSnapshot ||
@@ -222,20 +289,20 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     booking?.deliveryAddress?.address ||
     booking?.deliveryAddress;
 
-  const storeAddress = formatStoreAddress(rawAddress) || '15 Lê Lợi, Phú Hội, TP. Huế';
+  const storeAddress = formatStoreAddress(rawAddress) || 'Đang cập nhật địa chỉ cửa hàng';
 
   // Support hotline handler
   const handleSupport = () => {
     Swal.fire({
-      title: 'Trung tâm Hỗ trợ Khách hàng LUMÉ',
+      title: 'Trung tâm Hỗ trợ Khách hàng TàGo',
       html: `
         <div style="text-align: left; font-size: 14px; color: #4A3F35; line-height: 1.6;">
-          <p>Đội ngũ LUMÉ luôn sẵn sàng hỗ trợ bạn:</p>
+          <p>Đội ngũ TàGo luôn sẵn sàng hỗ trợ bạn:</p>
           <div style="background: #FDF2F4; padding: 12px 16px; border-radius: 10px; border: 1px solid #F7D5DA; margin: 12px 0;">
             <p style="margin: 0; font-weight: 700; color: #8E1B2E; font-size: 16px;">📞 Hotline: 1900 9999</p>
             <p style="margin: 4px 0 0 0; color: #7D736B; font-size: 12px;">Hỗ trợ 24/7 toàn quốc</p>
           </div>
-          <p style="margin: 0;">✉️ Email: <strong>support@lume.vn</strong></p>
+          <p style="margin: 0;">✉️ Email: <strong>support@tago.vn</strong></p>
           <p style="margin: 4px 0 0 0;">🏢 Cửa hàng: <strong>${storeAddress}</strong></p>
         </div>
       `,
@@ -257,7 +324,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
         <div style="text-align: left; font-size: 13.5px; color: #4A3F35; line-height: 1.6;">
           <ol style="padding-left: 18px; margin: 0; display: flex; flex-direction: column; gap: 8px;">
             <li><strong>Bảo quản trang phục:</strong> Giữ áo cẩn thận, không để dính vết bẩn cứng đầu, mực, hóa chất hoặc rách vải.</li>
-            <li><strong>Giặt ủi:</strong> Không tự ý giặt ủi hoặc tẩy trang phục. LUMÉ sẽ đảm nhận quy trình giặt sấy chuyên dụng sau khi nhận lại.</li>
+            <li><strong>Giặt ủi:</strong> Không tự ý giặt ủi hoặc tẩy trang phục. Cửa hàng và TàGo sẽ đảm nhận quy trình giặt sấy chuyên dụng sau khi nhận lại.</li>
             <li><strong>Thời hạn trả:</strong> Vui lòng hoàn trả trước giờ hẹn quy định. Trường hợp quá hạn sẽ tính phí phát sinh theo thỏa thuận.</li>
             <li><strong>Hoàn cọc:</strong> Tiền cọc (${depositFee.toLocaleString('vi-VN')}đ) sẽ được hoàn trả đầy đủ ngay sau khi nhân viên kiểm tra tình trạng áo dài.</li>
           </ol>
@@ -523,7 +590,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
       await Swal.fire({
         icon: 'success',
         title: 'Hoàn tất đơn hàng thành công!',
-        text: 'Cảm ơn bạn đã sử dụng dịch vụ của LUMÉ. Tiền cọc đang được hệ thống xử lý hoàn trả.',
+        text: 'Cảm ơn bạn đã sử dụng dịch vụ của TàGo. Tiền cọc đang được hệ thống xử lý hoàn trả.',
         confirmButtonColor: '#8E1B2E'
       });
       onRefreshBooking?.();
@@ -691,7 +758,8 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
           readyTime: readyTimeStr,
           pickupTime: rawPickup ? new Date(rawPickup).toLocaleDateString('vi-VN') + ' ' + pickupTimeStr : pickupTimeStr,
           dueTime: dueTimeStr,
-          remainingTime: remainingTimeStr
+          remainingTime: remainingTimeStr,
+          items: dressItems
         }}
         pickupInspection={
           ['PICKUP_PENDING', 'READY_FOR_PICKUP'].includes(currentStatus)
@@ -1011,7 +1079,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
               Đơn Hàng Đang Trong Quá Trình Giải Quyết Tranh Chấp
             </h4>
             <p style={{ margin: '3px 0 0 0', fontSize: '12.5px', color: '#B91C1C', lineHeight: 1.5 }}>
-              Bạn đã từ chối yêu cầu đền bù của Shop. Ban Quản Trị LUMÉ đang thụ lý hồ sơ, kiểm tra ảnh đối soát và sẽ liên hệ giải quyết công bằng trong vòng 24–48h làm việc. Toàn bộ tiền cọc và thanh toán được giữ an toàn trong Escrow.
+              Bạn đã từ chối yêu cầu đền bù của Shop. Ban Quản Trị TàGo đang thụ lý hồ sơ, kiểm tra ảnh đối soát và sẽ liên hệ giải quyết công bằng trong vòng 24–48h làm việc. Toàn bộ tiền cọc và thanh toán được giữ an toàn trong Escrow.
             </p>
           </div>
         </div>

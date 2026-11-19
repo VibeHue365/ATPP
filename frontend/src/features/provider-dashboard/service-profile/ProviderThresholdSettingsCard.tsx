@@ -185,7 +185,7 @@ export const ProviderThresholdSettingsCard: React.FC = () => {
                 />
               </div>
               <p style={{ fontSize: 12, color: '#64748b', margin: 0, lineHeight: 1.5 }}>
-                Áp dụng linh hoạt theo khuyến nghị và ngưỡng bảo vệ an toàn của hệ thống VibeHue.
+                Áp dụng linh hoạt theo khuyến nghị và ngưỡng bảo vệ an toàn của hệ thống TàGo.
               </p>
             </label>
 

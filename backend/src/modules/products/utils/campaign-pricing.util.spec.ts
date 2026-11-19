@@ -19,11 +19,15 @@ const tetDiscount: CampaignPricingRule = { ...tetSurcharge, type: 'DISCOUNT' };
 
 describe('campaign-pricing.util (VIB-43 seasonal discount & surcharge)', () => {
   it('applies a +20% surcharge when the rental day falls inside the campaign', () => {
-    expect(applyCampaignToRate(100000, tetSurcharge, '2026-12-30')).toBe(120000);
+    expect(applyCampaignToRate(100000, tetSurcharge, '2026-12-30')).toBe(
+      120000,
+    );
   });
 
   it('keeps the base rate when the rental day is outside the campaign', () => {
-    expect(applyCampaignToRate(100000, tetSurcharge, '2027-01-10')).toBe(100000);
+    expect(applyCampaignToRate(100000, tetSurcharge, '2027-01-10')).toBe(
+      100000,
+    );
   });
 
   it('applies a discount campaign by rental day as well', () => {
@@ -55,14 +59,23 @@ describe('campaign-pricing.util (VIB-43 seasonal discount & surcharge)', () => {
 
   it('prices each day separately when a rental straddles the campaign boundary', () => {
     // 31/12, 01/01, 02/01 bị phụ thu; 03/01 giá gốc.
-    expect(calculateDailyRentalTotal(100000, tetSurcharge, '2026-12-31', '2027-01-03')).toEqual({
+    expect(
+      calculateDailyRentalTotal(
+        100000,
+        tetSurcharge,
+        '2026-12-31',
+        '2027-01-03',
+      ),
+    ).toEqual({
       total: 460000,
       days: 4,
     });
   });
 
   it('charges the plain base price per day without a campaign', () => {
-    expect(calculateDailyRentalTotal(150000, null, '2027-03-01', '2027-03-03')).toEqual({
+    expect(
+      calculateDailyRentalTotal(150000, null, '2027-03-01', '2027-03-03'),
+    ).toEqual({
       total: 450000,
       days: 3,
     });
@@ -71,7 +84,9 @@ describe('campaign-pricing.util (VIB-43 seasonal discount & surcharge)', () => {
   it('derives the hourly rate from 30% of the daily price, then applies the campaign', () => {
     const hourly = resolveHourlyRate(500000, null);
     expect(hourly).toBe(150000);
-    expect(applyCampaignToRate(hourly, tetSurcharge, '2026-12-30')).toBe(180000);
+    expect(applyCampaignToRate(hourly, tetSurcharge, '2026-12-30')).toBe(
+      180000,
+    );
   });
 
   it('compares days on the Vietnam calendar regardless of the stored time of day', () => {

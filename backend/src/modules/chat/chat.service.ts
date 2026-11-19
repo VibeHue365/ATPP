@@ -1,8 +1,16 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ChatRoom, ChatRoomDocument } from './schemas/chat-room.schema';
-import { ChatMessage, ChatMessageDocument } from './schemas/chat-message.schema';
+import {
+  ChatMessage,
+  ChatMessageDocument,
+} from './schemas/chat-message.schema';
 import { User } from '../users/schemas/user.schema';
 import {
   Provider,
@@ -14,7 +22,8 @@ import {
 export class ChatService {
   constructor(
     @InjectModel(ChatRoom.name) private readonly chatRoomModel: Model<ChatRoom>,
-    @InjectModel(ChatMessage.name) private readonly chatMessageModel: Model<ChatMessage>,
+    @InjectModel(ChatMessage.name)
+    private readonly chatMessageModel: Model<ChatMessage>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
     @InjectModel(Provider.name) private readonly providerModel: Model<Provider>,
   ) {}
@@ -37,9 +46,7 @@ export class ChatService {
     const isParticipant = room.participants.some(
       (p) => p.toString() === userId,
     );
-    const isAdmin = (userRoles || []).some(
-      (r) => r.toUpperCase() === 'ADMIN',
-    );
+    const isAdmin = (userRoles || []).some((r) => r.toUpperCase() === 'ADMIN');
 
     if (!isParticipant && !isAdmin) {
       throw new ForbiddenException(
@@ -64,7 +71,10 @@ export class ChatService {
 
     const roomIds = rooms.map((room) => room._id);
     const unreadRows = roomIds.length
-      ? await this.chatMessageModel.aggregate<{ _id: Types.ObjectId; count: number }>([
+      ? await this.chatMessageModel.aggregate<{
+          _id: Types.ObjectId;
+          count: number;
+        }>([
           {
             $match: {
               roomId: { $in: roomIds },
@@ -99,7 +109,9 @@ export class ChatService {
           ? {
               id: (room.lastMessage as any)._id,
               messageText: (room.lastMessage as any).messageText,
-              senderId: (room.lastMessage as any).senderId?._id || (room.lastMessage as any).senderId,
+              senderId:
+                (room.lastMessage as any).senderId?._id ||
+                (room.lastMessage as any).senderId,
               isRead: (room.lastMessage as any).isRead,
               createdAt: (room.lastMessage as any).createdAt,
             }
@@ -149,9 +161,7 @@ export class ChatService {
       .select('_id profile.fullName profile.avatarUrl')
       .lean()
       .exec();
-    const usersById = new Map(
-      users.map((user) => [user._id.toString(), user]),
-    );
+    const usersById = new Map(users.map((user) => [user._id.toString(), user]));
 
     return providers.flatMap((provider) => {
       const partnerUserId = provider.userId?.toString();
@@ -176,9 +186,7 @@ export class ChatService {
           _id: provider._id,
           userId: partnerUser._id,
           businessName:
-            provider.businessName ||
-            partnerUser.profile?.fullName ||
-            'Đối tác',
+            provider.businessName || partnerUser.profile?.fullName || 'Đối tác',
           capabilities: provider.capabilities || [],
           avatarUrl:
             partnerUser.profile?.avatarUrl ||
@@ -253,7 +261,10 @@ export class ChatService {
     }
 
     // Populate and return mapped room
-    const populatedRoom = await room.populate('participants', 'profile roles defaultRole');
+    const populatedRoom = await room.populate(
+      'participants',
+      'profile roles defaultRole',
+    );
     const otherParticipant = populatedRoom.participants.find(
       (p: any) => p._id.toString() !== userId,
     ) as any;
@@ -274,7 +285,12 @@ export class ChatService {
     };
   }
 
-  async createMessage(roomId: string, senderId: string, messageText: string, attachments: string[] = []) {
+  async createMessage(
+    roomId: string,
+    senderId: string,
+    messageText: string,
+    attachments: string[] = [],
+  ) {
     await this.assertUserInRoom(roomId, senderId);
 
     const cleanText = (messageText || '').trim();
@@ -282,10 +298,14 @@ export class ChatService {
       throw new BadRequestException('Nội dung tin nhắn không được để trống.');
     }
     if (cleanText.length > 2000) {
-      throw new BadRequestException('Nội dung tin nhắn vượt quá giới hạn 2000 ký tự.');
+      throw new BadRequestException(
+        'Nội dung tin nhắn vượt quá giới hạn 2000 ký tự.',
+      );
     }
     if (attachments && attachments.length > 5) {
-      throw new BadRequestException('Mỗi tin nhắn chỉ được đính kèm tối đa 5 tệp.');
+      throw new BadRequestException(
+        'Mỗi tin nhắn chỉ được đính kèm tối đa 5 tệp.',
+      );
     }
 
     const message = await this.chatMessageModel.create({
@@ -330,7 +350,9 @@ export class ChatService {
   }
 
   async getRoomParticipants(roomId: string): Promise<string[]> {
-    const room = await this.chatRoomModel.findById(new Types.ObjectId(roomId)).exec();
+    const room = await this.chatRoomModel
+      .findById(new Types.ObjectId(roomId))
+      .exec();
     if (!room) return [];
     return room.participants.map((id) => id.toString());
   }

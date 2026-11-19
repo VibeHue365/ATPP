@@ -30,7 +30,10 @@ export class PaymentExpiryClaimService {
       .findById(bookingId)
       .session(session)
       .lean();
-    if (!booking?.holdExpiresAt && booking?.status === BookingStatus.PendingPayment) {
+    if (
+      !booking?.holdExpiresAt &&
+      booking?.status === BookingStatus.PendingPayment
+    ) {
       const createdAtTime = (booking as any).createdAt
         ? new Date((booking as any).createdAt).getTime()
         : now.getTime();

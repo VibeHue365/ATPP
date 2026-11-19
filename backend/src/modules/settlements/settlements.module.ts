@@ -14,7 +14,10 @@ import { AdminSettlementsController } from './controllers/admin-settlements.cont
 import { ProviderSettlementsController } from './controllers/provider-settlements.controller';
 import { SettlementAccessPolicy } from './policies/settlement-access.policy';
 import { Settlement, SettlementSchema } from './schemas/settlement.schema';
-import { SettlementAdjustment, SettlementAdjustmentSchema } from './schemas/settlement-adjustment.schema';
+import {
+  SettlementAdjustment,
+  SettlementAdjustmentSchema,
+} from './schemas/settlement-adjustment.schema';
 import { SettlementCalculationService } from './services/settlement-calculation.service';
 import { SettlementCodeService } from './services/settlement-code.service';
 import { SettlementQueryService } from './services/settlement-query.service';

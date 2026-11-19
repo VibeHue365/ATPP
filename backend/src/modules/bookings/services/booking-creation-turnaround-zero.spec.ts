@@ -1,11 +1,17 @@
 import { Types } from 'mongoose';
-import { BookingCreationService, createBookingCreationServiceForTest } from './booking-creation.service';
+import {
+  BookingCreationService,
+  createBookingCreationServiceForTest,
+} from './booking-creation.service';
 import { buildReservationOverlapFilter } from './reservation-overlap-filter';
 import { TimeSlotEngineService } from './time-slot-engine.service';
 import { InventorySlotLeaseService } from './inventory-slot-lease.service';
 import { ProductBusyCacheService } from './product-busy-cache.service';
 import { BookingType } from '../schemas/booking.schema';
-import { SlotLeasePurpose, SlotLeaseStatus } from '../schemas/inventory-slot-lease.schema';
+import {
+  SlotLeasePurpose,
+  SlotLeaseStatus,
+} from '../schemas/inventory-slot-lease.schema';
 import { ReservationStatus } from '../../products/schemas/inventory-reservation.schema';
 import { VoucherPricingService } from '../../products/services/voucher-pricing.service';
 import { BadRequestException } from '@nestjs/common';
@@ -81,8 +87,10 @@ describe('BookingCreation & Overlap Filter: turnaroundSlots = 0 vs 1 & Boundary 
           if (branch.status !== doc.status) return false;
           if (!branch.$or) return true;
           return branch.$or.some((sub: any) => {
-            if (sub.expiresAt?.$gt && doc.expiresAt > sub.expiresAt.$gt) return true;
-            if (sub.expiresAt?.$exists === false && doc.expiresAt === undefined) return true;
+            if (sub.expiresAt?.$gt && doc.expiresAt > sub.expiresAt.$gt)
+              return true;
+            if (sub.expiresAt?.$exists === false && doc.expiresAt === undefined)
+              return true;
             if (sub.expiresAt === null && doc.expiresAt === null) return true;
             return false;
           });
@@ -156,9 +164,14 @@ describe('BookingCreation & Overlap Filter: turnaroundSlots = 0 vs 1 & Boundary 
         const now = new Date();
         const filtered = inMemoryReservations.filter((r) => {
           if (query.inventoryItemId?.$in) {
-            const ids = query.inventoryItemId.$in.map((id: any) => id.toString());
+            const ids = query.inventoryItemId.$in.map((id: any) =>
+              id.toString(),
+            );
             if (!ids.includes(r.inventoryItemId.toString())) return false;
-          } else if (query.inventoryItemId && r.inventoryItemId.toString() !== query.inventoryItemId.toString()) {
+          } else if (
+            query.inventoryItemId &&
+            r.inventoryItemId.toString() !== query.inventoryItemId.toString()
+          ) {
             return false;
           }
 
@@ -169,9 +182,19 @@ describe('BookingCreation & Overlap Filter: turnaroundSlots = 0 vs 1 & Boundary 
               if (branch.status === ReservationStatus.Confirmed) return true;
               if (branch.$or) {
                 return branch.$or.some((sub: any) => {
-                  if (sub.expiresAt?.$gt && r.expiresAt && r.expiresAt > sub.expiresAt.$gt) return true;
-                  if (sub.expiresAt?.$exists === false && r.expiresAt === undefined) return true;
-                  if (sub.expiresAt === null && r.expiresAt === null) return true;
+                  if (
+                    sub.expiresAt?.$gt &&
+                    r.expiresAt &&
+                    r.expiresAt > sub.expiresAt.$gt
+                  )
+                    return true;
+                  if (
+                    sub.expiresAt?.$exists === false &&
+                    r.expiresAt === undefined
+                  )
+                    return true;
+                  if (sub.expiresAt === null && r.expiresAt === null)
+                    return true;
                   return false;
                 });
               }
@@ -181,12 +204,25 @@ describe('BookingCreation & Overlap Filter: turnaroundSlots = 0 vs 1 & Boundary 
           }
 
           // Time filter: half-open interval check
-          if (query.reservedFrom?.$lt && !(r.reservedFrom < query.reservedFrom.$lt)) return false;
-          if (query.reservedTo?.$gt && !(r.reservedTo > query.reservedTo.$gt)) return false;
+          if (
+            query.reservedFrom?.$lt &&
+            !(r.reservedFrom < query.reservedFrom.$lt)
+          )
+            return false;
+          if (query.reservedTo?.$gt && !(r.reservedTo > query.reservedTo.$gt))
+            return false;
 
           // Time filter: inclusive check
-          if (query.reservedFrom?.$lte && !(r.reservedFrom <= query.reservedFrom.$lte)) return false;
-          if (query.reservedTo?.$gte && !(r.reservedTo >= query.reservedTo.$gte)) return false;
+          if (
+            query.reservedFrom?.$lte &&
+            !(r.reservedFrom <= query.reservedFrom.$lte)
+          )
+            return false;
+          if (
+            query.reservedTo?.$gte &&
+            !(r.reservedTo >= query.reservedTo.$gte)
+          )
+            return false;
 
           return true;
         });
@@ -194,10 +230,13 @@ describe('BookingCreation & Overlap Filter: turnaroundSlots = 0 vs 1 & Boundary 
         return {
           session: jest.fn().mockReturnThis(),
           sort: jest.fn().mockReturnValue(Promise.resolve(filtered)),
-          then: (res: any, rej: any) => Promise.resolve(filtered).then(res, rej),
+          then: (res: any, rej: any) =>
+            Promise.resolve(filtered).then(res, rej),
         };
       });
-      mockReservationModel.deleteOne = jest.fn().mockResolvedValue({ deletedCount: 1 });
+      mockReservationModel.deleteOne = jest
+        .fn()
+        .mockResolvedValue({ deletedCount: 1 });
 
       const mockLeaseModel: any = {
         find: jest.fn().mockImplementation((query: any) => ({
@@ -206,17 +245,26 @@ describe('BookingCreation & Overlap Filter: turnaroundSlots = 0 vs 1 & Boundary 
             const now = new Date();
             const filtered = inMemoryLeases.filter((l) => {
               if (query.inventoryItemId?.$in) {
-                const ids = query.inventoryItemId.$in.map((id: any) => id.toString());
+                const ids = query.inventoryItemId.$in.map((id: any) =>
+                  id.toString(),
+                );
                 if (!ids.includes(l.inventoryItemId.toString())) return false;
               }
               if (query.$or) {
                 const matchesSlot = query.$or.some(
-                  (cond: any) => cond.dateStr === l.dateStr && cond.slotIndex === l.slotIndex,
+                  (cond: any) =>
+                    cond.dateStr === l.dateStr &&
+                    cond.slotIndex === l.slotIndex,
                 );
                 if (!matchesSlot) return false;
               }
               if (l.status === SlotLeaseStatus.Released) return false;
-              if (l.status === SlotLeaseStatus.Temp && l.expiresAt && l.expiresAt <= now) return false;
+              if (
+                l.status === SlotLeaseStatus.Temp &&
+                l.expiresAt &&
+                l.expiresAt <= now
+              )
+                return false;
               return true;
             });
             return Promise.resolve(filtered);
@@ -230,7 +278,8 @@ describe('BookingCreation & Overlap Filter: turnaroundSlots = 0 vs 1 & Boundary 
         }),
         updateMany: jest.fn().mockImplementation((query: any, update: any) => ({
           exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
-          then: (res: any, rej: any) => Promise.resolve({ modifiedCount: 1 }).then(res, rej),
+          then: (res: any, rej: any) =>
+            Promise.resolve({ modifiedCount: 1 }).then(res, rej),
         })),
       };
 
@@ -254,7 +303,9 @@ describe('BookingCreation & Overlap Filter: turnaroundSlots = 0 vs 1 & Boundary 
             depositAmount: 50000,
             sizes: ['M'],
             colors: ['RED'],
-            variants: [{ size: 'M', color: 'RED', quantity: 1, availableQuantity: 1 }],
+            variants: [
+              { size: 'M', color: 'RED', quantity: 1, availableQuantity: 1 },
+            ],
           }),
         }),
       };
@@ -296,7 +347,11 @@ describe('BookingCreation & Overlap Filter: turnaroundSlots = 0 vs 1 & Boundary 
 
       const mockPriceVersionModel: any = {
         findOne: jest.fn().mockReturnValue({
-          sort: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), price: 150000, depositAmount: 50000 }),
+          sort: jest.fn().mockResolvedValue({
+            _id: new Types.ObjectId(),
+            price: 150000,
+            depositAmount: 50000,
+          }),
         }),
       };
 
@@ -323,7 +378,9 @@ describe('BookingCreation & Overlap Filter: turnaroundSlots = 0 vs 1 & Boundary 
         priceVersionModel: mockPriceVersionModel,
         inventoryItemModel: mockInventoryItemModel,
         inventoryReservationModel: mockReservationModel,
-        notificationsService: { createNotification: jest.fn().mockResolvedValue(true) } as any,
+        notificationsService: {
+          createNotification: jest.fn().mockResolvedValue(true),
+        } as any,
         providerModel: mockProviderModel,
         voucherPricingService: new VoucherPricingService(),
         leaseModel: mockLeaseModel,
@@ -464,7 +521,9 @@ describe('BookingCreation & Overlap Filter: turnaroundSlots = 0 vs 1 & Boundary 
       });
 
       // Leases created: slot 1 (RENTAL) and slot 2 (TURNAROUND 09:00-11:00)
-      const turnaroundLease = inMemoryLeases.find((l) => l.slotIndex === 2 && l.purpose === SlotLeasePurpose.Turnaround);
+      const turnaroundLease = inMemoryLeases.find(
+        (l) => l.slotIndex === 2 && l.purpose === SlotLeasePurpose.Turnaround,
+      );
       expect(turnaroundLease).toBeDefined();
 
       // 2. Customer 2 tries to book 09:00-11:00 -> BLOCKED by turnaround lease

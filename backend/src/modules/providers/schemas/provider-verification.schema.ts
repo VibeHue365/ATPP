@@ -361,7 +361,10 @@ export class ProviderVerification {
                   qualityIssues: { type: [String], default: [] },
                   profileSnapshotHash: { type: String, default: null },
                   crossCheckComputedAt: { type: Date, default: null },
-                  identityFingerprint: { type: { keyId: { type: String }, value: { type: String } }, default: null },
+                  identityFingerprint: {
+                    type: { keyId: { type: String }, value: { type: String } },
+                    default: null,
+                  },
                   engine: { type: String, default: null },
                   engineVersion: { type: String, default: null },
                   language: { type: String, default: null },
@@ -403,8 +406,16 @@ export class ProviderVerification {
         type: [
           {
             _id: false,
-            target: { type: String, enum: Object.values(ProviderChangeRequestTarget), required: true },
-            action: { type: String, enum: Object.values(ProviderChangeRequestAction), required: true },
+            target: {
+              type: String,
+              enum: Object.values(ProviderChangeRequestTarget),
+              required: true,
+            },
+            action: {
+              type: String,
+              enum: Object.values(ProviderChangeRequestAction),
+              required: true,
+            },
             reasonCode: { type: String, required: true, trim: true },
             note: { type: String, default: null, trim: true },
             documentVersionNo: { type: Number, default: null },

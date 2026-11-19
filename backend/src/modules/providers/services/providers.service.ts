@@ -64,7 +64,7 @@ export class ProvidersService {
     @InjectModel(PortfolioItem.name)
     private readonly portfolioItemModel: Model<PortfolioItem>,
     private readonly smartTaggingService: SmartTaggingService,
-  ) { }
+  ) {}
 
   async getOrCreateProvider(
     userIdStr: string,
@@ -119,7 +119,10 @@ export class ProvidersService {
         ...dto.media,
       };
     }
-    const updated = await this.providersRepository.update(provider._id, update as Partial<Provider>);
+    const updated = await this.providersRepository.update(
+      provider._id,
+      update as Partial<Provider>,
+    );
     if (!updated) {
       throw new NotFoundException('Failed to update provider profile');
     }
@@ -127,14 +130,13 @@ export class ProvidersService {
     return updated;
   }
 
-  private toPlainSubdoc<T extends object>(value: T | null | undefined): Partial<T> {
+  private toPlainSubdoc<T extends object>(
+    value: T | null | undefined,
+  ): Partial<T> {
     if (!value) return {};
     const raw =
       typeof (value as { toObject?: () => unknown }).toObject === 'function'
-        ? ((value as { toObject: () => Record<string, unknown> }).toObject() as Record<
-            string,
-            unknown
-          >)
+        ? (value as { toObject: () => Record<string, unknown> }).toObject()
         : (value as Record<string, unknown>);
     const { _id: _ignoredId, ...clean } = raw;
     return clean as Partial<T>;
@@ -145,7 +147,10 @@ export class ProvidersService {
     dto: UpdateProviderProfileDto,
   ): UpdateProviderProfileDto {
     const rentalSettings = dto.rentalSettings
-      ? { ...this.toPlainSubdoc(provider.rentalSettings), ...dto.rentalSettings }
+      ? {
+          ...this.toPlainSubdoc(provider.rentalSettings),
+          ...dto.rentalSettings,
+        }
       : undefined;
     const photographySettings = dto.photographySettings
       ? {
@@ -155,15 +160,24 @@ export class ProvidersService {
       : undefined;
 
     this.assertGeoPoint(dto.address?.geo, 'address.geo');
-    this.assertGeoPoint(rentalSettings?.pickupLocation?.geo, 'rentalSettings.pickupLocation.geo');
+    this.assertGeoPoint(
+      rentalSettings?.pickupLocation?.geo,
+      'rentalSettings.pickupLocation.geo',
+    );
 
     if (rentalSettings) {
-      if (rentalSettings.useBusinessAddressForPickup && rentalSettings.pickupLocation) {
+      if (
+        rentalSettings.useBusinessAddressForPickup &&
+        rentalSettings.pickupLocation
+      ) {
         throw new BadRequestException(
           'pickupLocation must be empty when useBusinessAddressForPickup is true',
         );
       }
-      if (!rentalSettings.useBusinessAddressForPickup && !rentalSettings.pickupLocation?.addressLine?.trim()) {
+      if (
+        !rentalSettings.useBusinessAddressForPickup &&
+        !rentalSettings.pickupLocation?.addressLine?.trim()
+      ) {
         throw new BadRequestException(
           'pickupLocation is required when useBusinessAddressForPickup is false',
         );
@@ -172,8 +186,14 @@ export class ProvidersService {
 
     const serviceRadiusKm = photographySettings?.serviceRadiusKm;
     if (serviceRadiusKm !== undefined && serviceRadiusKm !== null) {
-      if (!Number.isFinite(serviceRadiusKm) || serviceRadiusKm < 0 || serviceRadiusKm > 500) {
-        throw new BadRequestException('serviceRadiusKm must be between 0 and 500');
+      if (
+        !Number.isFinite(serviceRadiusKm) ||
+        serviceRadiusKm < 0 ||
+        serviceRadiusKm > 500
+      ) {
+        throw new BadRequestException(
+          'serviceRadiusKm must be between 0 and 500',
+        );
       }
       const effectiveAddress = dto.address ?? provider.address;
       if (serviceRadiusKm > 0 && !effectiveAddress.geo?.coordinates) {
@@ -200,9 +220,14 @@ export class ProvidersService {
       geo.type !== 'Point' ||
       !Number.isFinite(longitude) ||
       !Number.isFinite(latitude) ||
-      longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90
+      longitude < -180 ||
+      longitude > 180 ||
+      latitude < -90 ||
+      latitude > 90
     ) {
-      throw new BadRequestException(`${field} must contain [longitude, latitude]`);
+      throw new BadRequestException(
+        `${field} must contain [longitude, latitude]`,
+      );
     }
   }
   async addPortfolioImage(
@@ -321,7 +346,9 @@ export class ProvidersService {
   ): Promise<PortfolioItemDocument[]> {
     return this.portfolioItemModel
       .find({ moderationStatus: status })
-      .select('title description images moderationStatus moderationReason providerId updatedAt')
+      .select(
+        'title description images moderationStatus moderationReason providerId updatedAt',
+      )
       .sort({ updatedAt: 1 })
       .populate('providerId', 'businessName')
       .exec();
@@ -438,22 +465,30 @@ export class ProvidersService {
       return hour * 60 + minute;
     };
 
-    const normalized = workingHours.map((slot) => {
-      const start = String(slot?.start || '').trim();
-      const end = String(slot?.end || '').trim();
-      const startMinutes = toMinutes(start);
-      const endMinutes = toMinutes(end);
-      if (startMinutes === null || endMinutes === null || startMinutes >= endMinutes) {
-        throw new BadRequestException(
-          'Mỗi ca phải có giờ bắt đầu trước giờ kết thúc (định dạng HH:mm).',
-        );
-      }
-      return { start, end, startMinutes, endMinutes };
-    }).sort((a, b) => a.startMinutes - b.startMinutes);
+    const normalized = workingHours
+      .map((slot) => {
+        const start = String(slot?.start || '').trim();
+        const end = String(slot?.end || '').trim();
+        const startMinutes = toMinutes(start);
+        const endMinutes = toMinutes(end);
+        if (
+          startMinutes === null ||
+          endMinutes === null ||
+          startMinutes >= endMinutes
+        ) {
+          throw new BadRequestException(
+            'Mỗi ca phải có giờ bắt đầu trước giờ kết thúc (định dạng HH:mm).',
+          );
+        }
+        return { start, end, startMinutes, endMinutes };
+      })
+      .sort((a, b) => a.startMinutes - b.startMinutes);
 
     for (let index = 1; index < normalized.length; index += 1) {
       if (normalized[index].startMinutes < normalized[index - 1].endMinutes) {
-        throw new BadRequestException('Các ca làm việc không được chồng lên nhau.');
+        throw new BadRequestException(
+          'Các ca làm việc không được chồng lên nhau.',
+        );
       }
     }
 
@@ -477,7 +512,7 @@ export class ProvidersService {
     const offDays = isOffDay ? [specificDate] : [];
     const reasonToSave =
       isOffDay || (customSlots && customSlots.length > 0)
-        ? (reason?.trim() || null)
+        ? reason?.trim() || null
         : null;
 
     return this.providersRepository.upsertSpecificDateSchedule(
@@ -490,7 +525,12 @@ export class ProvidersService {
     );
   }
 
-  async getProviderAnalytics(userIdStr: string, period = 'month', from?: string, to?: string) {
+  async getProviderAnalytics(
+    userIdStr: string,
+    period = 'month',
+    from?: string,
+    to?: string,
+  ) {
     const userId = this.toObjectId(userIdStr);
     const provider = await this.providersRepository.findByUserId(userId);
     if (!provider) {
@@ -523,18 +563,27 @@ export class ProvidersService {
         ],
       },
       ...dateFilter,
-    } as any);
+    });
 
     const bookingIds = bookings.map((booking) => booking._id);
     const revenueItems = bookingIds.length
-      ? await this.bookingItemModel.find({ bookingId: { $in: bookingIds }, providerId } as any).lean()
+      ? await this.bookingItemModel
+          .find({ bookingId: { $in: bookingIds }, providerId } as any)
+          .lean()
       : [];
     const revenueByBooking = new Map<string, number>();
     for (const item of revenueItems) {
       const bookingKey = item.bookingId.toString();
-      revenueByBooking.set(bookingKey, (revenueByBooking.get(bookingKey) || 0) + item.unitPrice * (item.quantity || 1));
+      revenueByBooking.set(
+        bookingKey,
+        (revenueByBooking.get(bookingKey) || 0) +
+          item.unitPrice * (item.quantity || 1),
+      );
     }
-    const totalRevenue = Array.from(revenueByBooking.values()).reduce((sum, amount) => sum + amount, 0);
+    const totalRevenue = Array.from(revenueByBooking.values()).reduce(
+      (sum, amount) => sum + amount,
+      0,
+    );
     const commissionFee = Math.round(totalRevenue * 0.15);
 
     // VS-103: Thống kê riêng cho dịch vụ thuê (Ao Dai Rental)
@@ -542,27 +591,32 @@ export class ProvidersService {
       const bType = String(b.bookingType || '').toUpperCase();
       return bType === 'AODAI_RENTAL' || bType === 'RENTAL';
     });
-    const rentalBookingIds = new Set(rentalBookings.map((b) => b._id.toString()));
-    const rentalRevenue = Array.from(revenueByBooking.entries()).reduce((sum, [bId, amt]) => {
-      return rentalBookingIds.has(bId) ? sum + amt : sum;
-    }, 0);
+    const rentalBookingIds = new Set(
+      rentalBookings.map((b) => b._id.toString()),
+    );
+    const rentalRevenue = Array.from(revenueByBooking.entries()).reduce(
+      (sum, [bId, amt]) => {
+        return rentalBookingIds.has(bId) ? sum + amt : sum;
+      },
+      0,
+    );
     const rentalOrderCount = rentalBookings.length;
 
     // 2. UC-K13: Tỷ lệ đặt lịch thành công & hủy lịch
     const allBookingsCount = await this.bookingModel.countDocuments({
       providerIds: providerId,
       ...dateFilter,
-    } as any);
+    });
     const successBookingsCount = await this.bookingModel.countDocuments({
       providerIds: providerId,
       status: 'COMPLETED',
       ...dateFilter,
-    } as any);
+    });
     const cancelledBookingsCount = await this.bookingModel.countDocuments({
       providerIds: providerId,
       status: 'CANCELLED',
       ...dateFilter,
-    } as any);
+    });
 
     const successRate = allBookingsCount
       ? Math.round((successBookingsCount / allBookingsCount) * 1000) / 10
@@ -574,18 +628,24 @@ export class ProvidersService {
     // 3. UC-K05 & VS-104: Sản phẩm phổ biến nhất (Top 5 theo shop)
     const popularItems = await this.bookingItemModel.aggregate([
       { $match: { providerId } },
-      { $group: { _id: '$productId', count: { $sum: { $ifNull: ['$quantity', 1] } } } },
+      {
+        $group: {
+          _id: '$productId',
+          count: { $sum: { $ifNull: ['$quantity', 1] } },
+        },
+      },
       { $sort: { count: -1 } },
       { $limit: 5 },
     ]);
 
     const productIds = popularItems.map((item) => item._id).filter(Boolean);
-    const products = productIds.length > 0
-      ? await this.productModel
-          .find({ _id: { $in: productIds } })
-          .select('name images')
-          .lean()
-      : [];
+    const products =
+      productIds.length > 0
+        ? await this.productModel
+            .find({ _id: { $in: productIds } })
+            .select('name images')
+            .lean()
+        : [];
     const productMap = new Map(products.map((p) => [p._id.toString(), p]));
 
     const popularProducts = popularItems
@@ -607,20 +667,18 @@ export class ProvidersService {
     // 4. UC-K06 & VS-105: Quản lý tồn kho / Trạng thái sản phẩm kèm tỷ lệ phần trăm
     const totalProducts = await this.productModel.countDocuments({
       providerId,
-    } as any);
+    });
 
-    const providerProducts = await this.productModel.find({ providerId }).select('_id');
+    const providerProducts = await this.productModel
+      .find({ providerId })
+      .select('_id');
     const providerProductIds = providerProducts.map((p) => p._id);
 
-    const invRawRows: Array<{ _id: string; count: number }> = await this.bookingModel.db
-      .model('InventoryItem')
-      .aggregate([
+    const invRawRows: Array<{ _id: string; count: number }> =
+      await this.bookingModel.db.model('InventoryItem').aggregate([
         {
           $match: {
-            $or: [
-              { providerId },
-              { productId: { $in: providerProductIds } },
-            ],
+            $or: [{ providerId }, { productId: { $in: providerProductIds } }],
           },
         },
         { $group: { _id: '$status', count: { $sum: 1 } } },
@@ -638,7 +696,8 @@ export class ProvidersService {
     };
 
     const inventoryStatus = invRawRows.map((row) => {
-      const percentage = totalInvItems > 0 ? Math.round((row.count / totalInvItems) * 100) : 0;
+      const percentage =
+        totalInvItems > 0 ? Math.round((row.count / totalInvItems) * 100) : 0;
       const statusKey = String(row._id || '').toUpperCase();
       return {
         name: statusNameMap[statusKey] || statusKey,
@@ -651,11 +710,10 @@ export class ProvidersService {
           statusKey === 'AVAILABLE'
             ? 'available'
             : statusKey === 'RENTED'
-            ? 'rental'
-            : 'maintenance',
+              ? 'rental'
+              : 'maintenance',
       };
     });
-
 
     // 5. UC-K08: Doanh thu theo thời gian (Tuần, Tháng, Năm)
     const revenueGrowth = [];
@@ -666,8 +724,24 @@ export class ProvidersService {
       for (let i = 6; i >= 0; i--) {
         const d = new Date(now);
         d.setDate(d.getDate() - i);
-        const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
-        const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+        const dayStart = new Date(
+          d.getFullYear(),
+          d.getMonth(),
+          d.getDate(),
+          0,
+          0,
+          0,
+          0,
+        );
+        const dayEnd = new Date(
+          d.getFullYear(),
+          d.getMonth(),
+          d.getDate(),
+          23,
+          59,
+          59,
+          999,
+        );
         const value = bookings.reduce((sum, booking) => {
           const createdAt = new Date((booking as any).createdAt);
           return createdAt >= dayStart && createdAt <= dayEnd
@@ -707,7 +781,11 @@ export class ProvidersService {
             ? sum + (revenueByBooking.get(booking._id.toString()) || 0)
             : sum;
         }, 0);
-        revenueGrowth.push({ label: `Tháng ${month.getMonth() + 1}`, shortLabel: `T${month.getMonth() + 1}`, value });
+        revenueGrowth.push({
+          label: `Tháng ${month.getMonth() + 1}`,
+          shortLabel: `T${month.getMonth() + 1}`,
+          value,
+        });
       }
     }
 
@@ -830,7 +908,6 @@ export class ProvidersService {
     };
   }
 
-
   private toObjectId(id: string): Types.ObjectId {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Invalid ID');
@@ -866,11 +943,14 @@ export class ProvidersService {
 
     // Fetch 10 most recent completed settlements for this provider
     const Settlement = this.bookingModel.db.model('Settlement');
-    const recentSettlements = await Settlement
-      .find({ providerId: provider._id })
+    const recentSettlements = await Settlement.find({
+      providerId: provider._id,
+    })
       .sort({ createdAt: -1 })
       .limit(10)
-      .select('settlementCode bookingId netAmount payableAmount status createdAt')
+      .select(
+        'settlementCode bookingId netAmount payableAmount status createdAt',
+      )
       .populate({ path: 'bookingId', select: 'bookingCode bookingType' })
       .lean();
 
@@ -943,7 +1023,10 @@ export class ProvidersService {
     const commissionRate =
       summary.grossEarnings > 0
         ? Number(
-            ((summary.platformCommission / summary.grossEarnings) * 100).toFixed(2),
+            (
+              (summary.platformCommission / summary.grossEarnings) *
+              100
+            ).toFixed(2),
           )
         : 0;
 
@@ -978,12 +1061,20 @@ export class ProvidersService {
       end = new Date(Date.UTC(year, monthIndex, 1));
     } else {
       const now = new Date();
-      start = from ? new Date(`${from}T00:00:00.000Z`) : new Date(now.setHours(0, 0, 0, 0));
+      start = from
+        ? new Date(`${from}T00:00:00.000Z`)
+        : new Date(now.setHours(0, 0, 0, 0));
       end = to
         ? new Date(`${to}T23:59:59.999Z`)
-        : new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 3, 1));
+        : new Date(
+            Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 3, 1),
+          );
     }
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) {
+    if (
+      Number.isNaN(start.getTime()) ||
+      Number.isNaN(end.getTime()) ||
+      start >= end
+    ) {
       throw new BadRequestException('Invalid calendar date range');
     }
 
@@ -995,7 +1086,9 @@ export class ProvidersService {
           scheduleType: 'PHOTOSHOOT',
         },
       },
-      { $addFields: { eventDate: { $ifNull: ['$startsAt', '$scheduledDate'] } } },
+      {
+        $addFields: { eventDate: { $ifNull: ['$startsAt', '$scheduledDate'] } },
+      },
       { $match: { eventDate: { $gte: start, $lt: end } } },
       {
         $lookup: {
@@ -1030,7 +1123,12 @@ export class ProvidersService {
           location: {
             $ifNull: [
               '$locationAddress',
-              { $ifNull: ['$bookingItem.shootLocation', '$bookingItem.shootLocationSnapshot.address'] },
+              {
+                $ifNull: [
+                  '$bookingItem.shootLocation',
+                  '$bookingItem.shootLocationSnapshot.address',
+                ],
+              },
             ],
           },
         },
@@ -1042,7 +1140,9 @@ export class ProvidersService {
       const cancelled =
         schedule.scheduleStatus === 'CANCELLED' ||
         schedule.bookingStatus === 'CANCELLED';
-      const date = schedule.providerLocalDate || new Date(schedule.eventDate).toISOString().slice(0, 10);
+      const date =
+        schedule.providerLocalDate ||
+        new Date(schedule.eventDate).toISOString().slice(0, 10);
       return {
         id: schedule._id?.toString(),
         bookingId: schedule.bookingId?.toString(),
@@ -1052,13 +1152,21 @@ export class ProvidersService {
         endsAt: schedule.endsAt || null,
         timeSlot: schedule.timeSlot || null,
         location: schedule.location || '',
-        status: cancelled ? 'CANCELLED' : schedule.scheduleStatus || 'CONFIRMED',
+        status: cancelled
+          ? 'CANCELLED'
+          : schedule.scheduleStatus || 'CONFIRMED',
         cancelled,
         markerColor: cancelled ? 'gray' : 'green',
         textDecoration: cancelled ? 'line-through' : 'none',
       };
     });
 
-    return { month: month || null, from: start.toISOString(), to: end.toISOString(), events, data: events };
+    return {
+      month: month || null,
+      from: start.toISOString(),
+      to: end.toISOString(),
+      events,
+      data: events,
+    };
   }
 }

@@ -44,8 +44,8 @@ describe('ProductsRepository public custom-tag search', () => {
     const customTagCondition = query.$or.find(
       (condition: any) => condition.customTags,
     );
-    expect(customTagCondition.customTags.$elemMatch.label.test('Nàng thơ')).toBe(
-      true,
-    );
+    expect(
+      customTagCondition.customTags.$elemMatch.label.test('Nàng thơ'),
+    ).toBe(true);
   });
 });

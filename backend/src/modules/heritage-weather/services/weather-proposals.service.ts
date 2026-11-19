@@ -15,8 +15,17 @@ import {
   WeatherProposal,
   WeatherProposalDocument,
 } from '../schemas/weather-proposal.schema';
-import { Booking, BookingDocument, BookingStatus, BookingType } from '../../bookings/schemas/booking.schema';
-import { BookingItem, BookingItemDocument, BookingItemType } from '../../bookings/schemas/booking-item.schema';
+import {
+  Booking,
+  BookingDocument,
+  BookingStatus,
+  BookingType,
+} from '../../bookings/schemas/booking.schema';
+import {
+  BookingItem,
+  BookingItemDocument,
+  BookingItemType,
+} from '../../bookings/schemas/booking-item.schema';
 import {
   BookingSchedule,
   BookingScheduleDocument,
@@ -72,11 +81,16 @@ export class WeatherProposalsService {
 
     // Authorization
     if (booking.customerId.toString() !== customerIdStr) {
-      throw new ForbiddenException('Bạn không có quyền thao tác trên đơn hàng này.');
+      throw new ForbiddenException(
+        'Bạn không có quyền thao tác trên đơn hàng này.',
+      );
     }
 
     // Must be active
-    const allowedStatuses: BookingStatus[] = [BookingStatus.Confirmed, BookingStatus.DepositPaid];
+    const allowedStatuses: BookingStatus[] = [
+      BookingStatus.Confirmed,
+      BookingStatus.DepositPaid,
+    ];
     if (!allowedStatuses.includes(booking.status)) {
       throw new BadRequestException(
         `Không thể gửi đề xuất Plan B khi đơn hàng ở trạng thái ${booking.status}.`,
@@ -107,7 +121,9 @@ export class WeatherProposalsService {
     });
 
     if (!photoItem) {
-      throw new BadRequestException('Đơn hàng không chứa gói chụp ảnh để áp dụng Plan B.');
+      throw new BadRequestException(
+        'Đơn hàng không chứa gói chụp ảnh để áp dụng Plan B.',
+      );
     }
 
     const schedule = await this.bookingScheduleModel.findOne({
@@ -117,8 +133,9 @@ export class WeatherProposalsService {
 
     const oldDateStr = photoItem.shootDate
       ? new Date(photoItem.shootDate).toISOString().split('T')[0]
-      : (schedule?.providerLocalDate || '');
-    const oldTimeSlot = photoItem.shootTimeSlot || schedule?.timeSlot || '09:00-11:00';
+      : schedule?.providerLocalDate || '';
+    const oldTimeSlot =
+      photoItem.shootTimeSlot || schedule?.timeSlot || '09:00-11:00';
     const oldSpotName = photoItem.shootLocation || 'Trung tâm TP. Huế';
 
     // Calculate original start time
@@ -128,19 +145,27 @@ export class WeatherProposalsService {
       oldStartsAt = new Date(schedule.startsAt);
     } else {
       const [sH, sM] = oldTimeSlot.split('-')[0].trim().split(':').map(Number);
-      oldStartsAt = new Date(`${oldDateStr}T${String(sH || 9).padStart(2, '0')}:${String(sM || 0).padStart(2, '0')}:00+07:00`);
+      oldStartsAt = new Date(
+        `${oldDateStr}T${String(sH || 9).padStart(2, '0')}:${String(sM || 0).padStart(2, '0')}:00+07:00`,
+      );
     }
 
     if (oldStartsAt.getTime() <= now.getTime()) {
-      throw new BadRequestException('Buổi chụp ban đầu đã diễn ra hoặc đã bắt đầu, không thể tạo đề xuất đổi lịch.');
+      throw new BadRequestException(
+        'Buổi chụp ban đầu đã diễn ra hoặc đã bắt đầu, không thể tạo đề xuất đổi lịch.',
+      );
     }
 
     // Hard ceiling for Proposal TTL: min(now + 4h, oldStartsAt)
     const fourHoursLater = new Date(now.getTime() + 4 * 60 * 60 * 1000);
-    const proposalExpiresAt = new Date(Math.min(fourHoursLater.getTime(), oldStartsAt.getTime()));
+    const proposalExpiresAt = new Date(
+      Math.min(fourHoursLater.getTime(), oldStartsAt.getTime()),
+    );
 
     if (proposalExpiresAt.getTime() <= now.getTime()) {
-      throw new BadRequestException('Thời gian còn lại trước giờ chụp cũ không đủ để tạo đề xuất.');
+      throw new BadRequestException(
+        'Thời gian còn lại trước giờ chụp cũ không đủ để tạo đề xuất.',
+      );
     }
 
     // Target schedule resolution
@@ -148,7 +173,8 @@ export class WeatherProposalsService {
     let targetTimeSlot = oldTimeSlot;
 
     if (dto.changeType === ProposalChangeType.SLOT_ONLY) {
-      if (!dto.proposedTimeSlot) throw new BadRequestException('Vui lòng chọn khung giờ mới.');
+      if (!dto.proposedTimeSlot)
+        throw new BadRequestException('Vui lòng chọn khung giờ mới.');
       targetTimeSlot = dto.proposedTimeSlot;
     } else if (dto.changeType === ProposalChangeType.DATE_AND_SLOT) {
       if (!dto.proposedDate || !dto.proposedTimeSlot) {
@@ -162,13 +188,19 @@ export class WeatherProposalsService {
     let proposedSpot: any = null;
     let proposedSpotIdObj: Types.ObjectId | null = null;
     if (dto.proposedSpotId && Types.ObjectId.isValid(dto.proposedSpotId)) {
-      proposedSpot = await this.heritageSpotsService.findById(dto.proposedSpotId);
+      proposedSpot = await this.heritageSpotsService.findById(
+        dto.proposedSpotId,
+      );
       proposedSpotIdObj = proposedSpot._id;
     }
 
     // Travel Fee Delta Calculation (AD-01)
-    const oldSpotIdStr = (photoItem as any).spotId ? (photoItem as any).spotId.toString() : null;
-    const proposedSpotIdStr = proposedSpotIdObj ? proposedSpotIdObj.toString() : null;
+    const oldSpotIdStr = (photoItem as any).spotId
+      ? (photoItem as any).spotId.toString()
+      : null;
+    const proposedSpotIdStr = proposedSpotIdObj
+      ? proposedSpotIdObj.toString()
+      : null;
 
     const feeDelta = await this.heritageSpotsService.calculateTravelFeeDelta(
       oldSpotIdStr,
@@ -178,7 +210,10 @@ export class WeatherProposalsService {
     // Acquire temporary Redis slot hold
     const photographerId = booking.providerIds[0];
     const holdKey = `hold:photographer:${photographerId}:${targetDate}:${targetTimeSlot}`;
-    const ttlSeconds = Math.max(60, Math.floor((proposalExpiresAt.getTime() - now.getTime()) / 1000));
+    const ttlSeconds = Math.max(
+      60,
+      Math.floor((proposalExpiresAt.getTime() - now.getTime()) / 1000),
+    );
 
     await this.redisService.set(
       holdKey,
@@ -229,12 +264,22 @@ export class WeatherProposalsService {
       `Created weather proposal ${proposal._id} for booking ${booking.bookingCode} (additionalFeeDue: ${feeDelta.additionalFeeDue})`,
     );
 
-    if (this.weatherNotificationService && proposal.providerIds && proposal.providerIds.length > 0) {
-      await this.weatherNotificationService.sendPlanBProposed({
-        proposal,
-        booking,
-        providerIds: proposal.providerIds,
-      }).catch((e) => this.logger.warn(`Failed to send plan_b_proposed notification: ${e?.message}`));
+    if (
+      this.weatherNotificationService &&
+      proposal.providerIds &&
+      proposal.providerIds.length > 0
+    ) {
+      await this.weatherNotificationService
+        .sendPlanBProposed({
+          proposal,
+          booking,
+          providerIds: proposal.providerIds,
+        })
+        .catch((e) =>
+          this.logger.warn(
+            `Failed to send plan_b_proposed notification: ${e?.message}`,
+          ),
+        );
     }
 
     return proposal;
@@ -264,7 +309,9 @@ export class WeatherProposalsService {
       (pId) => pId.toString() === providerIdStr,
     );
     if (!isAuthorized) {
-      throw new ForbiddenException('Bạn không phải đối tác của đơn đặt lịch này.');
+      throw new ForbiddenException(
+        'Bạn không phải đối tác của đơn đặt lịch này.',
+      );
     }
 
     const booking = await this.bookingModel.findById(proposal.bookingId);
@@ -277,12 +324,13 @@ export class WeatherProposalsService {
       this.comboCoordinator.isComboBooking(booking) ||
       (proposal.providerIds && proposal.providerIds.length > 1)
     ) {
-      const result = await this.comboCoordinator.coordinateComboProposalResponse(
-        proposalIdStr,
-        providerIdStr,
-        dto.decision,
-        dto.rejectionReason,
-      );
+      const result =
+        await this.comboCoordinator.coordinateComboProposalResponse(
+          proposalIdStr,
+          providerIdStr,
+          dto.decision,
+          dto.rejectionReason,
+        );
       return result.proposal;
     }
 
@@ -315,7 +363,9 @@ export class WeatherProposalsService {
       );
 
       await proposal.save();
-      this.logger.log(`Proposal ${proposal._id} REJECTED by provider ${providerIdStr}`);
+      this.logger.log(
+        `Proposal ${proposal._id} REJECTED by provider ${providerIdStr}`,
+      );
       return proposal;
     }
 
@@ -349,18 +399,28 @@ export class WeatherProposalsService {
       );
 
       await proposal.save();
-      this.logger.log(`Proposal ${proposal._id} APPROVED & APPLIED (zero additional fee).`);
+      this.logger.log(
+        `Proposal ${proposal._id} APPROVED & APPLIED (zero additional fee).`,
+      );
       return proposal;
     }
 
     // CASE B: Additional fee required (additionalFeeDue > 0)
     // Establish Payment TTL with hard ceiling: min(now + 15m, oldStartsAt)
     const oldDateStr = proposal.originalSchedule.date;
-    const [sH, sM] = proposal.originalSchedule.timeSlot.split('-')[0].trim().split(':').map(Number);
-    const oldStartsAt = new Date(`${oldDateStr}T${String(sH || 9).padStart(2, '0')}:${String(sM || 0).padStart(2, '0')}:00+07:00`);
+    const [sH, sM] = proposal.originalSchedule.timeSlot
+      .split('-')[0]
+      .trim()
+      .split(':')
+      .map(Number);
+    const oldStartsAt = new Date(
+      `${oldDateStr}T${String(sH || 9).padStart(2, '0')}:${String(sM || 0).padStart(2, '0')}:00+07:00`,
+    );
 
     const fifteenMinsLater = new Date(now.getTime() + 15 * 60 * 1000);
-    const paymentExpiresAt = new Date(Math.min(fifteenMinsLater.getTime(), oldStartsAt.getTime()));
+    const paymentExpiresAt = new Date(
+      Math.min(fifteenMinsLater.getTime(), oldStartsAt.getTime()),
+    );
 
     if (paymentExpiresAt.getTime() <= now.getTime()) {
       // Payment TTL expired before payment could start -> Reject
@@ -385,8 +445,13 @@ export class WeatherProposalsService {
     }
 
     // Create PayOS payment link details
-    const orderCode = Number(String(Date.now()).slice(-6) + Math.floor(Math.random() * 1000));
-    const frontendBase = this.configService.get<string>('FRONTEND_URL', 'https://vibe-hue.vn');
+    const orderCode = Number(
+      String(Date.now()).slice(-6) + Math.floor(Math.random() * 1000),
+    );
+    const frontendBase = this.configService.get<string>(
+      'FRONTEND_URL',
+      'https://vibe-hue.vn',
+    );
     const checkoutUrl = `${frontendBase}/checkout/payment?orderCode=${orderCode}&amount=${proposal.additionalFeeDue}`;
 
     proposal.status = ProposalStatus.APPROVED_PENDING_PAYMENT;
@@ -401,7 +466,10 @@ export class WeatherProposalsService {
 
     // Extend Redis hold to match paymentExpiresAt
     if (proposal.temporaryHoldRef) {
-      const ttlSec = Math.max(60, Math.floor((paymentExpiresAt.getTime() - now.getTime()) / 1000));
+      const ttlSec = Math.max(
+        60,
+        Math.floor((paymentExpiresAt.getTime() - now.getTime()) / 1000),
+      );
       await this.redisService.set(
         proposal.temporaryHoldRef,
         { bookingId: booking._id.toString(), orderCode },
@@ -415,11 +483,17 @@ export class WeatherProposalsService {
     );
 
     if (this.weatherNotificationService) {
-      await this.weatherNotificationService.sendPlanBPaymentRequired({
-        proposal,
-        booking,
-        paymentUrl: checkoutUrl,
-      }).catch((e) => this.logger.warn(`Failed to send plan_b_payment_required notification: ${e?.message}`));
+      await this.weatherNotificationService
+        .sendPlanBPaymentRequired({
+          proposal,
+          booking,
+          paymentUrl: checkoutUrl,
+        })
+        .catch((e) =>
+          this.logger.warn(
+            `Failed to send plan_b_payment_required notification: ${e?.message}`,
+          ),
+        );
     }
 
     return proposal;
@@ -435,7 +509,9 @@ export class WeatherProposalsService {
     });
 
     if (!proposal) {
-      throw new NotFoundException(`Không tìm thấy đề xuất tương ứng với mã thanh toán: ${orderCode}`);
+      throw new NotFoundException(
+        `Không tìm thấy đề xuất tương ứng với mã thanh toán: ${orderCode}`,
+      );
     }
 
     const booking = await this.bookingModel.findById(proposal.bookingId);
@@ -455,7 +531,10 @@ export class WeatherProposalsService {
         this.comboCoordinator.isComboBooking(booking) ||
         (proposal.providerIds && proposal.providerIds.length > 1)
       ) {
-        await this.comboCoordinator.applyComboProposalChanges(proposal, booking);
+        await this.comboCoordinator.applyComboProposalChanges(
+          proposal,
+          booking,
+        );
       } else {
         await this.applyProposalChanges(proposal, booking);
       }
@@ -483,7 +562,9 @@ export class WeatherProposalsService {
       );
 
       await proposal.save();
-      this.logger.log(`Proposal ${proposal._id} successfully APPLIED after on-time fee payment.`);
+      this.logger.log(
+        `Proposal ${proposal._id} successfully APPLIED after on-time fee payment.`,
+      );
       return { success: true, status: ProposalStatus.APPLIED, proposal };
     }
 
@@ -519,14 +600,16 @@ export class WeatherProposalsService {
     await this.refundOutboxService.enqueueRefund({
       bookingId: proposal.bookingId,
       amount: amountPaid,
-      reason: 'Hoàn trả phụ phí do thanh toán sau khi đề xuất đổi lịch đã hết hạn',
+      reason:
+        'Hoàn trả phụ phí do thanh toán sau khi đề xuất đổi lịch đã hết hạn',
       sourceEventId: `refund:late_fee:${proposal._id}`,
     });
 
     return {
       success: false,
       status: ProposalStatus.EXPIRED_PAYMENT_CAPTURED,
-      message: 'Thanh toán phụ phí quá hạn. Hệ thống đã đưa giao dịch vào hàng đợi hoàn tiền tự động.',
+      message:
+        'Thanh toán phụ phí quá hạn. Hệ thống đã đưa giao dịch vào hàng đợi hoàn tiền tự động.',
       proposal,
     };
   }
@@ -558,10 +641,22 @@ export class WeatherProposalsService {
     );
 
     // 2. Update BookingSchedule
-    const [sH, sM] = proposed.timeSlot.split('-')[0].trim().split(':').map(Number);
-    const [eH, eM] = proposed.timeSlot.split('-')[1].trim().split(':').map(Number);
-    const startsAt = new Date(`${proposed.date}T${String(sH || 9).padStart(2, '0')}:${String(sM || 0).padStart(2, '0')}:00+07:00`);
-    const endsAt = new Date(`${proposed.date}T${String(eH || 11).padStart(2, '0')}:${String(eM || 0).padStart(2, '0')}:00+07:00`);
+    const [sH, sM] = proposed.timeSlot
+      .split('-')[0]
+      .trim()
+      .split(':')
+      .map(Number);
+    const [eH, eM] = proposed.timeSlot
+      .split('-')[1]
+      .trim()
+      .split(':')
+      .map(Number);
+    const startsAt = new Date(
+      `${proposed.date}T${String(sH || 9).padStart(2, '0')}:${String(sM || 0).padStart(2, '0')}:00+07:00`,
+    );
+    const endsAt = new Date(
+      `${proposed.date}T${String(eH || 11).padStart(2, '0')}:${String(eM || 0).padStart(2, '0')}:00+07:00`,
+    );
 
     await this.bookingScheduleModel.updateOne(
       {
@@ -592,18 +687,27 @@ export class WeatherProposalsService {
 
     if (this.weatherNotificationService) {
       const recipientUserIds = [booking.customerId.toString()];
-      await this.weatherNotificationService.sendPlanBApplied({
-        proposal,
-        booking,
-        recipientUserIds,
-      }).catch((e) => this.logger.warn(`Failed to send plan_b_applied notification: ${e?.message}`));
+      await this.weatherNotificationService
+        .sendPlanBApplied({
+          proposal,
+          booking,
+          recipientUserIds,
+        })
+        .catch((e) =>
+          this.logger.warn(
+            `Failed to send plan_b_applied notification: ${e?.message}`,
+          ),
+        );
     }
   }
 
   /**
    * Customer cancels pending proposal
    */
-  async cancelProposal(proposalIdStr: string, customerIdStr: string): Promise<WeatherProposalDocument> {
+  async cancelProposal(
+    proposalIdStr: string,
+    customerIdStr: string,
+  ): Promise<WeatherProposalDocument> {
     const proposal = await this.proposalModel.findById(proposalIdStr);
     if (!proposal) throw new NotFoundException('Không tìm thấy đề xuất.');
 
@@ -612,7 +716,9 @@ export class WeatherProposalsService {
     }
 
     if (proposal.status !== ProposalStatus.PENDING) {
-      throw new BadRequestException('Chỉ có thể hủy đề xuất đang ở trạng thái PENDING.');
+      throw new BadRequestException(
+        'Chỉ có thể hủy đề xuất đang ở trạng thái PENDING.',
+      );
     }
 
     proposal.status = ProposalStatus.CANCELLED;
@@ -640,8 +746,13 @@ export class WeatherProposalsService {
     return this.proposalModel.findById(id).exec();
   }
 
-  async listProposalsByBooking(bookingId: string): Promise<WeatherProposalDocument[]> {
+  async listProposalsByBooking(
+    bookingId: string,
+  ): Promise<WeatherProposalDocument[]> {
     if (!Types.ObjectId.isValid(bookingId)) return [];
-    return this.proposalModel.find({ bookingId }).sort({ createdAt: -1 }).exec();
+    return this.proposalModel
+      .find({ bookingId })
+      .sort({ createdAt: -1 })
+      .exec();
   }
 }

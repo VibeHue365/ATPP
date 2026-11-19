@@ -125,7 +125,12 @@ export class BookingSchedule {
   scheduleSchemaVersion: number;
 
   /** Identifies the legacy BookingItem that was converted by the v2 migration. */
-  @Prop({ type: Types.ObjectId, ref: 'BookingItem', default: null, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'BookingItem',
+    default: null,
+    index: true,
+  })
   migratedFromLegacyItemId?: Types.ObjectId | null;
 
   @Prop({ type: Date, default: null })

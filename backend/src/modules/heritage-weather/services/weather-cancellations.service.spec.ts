@@ -18,7 +18,10 @@ import {
   HeritageSpotSpaceType,
 } from '../schemas/heritage-spot.schema';
 import { Booking, BookingStatus } from '../../bookings/schemas/booking.schema';
-import { BookingItem, BookingItemType } from '../../bookings/schemas/booking-item.schema';
+import {
+  BookingItem,
+  BookingItemType,
+} from '../../bookings/schemas/booking-item.schema';
 import {
   BookingSchedule,
   BookingScheduleType,
@@ -140,7 +143,9 @@ describe('WeatherCancellationsService', () => {
       ],
     }).compile();
 
-    service = module.get<WeatherCancellationsService>(WeatherCancellationsService);
+    service = module.get<WeatherCancellationsService>(
+      WeatherCancellationsService,
+    );
   });
 
   it('should be defined', () => {
@@ -149,13 +154,18 @@ describe('WeatherCancellationsService', () => {
 
   describe('submitCancellationRequest', () => {
     const validDto = {
-      reason: 'Bão số 6 ngập lụt toàn bộ đường vào Đại Nội, không thể di chuyển.',
+      reason:
+        'Bão số 6 ngập lụt toàn bộ đường vào Đại Nội, không thể di chuyển.',
       evidencePhotos: ['https://example.com/ticket.jpg'],
     };
 
     it('should throw BadRequestException if bookingId is invalid', async () => {
       await expect(
-        service.submitCancellationRequest('invalid-id', customerId.toString(), validDto),
+        service.submitCancellationRequest(
+          'invalid-id',
+          customerId.toString(),
+          validDto,
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -163,7 +173,11 @@ describe('WeatherCancellationsService', () => {
       mockBookingModel.findById.mockResolvedValue(null);
 
       await expect(
-        service.submitCancellationRequest(bookingId.toString(), customerId.toString(), validDto),
+        service.submitCancellationRequest(
+          bookingId.toString(),
+          customerId.toString(),
+          validDto,
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -175,7 +189,11 @@ describe('WeatherCancellationsService', () => {
       });
 
       await expect(
-        service.submitCancellationRequest(bookingId.toString(), customerId.toString(), validDto),
+        service.submitCancellationRequest(
+          bookingId.toString(),
+          customerId.toString(),
+          validDto,
+        ),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -187,7 +205,11 @@ describe('WeatherCancellationsService', () => {
       });
 
       await expect(
-        service.submitCancellationRequest(bookingId.toString(), customerId.toString(), validDto),
+        service.submitCancellationRequest(
+          bookingId.toString(),
+          customerId.toString(),
+          validDto,
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -200,7 +222,11 @@ describe('WeatherCancellationsService', () => {
       });
 
       await expect(
-        service.submitCancellationRequest(bookingId.toString(), customerId.toString(), validDto),
+        service.submitCancellationRequest(
+          bookingId.toString(),
+          customerId.toString(),
+          validDto,
+        ),
       ).rejects.toThrow(ConflictException);
     });
 
@@ -214,7 +240,11 @@ describe('WeatherCancellationsService', () => {
       mockCancellationModel.findOne.mockResolvedValue({ _id: requestId });
 
       await expect(
-        service.submitCancellationRequest(bookingId.toString(), customerId.toString(), validDto),
+        service.submitCancellationRequest(
+          bookingId.toString(),
+          customerId.toString(),
+          validDto,
+        ),
       ).rejects.toThrow(ConflictException);
     });
 
@@ -242,7 +272,11 @@ describe('WeatherCancellationsService', () => {
       });
 
       await expect(
-        service.submitCancellationRequest(bookingId.toString(), customerId.toString(), validDto),
+        service.submitCancellationRequest(
+          bookingId.toString(),
+          customerId.toString(),
+          validDto,
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -266,14 +300,25 @@ describe('WeatherCancellationsService', () => {
       mockOpenMeteoService.getHourlyMetrics.mockResolvedValue([]);
       mockScoringService.assessTimeSlot.mockReturnValue({
         isRedAlert: true,
-        hourlyBreakdown: [{ isRedAlert: true, precipitationMm: 5.0, precipitationProbability: 80, weatherCode: 95 }],
+        hourlyBreakdown: [
+          {
+            isRedAlert: true,
+            precipitationMm: 5.0,
+            precipitationProbability: 80,
+            weatherCode: 95,
+          },
+        ],
       });
 
       await expect(
-        service.submitCancellationRequest(bookingId.toString(), customerId.toString(), {
-          reason: 'Mưa to gió lớn không thể đến nơi',
-          evidencePhotos: [],
-        }),
+        service.submitCancellationRequest(
+          bookingId.toString(),
+          customerId.toString(),
+          {
+            reason: 'Mưa to gió lớn không thể đến nơi',
+            evidencePhotos: [],
+          },
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -298,7 +343,14 @@ describe('WeatherCancellationsService', () => {
       mockOpenMeteoService.getHourlyMetrics.mockResolvedValue([]);
       mockScoringService.assessTimeSlot.mockReturnValue({
         isRedAlert: true,
-        hourlyBreakdown: [{ isRedAlert: true, precipitationMm: 6.5, precipitationProbability: 90, weatherCode: 95 }],
+        hourlyBreakdown: [
+          {
+            isRedAlert: true,
+            precipitationMm: 6.5,
+            precipitationProbability: 90,
+            weatherCode: 95,
+          },
+        ],
       });
 
       const createdDoc = {
@@ -314,11 +366,16 @@ describe('WeatherCancellationsService', () => {
       const result = await service.submitCancellationRequest(
         bookingId.toString(),
         customerId.toString(),
-        { reason: 'Đã hết lượt đổi ngày, thời tiết vẫn bão cấp 8.', evidencePhotos: [] },
+        {
+          reason: 'Đã hết lượt đổi ngày, thời tiết vẫn bão cấp 8.',
+          evidencePhotos: [],
+        },
       );
 
       expect(result).toBeDefined();
-      expect(result.eligibilityBasis).toBe(CancellationEligibilityBasis.BASIS_A_QUOTA_EXHAUSTED);
+      expect(result.eligibilityBasis).toBe(
+        CancellationEligibilityBasis.BASIS_A_QUOTA_EXHAUSTED,
+      );
       expect(mockBooking.hasPendingWeatherAction).toBe(true);
       expect(mockBooking.activeWeatherCancellationId).toEqual(requestId);
       expect(mockBooking.disputeDeferredUntil).toBeDefined();
@@ -350,7 +407,14 @@ describe('WeatherCancellationsService', () => {
       mockOpenMeteoService.getHourlyMetrics.mockResolvedValue([]);
       mockScoringService.assessTimeSlot.mockReturnValue({
         isRedAlert: true,
-        hourlyBreakdown: [{ isRedAlert: true, precipitationMm: 8.0, precipitationProbability: 95, weatherCode: 96 }],
+        hourlyBreakdown: [
+          {
+            isRedAlert: true,
+            precipitationMm: 8.0,
+            precipitationProbability: 95,
+            weatherCode: 96,
+          },
+        ],
       });
 
       const createdDoc = {
@@ -369,7 +433,9 @@ describe('WeatherCancellationsService', () => {
         validDto,
       );
 
-      expect(result.eligibilityBasis).toBe(CancellationEligibilityBasis.BASIS_B_FORCE_MAJEURE);
+      expect(result.eligibilityBasis).toBe(
+        CancellationEligibilityBasis.BASIS_B_FORCE_MAJEURE,
+      );
       expect(mockBooking.hasPendingWeatherAction).toBe(true);
       expect(mockBooking.activeWeatherCancellationId).toEqual(requestId);
       expect(mockBooking.save).toHaveBeenCalled();
@@ -379,7 +445,10 @@ describe('WeatherCancellationsService', () => {
   describe('getBookingCancellationRequest', () => {
     it('should throw BadRequestException if bookingId is invalid', async () => {
       await expect(
-        service.getBookingCancellationRequest('invalid-id', customerId.toString()),
+        service.getBookingCancellationRequest(
+          'invalid-id',
+          customerId.toString(),
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -387,7 +456,10 @@ describe('WeatherCancellationsService', () => {
       mockBookingModel.findById.mockResolvedValue(null);
 
       await expect(
-        service.getBookingCancellationRequest(bookingId.toString(), customerId.toString()),
+        service.getBookingCancellationRequest(
+          bookingId.toString(),
+          customerId.toString(),
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -399,7 +471,10 @@ describe('WeatherCancellationsService', () => {
       });
 
       await expect(
-        service.getBookingCancellationRequest(bookingId.toString(), customerId.toString()),
+        service.getBookingCancellationRequest(
+          bookingId.toString(),
+          customerId.toString(),
+        ),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -425,9 +500,9 @@ describe('WeatherCancellationsService', () => {
 
   describe('getCancellationRequestById', () => {
     it('should throw BadRequestException for invalid id', async () => {
-      await expect(service.getCancellationRequestById('invalid')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.getCancellationRequestById('invalid'),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw NotFoundException if not found', async () => {
@@ -437,9 +512,9 @@ describe('WeatherCancellationsService', () => {
       };
       mockCancellationModel.findById.mockReturnValue(queryObj);
 
-      await expect(service.getCancellationRequestById(requestId.toString())).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.getCancellationRequestById(requestId.toString()),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should return populated cancellation request', async () => {
@@ -449,7 +524,9 @@ describe('WeatherCancellationsService', () => {
       };
       mockCancellationModel.findById.mockReturnValue(queryObj);
 
-      const result = await service.getCancellationRequestById(requestId.toString());
+      const result = await service.getCancellationRequestById(
+        requestId.toString(),
+      );
       expect(result._id).toEqual(requestId);
     });
   });
@@ -468,7 +545,10 @@ describe('WeatherCancellationsService', () => {
         exec: jest.fn().mockResolvedValue(1),
       });
 
-      const res = await service.listCancellationRequests({ page: 1, limit: 10 });
+      const res = await service.listCancellationRequests({
+        page: 1,
+        limit: 10,
+      });
       expect(res.items.length).toBe(1);
       expect(res.total).toBe(1);
     });
@@ -487,9 +567,13 @@ describe('WeatherCancellationsService', () => {
       mockCancellationModel.findById.mockResolvedValue(null);
 
       await expect(
-        service.adminReviewCancellation(requestId.toString(), adminId.toString(), {
-          decision: CancellationReviewStatus.REJECTED,
-        }),
+        service.adminReviewCancellation(
+          requestId.toString(),
+          adminId.toString(),
+          {
+            decision: CancellationReviewStatus.REJECTED,
+          },
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -500,9 +584,13 @@ describe('WeatherCancellationsService', () => {
       });
 
       await expect(
-        service.adminReviewCancellation(requestId.toString(), adminId.toString(), {
-          decision: CancellationReviewStatus.REJECTED,
-        }),
+        service.adminReviewCancellation(
+          requestId.toString(),
+          adminId.toString(),
+          {
+            decision: CancellationReviewStatus.REJECTED,
+          },
+        ),
       ).rejects.toThrow(ConflictException);
     });
 
@@ -522,10 +610,14 @@ describe('WeatherCancellationsService', () => {
       mockCancellationModel.findById.mockResolvedValue(mockRequest);
       mockBookingModel.findById.mockResolvedValue(mockBooking);
 
-      const res = await service.adminReviewCancellation(requestId.toString(), adminId.toString(), {
-        decision: CancellationReviewStatus.REJECTED,
-        notes: 'Bằng chứng vé máy bay không trùng khớp họ tên',
-      });
+      const res = await service.adminReviewCancellation(
+        requestId.toString(),
+        adminId.toString(),
+        {
+          decision: CancellationReviewStatus.REJECTED,
+          notes: 'Bằng chứng vé máy bay không trùng khớp họ tên',
+        },
+      );
 
       expect(res.status).toBe(CancellationReviewStatus.REJECTED);
       expect(mockBooking.hasPendingWeatherAction).toBe(false);
@@ -554,19 +646,27 @@ describe('WeatherCancellationsService', () => {
       mockCancellationModel.findById.mockResolvedValue(mockRequest);
       mockBookingModel.findById.mockResolvedValue(mockBooking);
       mockPaymentModel.find.mockReturnValue({
-        lean: jest.fn().mockResolvedValue([
-          { _id: new Types.ObjectId(), amount: 1500000, refundedAmount: 0 },
-        ]),
+        lean: jest
+          .fn()
+          .mockResolvedValue([
+            { _id: new Types.ObjectId(), amount: 1500000, refundedAmount: 0 },
+          ]),
       });
 
       const refundDocId = new Types.ObjectId();
       mockRefundRequestModel.create.mockResolvedValue({ _id: refundDocId });
-      mockRefundOutboxService.enqueueRefund.mockResolvedValue({ _id: new Types.ObjectId() });
-
-      const res = await service.adminReviewCancellation(requestId.toString(), adminId.toString(), {
-        decision: CancellationReviewStatus.APPROVED_FULL_REFUND,
-        notes: 'Chấp thuận hoàn toàn bộ do bão đổ bộ trực tiếp',
+      mockRefundOutboxService.enqueueRefund.mockResolvedValue({
+        _id: new Types.ObjectId(),
       });
+
+      const res = await service.adminReviewCancellation(
+        requestId.toString(),
+        adminId.toString(),
+        {
+          decision: CancellationReviewStatus.APPROVED_FULL_REFUND,
+          notes: 'Chấp thuận hoàn toàn bộ do bão đổ bộ trực tiếp',
+        },
+      );
 
       expect(res.status).toBe(CancellationReviewStatus.APPROVED_FULL_REFUND);
       expect(mockBooking.status).toBe(BookingStatus.Cancelled);
@@ -601,10 +701,14 @@ describe('WeatherCancellationsService', () => {
       });
 
       await expect(
-        service.adminReviewCancellation(requestId.toString(), adminId.toString(), {
-          decision: CancellationReviewStatus.APPROVED_PARTIAL_REFUND,
-          approvedRefundAmount: 2000000, // exceeds 1,000,000
-        }),
+        service.adminReviewCancellation(
+          requestId.toString(),
+          adminId.toString(),
+          {
+            decision: CancellationReviewStatus.APPROVED_PARTIAL_REFUND,
+            approvedRefundAmount: 2000000, // exceeds 1,000,000
+          },
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -630,15 +734,21 @@ describe('WeatherCancellationsService', () => {
       mockPaymentModel.find.mockReturnValue({
         lean: jest.fn().mockResolvedValue([{ amount: 1000000 }]),
       });
-      mockRefundRequestModel.create.mockResolvedValue({ _id: new Types.ObjectId() });
+      mockRefundRequestModel.create.mockResolvedValue({
+        _id: new Types.ObjectId(),
+      });
       mockRefundOutboxService.enqueueRefund.mockResolvedValue({});
 
-      const res = await service.adminReviewCancellation(requestId.toString(), adminId.toString(), {
-        decision: CancellationReviewStatus.APPROVED_PARTIAL_REFUND,
-        approvedRefundAmount: 700000,
-        penaltyDeducted: 300000,
-        notes: 'Khấu trừ 300.000đ chi phí chuẩn bị cổ phục',
-      });
+      const res = await service.adminReviewCancellation(
+        requestId.toString(),
+        adminId.toString(),
+        {
+          decision: CancellationReviewStatus.APPROVED_PARTIAL_REFUND,
+          approvedRefundAmount: 700000,
+          penaltyDeducted: 300000,
+          notes: 'Khấu trừ 300.000đ chi phí chuẩn bị cổ phục',
+        },
+      );
 
       expect(res.status).toBe(CancellationReviewStatus.APPROVED_PARTIAL_REFUND);
       expect(res.reviewDecision?.approvedRefundAmount).toBe(700000);

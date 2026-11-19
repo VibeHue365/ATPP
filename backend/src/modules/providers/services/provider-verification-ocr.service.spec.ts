@@ -45,7 +45,9 @@ describe('ProviderVerificationService OCR', () => {
       fullName: ownerName,
       idNumberMasked: '*****5678',
     });
-    expect((result.extractedFields as Record<string, string>).idNumberHash).toHaveLength(64);
+    expect(
+      (result.extractedFields as Record<string, string>).idNumberHash,
+    ).toHaveLength(64);
   });
 
   it('returns low confidence before a profile mismatch warning', async () => {

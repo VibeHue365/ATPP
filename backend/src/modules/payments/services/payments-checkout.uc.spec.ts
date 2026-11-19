@@ -4,7 +4,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { BookingStatus, BookingType } from '../../bookings/schemas/booking.schema';
+import {
+  BookingStatus,
+  BookingType,
+} from '../../bookings/schemas/booking.schema';
 import { PaymentPurpose, PaymentStatus } from '../schemas/payment.schema';
 import { PaymentsService } from './payments.service';
 
@@ -35,11 +38,9 @@ function createService(
     ),
   };
   const providerModel = {
-    findOne: jest
-      .fn()
-      .mockReturnValue({
-        lean: () => ({ exec: () => Promise.resolve(options.provider ?? null) }),
-      }),
+    findOne: jest.fn().mockReturnValue({
+      lean: () => ({ exec: () => Promise.resolve(options.provider ?? null) }),
+    }),
   };
   const refundPaymentModel = {
     findOne: jest.fn().mockReturnValue({ exec: () => Promise.resolve(null) }),

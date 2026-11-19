@@ -151,7 +151,9 @@ export class BookingsSchedulerService {
    */
   @Cron(CronExpression.EVERY_HOUR)
   async autoCompleteReturnedRentals() {
-    this.logger.log('Skipping auto-complete for rental bookings (requires manual handover & deposit settlement inspection).');
+    this.logger.log(
+      'Skipping auto-complete for rental bookings (requires manual handover & deposit settlement inspection).',
+    );
   }
 
   /**
@@ -231,7 +233,9 @@ export class BookingsSchedulerService {
    */
   @Cron(CronExpression.EVERY_HOUR)
   async autoUnlockMaintenanceItems() {
-    this.logger.log('Skipping auto-unlock for LOCKED items: unlocking requires provider/admin action with audit note.');
+    this.logger.log(
+      'Skipping auto-unlock for LOCKED items: unlocking requires provider/admin action with audit note.',
+    );
   }
 
   @Cron(CronExpression.EVERY_5_MINUTES)
@@ -259,7 +263,9 @@ export class BookingsSchedulerService {
           status: { $in: [BookingStatus.Completed, BookingStatus.Returned] },
           statusTimeline: {
             $elemMatch: {
-              status: { $in: [BookingStatus.Completed, BookingStatus.Returned] },
+              status: {
+                $in: [BookingStatus.Completed, BookingStatus.Returned],
+              },
               changedAt: { $gte: oldestEligible, $lte: reminderCutoff },
             },
           },
@@ -287,7 +293,7 @@ export class BookingsSchedulerService {
         await this.notificationsService.createNotification(
           customerId,
           'Chia sẻ trải nghiệm của bạn',
-          `Đơn hàng ${booking.bookingCode} đã hoàn thành. Hãy dành ít phút đánh giá sản phẩm và dịch vụ để giúp VibeHue phục vụ bạn tốt hơn!`,
+          `Đơn hàng ${booking.bookingCode} đã hoàn thành. Hãy dành ít phút đánh giá sản phẩm và dịch vụ để giúp TàGo phục vụ bạn tốt hơn!`,
           NotificationType.Booking,
           {
             bookingId: booking._id,
@@ -342,7 +348,9 @@ export class BookingsSchedulerService {
 
     try {
       const scheduleIds = schedules.map((s) => s._id);
-      const bookingIds = [...new Set(schedules.map((s) => s.bookingId.toString()))];
+      const bookingIds = [
+        ...new Set(schedules.map((s) => s.bookingId.toString())),
+      ];
 
       // Batch query 1: Fetch all bookings for these schedules in 1 query
       const bookings = await this.bookingModel
@@ -434,7 +442,10 @@ export class BookingsSchedulerService {
         }
       }
     } catch (batchErr) {
-      this.logger.error(`Error in batch reminder processing (${reminderType}):`, batchErr);
+      this.logger.error(
+        `Error in batch reminder processing (${reminderType}):`,
+        batchErr,
+      );
     }
   }
 
@@ -846,7 +857,10 @@ export class BookingsSchedulerService {
         } else if (photoItem.shootDate) {
           let endHour = 23;
           let endMin = 59;
-          if (photoItem.shootTimeSlot && photoItem.shootTimeSlot.includes('-')) {
+          if (
+            photoItem.shootTimeSlot &&
+            photoItem.shootTimeSlot.includes('-')
+          ) {
             const parts = photoItem.shootTimeSlot.split('-');
             if (parts.length >= 2) {
               const [h, m] = parts[1].trim().split(':').map(Number);

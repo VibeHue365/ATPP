@@ -89,13 +89,13 @@ export const ComboSidebarFilter: React.FC<ComboSidebarFilterProps> = ({
 
   const handleSelectPricePreset = (preset: string) => {
     if (values.presetPrice === preset) {
-      onChange({ presetPrice: null, minPrice: 500000, maxPrice: 5000000 });
+      onChange({ presetPrice: null, minPrice: 0, maxPrice: 5000000 });
       return;
     }
-    let min = 500000;
+    let min = 0;
     let max = 5000000;
     if (preset === 'under_1m') {
-      min = 500000;
+      min = 0;
       max = 1000000;
     } else if (preset === '1m_2m') {
       min = 1000000;
@@ -355,9 +355,9 @@ export const ComboSidebarFilter: React.FC<ComboSidebarFilterProps> = ({
               <div className="price-range-slider-wrapper">
                 <input
                   type="range"
-                  min={500000}
+                  min={0}
                   max={5000000}
-                  step={100000}
+                  step={50000}
                   value={values.maxPrice}
                   onChange={(e) =>
                     onChange({ maxPrice: Number(e.target.value), presetPrice: null })

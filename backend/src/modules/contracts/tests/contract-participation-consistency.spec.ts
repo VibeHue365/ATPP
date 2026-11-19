@@ -42,7 +42,8 @@ describe('ContractPolicyService participation consistency', () => {
     const connection = {
       db: {
         collection: jest.fn((name: string) => {
-          if (name !== 'providers') throw new Error(`Unexpected collection ${name}`);
+          if (name !== 'providers')
+            throw new Error(`Unexpected collection ${name}`);
           return {
             findOne: jest.fn().mockResolvedValue({
               _id: providerId,
@@ -58,7 +59,9 @@ describe('ContractPolicyService participation consistency', () => {
     return new ContractPolicyService(
       connection as any,
       acceptanceModel as any,
-      { currentPoliciesForProvider: jest.fn().mockResolvedValue(policies) } as any,
+      {
+        currentPoliciesForProvider: jest.fn().mockResolvedValue(policies),
+      } as any,
       { getApproved: jest.fn().mockReturnValue(mechanism) } as any,
       { getApproved: jest.fn().mockReturnValue(template) } as any,
     );
@@ -72,8 +75,9 @@ describe('ContractPolicyService participation consistency', () => {
 
   it('suspends an acceptance recorded by a user other than the provider owner', async () => {
     await expect(
-      createService({ acceptedByUserId: new Types.ObjectId() })
-        .getProviderContractParticipationStatus(providerId),
+      createService({
+        acceptedByUserId: new Types.ObjectId(),
+      }).getProviderContractParticipationStatus(providerId),
     ).resolves.toMatchObject({
       status: 'CONTRACT_SUSPENDED',
       reason: 'ACCEPTOR_MISMATCH',
@@ -82,8 +86,9 @@ describe('ContractPolicyService participation consistency', () => {
 
   it('suspends an acceptance whose mechanism version is stale even when its hash matches', async () => {
     await expect(
-      createService({ mechanismVersion: 'mechanism-v1' })
-        .getProviderContractParticipationStatus(providerId),
+      createService({
+        mechanismVersion: 'mechanism-v1',
+      }).getProviderContractParticipationStatus(providerId),
     ).resolves.toMatchObject({
       status: 'CONTRACT_SUSPENDED',
       reason: 'MECHANISM_CHANGED',

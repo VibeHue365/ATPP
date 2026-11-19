@@ -1,6 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { BookingStatus, PaymentStatus as BookingPaymentStatus } from '../../bookings/schemas/booking.schema';
+import {
+  BookingStatus,
+  PaymentStatus as BookingPaymentStatus,
+} from '../../bookings/schemas/booking.schema';
 import { SettlementStatus } from '../constants/settlement-status.enum';
 import { SettlementsService } from './settlements.service';
 
@@ -22,7 +25,9 @@ describe('SettlementsService', () => {
   const adjustmentModel = { find: jest.fn(), updateOne: jest.fn() };
   const providerModel = {
     find: jest.fn(),
-    findById: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue({ userId: new Types.ObjectId() }) }),
+    findById: jest.fn().mockReturnValue({
+      lean: jest.fn().mockResolvedValue({ userId: new Types.ObjectId() }),
+    }),
   };
   const calculationService = { calculateSettlementsForBooking: jest.fn() };
   const codeService = { generateSettlementCode: jest.fn() };
@@ -61,12 +66,17 @@ describe('SettlementsService', () => {
 
   function mockItems(items: Array<{ providerId: Types.ObjectId }>) {
     const secondPopulate = jest.fn().mockResolvedValue(items);
-    const firstPopulate = jest.fn().mockReturnValue({ populate: secondPopulate });
+    const firstPopulate = jest
+      .fn()
+      .mockReturnValue({ populate: secondPopulate });
     bookingItemModel.find.mockReturnValue({ populate: firstPopulate });
   }
 
   /** The service reads existing rows directly, then reloads the sorted result. */
-  function mockSettlementReads(existing: unknown[], reloaded: unknown[] = existing) {
+  function mockSettlementReads(
+    existing: unknown[],
+    reloaded: unknown[] = existing,
+  ) {
     settlementModel.find
       .mockReturnValueOnce(Promise.resolve(existing))
       .mockReturnValueOnce({ sort: jest.fn().mockResolvedValue(reloaded) });
@@ -80,7 +90,9 @@ describe('SettlementsService', () => {
     await expect(
       service.createSettlementsForBooking(new Types.ObjectId().toString()),
     ).rejects.toBeInstanceOf(BadRequestException);
-    expect(calculationService.calculateSettlementsForBooking).not.toHaveBeenCalled();
+    expect(
+      calculationService.calculateSettlementsForBooking,
+    ).not.toHaveBeenCalled();
   });
 
   it('does not create settlements before the booking is paid', async () => {
@@ -91,7 +103,9 @@ describe('SettlementsService', () => {
     await expect(
       service.createSettlementsForBooking(new Types.ObjectId().toString()),
     ).rejects.toBeInstanceOf(BadRequestException);
-    expect(calculationService.calculateSettlementsForBooking).not.toHaveBeenCalled();
+    expect(
+      calculationService.calculateSettlementsForBooking,
+    ).not.toHaveBeenCalled();
   });
 
   it('creates one settlement per provider and remains idempotent', async () => {
@@ -115,8 +129,12 @@ describe('SettlementsService', () => {
     bookingModel.findById.mockResolvedValue(currentBooking);
     mockItems(sourceItems);
     mockSettlementReads([], created);
-    paymentModel.findOne.mockReturnValue({ sort: jest.fn().mockResolvedValue(null) });
-    calculationService.calculateSettlementsForBooking.mockResolvedValue(payloads);
+    paymentModel.findOne.mockReturnValue({
+      sort: jest.fn().mockResolvedValue(null),
+    });
+    calculationService.calculateSettlementsForBooking.mockResolvedValue(
+      payloads,
+    );
     codeService.generateSettlementCode
       .mockResolvedValueOnce('STL-1')
       .mockResolvedValueOnce('STL-2');
@@ -127,8 +145,14 @@ describe('SettlementsService', () => {
     ).resolves.toEqual(created);
     expect(settlementModel.insertMany).toHaveBeenCalledWith(
       expect.arrayContaining([
-        expect.objectContaining({ settlementCode: 'STL-1', providerId: providerA }),
-        expect.objectContaining({ settlementCode: 'STL-2', providerId: providerB }),
+        expect.objectContaining({
+          settlementCode: 'STL-1',
+          providerId: providerA,
+        }),
+        expect.objectContaining({
+          settlementCode: 'STL-2',
+          providerId: providerB,
+        }),
       ]),
       { ordered: false },
     );
@@ -153,7 +177,9 @@ describe('SettlementsService', () => {
     bookingModel.findById.mockResolvedValue(currentBooking);
     mockItems([{ providerId: providerA }, { providerId: providerB }]);
     mockSettlementReads([existingA], [existingA, createdB]);
-    paymentModel.findOne.mockReturnValue({ sort: jest.fn().mockResolvedValue(null) });
+    paymentModel.findOne.mockReturnValue({
+      sort: jest.fn().mockResolvedValue(null),
+    });
     calculationService.calculateSettlementsForBooking.mockResolvedValue([
       { bookingId: currentBooking._id, providerId: providerA },
       { bookingId: currentBooking._id, providerId: providerB },
@@ -165,7 +191,12 @@ describe('SettlementsService', () => {
       service.createSettlementsForBooking(currentBooking._id.toString()),
     ).resolves.toEqual([existingA, createdB]);
     expect(settlementModel.insertMany).toHaveBeenCalledWith(
-      [expect.objectContaining({ providerId: providerB, settlementCode: 'STL-B' })],
+      [
+        expect.objectContaining({
+          providerId: providerB,
+          settlementCode: 'STL-B',
+        }),
+      ],
       { ordered: false },
     );
   });
@@ -178,7 +209,11 @@ describe('SettlementsService', () => {
       status: SettlementStatus.ReadyToSettle,
       providerId: new Types.ObjectId(),
     };
-    const held = { ...ready, status: SettlementStatus.OnHold, holdReason: 'DISPUTE' };
+    const held = {
+      ...ready,
+      status: SettlementStatus.OnHold,
+      holdReason: 'DISPUTE',
+    };
     const released = { ...ready, holdReason: null };
     settlementModel.findById
       .mockResolvedValueOnce(ready)
@@ -187,7 +222,9 @@ describe('SettlementsService', () => {
       .mockResolvedValueOnce(held)
       .mockResolvedValueOnce(released);
 
-    await service.holdSettlement(actorId, settlementId.toString(), { reason: 'DISPUTE' });
+    await service.holdSettlement(actorId, settlementId.toString(), {
+      reason: 'DISPUTE',
+    });
     expect(settlementModel.findOneAndUpdate).toHaveBeenNthCalledWith(
       1,
       { _id: settlementId, status: SettlementStatus.ReadyToSettle },
@@ -195,7 +232,9 @@ describe('SettlementsService', () => {
       { new: true },
     );
 
-    await service.releaseSettlement(actorId, settlementId.toString(), { reason: 'RESOLVED' });
+    await service.releaseSettlement(actorId, settlementId.toString(), {
+      reason: 'RESOLVED',
+    });
     expect(settlementModel.findOneAndUpdate).toHaveBeenNthCalledWith(
       2,
       { _id: settlementId, status: SettlementStatus.OnHold },
@@ -219,7 +258,9 @@ describe('SettlementsService', () => {
       payoutReference: 'BANK-REF-001',
     };
     settlementModel.findById.mockResolvedValue(ready);
-    adjustmentModel.find.mockReturnValue({ sort: jest.fn().mockResolvedValue([]) });
+    adjustmentModel.find.mockReturnValue({
+      sort: jest.fn().mockResolvedValue([]),
+    });
     settlementModel.findOneAndUpdate.mockResolvedValue(settled);
     const session = {
       withTransaction: jest.fn(async (work: () => Promise<void>) => work()),

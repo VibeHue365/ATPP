@@ -128,9 +128,7 @@ export class PhotographyHoldService {
     idempotencyKey: string,
   ) {
     if (!Types.ObjectId.isValid(customerIdValue)) {
-      throw new BadRequestException(
-        'Tài khoản đặt lịch không hợp lệ.',
-      );
+      throw new BadRequestException('Tài khoản đặt lịch không hợp lệ.');
     }
     if (!Types.ObjectId.isValid(dto.packageId)) {
       throw new BadRequestException('Gói chụp không hợp lệ.');
@@ -150,9 +148,7 @@ export class PhotographyHoldService {
       status: PackageStatus.Active,
     });
     if (!packagePreview) {
-      throw new NotFoundException(
-        'Không tìm thấy gói chụp đang hoạt động.',
-      );
+      throw new NotFoundException('Không tìm thấy gói chụp đang hoạt động.');
     }
 
     // The preflight checks working hours, blocked days and existing legacy data.
@@ -190,9 +186,7 @@ export class PhotographyHoldService {
     idempotencyKey: string,
   ) {
     if (!Types.ObjectId.isValid(customerIdValue)) {
-      throw new BadRequestException(
-        'Tài khoản đặt lịch không hợp lệ.',
-      );
+      throw new BadRequestException('Tài khoản đặt lịch không hợp lệ.');
     }
     if (!Types.ObjectId.isValid(dto.packageId)) {
       throw new BadRequestException('Gói chụp không hợp lệ.');
@@ -212,9 +206,7 @@ export class PhotographyHoldService {
       status: PackageStatus.Active,
     });
     if (!packagePreview) {
-      throw new NotFoundException(
-        'Không tìm thấy gói chụp đang hoạt động.',
-      );
+      throw new NotFoundException('Không tìm thấy gói chụp đang hoạt động.');
     }
 
     const preflight = await this.quoteService.quote(
@@ -457,8 +449,7 @@ export class PhotographyHoldService {
       pricingSummary: {
         subTotal,
         depositTotal: productDepositTotal,
-        discountAmount:
-          comboDiscountTotal + pricingResult.voucherDiscountTotal,
+        discountAmount: comboDiscountTotal + pricingResult.voucherDiscountTotal,
         comboDiscountTotal,
         voucherDiscountTotal: pricingResult.voucherDiscountTotal,
         platformSubsidyAmount: pricingResult.platformSubsidyAmount,
@@ -618,8 +609,7 @@ export class PhotographyHoldService {
           priceBreakdown: [],
           comboDiscountPercent: 10,
           comboDiscountAmount: itemDiscount,
-          shopVoucherDiscountAmount:
-            allocation?.shopVoucherDiscountAmount || 0,
+          shopVoucherDiscountAmount: allocation?.shopVoucherDiscountAmount || 0,
           platformVoucherDiscountAmount:
             allocation?.platformVoucherDiscountAmount || 0,
         });
@@ -645,15 +635,19 @@ export class PhotographyHoldService {
     const firstProductRes = aodaiReservations[0];
     if (firstProductRes?.product?._id) {
       try {
-        await this.bookingModel.db.model('ComboPromotion').updateOne(
-          {
-            providerId: photographyPackage.providerId,
-            productId: firstProductRes.product._id,
-            photographyPackageId: photographyPackage._id,
-            status: 'ACTIVE',
-          },
-          { $inc: { usedCount: 1 } },
-        ).session(session).exec();
+        await this.bookingModel.db
+          .model('ComboPromotion')
+          .updateOne(
+            {
+              providerId: photographyPackage.providerId,
+              productId: firstProductRes.product._id,
+              photographyPackageId: photographyPackage._id,
+              status: 'ACTIVE',
+            },
+            { $inc: { usedCount: 1 } },
+          )
+          .session(session)
+          .exec();
       } catch (e) {
         console.warn('Failed to increment ComboPromotion usedCount:', e);
       }
@@ -680,9 +674,7 @@ export class PhotographyHoldService {
       .session(session)
       .exec();
     if (!product) {
-      throw new NotFoundException(
-        'Không tìm thấy áo dài đang hoạt động.',
-      );
+      throw new NotFoundException('Không tìm thấy áo dài đang hoạt động.');
     }
 
     const provider = await this.providerModel
@@ -700,9 +692,7 @@ export class PhotographyHoldService {
       product.sizes.length &&
       !product.sizes.some((size) => size.trim().toUpperCase() === selectedSize)
     ) {
-      throw new BadRequestException(
-        'Kích cỡ áo dài đã chọn không khả dụng.',
-      );
+      throw new BadRequestException('Kích cỡ áo dài đã chọn không khả dụng.');
     }
     if (
       product.colors.length &&
@@ -710,9 +700,7 @@ export class PhotographyHoldService {
         (color) => this.normalizeInventoryColor(color) === selectedColor,
       )
     ) {
-      throw new BadRequestException(
-        'Màu sắc áo dài đã chọn không khả dụng.',
-      );
+      throw new BadRequestException('Màu sắc áo dài đã chọn không khả dụng.');
     }
 
     const { rentalFrom, rentalTo } = this.toRentalRange(
@@ -727,9 +715,7 @@ export class PhotographyHoldService {
     const rentalDurationDays =
       Math.floor((rentalTo.getTime() - rentalFrom.getTime()) / 86_400_000) + 1;
     if (rentalDurationDays > 30) {
-      throw new BadRequestException(
-        'Thời gian thuê áo dài tối đa là 30 ngày.',
-      );
+      throw new BadRequestException('Thời gian thuê áo dài tối đa là 30 ngày.');
     }
 
     const rentalFromKey = this.toBusinessDateKey(rentalFrom);
@@ -831,7 +817,7 @@ export class PhotographyHoldService {
     }
 
     return {
-      product: product as Product & { _id: Types.ObjectId },
+      product: product,
       inventoryItemIds: selectedIds,
       rentalFrom,
       rentalTo,
@@ -1173,7 +1159,9 @@ export class PhotographyHoldService {
       expiredBookingIds.add(schedule.bookingId.toString());
     }
     if (!expiredCount) return 0;
-    const bookingIds = [...expiredBookingIds].map((id) => new Types.ObjectId(id));
+    const bookingIds = [...expiredBookingIds].map(
+      (id) => new Types.ObjectId(id),
+    );
     await this.inventoryReservationModel.updateMany(
       {
         bookingId: { $in: bookingIds },

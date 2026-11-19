@@ -65,7 +65,14 @@ export function PayoutsPanel({ isLoadingProvider, payouts, setSelectedBookingId,
                         <td style={{ padding: '16px 20px', fontWeight: 700, color: '#1F2937' }}>{(() => { const bId = p.bookingId?._id || (typeof p.bookingId === 'string' ? p.bookingId : (p.bookingId?.id || null)); return bId ? `#${String(bId).slice(-6).toUpperCase()}` : '—'; })()}</td>
                         <td style={{ padding: '16px 20px', fontWeight: 700 }}>{p.settlementCode || p.id}</td>
                         <td style={{ padding: '16px 20px', fontWeight: 600, color: 'var(--color-primary-dark)' }}>{p.bookingId?.bookingCode || p.bookingCode || '—'}</td>
-                        <td style={{ padding: '16px 20px', textAlign: 'right', fontWeight: 800, color: '#166534' }}>{(p.payableAmount ?? p.netAmount ?? p.amount ?? 0).toLocaleString('vi-VN')}đ</td>
+                        <td style={{ padding: '16px 20px', textAlign: 'right', fontWeight: 800, color: '#166534' }}>
+                          {(p.payableAmount ?? p.netAmount ?? p.amount ?? 0).toLocaleString('vi-VN')}đ
+                          {p.compensationAmount && p.compensationAmount > 0 ? (
+                            <span style={{ display: 'block', fontSize: '11px', color: '#15803D', fontWeight: 600, marginTop: '2px' }}>
+                              +{p.compensationAmount.toLocaleString('vi-VN')}đ bồi thường cọc
+                            </span>
+                          ) : null}
+                        </td>
                         <td style={{ padding: '16px 20px', textAlign: 'right', color: 'var(--color-text-secondary)' }}>
                           {(p.grossAmount ?? 0).toLocaleString('vi-VN')}đ
                         </td>

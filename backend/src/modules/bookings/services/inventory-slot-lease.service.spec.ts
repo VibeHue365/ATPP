@@ -2,7 +2,10 @@ import { ConflictException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { InventorySlotLeaseService } from './inventory-slot-lease.service';
 import { TimeSlotEngineService } from './time-slot-engine.service';
-import { SlotLeasePurpose, SlotLeaseStatus } from '../schemas/inventory-slot-lease.schema';
+import {
+  SlotLeasePurpose,
+  SlotLeaseStatus,
+} from '../schemas/inventory-slot-lease.schema';
 
 describe('InventorySlotLeaseService', () => {
   let service: InventorySlotLeaseService;
@@ -13,11 +16,13 @@ describe('InventorySlotLeaseService', () => {
     timeEngine = new TimeSlotEngineService();
     mockLeaseModel = {
       insertMany: jest.fn(),
-      updateMany: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }) }),
+      updateMany: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+      }),
       find: jest.fn(),
       findOne: jest.fn(),
     };
-    service = new InventorySlotLeaseService(mockLeaseModel as any, timeEngine);
+    service = new InventorySlotLeaseService(mockLeaseModel, timeEngine);
   });
 
   describe('isSlotConflictError', () => {
@@ -25,7 +30,8 @@ describe('InventorySlotLeaseService', () => {
       const err = {
         code: 11000,
         keyPattern: { inventoryItemId: 1, dateStr: 1, slotIndex: 1 },
-        message: 'E11000 duplicate key error collection: inventory_slot_leases index: inventory_slot_leases_item_date_slot_unique',
+        message:
+          'E11000 duplicate key error collection: inventory_slot_leases index: inventory_slot_leases_item_date_slot_unique',
       };
       expect(service.isSlotConflictError(err)).toBe(true);
     });
@@ -40,7 +46,9 @@ describe('InventorySlotLeaseService', () => {
     });
 
     it('returns false for non-11000 error', () => {
-      expect(service.isSlotConflictError(new Error('Generic database error'))).toBe(false);
+      expect(
+        service.isSlotConflictError(new Error('Generic database error')),
+      ).toBe(false);
     });
   });
 
@@ -66,8 +74,14 @@ describe('InventorySlotLeaseService', () => {
       expect(result).toHaveLength(2);
       expect(mockLeaseModel.insertMany).toHaveBeenCalledWith(
         expect.arrayContaining([
-          expect.objectContaining({ slotIndex: 1, purpose: SlotLeasePurpose.Rental }),
-          expect.objectContaining({ slotIndex: 2, purpose: SlotLeasePurpose.Turnaround }),
+          expect.objectContaining({
+            slotIndex: 1,
+            purpose: SlotLeasePurpose.Rental,
+          }),
+          expect.objectContaining({
+            slotIndex: 2,
+            purpose: SlotLeasePurpose.Turnaround,
+          }),
         ]),
         { session: undefined },
       );
@@ -81,7 +95,9 @@ describe('InventorySlotLeaseService', () => {
       };
       mockLeaseModel.insertMany.mockRejectedValue(duplicateErr);
 
-      await expect(service.acquireUpfrontBlockLease(input)).rejects.toThrow(ConflictException);
+      await expect(service.acquireUpfrontBlockLease(input)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -97,12 +113,20 @@ describe('InventorySlotLeaseService', () => {
       mockLeaseModel.find.mockReturnValue({
         session: jest.fn().mockReturnValue({
           exec: jest.fn().mockResolvedValue([
-            { _id: lease3Id, dateStr: '2026-11-16', slotIndex: 3, purpose: SlotLeasePurpose.Turnaround },
+            {
+              _id: lease3Id,
+              dateStr: '2026-11-16',
+              slotIndex: 3,
+              purpose: SlotLeasePurpose.Turnaround,
+            },
           ]),
         }),
       });
 
-      const releasedCount = await service.reconcileTurnaroundLeases(bookingItemId, availableFrom);
+      const releasedCount = await service.reconcileTurnaroundLeases(
+        bookingItemId,
+        availableFrom,
+      );
       expect(releasedCount).toBe(1);
       expect(mockLeaseModel.updateMany).toHaveBeenCalledWith(
         { _id: { $in: [lease3Id] } },

@@ -13,7 +13,10 @@ import {
   PayOSRefundService,
 } from '../../payments/services/payos-refund.service';
 import { Payment, PaymentStatus } from '../../payments/schemas/payment.schema';
-import { RefundRequest, RefundStatus } from '../../payments/schemas/refund-request.schema';
+import {
+  RefundRequest,
+  RefundStatus,
+} from '../../payments/schemas/refund-request.schema';
 import { Booking } from '../../bookings/schemas/booking.schema';
 import { WeatherNotificationService } from './weather-notification.service';
 
@@ -43,7 +46,9 @@ export class RefundOutboxSweeperService {
   @Cron('0 */2 * * * *')
   async sweepPendingRefunds(): Promise<number> {
     if (this.isRunning) {
-      this.logger.debug('Previous refund sweeper run is still active. Skipping.');
+      this.logger.debug(
+        'Previous refund sweeper run is still active. Skipping.',
+      );
       return 0;
     }
 
@@ -72,14 +77,19 @@ export class RefundOutboxSweeperService {
         return 0;
       }
 
-      this.logger.log(`Found ${tasks.length} refund outbox task(s) to process.`);
+      this.logger.log(
+        `Found ${tasks.length} refund outbox task(s) to process.`,
+      );
 
       for (const task of tasks) {
         const handled = await this.processSingleTask(task);
         if (handled) processedCount++;
       }
     } catch (error: any) {
-      this.logger.error(`Error in sweepPendingRefunds: ${error?.message}`, error);
+      this.logger.error(
+        `Error in sweepPendingRefunds: ${error?.message}`,
+        error,
+      );
     } finally {
       this.isRunning = false;
     }
@@ -124,7 +134,10 @@ export class RefundOutboxSweeperService {
       let orderCode: number | null = payment?.payos?.orderCode ?? null;
 
       if (!orderCode) {
-        const nodeEnv = this.configService.get<string>('NODE_ENV', 'development');
+        const nodeEnv = this.configService.get<string>(
+          'NODE_ENV',
+          'development',
+        );
         if (nodeEnv !== 'production') {
           // Fallback mock order code in non-production environments
           orderCode = 999999;
@@ -178,19 +191,31 @@ export class RefundOutboxSweeperService {
       );
 
       if (this.weatherNotificationService) {
-        const booking = await this.bookingModel.findById(locked.bookingId).select('customerId').lean();
+        const booking = await this.bookingModel
+          .findById(locked.bookingId)
+          .select('customerId')
+          .lean();
         if (booking && booking.customerId) {
-          await this.weatherNotificationService.sendRefundStatusUpdated({
-            userId: booking.customerId.toString(),
-            refundId: locked.refundRequestId?.toString() || locked._id.toString(),
-            bookingId: locked.bookingId.toString(),
-            status: 'COMPLETED',
-            amount: locked.amount,
-          }).catch((e) => this.logger.warn(`Failed to send refund_status_updated notification: ${e?.message}`));
+          await this.weatherNotificationService
+            .sendRefundStatusUpdated({
+              userId: booking.customerId.toString(),
+              refundId:
+                locked.refundRequestId?.toString() || locked._id.toString(),
+              bookingId: locked.bookingId.toString(),
+              status: 'COMPLETED',
+              amount: locked.amount,
+            })
+            .catch((e) =>
+              this.logger.warn(
+                `Failed to send refund_status_updated notification: ${e?.message}`,
+              ),
+            );
         }
       }
 
-      this.logger.log(`Successfully completed refund outbox task ${locked._id}`);
+      this.logger.log(
+        `Successfully completed refund outbox task ${locked._id}`,
+      );
       return true;
     } catch (err: any) {
       if (err instanceof PayOSRefundRejectedError) {

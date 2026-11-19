@@ -5,7 +5,13 @@ export type SearchLogDocument = HydratedDocument<SearchLog>;
 
 @Schema({ collection: 'search_logs', timestamps: true })
 export class SearchLog {
-  @Prop({ required: true, trim: true, lowercase: true, unique: true, index: true })
+  @Prop({
+    required: true,
+    trim: true,
+    lowercase: true,
+    unique: true,
+    index: true,
+  })
   keyword: string;
 
   @Prop({ type: Number, default: 1 })

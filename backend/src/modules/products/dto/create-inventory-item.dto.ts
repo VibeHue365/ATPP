@@ -1,6 +1,16 @@
-import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
-import { ConditionStatus, InventoryItemStatus } from '../schemas/inventory-item.schema';
+import {
+  ConditionStatus,
+  InventoryItemStatus,
+} from '../schemas/inventory-item.schema';
 
 export class CreateInventoryItemDto {
   @IsString()

@@ -138,9 +138,15 @@ describe('WeatherAlertSchedulerService', () => {
         hasPendingWeatherAction: true,
       });
 
-      const count = await service.processMilestoneWindow(windowStart, windowEnd, 'T-24h');
+      const count = await service.processMilestoneWindow(
+        windowStart,
+        windowEnd,
+        'T-24h',
+      );
       expect(count).toBe(0);
-      expect(mockWeatherNotificationService.sendWeatherRedAlert).not.toHaveBeenCalled();
+      expect(
+        mockWeatherNotificationService.sendWeatherRedAlert,
+      ).not.toHaveBeenCalled();
     });
 
     it('should skip if alert was already sent (deduplication)', async () => {
@@ -160,9 +166,15 @@ describe('WeatherAlertSchedulerService', () => {
         status: BookingStatus.Confirmed,
         hasPendingWeatherAction: false,
       });
-      mockNotificationModel.findOne.mockResolvedValue({ _id: new Types.ObjectId() }); // already sent
+      mockNotificationModel.findOne.mockResolvedValue({
+        _id: new Types.ObjectId(),
+      }); // already sent
 
-      const count = await service.processMilestoneWindow(windowStart, windowEnd, 'T-24h');
+      const count = await service.processMilestoneWindow(
+        windowStart,
+        windowEnd,
+        'T-24h',
+      );
       expect(count).toBe(0);
       expect(mockOpenMeteoService.getHourlyMetrics).not.toHaveBeenCalled();
     });
@@ -199,9 +211,15 @@ describe('WeatherAlertSchedulerService', () => {
         recommendation: 'Mưa dông nguy hiểm',
       });
 
-      const count = await service.processMilestoneWindow(windowStart, windowEnd, 'T-24h');
+      const count = await service.processMilestoneWindow(
+        windowStart,
+        windowEnd,
+        'T-24h',
+      );
       expect(count).toBe(1);
-      expect(mockWeatherNotificationService.sendWeatherRedAlert).toHaveBeenCalledWith(
+      expect(
+        mockWeatherNotificationService.sendWeatherRedAlert,
+      ).toHaveBeenCalledWith(
         expect.objectContaining({
           booking: mockBooking,
           milestone: 'T-24h',

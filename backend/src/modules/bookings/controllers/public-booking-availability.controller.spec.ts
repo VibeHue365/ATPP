@@ -55,7 +55,9 @@ describe('PublicBookingAvailabilityController (e2e / integration)', () => {
         statusCode: 400,
         message: 'ID sản phẩm không hợp lệ',
       });
-      expect(mockBookingsService.getBusySchedulesForProduct).not.toHaveBeenCalled();
+      expect(
+        mockBookingsService.getBusySchedulesForProduct,
+      ).not.toHaveBeenCalled();
     });
 
     it('returns 400 Bad Request when productId is not a valid ObjectId on /api/bookings prefix', async () => {
@@ -67,7 +69,9 @@ describe('PublicBookingAvailabilityController (e2e / integration)', () => {
         statusCode: 400,
         message: 'ID sản phẩm không hợp lệ',
       });
-      expect(mockBookingsService.getBusySchedulesForProduct).not.toHaveBeenCalled();
+      expect(
+        mockBookingsService.getBusySchedulesForProduct,
+      ).not.toHaveBeenCalled();
     });
 
     it('returns 200 OK with schedules when productId is a valid ObjectId on /bookings prefix', async () => {
@@ -82,7 +86,9 @@ describe('PublicBookingAvailabilityController (e2e / integration)', () => {
         variantBookedDates: {},
         variantBookedSlots: {},
       });
-      expect(mockBookingsService.getBusySchedulesForProduct).toHaveBeenCalledWith(validProductId);
+      expect(
+        mockBookingsService.getBusySchedulesForProduct,
+      ).toHaveBeenCalledWith(validProductId);
     });
 
     it('returns 200 OK with schedules when productId is a valid ObjectId on /api/bookings prefix', async () => {
@@ -97,7 +103,9 @@ describe('PublicBookingAvailabilityController (e2e / integration)', () => {
         variantBookedDates: {},
         variantBookedSlots: {},
       });
-      expect(mockBookingsService.getBusySchedulesForProduct).toHaveBeenCalledWith(validProductId);
+      expect(
+        mockBookingsService.getBusySchedulesForProduct,
+      ).toHaveBeenCalledWith(validProductId);
     });
   });
 
@@ -111,7 +119,9 @@ describe('PublicBookingAvailabilityController (e2e / integration)', () => {
         statusCode: 400,
         message: 'ID nhà cung cấp không hợp lệ',
       });
-      expect(mockBookingsService.getBusySchedulesForProvider).not.toHaveBeenCalled();
+      expect(
+        mockBookingsService.getBusySchedulesForProvider,
+      ).not.toHaveBeenCalled();
     });
 
     it('returns 400 Bad Request when providerId is invalid on /api/bookings prefix', async () => {
@@ -135,7 +145,9 @@ describe('PublicBookingAvailabilityController (e2e / integration)', () => {
         bookedDates: ['2026-11-21'],
         bookedSlots: [],
       });
-      expect(mockBookingsService.getBusySchedulesForProvider).toHaveBeenCalledWith(validProviderId);
+      expect(
+        mockBookingsService.getBusySchedulesForProvider,
+      ).toHaveBeenCalledWith(validProviderId);
     });
   });
 });

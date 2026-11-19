@@ -102,12 +102,10 @@ describe('UC-31 AI Chat Recommendation (HoangLVM)', () => {
   });
 
   it('UT-31 UTCID10 URL-encodes the question sent to the AI service', async () => {
-    const fetchMock = jest
-      .spyOn(global, 'fetch')
-      .mockResolvedValue({
-        ok: true,
-        json: async () => ({ answer: 'ok' }),
-      } as Response);
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ answer: 'ok' }),
+    } as Response);
 
     await createService().chat('Áo dài & giá?');
 

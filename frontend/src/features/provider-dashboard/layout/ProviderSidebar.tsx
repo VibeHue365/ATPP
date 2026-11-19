@@ -48,6 +48,14 @@ export function ProviderSidebar({
   toggleSidebar,
   chatUnreadCount = 0,
 }: ProviderSidebarProps) {
+  const isPurePhoto = Boolean(hasPhotographyCapability && !hasAodaiCapability);
+  const isPureAodai = Boolean(hasAodaiCapability && !hasPhotographyCapability);
+  const calendarMenuLabel = isPurePhoto
+    ? 'Lịch ca chụp'
+    : isPureAodai
+    ? 'Giờ mở cửa & Lịch hẹn'
+    : 'Lịch làm việc & Đặt hẹn';
+
   return (
     <aside className={`p-sidebar-aside ${isSidebarCollapsed ? 'collapsed' : ''}`} aria-label="Menu chính">
       <div>
@@ -130,18 +138,18 @@ export function ProviderSidebar({
             </div>
           </button>
 
-          {/* 3. Lịch chụp */}
-          {hasPhotographyCapability && (
+          {/* 3. Lịch làm việc / Lịch ca chụp / Giờ mở cửa */}
+          {(hasPhotographyCapability || hasAodaiCapability) && (
             <button
               onClick={() => setCurrentView('calendar')}
               className={`p-nav-item ${currentView === 'calendar' ? 'active' : ''}`}
-              aria-label="Lịch làm việc & Chặn"
-              title="Lịch chụp"
+              aria-label={calendarMenuLabel}
+              title={calendarMenuLabel}
               type="button"
             >
               <div className="p-nav-item-left">
                 <Calendar size={20} />
-                <span>Lịch chụp</span>
+                <span>{calendarMenuLabel}</span>
               </div>
             </button>
           )}

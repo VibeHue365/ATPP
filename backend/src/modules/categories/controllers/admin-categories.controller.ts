@@ -93,7 +93,12 @@ export class AdminCategoriesController {
     @Body() dto: UpdateCategoryDto,
     @Req() request: RequestMeta,
   ) {
-    return this.categoriesService.update(user.sub, id, dto, this.context(request));
+    return this.categoriesService.update(
+      user.sub,
+      id,
+      dto,
+      this.context(request),
+    );
   }
 
   @Delete(':id')
@@ -103,7 +108,11 @@ export class AdminCategoriesController {
     @Param('id') id: string,
     @Req() request: RequestMeta,
   ) {
-    return this.categoriesService.softDelete(user.sub, id, this.context(request));
+    return this.categoriesService.softDelete(
+      user.sub,
+      id,
+      this.context(request),
+    );
   }
 
   private context(request: RequestMeta): {

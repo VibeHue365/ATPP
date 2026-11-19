@@ -1,7 +1,8 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 
-export type RentalEvidenceUploadDocument = HydratedDocument<RentalEvidenceUpload>;
+export type RentalEvidenceUploadDocument =
+  HydratedDocument<RentalEvidenceUpload>;
 
 /** Private evidence metadata. The object-storage key is never exposed by public APIs. */
 @Schema({ collection: 'rental_evidence_uploads', timestamps: true })
@@ -12,7 +13,12 @@ export class RentalEvidenceUpload {
   @Prop({ type: Types.ObjectId, ref: 'Booking', required: true, index: true })
   bookingId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'BookingItem', required: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'BookingItem',
+    required: true,
+    index: true,
+  })
   bookingItemId: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
@@ -35,4 +41,5 @@ export class RentalEvidenceUpload {
   consumedFor?: 'PICKUP' | 'RETURN' | null;
 }
 
-export const RentalEvidenceUploadSchema = SchemaFactory.createForClass(RentalEvidenceUpload);
+export const RentalEvidenceUploadSchema =
+  SchemaFactory.createForClass(RentalEvidenceUpload);

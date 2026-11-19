@@ -184,16 +184,27 @@ describe('Contracts V2: Full Contract Flow & 10 Verification Cases', () => {
         customTermsText: 'Khách hàng vui lòng đồng kiểm khi nhận trang phục.',
       };
 
-      const dto = plainToInstance(SaveProviderPolicyDraftDto, fullPolicyPayload);
+      const dto = plainToInstance(
+        SaveProviderPolicyDraftDto,
+        fullPolicyPayload,
+      );
       const errors = await validate(dto);
       expect(errors.length).toBe(0);
 
       // Verify no fields got dropped or mutated
-      expect(dto.damageCompensation.minorDamage?.method).toBe(IncidentCompensationMethod.FIXED_FEE);
+      expect(dto.damageCompensation.minorDamage?.method).toBe(
+        IncidentCompensationMethod.FIXED_FEE,
+      );
       expect(dto.damageCompensation.minorDamage?.fixedFeeAmount).toBe(50000);
-      expect(dto.damageCompensation.moderateDamage?.method).toBe(IncidentCompensationMethod.ACTUAL_REPAIR_COST);
-      expect(dto.damageCompensation.severeDamage?.method).toBe(IncidentCompensationMethod.INCIDENT_NEGOTIATION);
-      expect(dto.damageCompensation.totalLoss?.method).toBe(IncidentCompensationMethod.PERCENTAGE_ON_ASSET);
+      expect(dto.damageCompensation.moderateDamage?.method).toBe(
+        IncidentCompensationMethod.ACTUAL_REPAIR_COST,
+      );
+      expect(dto.damageCompensation.severeDamage?.method).toBe(
+        IncidentCompensationMethod.INCIDENT_NEGOTIATION,
+      );
+      expect(dto.damageCompensation.totalLoss?.method).toBe(
+        IncidentCompensationMethod.PERCENTAGE_ON_ASSET,
+      );
       expect(dto.damageCompensation.totalLoss?.percentageOfAsset).toBe(100);
     });
   });
@@ -202,7 +213,6 @@ describe('Contracts V2: Full Contract Flow & 10 Verification Cases', () => {
   // SECTION 2: Verification of All 4 Methods (Requirement 5: Cases A-F)
   // -------------------------------------------------------------
   describe('2. Four Compensation Methods End-to-End Verification (Cases A - F)', () => {
-
     // CASE A: FIXED_FEE valid -> Creates contract successfully
     it('Case A: FIXED_FEE valid -> Eligible, creates contract successfully without requiring replacementValue', async () => {
       const fixedFeePolicy = {
@@ -232,19 +242,26 @@ describe('Contracts V2: Full Contract Flow & 10 Verification Cases', () => {
       };
 
       // Product has NO replacementValue (null)
-      const { readService } = createEligibilityService({ replacementValue: null }, fixedFeePolicy);
-      const result = await readService.checkEligibility([{ productId: prodId.toHexString() }]);
+      const { readService } = createEligibilityService(
+        { replacementValue: null },
+        fixedFeePolicy,
+      );
+      const result = await readService.checkEligibility([
+        { productId: prodId.toHexString() },
+      ]);
 
       expect(result.eligible).toBe(true);
       expect(result.ineligibleItems.length).toBe(0);
 
       // Verify contract terms rendering
-      const terms = buildContractTermsLines(fixedFeePolicy, [{
-        productName: 'Ao dai rong',
-        unitPrice: 55555,
-        quantity: 1,
-        replacementValue: null,
-      }]);
+      const terms = buildContractTermsLines(fixedFeePolicy, [
+        {
+          productName: 'Ao dai rong',
+          unitPrice: 55555,
+          quantity: 1,
+          replacementValue: null,
+        },
+      ]);
       const text = terms.join('\n');
       expect(text).toContain('50.000 đ/lỗi');
       expect(text).toContain('150.000 đ/lỗi');
@@ -275,20 +292,29 @@ describe('Contracts V2: Full Contract Flow & 10 Verification Cases', () => {
       };
 
       // Product has NO replacementValue
-      const { readService } = createEligibilityService({ replacementValue: null }, repairCostPolicy);
-      const result = await readService.checkEligibility([{ productId: prodId.toHexString() }]);
+      const { readService } = createEligibilityService(
+        { replacementValue: null },
+        repairCostPolicy,
+      );
+      const result = await readService.checkEligibility([
+        { productId: prodId.toHexString() },
+      ]);
 
       expect(result.eligible).toBe(true);
       expect(result.ineligibleItems.length).toBe(0);
 
-      const terms = buildContractTermsLines(repairCostPolicy, [{
-        productName: 'Ao dai rong',
-        unitPrice: 55555,
-        quantity: 1,
-        replacementValue: null,
-      }]);
+      const terms = buildContractTermsLines(repairCostPolicy, [
+        {
+          productName: 'Ao dai rong',
+          unitPrice: 55555,
+          quantity: 1,
+          replacementValue: null,
+        },
+      ]);
       const text = terms.join('\n');
-      expect(text).toContain('Bồi thường theo chi phí phục hồi/sửa chữa thực tế căn cứ hóa đơn, chứng từ hợp lệ từ đơn vị chuyên nghiệp');
+      expect(text).toContain(
+        'Bồi thường theo chi phí phục hồi/sửa chữa thực tế căn cứ hóa đơn, chứng từ hợp lệ từ đơn vị chuyên nghiệp',
+      );
       expect(text).toContain('Căn cứ: Hóa đơn dịch vụ giặt hấp/tiệm may');
     });
 
@@ -312,26 +338,38 @@ describe('Contracts V2: Full Contract Flow & 10 Verification Cases', () => {
             method: IncidentCompensationMethod.INCIDENT_NEGOTIATION,
             conditionsAndEvidence: 'Thương lượng đền bù giá trị trang phục',
           },
-          disputeResolutionTerms: 'Sàn VibeHue tiếp nhận phản ánh, hỗ trợ hòa giải trung gian.',
+          disputeResolutionTerms:
+            'Sàn VibeHue tiếp nhận phản ánh, hỗ trợ hòa giải trung gian.',
         },
       };
 
       // Product has NO replacementValue
-      const { readService } = createEligibilityService({ replacementValue: null }, negotiationPolicy);
-      const result = await readService.checkEligibility([{ productId: prodId.toHexString() }]);
+      const { readService } = createEligibilityService(
+        { replacementValue: null },
+        negotiationPolicy,
+      );
+      const result = await readService.checkEligibility([
+        { productId: prodId.toHexString() },
+      ]);
 
       expect(result.eligible).toBe(true);
       expect(result.ineligibleItems.length).toBe(0);
 
-      const terms = buildContractTermsLines(negotiationPolicy, [{
-        productName: 'Ao dai rong',
-        unitPrice: 55555,
-        quantity: 1,
-        replacementValue: null,
-      }]);
+      const terms = buildContractTermsLines(negotiationPolicy, [
+        {
+          productName: 'Ao dai rong',
+          unitPrice: 55555,
+          quantity: 1,
+          replacementValue: null,
+        },
+      ]);
       const text = terms.join('\n');
-      expect(text).toContain('Hai bên đối chiếu hiện trạng và thương lượng số tiền bồi thường dựa trên chứng cứ giao nhận');
-      expect(text).toContain('Sàn VibeHue tiếp nhận phản ánh, hỗ trợ hòa giải trung gian.');
+      expect(text).toContain(
+        'Hai bên đối chiếu hiện trạng và thương lượng số tiền bồi thường dựa trên chứng cứ giao nhận',
+      );
+      expect(text).toContain(
+        'Sàn VibeHue tiếp nhận phản ánh, hỗ trợ hòa giải trung gian.',
+      );
     });
 
     // CASE D: PERCENTAGE_ON_ASSET with valid replacementValue -> Creates contract successfully
@@ -365,21 +403,31 @@ describe('Contracts V2: Full Contract Flow & 10 Verification Cases', () => {
         { replacementValue: 2500000, moderationStatus: 'APPROVED' },
         percentagePolicy,
       );
-      const result = await readService.checkEligibility([{ productId: prodId.toHexString() }]);
+      const result = await readService.checkEligibility([
+        { productId: prodId.toHexString() },
+      ]);
 
       expect(result.eligible).toBe(true);
       expect(result.ineligibleItems.length).toBe(0);
 
-      const terms = buildContractTermsLines(percentagePolicy, [{
-        productName: 'Ao dai rong',
-        unitPrice: 55555,
-        quantity: 1,
-        replacementValue: 2500000,
-      }]);
+      const terms = buildContractTermsLines(percentagePolicy, [
+        {
+          productName: 'Ao dai rong',
+          unitPrice: 55555,
+          quantity: 1,
+          replacementValue: 2500000,
+        },
+      ]);
       const text = terms.join('\n');
-      expect(text).toContain('20% Giá trị bồi hoàn trang phục (500.000 đ trên tổng giá trị bồi hoàn 2.500.000 đ)');
-      expect(text).toContain('80% Giá trị bồi hoàn trang phục (2.000.000 đ trên tổng giá trị bồi hoàn 2.500.000 đ)');
-      expect(text).toContain('100% Giá trị bồi hoàn trang phục (2.500.000 đ trên tổng giá trị bồi hoàn 2.500.000 đ)');
+      expect(text).toContain(
+        '20% Giá trị bồi hoàn trang phục (500.000 đ trên tổng giá trị bồi hoàn 2.500.000 đ)',
+      );
+      expect(text).toContain(
+        '80% Giá trị bồi hoàn trang phục (2.000.000 đ trên tổng giá trị bồi hoàn 2.500.000 đ)',
+      );
+      expect(text).toContain(
+        '100% Giá trị bồi hoàn trang phục (2.500.000 đ trên tổng giá trị bồi hoàn 2.500.000 đ)',
+      );
     });
 
     // CASE E: PERCENTAGE_ON_ASSET missing replacementValue -> Fails closed with exact error message
@@ -406,13 +454,22 @@ describe('Contracts V2: Full Contract Flow & 10 Verification Cases', () => {
       };
 
       // Product has NO replacementValue (null or <= 0)
-      const { readService } = createEligibilityService({ replacementValue: null }, percentagePolicy);
-      const result = await readService.checkEligibility([{ productId: prodId.toHexString() }]);
+      const { readService } = createEligibilityService(
+        { replacementValue: null },
+        percentagePolicy,
+      );
+      const result = await readService.checkEligibility([
+        { productId: prodId.toHexString() },
+      ]);
 
       expect(result.eligible).toBe(false);
       expect(result.ineligibleItems.length).toBe(1);
-      expect(result.ineligibleItems[0].reason).toBe('CONTRACT_PRODUCT_REPLACEMENT_VALUE_MISSING');
-      expect(result.ineligibleItems[0].message).toContain("Trang phục 'Ao dai rong' của Shop 'aaa' chưa có Giá trị bồi hoàn được thiết lập.");
+      expect(result.ineligibleItems[0].reason).toBe(
+        'CONTRACT_PRODUCT_REPLACEMENT_VALUE_MISSING',
+      );
+      expect(result.ineligibleItems[0].message).toContain(
+        "Trang phục 'Ao dai rong' của Shop 'aaa' chưa có Giá trị bồi hoàn được thiết lập.",
+      );
     });
 
     // CASE F: One Shop using all four methods simultaneously -> A4/PDF displays correctly
@@ -438,7 +495,8 @@ describe('Contracts V2: Full Contract Flow & 10 Verification Cases', () => {
             conditionsAndEvidence: 'Mất không tìm lại được',
           },
           incidentNotificationHours: 36,
-          disputeResolutionTerms: 'Trung tâm hỗ trợ khách hàng VibeHue xử lý theo quy định sàn.',
+          disputeResolutionTerms:
+            'Trung tâm hỗ trợ khách hàng VibeHue xử lý theo quy định sàn.',
         },
       };
 
@@ -447,45 +505,64 @@ describe('Contracts V2: Full Contract Flow & 10 Verification Cases', () => {
         { replacementValue: 3000000, moderationStatus: 'APPROVED' },
         allFourMethodsPolicy,
       );
-      const result = await readService.checkEligibility([{ productId: prodId.toHexString() }]);
+      const result = await readService.checkEligibility([
+        { productId: prodId.toHexString() },
+      ]);
       expect(result.eligible).toBe(true);
 
-      const terms = buildContractTermsLines(allFourMethodsPolicy, [{
-        productName: 'Ao dai rong',
-        unitPrice: 55555,
-        quantity: 1,
-        replacementValue: 3000000,
-      }]);
+      const terms = buildContractTermsLines(allFourMethodsPolicy, [
+        {
+          productName: 'Ao dai rong',
+          unitPrice: 55555,
+          quantity: 1,
+          replacementValue: 3000000,
+        },
+      ]);
       const text = terms.join('\n');
 
       // Verify all 4 distinct clauses are present in contract text:
       // 1. Fixed Fee
       expect(text).toContain('40.000 đ/lỗi (Điều kiện: Vết bẩn giặt ra được).');
       // 2. Actual Repair Cost
-      expect(text).toContain('Bồi thường theo chi phí phục hồi/sửa chữa thực tế căn cứ hóa đơn, chứng từ hợp lệ từ đơn vị chuyên nghiệp. Căn cứ: Hóa đơn giặt sấy cao cấp');
+      expect(text).toContain(
+        'Bồi thường theo chi phí phục hồi/sửa chữa thực tế căn cứ hóa đơn, chứng từ hợp lệ từ đơn vị chuyên nghiệp. Căn cứ: Hóa đơn giặt sấy cao cấp',
+      );
       // 3. Incident Negotiation
-      expect(text).toContain('Hai bên đối chiếu hiện trạng và thương lượng số tiền bồi thường dựa trên chứng cứ giao nhận. Căn cứ: Thương lượng dựa trên clip mở gói hàng');
+      expect(text).toContain(
+        'Hai bên đối chiếu hiện trạng và thương lượng số tiền bồi thường dựa trên chứng cứ giao nhận. Căn cứ: Thương lượng dựa trên clip mở gói hàng',
+      );
       // 4. Percentage on Asset
-      expect(text).toContain('100% Giá trị bồi hoàn trang phục (3.000.000 đ trên tổng giá trị bồi hoàn 3.000.000 đ) (Điều kiện: Mất không tìm lại được).');
+      expect(text).toContain(
+        '100% Giá trị bồi hoàn trang phục (3.000.000 đ trên tổng giá trị bồi hoàn 3.000.000 đ) (Điều kiện: Mất không tìm lại được).',
+      );
       // 5. Timeframe & Dispute terms
-      expect(text).toContain('Thời hạn thông báo sự cố: Bên A có trách nhiệm kiểm tra và gửi thông báo sự cố kèm chứng cứ trong vòng 36 giờ kể từ thời điểm nhận lại trang phục.');
-      expect(text).toContain('Hỗ trợ giải quyết tranh chấp: Trung tâm hỗ trợ khách hàng VibeHue xử lý theo quy định sàn.');
+      expect(text).toContain(
+        'Thời hạn thông báo sự cố: Bên A có trách nhiệm kiểm tra và gửi thông báo sự cố kèm chứng cứ trong vòng 36 giờ kể từ thời điểm nhận lại trang phục.',
+      );
+      expect(text).toContain(
+        'Hỗ trợ giải quyết tranh chấp: Trung tâm hỗ trợ khách hàng VibeHue xử lý theo quy định sàn.',
+      );
     });
 
     // CASE 7: Contract Immutability - Post-signing policy/product mutations do not affect signed contract
     it('Case 7: Contract Immutability: Subsequent Shop policy/product updates do not alter historical signed contract', async () => {
       const historicalSnapshot = {
         booking: { bookingCode: 'VH-12345', status: 'CONFIRMED' },
-        providerItems: [{
-          productId: prodId.toHexString(),
-          productName: 'Ao dai rong',
-          unitPrice: 55555,
-          quantity: 1,
-          replacementValue: 2000000,
-        }],
+        providerItems: [
+          {
+            productId: prodId.toHexString(),
+            productName: 'Ao dai rong',
+            unitPrice: 55555,
+            quantity: 1,
+            replacementValue: 2000000,
+          },
+        ],
         policies: {
           providerDamageCompensation: {
-            totalLoss: { method: IncidentCompensationMethod.PERCENTAGE_ON_ASSET, percentageOfAsset: 99 },
+            totalLoss: {
+              method: IncidentCompensationMethod.PERCENTAGE_ON_ASSET,
+              percentageOfAsset: 99,
+            },
           },
         },
         pricing: { grandTotal: 66666 },
@@ -496,7 +573,10 @@ describe('Contracts V2: Full Contract Flow & 10 Verification Cases', () => {
       // Provider changes policy in DB later to a different fee and method
       const mutatedPolicy = {
         providerDamageCompensation: {
-          totalLoss: { method: IncidentCompensationMethod.FIXED_FEE, fixedFeeAmount: 500000 },
+          totalLoss: {
+            method: IncidentCompensationMethod.FIXED_FEE,
+            fixedFeeAmount: 500000,
+          },
         },
       };
 
@@ -509,8 +589,13 @@ describe('Contracts V2: Full Contract Flow & 10 Verification Cases', () => {
 
       // Verifies that the hash of the original accepted contract is strictly immutable and different
       expect(frozenContentHash).not.toBe(newContentHash);
-      expect(historicalSnapshot.providerItems[0].replacementValue).toBe(2000000);
-      expect(historicalSnapshot.policies.providerDamageCompensation.totalLoss.percentageOfAsset).toBe(99);
+      expect(historicalSnapshot.providerItems[0].replacementValue).toBe(
+        2000000,
+      );
+      expect(
+        historicalSnapshot.policies.providerDamageCompensation.totalLoss
+          .percentageOfAsset,
+      ).toBe(99);
     });
 
     // CASE 8: Security & Authorization (IDOR) - Non-participants cannot read or consent to contracts
@@ -536,12 +621,26 @@ describe('Contracts V2: Full Contract Flow & 10 Verification Cases', () => {
 
       // Customer A owns the booking -> assertCustomer succeeds
       expect(() => {
-        accessService.assertCustomer({ sub: bookingCustomerId.toHexString(), roles: ['CUSTOMER'], permissions: [] }, mockBooking);
+        accessService.assertCustomer(
+          {
+            sub: bookingCustomerId.toHexString(),
+            roles: ['CUSTOMER'],
+            permissions: [],
+          },
+          mockBooking,
+        );
       }).not.toThrow();
 
       // Intruder Customer B attempts access -> NotFoundException thrown (fail-closed, no info leak)
       expect(() => {
-        accessService.assertCustomer({ sub: intruderCustomerId.toHexString(), roles: ['CUSTOMER'], permissions: [] }, mockBooking);
+        accessService.assertCustomer(
+          {
+            sub: intruderCustomerId.toHexString(),
+            roles: ['CUSTOMER'],
+            permissions: [],
+          },
+          mockBooking,
+        );
       }).toThrow('CONTRACT_NOT_FOUND');
     });
 
@@ -552,25 +651,46 @@ describe('Contracts V2: Full Contract Flow & 10 Verification Cases', () => {
         isLegacyFallback: true, // means no approved Contracts V2 policy exists
       };
 
-      const { readService: draftService } = createEligibilityService({}, draftOnlyPolicy);
-      const draftResult = await draftService.checkEligibility([{ productId: prodId.toHexString() }]);
+      const { readService: draftService } = createEligibilityService(
+        {},
+        draftOnlyPolicy,
+      );
+      const draftResult = await draftService.checkEligibility([
+        { productId: prodId.toHexString() },
+      ]);
 
       expect(draftResult.eligible).toBe(false);
-      expect(draftResult.ineligibleItems[0].reason).toBe('PROVIDER_POLICY_NOT_APPROVED');
+      expect(draftResult.ineligibleItems[0].reason).toBe(
+        'PROVIDER_POLICY_NOT_APPROVED',
+      );
 
       // 2. APPROVED policy succeeds
       const approvedPolicy = {
         isLegacyFallback: false,
         providerDamageCompensation: {
-          minorDamage: { method: IncidentCompensationMethod.FIXED_FEE, fixedFeeAmount: 50000 },
-          moderateDamage: { method: IncidentCompensationMethod.INCIDENT_NEGOTIATION },
-          severeDamage: { method: IncidentCompensationMethod.INCIDENT_NEGOTIATION },
-          totalLoss: { method: IncidentCompensationMethod.INCIDENT_NEGOTIATION },
+          minorDamage: {
+            method: IncidentCompensationMethod.FIXED_FEE,
+            fixedFeeAmount: 50000,
+          },
+          moderateDamage: {
+            method: IncidentCompensationMethod.INCIDENT_NEGOTIATION,
+          },
+          severeDamage: {
+            method: IncidentCompensationMethod.INCIDENT_NEGOTIATION,
+          },
+          totalLoss: {
+            method: IncidentCompensationMethod.INCIDENT_NEGOTIATION,
+          },
         },
       };
 
-      const { readService: approvedService } = createEligibilityService({}, approvedPolicy);
-      const approvedResult = await approvedService.checkEligibility([{ productId: prodId.toHexString() }]);
+      const { readService: approvedService } = createEligibilityService(
+        {},
+        approvedPolicy,
+      );
+      const approvedResult = await approvedService.checkEligibility([
+        { productId: prodId.toHexString() },
+      ]);
 
       expect(approvedResult.eligible).toBe(true);
       expect(approvedResult.ineligibleItems.length).toBe(0);
@@ -581,22 +701,36 @@ describe('Contracts V2: Full Contract Flow & 10 Verification Cases', () => {
       const percentagePolicy = {
         isLegacyFallback: false,
         providerDamageCompensation: {
-          totalLoss: { method: IncidentCompensationMethod.PERCENTAGE_ON_ASSET, percentageOfAsset: 99 },
+          totalLoss: {
+            method: IncidentCompensationMethod.PERCENTAGE_ON_ASSET,
+            percentageOfAsset: 99,
+          },
         },
       };
 
       // 10a: MISSING replacement value
-      const { readService: svcMissing } = createEligibilityService({ replacementValue: null }, percentagePolicy);
-      const resMissing = await svcMissing.checkEligibility([{ productId: prodId.toHexString() }]);
-      expect(resMissing.ineligibleItems[0].reason).toBe('CONTRACT_PRODUCT_REPLACEMENT_VALUE_MISSING');
+      const { readService: svcMissing } = createEligibilityService(
+        { replacementValue: null },
+        percentagePolicy,
+      );
+      const resMissing = await svcMissing.checkEligibility([
+        { productId: prodId.toHexString() },
+      ]);
+      expect(resMissing.ineligibleItems[0].reason).toBe(
+        'CONTRACT_PRODUCT_REPLACEMENT_VALUE_MISSING',
+      );
 
       // 10b: UNAPPROVED replacement value (moderationStatus !== 'APPROVED')
       const { readService: svcUnapproved } = createEligibilityService(
         { replacementValue: 2000000, moderationStatus: 'PENDING_REVIEW' },
         percentagePolicy,
       );
-      const resUnapproved = await svcUnapproved.checkEligibility([{ productId: prodId.toHexString() }]);
-      expect(resUnapproved.ineligibleItems[0].reason).toBe('CONTRACT_PRODUCT_REPLACEMENT_VALUE_UNAPPROVED');
+      const resUnapproved = await svcUnapproved.checkEligibility([
+        { productId: prodId.toHexString() },
+      ]);
+      expect(resUnapproved.ineligibleItems[0].reason).toBe(
+        'CONTRACT_PRODUCT_REPLACEMENT_VALUE_UNAPPROVED',
+      );
 
       // 10c: STALE provider acceptance (policy fingerprint mismatch)
       const { readService: svcStale } = createEligibilityService(
@@ -605,8 +739,12 @@ describe('Contracts V2: Full Contract Flow & 10 Verification Cases', () => {
         {},
         { policyFingerprint: 'stale_fingerprint_hash_mismatch' },
       );
-      const resStale = await svcStale.checkEligibility([{ productId: prodId.toHexString() }]);
-      expect(resStale.ineligibleItems[0].reason).toBe('PROVIDER_ACCEPTANCE_STALE');
+      const resStale = await svcStale.checkEligibility([
+        { productId: prodId.toHexString() },
+      ]);
+      expect(resStale.ineligibleItems[0].reason).toBe(
+        'PROVIDER_ACCEPTANCE_STALE',
+      );
 
       // 10d: Inactive provider rental status
       const { readService: svcInactive } = createEligibilityService(
@@ -614,8 +752,12 @@ describe('Contracts V2: Full Contract Flow & 10 Verification Cases', () => {
         percentagePolicy,
         { status: 'SUSPENDED' },
       );
-      const resInactive = await svcInactive.checkEligibility([{ productId: prodId.toHexString() }]);
-      expect(resInactive.ineligibleItems[0].reason).toBe('PROVIDER_RENTAL_NOT_ACTIVE');
+      const resInactive = await svcInactive.checkEligibility([
+        { productId: prodId.toHexString() },
+      ]);
+      expect(resInactive.ineligibleItems[0].reason).toBe(
+        'PROVIDER_RENTAL_NOT_ACTIVE',
+      );
     });
   });
 });

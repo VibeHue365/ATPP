@@ -945,10 +945,10 @@ export const BecomeProviderPage: React.FC = () => {
     <main className="vh-provider-shell animate-fade-in">
       <section className="vh-provider-header-band">
         <div>
-          <span className="vh-provider-kicker">ĐỐI TÁC VIBEHUE</span>
+          <span className="vh-provider-kicker">ĐỐI TÁC TÀGO</span>
           <h1>Đăng ký tài khoản Đối tác</h1>
           <p>
-            Đồng hành cùng VibeHue để kết nối với hàng ngàn khách hàng yêu thích cổ phục áo dài và nhiếp ảnh chuyên nghiệp.
+            Đồng hành cùng TàGo để kết nối với hàng ngàn khách hàng yêu thích cổ phục áo dài và nhiếp ảnh chuyên nghiệp.
           </p>
         </div>
         {verification && (
@@ -1274,7 +1274,7 @@ function ProfileStep({
       <PanelTitle
         icon={<FileCheck size={20} />}
         title="Thông tin hồ sơ đối tác"
-        subtitle="Thông tin này sẽ là hồ sơ chính thức của bạn trên VibeHue sau khi được Admin phê duyệt."
+        subtitle="Thông tin này sẽ là hồ sơ chính thức của bạn trên TàGo sau khi được Admin phê duyệt."
       />
       <div className="vh-provider-form-grid">
         <TextField
@@ -1643,8 +1643,8 @@ function ConsentStep({
         <div className="vh-consent-body">
           <p>Bằng việc đánh dấu đồng ý, tôi cam kết và đồng ý rằng:</p>
           <ul>
-            <li>VibeHue có quyền thu thập, đối chiếu và xử lý các thông tin cá nhân và tài liệu xác thực (CCCD/Hộ chiếu, Giấy đăng ký kinh doanh...) do tôi tải lên cho mục đích xét duyệt tư cách Đối tác.</li>
-            <li>Các tài liệu này sẽ được lưu trữ an toàn trong kho dữ liệu riêng tư (Private Storage) của hệ thống và chỉ được truy xuất bảo mật thông qua máy chủ backend của VibeHue.</li>
+            <li>TàGo có quyền thu thập, đối chiếu và xử lý các thông tin cá nhân và tài liệu xác thực (CCCD/Hộ chiếu, Giấy đăng ký kinh doanh...) do tôi tải lên cho mục đích xét duyệt tư cách Đối tác.</li>
+            <li>Các tài liệu này sẽ được lưu trữ an toàn trong kho dữ liệu riêng tư (Private Storage) của hệ thống và chỉ được truy xuất bảo mật thông qua máy chủ backend của TàGo.</li>
             <li>Thông tin định danh như Số CCCD/Hộ chiếu sẽ được hệ thống mã hóa và băm (masked & hashed) nhằm bảo mật tối đa, không hiển thị công khai.</li>
             <li>Tôi hoàn toàn tự chịu trách nhiệm về tính chính xác và tính pháp lý của toàn bộ tài liệu do mình cung cấp.</li>
           </ul>
@@ -2306,7 +2306,7 @@ function StatusDashboard({
             <Sparkles size={28} className="vh-icon-sparkle" />
           </div>
           <div className="vh-status-banner-content">
-            <h2>Chúc mừng! Bạn đã là Đối tác của VibeHue</h2>
+            <h2>Chúc mừng! Bạn đã là Đối tác của TàGo</h2>
             <p>Hồ sơ đăng ký của bạn đã được phê duyệt thành công. Tài khoản của bạn hiện tại có toàn quyền đăng bán, cho thuê áo dài hoặc thiết lập dịch vụ nhiếp ảnh trên hệ thống.</p>
             <div className="vh-banner-actions">
               <a href="/provider/dashboard" className="vh-btn vh-btn-primary vh-btn-md vh-link-btn">

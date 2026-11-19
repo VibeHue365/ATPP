@@ -31,15 +31,13 @@ describe('UC-12 View Activity History (DaiBLL)', () => {
       .fn()
       .mockResolvedValue((options.bookings ?? []).map(bookingDoc));
     const incidentModel = {
-      find: jest
-        .fn()
-        .mockReturnValue(
-          options.incidents instanceof Error
-            ? {
-                lean: () => ({ exec: () => Promise.reject(options.incidents) }),
-              }
-            : chain(options.incidents ?? []),
-        ),
+      find: jest.fn().mockReturnValue(
+        options.incidents instanceof Error
+          ? {
+              lean: () => ({ exec: () => Promise.reject(options.incidents) }),
+            }
+          : chain(options.incidents ?? []),
+      ),
     };
     const bookingModel = {
       find: jest.fn().mockReturnValue({ sort: bookingSort }),

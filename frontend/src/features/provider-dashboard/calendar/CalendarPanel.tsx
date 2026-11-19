@@ -128,12 +128,22 @@ export function CalendarPanel({
   setListTab,
   orders = [],
 }: CalendarPanelProps) {
+  const isPurePhoto = Boolean(hasPhotographyCapability && !hasAodaiCapability);
+  const isPureAodai = Boolean(hasAodaiCapability && !hasPhotographyCapability);
+  const isHybrid = Boolean(hasPhotographyCapability && hasAodaiCapability);
+
+  const [detailFilter, setDetailFilter] = useState<'ALL' | 'PHOTO' | 'AODAI'>('ALL');
+
   // Month navigation helpers
   const currentYear = calendarMonth.getFullYear();
   const currentMonthIdx = calendarMonth.getMonth(); // 0-indexed
   const [photographyEvents, setPhotographyEvents] = useState<PhotographerCalendarEvent[]>([]);
 
   useEffect(() => {
+    if (!hasPhotographyCapability) {
+      setPhotographyEvents([]);
+      return;
+    }
     let active = true;
     const month = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, '0')}`;
     providerApi
@@ -145,7 +155,7 @@ export function CalendarPanel({
         if (active) setPhotographyEvents([]);
       });
     return () => { active = false; };
-  }, [currentYear, currentMonthIdx]);
+  }, [currentYear, currentMonthIdx, hasPhotographyCapability]);
 
   const handlePrevMonth = () => {
     setCalendarMonth(new Date(currentYear, currentMonthIdx - 1, 1));
@@ -228,9 +238,18 @@ export function CalendarPanel({
       }
     });
 
+  // Filter customer orders strictly by capability to avoid cross-role contamination
+  const roleScopedOrders = orders.filter((ord: any) => {
+    const isPhoto = ord.bookingType === 'PHOTOGRAPHY' || ord.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY');
+    const isAoDai = ord.bookingType === 'AODAI_RENTAL' || ord.items?.some((i: any) => i.itemType === 'AODAI_RENTAL');
+    if (isPurePhoto) return isPhoto;
+    if (isPureAodai) return isAoDai;
+    return true; // Hybrid accounts see both
+  });
+
   // Helper map for customer orders by date
   const ordersByDateMap = new Map<string, any[]>();
-  orders.forEach((ord) => {
+  roleScopedOrders.forEach((ord) => {
     const rawDate = ord.startDate || ord.rawOrderDate || ord.orderDate || ord.createdAt;
     if (rawDate) {
       try {
@@ -246,22 +265,24 @@ export function CalendarPanel({
   });
 
   const photographyEventsByDate = new Map<string, PhotographerCalendarEvent[]>();
-  photographyEvents.forEach((event) => {
-    const events = photographyEventsByDate.get(event.date) || [];
-    events.push(event);
-    photographyEventsByDate.set(event.date, events);
-    const ordersForDate = ordersByDateMap.get(event.date) || [];
-    ordersForDate.push({
-      _id: event.id,
-      bookingType: 'PHOTOGRAPHY',
-      customerName: event.location || 'Chưa cập nhật địa điểm',
-      status: event.cancelled ? 'CANCELLED' : event.status,
-      startDate: event.startsAt,
-      schedules: [{ timeSlot: event.timeSlot }],
-      isPhotographerCalendarEvent: true,
+  if (hasPhotographyCapability) {
+    photographyEvents.forEach((event) => {
+      const events = photographyEventsByDate.get(event.date) || [];
+      events.push(event);
+      photographyEventsByDate.set(event.date, events);
+      const ordersForDate = ordersByDateMap.get(event.date) || [];
+      ordersForDate.push({
+        _id: event.id,
+        bookingType: 'PHOTOGRAPHY',
+        customerName: event.location || 'Chưa cập nhật địa điểm',
+        status: event.cancelled ? 'CANCELLED' : event.status,
+        startDate: event.startsAt,
+        schedules: [{ timeSlot: event.timeSlot }],
+        isPhotographerCalendarEvent: true,
+      });
+      ordersByDateMap.set(event.date, ordersForDate);
     });
-    ordersByDateMap.set(event.date, ordersForDate);
-  });
+  }
 
   // Calculate monthly stats for the displayed month
   let workingDaysCount = 0;
@@ -303,10 +324,42 @@ export function CalendarPanel({
   });
   const isSelectedDateToday = selectedDate === toLocalDateKey();
   const selectedDateOrders = ordersByDateMap.get(selectedDate) || [];
+  const filteredSelectedDateOrders = selectedDateOrders.filter((ord: any) => {
+    const isPhoto = ord.bookingType === 'PHOTOGRAPHY' || ord.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY');
+    const isAoDai = ord.bookingType === 'AODAI_RENTAL' || ord.items?.some((i: any) => i.itemType === 'AODAI_RENTAL');
+    if (detailFilter === 'PHOTO') return isPhoto;
+    if (detailFilter === 'AODAI') return isAoDai;
+    return true;
+  });
+
   const isSelectedDateBlocked = blockedDatesMap.has(selectedDate);
   const selectedDateSchedule = recurringSchedules.find(
     (s) => Number(s.dayOfWeek) === selectedDateObj.getDay()
   );
+
+  const headerTitle = isPurePhoto
+    ? 'Lịch ca chụp & Chặn ngày bận'
+    : isPureAodai
+    ? 'Giờ mở cửa tiệm & Lịch hẹn'
+    : 'Lịch làm việc & Đặt hẹn';
+
+  const headerDesc = isPurePhoto
+    ? 'Thiết lập khung giờ nhận lịch chụp ảnh để khách hàng có thể đặt lịch. Quản lý ngày nghỉ, ngày bận và xem lịch tổng quan.'
+    : isPureAodai
+    ? 'Thiết lập khung giờ mở cửa đón khách đến thử đồ, nhận đồ và trả đồ tại cửa hàng. Quản lý ngày nghỉ lễ, ngày đóng cửa tiệm.'
+    : 'Thiết lập khung giờ hoạt động để khách hàng có thể đặt lịch. Quản lý ngày nghỉ, ngày bận và xem lịch tổng quan.';
+
+  const recurringTabLabel = isPurePhoto
+    ? 'Thiết lập ca chụp'
+    : isPureAodai
+    ? 'Thiết lập giờ mở cửa tiệm'
+    : 'Thiết lập lịch làm việc';
+
+  const blockTabLabel = isPurePhoto
+    ? 'Chặn ngày bận / nghỉ'
+    : isPureAodai
+    ? 'Chặn ngày đóng cửa tiệm'
+    : 'Chặn ngày / khung giờ';
 
   // Quick block action from Overview -> switch to Block Tab with date prefilled
   const handleQuickBlockSelectedDate = () => {
@@ -325,10 +378,8 @@ export function CalendarPanel({
       {/* Header */}
       <div className="cal-header">
         <div className="cal-header-left">
-          <h1>Lịch làm việc &amp; Chặn</h1>
-          <p>
-            Thiết lập khung giờ hoạt động để khách hàng có thể đặt lịch. Quản lý ngày nghỉ, ngày bận và xem lịch tổng quan.
-          </p>
+          <h1>{headerTitle}</h1>
+          <p>{headerDesc}</p>
         </div>
         <div className="cal-header-quote">
           <Sparkles size={15} style={{ color: '#832738' }} />
@@ -352,7 +403,7 @@ export function CalendarPanel({
           className={`cal-subnav-btn ${activeSubNavTab === 'recurring' ? 'active' : ''}`}
         >
           <CalendarClock size={16} />
-          <span>Thiết lập lịch làm việc</span>
+          <span>{recurringTabLabel}</span>
         </button>
         <button
           type="button"
@@ -360,7 +411,7 @@ export function CalendarPanel({
           className={`cal-subnav-btn ${activeSubNavTab === 'block' ? 'active' : ''}`}
         >
           <CalendarOff size={16} />
-          <span>Chặn ngày / khung giờ</span>
+          <span>{blockTabLabel}</span>
         </button>
         <button
           type="button"
@@ -502,21 +553,55 @@ export function CalendarPanel({
                     )}
                   </div>
                   <div className="cal-detail-orders-count">
-                    {selectedDateDayVn} • {selectedDateOrders.length} đơn đặt lịch
+                    {selectedDateDayVn} • {filteredSelectedDateOrders.length} {isPurePhoto ? 'ca chụp' : isPureAodai ? 'lịch hẹn lấy/trả' : 'đơn đặt lịch'}
                   </div>
                 </div>
 
+                {/* Sub-filter for hybrid providers */}
+                {isHybrid && selectedDateOrders.length > 0 && (
+                  <div style={{ display: 'flex', gap: '6px', margin: '4px 0 10px 0' }}>
+                    <button
+                      type="button"
+                      onClick={() => setDetailFilter('ALL')}
+                      className={`cal-quick-btn ${detailFilter === 'ALL' ? 'active' : ''}`}
+                      style={{ padding: '3px 8px', fontSize: '11px', borderRadius: '6px', background: detailFilter === 'ALL' ? '#832738' : '#F3F4F6', color: detailFilter === 'ALL' ? '#FFF' : '#374151' }}
+                    >
+                      Tất cả ({selectedDateOrders.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDetailFilter('PHOTO')}
+                      className={`cal-quick-btn ${detailFilter === 'PHOTO' ? 'active' : ''}`}
+                      style={{ padding: '3px 8px', fontSize: '11px', borderRadius: '6px', background: detailFilter === 'PHOTO' ? '#832738' : '#F3F4F6', color: detailFilter === 'PHOTO' ? '#FFF' : '#374151' }}
+                    >
+                      Chụp ảnh ({selectedDateOrders.filter((o: any) => o.bookingType === 'PHOTOGRAPHY' || o.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY')).length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDetailFilter('AODAI')}
+                      className={`cal-quick-btn ${detailFilter === 'AODAI' ? 'active' : ''}`}
+                      style={{ padding: '3px 8px', fontSize: '11px', borderRadius: '6px', background: detailFilter === 'AODAI' ? '#832738' : '#F3F4F6', color: detailFilter === 'AODAI' ? '#FFF' : '#374151' }}
+                    >
+                      Thuê áo ({selectedDateOrders.filter((o: any) => o.bookingType === 'AODAI_RENTAL' || o.items?.some((i: any) => i.itemType === 'AODAI_RENTAL')).length})
+                    </button>
+                  </div>
+                )}
+
                 {/* Bookings List */}
                 <div className="cal-detail-orders-list">
-                  {selectedDateOrders.length === 0 ? (
+                  {filteredSelectedDateOrders.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '28px 0', color: '#9CA3AF' }}>
                       <CalendarDays size={32} style={{ opacity: 0.35, marginBottom: '6px' }} />
                       <p style={{ margin: 0, fontSize: '13px', fontWeight: 500 }}>
-                        Chưa có đơn đặt lịch nào trong ngày này.
+                        {isPurePhoto
+                          ? 'Chưa có ca chụp nào trong ngày này.'
+                          : isPureAodai
+                          ? 'Chưa có lịch hẹn nhận hoặc trả áo nào trong ngày này.'
+                          : 'Chưa có đơn đặt lịch nào trong ngày này.'}
                       </p>
                     </div>
                   ) : (
-                    selectedDateOrders.map((ord: any) => {
+                    filteredSelectedDateOrders.map((ord: any) => {
                       const isPhoto = ord.bookingType === 'PHOTOGRAPHY' || ord.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY');
                       const isAoDai = ord.bookingType === 'AODAI_RENTAL' || ord.items?.some((i: any) => i.itemType === 'AODAI_RENTAL');
                       const isCombo = ord.bookingType === 'COMBO' || (isPhoto && isAoDai);
@@ -560,13 +645,19 @@ export function CalendarPanel({
 
                 {/* Open Slots Section */}
                 <div className="cal-open-slots-section">
-                  <div className="cal-open-slots-title">Khung giờ hoạt động</div>
+                  <div className="cal-open-slots-title">
+                    {isPurePhoto ? 'Khung giờ nhận ca chụp' : isPureAodai ? 'Khung giờ mở cửa đón khách' : 'Khung giờ hoạt động'}
+                  </div>
                   <div className="cal-open-slots-list">
                     {isSelectedDateBlocked ? (
                       <span className="cal-slot-chip blocked">
                         <CalendarOff size={13} />
                         <span>
-                          Ngày này đã bị chặn lịch nghỉ
+                          {isPureAodai
+                            ? 'Tiệm đóng cửa không đón khách vào ngày này'
+                            : isPurePhoto
+                            ? 'Ngày này đã bị chặn lịch nghỉ / bận'
+                            : 'Ngày này đã bị chặn lịch nghỉ'}
                           {blockedDatesMap.get(selectedDate)?.reason
                             ? ` (${blockedDatesMap.get(selectedDate).reason})`
                             : ''}
@@ -581,7 +672,7 @@ export function CalendarPanel({
                       ))
                     ) : (
                       <span style={{ fontSize: '12px', color: '#9CA3AF', fontStyle: 'italic' }}>
-                        Không có ca làm việc cố định
+                        {isPureAodai ? 'Tiệm đóng cửa vào ngày này' : 'Không có ca làm việc cố định'}
                       </span>
                     )}
                   </div>
@@ -592,7 +683,7 @@ export function CalendarPanel({
                     className="cal-btn-quick-block"
                   >
                     <CalendarOff size={15} />
-                    <span>+ Chặn ngày này</span>
+                    <span>{isPureAodai ? '+ Chặn đóng cửa ngày này' : isPurePhoto ? '+ Chặn bận ngày này' : '+ Chặn ngày này'}</span>
                   </button>
                 </div>
               </div>
@@ -667,7 +758,13 @@ export function CalendarPanel({
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
                   <h3 className="cal-card-title">
                     <CalendarClock size={20} style={{ color: '#4A0E17' }} />
-                    <span>Khung giờ làm việc hằng tuần</span>
+                    <span>
+                      {isPurePhoto
+                        ? 'Khung giờ nhận ca chụp hằng tuần'
+                        : isPureAodai
+                        ? 'Giờ mở cửa đón khách hằng tuần'
+                        : 'Khung giờ làm việc hằng tuần'}
+                    </span>
                   </h3>
                   {editingScheduleDay !== null && (
                     <span style={{ fontSize: '11.5px', fontWeight: 700, padding: '3px 10px', borderRadius: '999px', backgroundColor: '#FFF7ED', color: '#9A3412' }}>
@@ -736,7 +833,11 @@ export function CalendarPanel({
 
                 {/* Working Shifts */}
                 <span style={{ fontSize: '12px', fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', marginBottom: '10px', display: 'block' }}>
-                  Các ca làm việc trong ngày
+                  {isPurePhoto
+                    ? 'Các ca chụp trong ngày'
+                    : isPureAodai
+                    ? 'Khung giờ mở cửa đón khách'
+                    : 'Các ca làm việc trong ngày'}
                 </span>
 
                 <div className="cal-shifts-container">
@@ -836,14 +937,24 @@ export function CalendarPanel({
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                   <h3 className="cal-card-title">
                     <CalendarDays size={19} style={{ color: '#4A0E17' }} />
-                    <span>Lịch làm việc đã cấu hình ({recurringSchedules.length} ngày)</span>
+                    <span>
+                      {isPurePhoto
+                        ? `Lịch ca chụp theo tuần (${recurringSchedules.length} ngày)`
+                        : isPureAodai
+                        ? `Giờ mở cửa theo tuần (${recurringSchedules.length} ngày)`
+                        : `Lịch làm việc đã cấu hình (${recurringSchedules.length} ngày)`}
+                    </span>
                   </h3>
                 </div>
 
                 <div className="cal-configured-items-list">
                   {recurringSchedules.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '40px 0', color: '#9CA3AF', fontSize: '13.5px' }}>
-                      Chưa thiết lập khung giờ làm việc hằng tuần nào.
+                      {isPurePhoto
+                        ? 'Chưa thiết lập khung giờ nhận ca chụp nào.'
+                        : isPureAodai
+                        ? 'Chưa thiết lập giờ mở cửa tiệm hằng tuần.'
+                        : 'Chưa thiết lập khung giờ làm việc hằng tuần nào.'}
                     </div>
                   ) : (
                     [1, 2, 3, 4, 5, 6, 0].map((dayIdx) => {
@@ -855,7 +966,9 @@ export function CalendarPanel({
                           <div key={dayIdx} className="cal-configured-item" style={{ opacity: 0.6 }}>
                             <div>
                               <div className="cal-item-day-title">{dayName}</div>
-                              <div className="cal-item-hours">Nghỉ (Không làm việc)</div>
+                              <div className="cal-item-hours">
+                                {isPureAodai ? 'Nghỉ (Đóng cửa tiệm)' : 'Nghỉ (Không làm việc)'}
+                              </div>
                             </div>
                             <span style={{ fontSize: '11px', color: '#9CA3AF', fontWeight: 600 }}>Đóng</span>
                           </div>
@@ -906,7 +1019,13 @@ export function CalendarPanel({
               <div className="cal-card">
                 <h3 className="cal-card-title" style={{ marginBottom: '18px' }}>
                   <CalendarOff size={20} style={{ color: '#DC2626' }} />
-                  <span>Chặn lịch nghỉ / Lịch bận đột xuất</span>
+                  <span>
+                    {isPurePhoto
+                      ? 'Chặn lịch nghỉ / Ca bận đột xuất'
+                      : isPureAodai
+                      ? 'Chặn ngày đóng cửa tiệm / Nghỉ lễ'
+                      : 'Chặn lịch nghỉ / Lịch bận đột xuất'}
+                  </span>
                 </h3>
 
                 {/* Block Type Radio */}
@@ -918,7 +1037,7 @@ export function CalendarPanel({
                       checked={blockType === 'FULL_DAY'}
                       onChange={() => setBlockType('FULL_DAY')}
                     />
-                    <span>Chặn cả ngày</span>
+                    <span>{isPureAodai ? 'Đóng cửa cả ngày' : 'Chặn cả ngày'}</span>
                   </label>
                   <label className="cal-radio-label">
                     <input
@@ -927,7 +1046,7 @@ export function CalendarPanel({
                       checked={blockType === 'CUSTOM_HOURS'}
                       onChange={() => setBlockType('CUSTOM_HOURS')}
                     />
-                    <span>Chặn khung giờ cụ thể</span>
+                    <span>{isPureAodai ? 'Đóng cửa khung giờ cụ thể' : 'Chặn khung giờ cụ thể'}</span>
                   </label>
                 </div>
 
@@ -954,7 +1073,7 @@ export function CalendarPanel({
 
                 {/* Date Input */}
                 <div className="cal-form-group">
-                  <label>Chọn ngày bận</label>
+                  <label>{isPureAodai ? 'Chọn ngày đóng cửa / nghỉ' : 'Chọn ngày bận'}</label>
                   <input
                     type="date"
                     value={blockedDate}
@@ -966,12 +1085,12 @@ export function CalendarPanel({
 
                 {/* Reason Input */}
                 <div className="cal-form-group">
-                  <label>Lý do nghỉ (Tùy chọn)</label>
+                  <label>{isPureAodai ? 'Lý do đóng cửa (Nghỉ lễ, kiểm kê kho...)' : 'Lý do nghỉ / bận (Tùy chọn)'}</label>
                   <textarea
                     value={blockReason}
                     maxLength={200}
                     onChange={(e) => setBlockReason(e.target.value)}
-                    placeholder="Ví dụ: Đi công tác, nghỉ lễ gia đình, bận việc đột xuất..."
+                    placeholder={isPureAodai ? 'Ví dụ: Nghỉ Tết, Kiểm kê kho áo dài định kỳ, Sửa chữa tiệm...' : 'Ví dụ: Đi công tác chụp ảnh, nghỉ lễ gia đình, bận việc đột xuất...'}
                     className="cal-textarea-reason"
                   />
                   <div className="cal-char-count">{blockReason.length}/200</div>
@@ -984,7 +1103,7 @@ export function CalendarPanel({
                   className="cal-btn-confirm-block"
                 >
                   <ShieldAlert size={16} />
-                  <span>Xác nhận chặn lịch nghỉ</span>
+                  <span>{isPureAodai ? 'Xác nhận đóng cửa tiệm' : 'Xác nhận chặn lịch nghỉ'}</span>
                 </button>
               </div>
 
@@ -993,14 +1112,20 @@ export function CalendarPanel({
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                   <h3 className="cal-card-title">
                     <CalendarX size={19} style={{ color: '#DC2626' }} />
-                    <span>Danh sách ngày đang bị chặn ({blockedDatesMap.size})</span>
+                    <span>
+                      {isPureAodai
+                        ? `Danh sách ngày đóng cửa tiệm (${blockedDatesMap.size})`
+                        : `Danh sách ngày đang bị chặn (${blockedDatesMap.size})`}
+                    </span>
                   </h3>
                 </div>
 
                 <div className="cal-configured-items-list">
                   {blockedDatesMap.size === 0 ? (
                     <div style={{ textAlign: 'center', padding: '40px 0', color: '#9CA3AF', fontSize: '13.5px' }}>
-                      Chưa có ngày nào bị chặn lịch nghỉ.
+                      {isPureAodai
+                        ? 'Chưa có ngày đóng cửa tiệm nào được thiết lập.'
+                        : 'Chưa có ngày nào bị chặn lịch nghỉ.'}
                     </div>
                   ) : (
                     Array.from(blockedDatesMap.entries()).map(([dateKey, sched]: [string, any]) => {
@@ -1076,7 +1201,13 @@ export function CalendarPanel({
                   className={`cal-list-tab-btn ${listTab === 'working' ? 'active' : ''}`}
                 >
                   <CalendarClock size={14} />
-                  <span>Lịch làm việc hằng tuần ({recurringSchedules.length})</span>
+                  <span>
+                    {isPurePhoto
+                      ? `Lịch ca chụp theo tuần (${recurringSchedules.length})`
+                      : isPureAodai
+                      ? `Giờ mở cửa theo tuần (${recurringSchedules.length})`
+                      : `Lịch làm việc hằng tuần (${recurringSchedules.length})`}
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -1084,7 +1215,11 @@ export function CalendarPanel({
                   className={`cal-list-tab-btn ${listTab === 'blocked' ? 'active' : ''}`}
                 >
                   <CalendarOff size={14} />
-                  <span>Ngày nghỉ / Bị chặn ({blockedDatesMap.size})</span>
+                  <span>
+                    {isPureAodai
+                      ? `Ngày đóng cửa tiệm (${blockedDatesMap.size})`
+                      : `Ngày nghỉ / Bị chặn (${blockedDatesMap.size})`}
+                  </span>
                 </button>
               </div>
 
@@ -1100,7 +1235,9 @@ export function CalendarPanel({
                         <div key={dayIdx} className="cal-configured-item" style={{ opacity: 0.6 }}>
                           <div>
                             <div className="cal-item-day-title">{dayName}</div>
-                            <div className="cal-item-hours">Nghỉ (Đóng cửa)</div>
+                            <div className="cal-item-hours">
+                              {isPureAodai ? 'Nghỉ (Đóng cửa tiệm)' : 'Nghỉ (Không làm việc)'}
+                            </div>
                           </div>
                           <span style={{ fontSize: '12px', color: '#9CA3AF' }}>Chưa thiết lập</span>
                         </div>
@@ -1141,7 +1278,9 @@ export function CalendarPanel({
                 ) : (
                   blockedDatesMap.size === 0 ? (
                     <div style={{ textAlign: 'center', padding: '50px 0', color: '#9CA3AF', fontSize: '13.5px' }}>
-                      Chưa có ngày nào bị chặn lịch nghỉ.
+                      {isPureAodai
+                        ? 'Chưa có ngày đóng cửa tiệm nào được thiết lập.'
+                        : 'Chưa có ngày nào bị chặn lịch nghỉ.'}
                     </div>
                   ) : (
                     Array.from(blockedDatesMap.entries()).map(([dateKey, sched]: [string, any]) => {

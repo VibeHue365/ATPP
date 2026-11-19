@@ -142,7 +142,12 @@ export class ProviderOverviewService {
         isCurrentMonth,
       ),
       this.calculateUpcomingSchedules(providerId, startOfToday),
-      this.calculateTasks(providerId, provider.userId, startOfToday, endOfToday),
+      this.calculateTasks(
+        providerId,
+        provider.userId,
+        startOfToday,
+        endOfToday,
+      ),
       this.calculateTopServices(providerId),
       this.calculateRecentActivities(providerId),
       this.calculatePerformance(provider, providerId),
@@ -228,10 +233,7 @@ export class ProviderOverviewService {
               {
                 $subtract: [
                   {
-                    $multiply: [
-                      '$unitPrice',
-                      { $ifNull: ['$quantity', 1] },
-                    ],
+                    $multiply: ['$unitPrice', { $ifNull: ['$quantity', 1] }],
                   },
                   { $ifNull: ['$comboDiscountAmount', 0] },
                 ],
@@ -278,14 +280,15 @@ export class ProviderOverviewService {
 
     // 3. Upcoming schedules count (next 7 days) & today
     const in7Days = new Date(startOfToday.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const upcomingSchedulesCount = await this.bookingScheduleModel.countDocuments({
-      providerId,
-      status: { $in: ['CONFIRMED', 'SCHEDULED', 'HELD'] },
-      $or: [
-        { startsAt: { $gte: startOfToday, $lte: in7Days } },
-        { scheduledDate: { $gte: startOfToday, $lte: in7Days } },
-      ],
-    } as any);
+    const upcomingSchedulesCount =
+      await this.bookingScheduleModel.countDocuments({
+        providerId,
+        status: { $in: ['CONFIRMED', 'SCHEDULED', 'HELD'] },
+        $or: [
+          { startsAt: { $gte: startOfToday, $lte: in7Days } },
+          { scheduledDate: { $gte: startOfToday, $lte: in7Days } },
+        ],
+      } as any);
 
     const todaySchedulesCount = await this.bookingScheduleModel.countDocuments({
       providerId,
@@ -516,10 +519,7 @@ export class ProviderOverviewService {
               {
                 $subtract: [
                   {
-                    $multiply: [
-                      '$unitPrice',
-                      { $ifNull: ['$quantity', 1] },
-                    ],
+                    $multiply: ['$unitPrice', { $ifNull: ['$quantity', 1] }],
                   },
                   { $ifNull: ['$comboDiscountAmount', 0] },
                 ],
@@ -617,16 +617,14 @@ export class ProviderOverviewService {
       const item = s.bookingItemId;
       const cust = b?.customerId;
       const custName =
-        cust?.profile?.fullName ||
-        cust?.email?.split('@')[0] ||
-        'Khách hàng';
+        cust?.profile?.fullName || cust?.email?.split('@')[0] || 'Khách hàng';
       const avatarUrl = cust?.profile?.avatarUrl || null;
 
       const scheduleDate = s.startsAt
         ? new Date(s.startsAt)
         : s.scheduledDate
-        ? new Date(s.scheduledDate)
-        : startOfToday;
+          ? new Date(s.scheduledDate)
+          : startOfToday;
       const timeLabel =
         s.startsAt && s.endsAt
           ? `${this.formatVnTime(new Date(s.startsAt))} - ${this.formatVnTime(new Date(s.endsAt))}`
@@ -877,10 +875,7 @@ export class ProviderOverviewService {
                 {
                   $subtract: [
                     {
-                      $multiply: [
-                        '$unitPrice',
-                        { $ifNull: ['$quantity', 1] },
-                      ],
+                      $multiply: ['$unitPrice', { $ifNull: ['$quantity', 1] }],
                     },
                     { $ifNull: ['$comboDiscountAmount', 0] },
                   ],
@@ -1083,7 +1078,11 @@ export class ProviderOverviewService {
 
   // --- Date Helpers (Asia/Ho_Chi_Minh: UTC+7) ---
 
-  private getVnDateParts(d: Date): { year: number; month: number; day: number } {
+  private getVnDateParts(d: Date): {
+    year: number;
+    month: number;
+    day: number;
+  } {
     const str = d.toLocaleDateString('en-CA', {
       timeZone: 'Asia/Ho_Chi_Minh',
     }); // "YYYY-MM-DD"

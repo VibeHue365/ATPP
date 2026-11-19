@@ -267,7 +267,7 @@ export function CustomerManagementPanel() {
             warning: 'NONE',
             warningLabel: 'Không có',
             riskLevel: 'LOW',
-            registrationSource: 'Website VibeHue',
+            registrationSource: 'Website TàGo',
             address: 'Việt Nam',
             language: 'Tiếng Việt',
             device: 'Trình duyệt Web / Di động',

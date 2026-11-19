@@ -102,7 +102,7 @@ export const ProductDraftSuggestion: React.FC<ProductDraftSuggestionProps> = ({
         <span className="pdraft-hint">
           {photos.length === 0
             ? 'Tải ảnh lên trước, AI sẽ đọc ảnh bìa và tối đa 2 ảnh tiếp theo.'
-            : 'AI chạy trên máy chủ VibeHue, chỉ gợi ý những gì nhận ra chắc chắn.'}
+            : 'AI chạy trên máy chủ TàGo, chỉ gợi ý những gì nhận ra chắc chắn.'}
         </span>
       </div>
 

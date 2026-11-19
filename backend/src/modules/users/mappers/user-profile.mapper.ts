@@ -8,7 +8,8 @@ export class UserProfileMapper {
     user: User & { _id: Types.ObjectId },
     roles: string[],
   ): Record<string, unknown> {
-    const defaultAddr = (user.addresses || []).find((a) => a.isDefault) || user.addresses?.[0];
+    const defaultAddr =
+      (user.addresses || []).find((a) => a.isDefault) || user.addresses?.[0];
     return {
       id: user._id.toString(),
       email: user.auth.email,

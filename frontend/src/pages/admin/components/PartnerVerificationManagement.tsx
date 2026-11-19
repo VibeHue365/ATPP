@@ -52,7 +52,7 @@ const REJECT_PRESET_REASONS = [
   'Ảnh chụp CCCD bị mờ, lóa sáng hoặc mất góc',
   'Thông tin hồ sơ không trùng khớp dữ liệu OCR',
   'Cơ sở vật chất không đáp ứng tiêu chuẩn nền tảng',
-  'Vi phạm quy định chính sách đối tác VibeHue',
+  'Vi phạm quy định chính sách đối tác TàGo',
 ];
 
 const CHANGE_TARGET_OPTIONS = [
@@ -306,7 +306,7 @@ export function PartnerVerificationManagement() {
   const handleApprove = async (id: string) => {
     const result = await Swal.fire({
       title: 'Phê duyệt hồ sơ đối tác?',
-      text: 'Sau khi phê duyệt, tài khoản đối tác sẽ được kích hoạt trên hệ thống VibeHue.',
+      text: 'Sau khi phê duyệt, tài khoản đối tác sẽ được kích hoạt trên hệ thống TàGo.',
       icon: 'question',
       showCancelButton: true,
       confirmButtonColor: '#059669',
@@ -1095,7 +1095,7 @@ export function PartnerVerificationManagement() {
                     <h2>
                       {activeVerification.businessProfile?.businessName ||
                         activeVerification.businessName ||
-                        'Đối tác VibeHue'}
+                        'Đối tác TàGo'}
                     </h2>
                     <div className="pv-dh-subgroup">
                       <span className="pv-partner-code">
@@ -1136,7 +1136,7 @@ export function PartnerVerificationManagement() {
                 <div className="pv-dh-item">
                   <span className="label">Email:</span>
                   <span className="val">
-                    {activeVerification.businessProfile?.email || activeVerification.email || 'partner@vibehue.com'}
+                    {activeVerification.businessProfile?.email || activeVerification.email || 'partner@tago.vn'}
                   </span>
                 </div>
                 <div className="pv-dh-item">
@@ -1202,7 +1202,7 @@ export function PartnerVerificationManagement() {
                         </div>
                         <div className="pv-score-info">
                           <h4>Tiêu chí đạt ({Math.round(((activeVerification.documentsValid ?? 4) / 5) * 100)}%)</h4>
-                          <p>Hồ sơ đáp ứng {activeVerification.documentsValid ?? 4} trên 5 tiêu chuẩn đối tác VibeHue Escrow.</p>
+                          <p>Hồ sơ đáp ứng {activeVerification.documentsValid ?? 4} trên 5 tiêu chuẩn đối tác TàGo Escrow.</p>
                         </div>
                       </div>
 
@@ -1738,7 +1738,7 @@ export function PartnerVerificationManagement() {
                         <span className="pv-tl-title" style={{ color: '#059669' }}>
                           Phê duyệt và kích hoạt đối tác
                         </span>
-                        <span className="pv-tl-meta">Hồ sơ đạt tiêu chuẩn VibeHue</span>
+                        <span className="pv-tl-meta">Hồ sơ đạt tiêu chuẩn TàGo</span>
                       </div>
                     )}
 

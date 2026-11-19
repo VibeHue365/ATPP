@@ -375,6 +375,8 @@ export const ProviderDashboard: React.FC = () => {
     toast,
     workingHourRanges,
     scheduleCapability,
+    hasPhotographyCapability,
+    hasAodaiCapability,
     setEditingScheduleDay,
     fetchProviderData: (...args) => fetchProviderData(...args),
     blockedDate,

@@ -1,4 +1,10 @@
-import { IsArray, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsArray,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 
 export class SubmitWeatherCancellationDto {
   @IsString()
@@ -7,7 +13,10 @@ export class SubmitWeatherCancellationDto {
   reason: string;
 
   @IsArray({ message: 'Danh sách ảnh bằng chứng phải là một mảng.' })
-  @IsString({ each: true, message: 'Đường dẫn ảnh bằng chứng phải là chuỗi URL.' })
+  @IsString({
+    each: true,
+    message: 'Đường dẫn ảnh bằng chứng phải là chuỗi URL.',
+  })
   @IsOptional()
   evidencePhotos?: string[];
 }

@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -7,8 +11,15 @@ import {
   ProviderDocument,
   ProviderStatus,
 } from '../../providers/schemas/provider.schema';
-import { PackageStatus, PhotographyPackage } from '../../products/schemas/photography-package.schema';
-import { Category, CategoryStatus, ServiceCategoryType } from '../../categories/schemas/category.schema';
+import {
+  PackageStatus,
+  PhotographyPackage,
+} from '../../products/schemas/photography-package.schema';
+import {
+  Category,
+  CategoryStatus,
+  ServiceCategoryType,
+} from '../../categories/schemas/category.schema';
 import {
   ProviderSchedule,
   ScheduleCapability,
@@ -16,8 +27,14 @@ import {
 } from '../../products/schemas/provider-schedule.schema';
 import { PortfolioItem } from '../../providers/schemas/portfolio-item.schema';
 import { ProductModerationStatus } from '../../products/schemas/product.schema';
-import { SmartTagPublicProjectionService, type PublicSmartTagBadge } from '../../smart-tagging/services/smart-tag-public-projection.service';
-import { PhotographerDiscoveryQueryDto, PhotographerSortOption } from '../dto/photographer-discovery-query.dto';
+import {
+  SmartTagPublicProjectionService,
+  type PublicSmartTagBadge,
+} from '../../smart-tagging/services/smart-tag-public-projection.service';
+import {
+  PhotographerDiscoveryQueryDto,
+  PhotographerSortOption,
+} from '../dto/photographer-discovery-query.dto';
 
 const DISCOVERY_LOCATION_KEY = '__locationForDiscovery';
 
@@ -41,7 +58,9 @@ export class PhotographersService {
     value: Record<string, unknown>[];
     expiresAt: number;
   };
-  private static publicPhotographersInFlight?: Promise<Record<string, unknown>[]>;
+  private static publicPhotographersInFlight?: Promise<
+    Record<string, unknown>[]
+  >;
 
   static clearPublicCache(): void {
     PhotographersService.publicPhotographersCache = undefined;
@@ -50,28 +69,40 @@ export class PhotographersService {
 
   private async getPublicPhotographers(): Promise<Record<string, unknown>[]> {
     const now = Date.now();
-    if (PhotographersService.publicPhotographersCache && PhotographersService.publicPhotographersCache.expiresAt > now) {
+    if (
+      PhotographersService.publicPhotographersCache &&
+      PhotographersService.publicPhotographersCache.expiresAt > now
+    ) {
       return PhotographersService.publicPhotographersCache.value;
     }
-    if (PhotographersService.publicPhotographersInFlight) return PhotographersService.publicPhotographersInFlight;
+    if (PhotographersService.publicPhotographersInFlight)
+      return PhotographersService.publicPhotographersInFlight;
 
-    PhotographersService.publicPhotographersInFlight = this.loadPublicPhotographers()
-      .then((value) => {
-        PhotographersService.publicPhotographersCache = { value, expiresAt: Date.now() + 120_000 };
-        return value;
-      })
-      .finally(() => {
-        PhotographersService.publicPhotographersInFlight = undefined;
-      });
+    PhotographersService.publicPhotographersInFlight =
+      this.loadPublicPhotographers()
+        .then((value) => {
+          PhotographersService.publicPhotographersCache = {
+            value,
+            expiresAt: Date.now() + 120_000,
+          };
+          return value;
+        })
+        .finally(() => {
+          PhotographersService.publicPhotographersInFlight = undefined;
+        });
     return PhotographersService.publicPhotographersInFlight;
   }
-  
+
   async findAll(query: PhotographerDiscoveryQueryDto = {}) {
     const publicPhotographers = await this.getPublicPhotographers();
     const normalizedQuery = this.normalizeDiscoveryQuery(query);
     const matchingPhotographers = publicPhotographers
-      .filter((photographer) => this.matchesDiscoveryQuery(photographer, normalizedQuery))
-      .sort((left, right) => this.comparePhotographers(left, right, normalizedQuery.sort));
+      .filter((photographer) =>
+        this.matchesDiscoveryQuery(photographer, normalizedQuery),
+      )
+      .sort((left, right) =>
+        this.comparePhotographers(left, right, normalizedQuery.sort),
+      );
 
     const total = matchingPhotographers.length;
     const totalPages = Math.max(1, Math.ceil(total / normalizedQuery.limit));
@@ -82,8 +113,10 @@ export class PhotographersService {
       data: matchingPhotographers
         .slice(start, start + normalizedQuery.limit)
         .map((photographer) => {
-          const { [DISCOVERY_LOCATION_KEY]: _privateLocation, ...publicPhotographer } =
-            photographer;
+          const {
+            [DISCOVERY_LOCATION_KEY]: _privateLocation,
+            ...publicPhotographer
+          } = photographer;
           return publicPhotographer;
         }),
       meta: {
@@ -105,15 +138,17 @@ export class PhotographersService {
         .sort({ displayOrder: 1, name: 1 })
         .lean()
         .exec(),
-      this.packageModel.aggregate<{ _id: Types.ObjectId; packageCount: number }>([
-        {
-          $match: {
-            status: PackageStatus.Active,
-            categoryId: { $ne: null },
+      this.packageModel
+        .aggregate<{ _id: Types.ObjectId; packageCount: number }>([
+          {
+            $match: {
+              status: PackageStatus.Active,
+              categoryId: { $ne: null },
+            },
           },
-        },
-        { $group: { _id: '$categoryId', packageCount: { $sum: 1 } } },
-      ]).exec(),
+          { $group: { _id: '$categoryId', packageCount: { $sum: 1 } } },
+        ])
+        .exec(),
     ]);
 
     const packageCountByCategory = new Map(
@@ -193,11 +228,13 @@ export class PhotographersService {
     if (!Types.ObjectId.isValid(id)) {
       throw new NotFoundException('ID nhiếp ảnh gia không hợp lệ');
     }
-    const photographer = await this.providerModel.findOne({
-      _id: new Types.ObjectId(id),
-      capabilities: ProviderCapability.Photography,
-      status: ProviderStatus.Active,
-    }).exec();
+    const photographer = await this.providerModel
+      .findOne({
+        _id: new Types.ObjectId(id),
+        capabilities: ProviderCapability.Photography,
+        status: ProviderStatus.Active,
+      })
+      .exec();
     if (!photographer) {
       throw new NotFoundException(`Không tìm thấy nhiếp ảnh gia với ID: ${id}`);
     }
@@ -232,17 +269,26 @@ export class PhotographersService {
     if (!photographer) {
       throw new NotFoundException('Active photographer not found');
     }
-    return this.packageModel.find({
-      providerId: new Types.ObjectId(providerId),
-      status: PackageStatus.Active,
-    }).sort({ updatedAt: -1 }).exec();
+    return this.packageModel
+      .find({
+        providerId: new Types.ObjectId(providerId),
+        status: PackageStatus.Active,
+      })
+      .sort({ updatedAt: -1 })
+      .exec();
   }
 
-  async findAvailability(providerId: string, date: string): Promise<{
+  async findAvailability(
+    providerId: string,
+    date: string,
+  ): Promise<{
     date: string;
     timeRanges: Array<{ start: string; end: string }>;
   }> {
-    if (!Types.ObjectId.isValid(providerId) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    if (
+      !Types.ObjectId.isValid(providerId) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(date)
+    ) {
       throw new NotFoundException('Thông tin lịch làm việc không hợp lệ');
     }
 
@@ -252,7 +298,9 @@ export class PhotographersService {
       status: ProviderStatus.Active,
     });
     if (!photographer) {
-      throw new NotFoundException('Không tìm thấy nhiếp ảnh gia đang hoạt động');
+      throw new NotFoundException(
+        'Không tìm thấy nhiếp ảnh gia đang hoạt động',
+      );
     }
 
     const selectedDate = new Date(`${date}T00:00:00`);
@@ -264,7 +312,10 @@ export class PhotographersService {
       providerId: photographer._id,
       scheduleType: ScheduleType.SpecificDate,
       specificDate: selectedDate,
-      $or: [{ capability: null }, { capability: ScheduleCapability.Photography }],
+      $or: [
+        { capability: null },
+        { capability: ScheduleCapability.Photography },
+      ],
     });
     const isOffDay = specificSchedule?.offDays.some(
       (offDay: Date) => offDay.toISOString().slice(0, 10) === date,
@@ -277,12 +328,19 @@ export class PhotographersService {
       return {
         date,
         timeRanges: specificSchedule.customSlots
-          .filter((slot: { timeSlot: string; status: string }) => slot.status === 'AVAILABLE')
+          .filter(
+            (slot: { timeSlot: string; status: string }) =>
+              slot.status === 'AVAILABLE',
+          )
           .map((slot: { timeSlot: string; status: string }) => {
-            const [start, end] = slot.timeSlot.split('-').map((value: string) => value.trim());
+            const [start, end] = slot.timeSlot
+              .split('-')
+              .map((value: string) => value.trim());
             return { start, end };
           })
-          .filter((slot: { start: string; end: string }) => slot.start && slot.end),
+          .filter(
+            (slot: { start: string; end: string }) => slot.start && slot.end,
+          ),
       };
     }
 
@@ -290,7 +348,10 @@ export class PhotographersService {
       providerId: photographer._id,
       scheduleType: ScheduleType.Recurring,
       dayOfWeek: selectedDate.getDay(),
-      $or: [{ capability: null }, { capability: ScheduleCapability.Photography }],
+      $or: [
+        { capability: null },
+        { capability: ScheduleCapability.Photography },
+      ],
     });
 
     return {
@@ -302,13 +363,17 @@ export class PhotographersService {
     const [activePackages, approvedPortfolioItems] = await Promise.all([
       this.packageModel
         .find({ status: PackageStatus.Active })
-        .select('providerId categoryId conceptCategoryIds styleCategoryIds eventCategoryIds name slug description price durationHours pricingUnit includedDurationMinutes includedSessionCount includedDayCount additionalSessionFee editedPhotosCount rawPhotosCount deliveryDays travelFeeNotes overtimeFeePerHour overtimeIncrementMinutes maxOvertimeMinutes bufferBeforeMinutes bufferAfterMinutes images status maxPeople rating createdAt updatedAt')
+        .select(
+          'providerId categoryId conceptCategoryIds styleCategoryIds eventCategoryIds name slug description price durationHours pricingUnit includedDurationMinutes includedSessionCount includedDayCount additionalSessionFee editedPhotosCount rawPhotosCount deliveryDays travelFeeNotes overtimeFeePerHour overtimeIncrementMinutes maxOvertimeMinutes bufferBeforeMinutes bufferAfterMinutes images status maxPeople rating createdAt updatedAt',
+        )
         .sort({ price: 1, updatedAt: -1 })
         .lean()
         .exec(),
       this.portfolioItemModel
         .find({ moderationStatus: ProductModerationStatus.Approved })
-        .select('providerId title description images taggingRevision createdAt updatedAt')
+        .select(
+          'providerId title description images taggingRevision createdAt updatedAt',
+        )
         .sort({ updatedAt: -1 })
         .lean()
         .exec(),
@@ -331,12 +396,19 @@ export class PhotographersService {
         _id: { $in: publicProviderIds },
         status: ProviderStatus.Active,
       })
-      .select('businessName status address media photographySettings rating quote equipment policies portfolio createdAt updatedAt')
+      .select(
+        'businessName status address media photographySettings rating quote equipment policies portfolio createdAt updatedAt',
+      )
       .lean()
       .exec();
-    const visibleProviderIds = new Set(photographers.map((item) => item._id.toString()));
+    const visibleProviderIds = new Set(
+      photographers.map((item) => item._id.toString()),
+    );
     const packagesByProvider = new Map<string, any[]>();
-    const portfolioByProvider = new Map<string, typeof approvedPortfolioItems>();
+    const portfolioByProvider = new Map<
+      string,
+      typeof approvedPortfolioItems
+    >();
 
     for (const item of activePackages) {
       const providerId = item.providerId.toString();
@@ -353,9 +425,12 @@ export class PhotographersService {
       portfolioByProvider.set(providerId, portfolioItems);
     }
 
-    const portfolioBadgeMap = await this.smartTagPublicProjectionService.projectPortfolioBadges(
-      approvedPortfolioItems.filter((item) => visibleProviderIds.has(item.providerId.toString())),
-    );
+    const portfolioBadgeMap =
+      await this.smartTagPublicProjectionService.projectPortfolioBadges(
+        approvedPortfolioItems.filter((item) =>
+          visibleProviderIds.has(item.providerId.toString()),
+        ),
+      );
 
     return Promise.all(
       photographers.map(async (photographer) => {
@@ -387,7 +462,9 @@ export class PhotographersService {
       query.longitude,
       query.searchRadiusKm,
     ];
-    const usesProximityFilter = proximityValues.some((value) => value !== undefined);
+    const usesProximityFilter = proximityValues.some(
+      (value) => value !== undefined,
+    );
     if (
       usesProximityFilter &&
       proximityValues.some((value) => value === undefined)
@@ -397,11 +474,15 @@ export class PhotographersService {
       );
     }
     return {
-      q: this.normalizeText(query.q),      concept: query.concept?.trim().toUpperCase() ?? '',
-      packageCategoryId: Types.ObjectId.isValid(query.packageCategoryId ?? '') ? query.packageCategoryId ?? '' : '',
+      q: this.normalizeText(query.q),
+      concept: query.concept?.trim().toUpperCase() ?? '',
+      packageCategoryId: Types.ObjectId.isValid(query.packageCategoryId ?? '')
+        ? (query.packageCategoryId ?? '')
+        : '',
       conceptCategoryIds: this.toObjectIdList(query.conceptCategoryIds),
       styleCategoryIds: this.toObjectIdList(query.styleCategoryIds),
-      eventCategoryIds: this.toObjectIdList(query.eventCategoryIds),      location: this.normalizeText(query.location),
+      eventCategoryIds: this.toObjectIdList(query.eventCategoryIds),
+      location: this.normalizeText(query.location),
       proximity: usesProximityFilter
         ? {
             latitude: query.latitude as number,
@@ -410,7 +491,10 @@ export class PhotographersService {
           }
         : null,
       minPrice,
-      maxPrice: maxPrice !== undefined && minPrice !== undefined && maxPrice < minPrice ? minPrice : maxPrice,
+      maxPrice:
+        maxPrice !== undefined && minPrice !== undefined && maxPrice < minPrice
+          ? minPrice
+          : maxPrice,
       minRating: query.minRating,
       sort: query.sort ?? 'rating_desc',
       date: query.date?.trim(),
@@ -425,7 +509,9 @@ export class PhotographersService {
     photographer: Record<string, unknown>,
     query: ReturnType<PhotographersService['normalizeDiscoveryQuery']>,
   ): boolean {
-    const defaultPackage = photographer.defaultPackage as { price?: number } | null;
+    const defaultPackage = photographer.defaultPackage as {
+      price?: number;
+    } | null;
     const packages = photographer.packages as Array<{
       price?: number;
       categoryId?: unknown;
@@ -445,8 +531,12 @@ export class PhotographersService {
     const packagesForPrice = hasPackageCategoryFilters
       ? matchingPackages
       : packages;
-    const rating = photographer.rating as { averageRating?: number } | undefined;
-    const address = photographer.address as { city?: string; district?: string } | undefined;
+    const rating = photographer.rating as
+      | { averageRating?: number }
+      | undefined;
+    const address = photographer.address as
+      | { city?: string; district?: string }
+      | undefined;
     const businessName = String(photographer.businessName ?? '');
     const portfolioItems = photographer.portfolioItems as Array<{
       badges?: Array<{ code?: string; label?: string }>;
@@ -485,7 +575,9 @@ export class PhotographersService {
     }
 
     if (query.q) {
-      const packageTexts = packages.map((pkg: any) => `${pkg.name ?? ''} ${pkg.description ?? ''}`);
+      const packageTexts = packages.map(
+        (pkg: any) => `${pkg.name ?? ''} ${pkg.description ?? ''}`,
+      );
       const searchableText = [
         businessName,
         address?.city ?? '',
@@ -530,12 +622,19 @@ export class PhotographersService {
       return false;
     }
     if (query.groupSize) {
-      const minRequired = query.groupSize === '1' ? 1
-        : query.groupSize === '2' ? 2
-        : query.groupSize === '3-5' ? 3
-        : query.groupSize === '6+' ? 6
-        : Number(query.groupSize) || 1;
-      const hasEligiblePackage = packagesForPrice.some((p: any) => (p.maxPeople ?? 1) >= minRequired);
+      const minRequired =
+        query.groupSize === '1'
+          ? 1
+          : query.groupSize === '2'
+            ? 2
+            : query.groupSize === '3-5'
+              ? 3
+              : query.groupSize === '6+'
+                ? 6
+                : Number(query.groupSize) || 1;
+      const hasEligiblePackage = packagesForPrice.some(
+        (p: any) => (p.maxPeople ?? 1) >= minRequired,
+      );
       if (!hasEligiblePackage) return false;
     }
     return true;
@@ -562,12 +661,23 @@ export class PhotographersService {
     right: Record<string, unknown>,
     sort: PhotographerSortOption,
   ): number {
-    const leftRating = (left.rating as { averageRating?: number } | undefined)?.averageRating ?? 0;
-    const rightRating = (right.rating as { averageRating?: number } | undefined)?.averageRating ?? 0;
-    const leftReviewCount = (left.rating as { totalReviews?: number } | undefined)?.totalReviews ?? 0;
-    const rightReviewCount = (right.rating as { totalReviews?: number } | undefined)?.totalReviews ?? 0;
-    const leftPrice = (left.defaultPackage as { price?: number } | null)?.price ?? Number.POSITIVE_INFINITY;
-    const rightPrice = (right.defaultPackage as { price?: number } | null)?.price ?? Number.POSITIVE_INFINITY;
+    const leftRating =
+      (left.rating as { averageRating?: number } | undefined)?.averageRating ??
+      0;
+    const rightRating =
+      (right.rating as { averageRating?: number } | undefined)?.averageRating ??
+      0;
+    const leftReviewCount =
+      (left.rating as { totalReviews?: number } | undefined)?.totalReviews ?? 0;
+    const rightReviewCount =
+      (right.rating as { totalReviews?: number } | undefined)?.totalReviews ??
+      0;
+    const leftPrice =
+      (left.defaultPackage as { price?: number } | null)?.price ??
+      Number.POSITIVE_INFINITY;
+    const rightPrice =
+      (right.defaultPackage as { price?: number } | null)?.price ??
+      Number.POSITIVE_INFINITY;
 
     const comparison =
       sort === 'reviews_desc'
@@ -577,12 +687,24 @@ export class PhotographersService {
           : sort === 'price_desc'
             ? rightPrice - leftPrice
             : rightRating - leftRating;
-    return comparison || String(left.businessName ?? '').localeCompare(String(right.businessName ?? ''), 'vi');
+    return (
+      comparison ||
+      String(left.businessName ?? '').localeCompare(
+        String(right.businessName ?? ''),
+        'vi',
+      )
+    );
   }
 
-
   private toObjectIdList(value?: string): string[] {
-    return [...new Set((value ?? '').split(',').map((id) => id.trim()).filter((id) => Types.ObjectId.isValid(id)))];
+    return [
+      ...new Set(
+        (value ?? '')
+          .split(',')
+          .map((id) => id.trim())
+          .filter((id) => Types.ObjectId.isValid(id)),
+      ),
+    ];
   }
 
   private matchesPackageCategoryFilters(
@@ -599,14 +721,18 @@ export class PhotographersService {
       eventCategoryIds: string[];
     },
   ): boolean {
-    const includesAll = (assigned: unknown[] | undefined, selected: string[]) => {
+    const includesAll = (
+      assigned: unknown[] | undefined,
+      selected: string[],
+    ) => {
       if (selected.length === 0) return true;
       const assignedIds = new Set((assigned ?? []).map((id) => String(id)));
       return selected.every((id) => assignedIds.has(id));
     };
 
     return (
-      (!query.packageCategoryId || String(item.categoryId) === query.packageCategoryId) &&
+      (!query.packageCategoryId ||
+        String(item.categoryId) === query.packageCategoryId) &&
       includesAll(item.conceptCategoryIds, query.conceptCategoryIds) &&
       includesAll(item.styleCategoryIds, query.styleCategoryIds) &&
       includesAll(item.eventCategoryIds, query.eventCategoryIds)
@@ -623,20 +749,31 @@ export class PhotographersService {
   private async toPublicPhotographer(
     photographer: ProviderDocument | Record<string, any>,
     packages: any[],
-    portfolioItemsOverride?: Array<{ _id: Types.ObjectId; title: string; description?: string | null; images: string[]; taggingRevision: number }>,
+    portfolioItemsOverride?: Array<{
+      _id: Types.ObjectId;
+      title: string;
+      description?: string | null;
+      images: string[];
+      taggingRevision: number;
+    }>,
     badgeMapOverride?: Map<string, PublicSmartTagBadge[]>,
   ): Promise<Record<string, unknown>> {
-    const portfolioItems = portfolioItemsOverride ?? await this.portfolioItemModel
-      .find({
-        providerId: photographer._id,
-        moderationStatus: ProductModerationStatus.Approved,
-      })
-      .select('_id title description images taggingRevision createdAt updatedAt')
-      .sort({ updatedAt: -1 })
-      .lean();
-    const provider = typeof (photographer as any).toObject === 'function'
-      ? (photographer as any).toObject()
-      : photographer;
+    const portfolioItems =
+      portfolioItemsOverride ??
+      (await this.portfolioItemModel
+        .find({
+          providerId: photographer._id,
+          moderationStatus: ProductModerationStatus.Approved,
+        })
+        .select(
+          '_id title description images taggingRevision createdAt updatedAt',
+        )
+        .sort({ updatedAt: -1 })
+        .lean());
+    const provider =
+      typeof (photographer as any).toObject === 'function'
+        ? (photographer as any).toObject()
+        : photographer;
     const providerAddress = provider.address;
     const photographySettings = provider.photographySettings;
     const address = providerAddress
@@ -649,8 +786,11 @@ export class PhotographersService {
         }
       : null;
     const media = { ...provider.media, images: provider.media?.images || [] };
-    const badgeMap = badgeMapOverride ??
-      await this.smartTagPublicProjectionService.projectPortfolioBadges(portfolioItems);
+    const badgeMap =
+      badgeMapOverride ??
+      (await this.smartTagPublicProjectionService.projectPortfolioBadges(
+        portfolioItems,
+      ));
     const publicPortfolioItems = portfolioItems.map((item) => ({
       _id: item._id,
       title: item.title,

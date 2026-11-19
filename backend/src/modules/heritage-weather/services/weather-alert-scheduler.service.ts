@@ -52,7 +52,9 @@ export class WeatherAlertSchedulerService {
       'true',
     );
     if (isEnabled === 'false') {
-      this.logger.debug('Weather advisor feature flag is disabled. Skipping scan.');
+      this.logger.debug(
+        'Weather advisor feature flag is disabled. Skipping scan.',
+      );
       return { t24Count: 0, t3Count: 0 };
     }
 
@@ -158,7 +160,9 @@ export class WeatherAlertSchedulerService {
 
         const shootDateStr =
           schedule.providerLocalDate ||
-          (schedule.startsAt ? new Date(schedule.startsAt).toISOString().split('T')[0] : '');
+          (schedule.startsAt
+            ? new Date(schedule.startsAt).toISOString().split('T')[0]
+            : '');
         const timeSlot = schedule.timeSlot || '09:00 - 11:00';
         const spotName = schedule.locationAddress || 'Di tích Huế';
 

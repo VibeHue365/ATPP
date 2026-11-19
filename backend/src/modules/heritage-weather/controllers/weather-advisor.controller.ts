@@ -74,7 +74,10 @@ export class WeatherAdvisorController {
           isGolden,
           isBlue,
         );
-        const isRedAlert = this.scoringService.isHourRedAlert(metric, spaceType);
+        const isRedAlert = this.scoringService.isHourRedAlert(
+          metric,
+          spaceType,
+        );
 
         return {
           hour: metric.hourTimestamp.getHours(),
@@ -131,10 +134,7 @@ export class WeatherAdvisorController {
    * Assesses a specific photography slot at a Heritage Spot by its ID
    */
   @Get('spots/:id/assessment')
-  async assessSpotSlot(
-    @Param('id') id: string,
-    @Query() query: AssessSlotDto,
-  ) {
+  async assessSpotSlot(@Param('id') id: string, @Query() query: AssessSlotDto) {
     const spot = await this.heritageSpotsService.findById(id);
     const lng = spot.location.coordinates[0];
     const lat = spot.location.coordinates[1];

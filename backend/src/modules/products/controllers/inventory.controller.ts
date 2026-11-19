@@ -1,11 +1,24 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { InventoryService } from '../services/inventory.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { CreateInventoryItemDto } from '../dto/create-inventory-item.dto';
 import { UpdateInventoryItemDto } from '../dto/update-inventory-item.dto';
-import { AdjustVariantQuantityDto, VariantKeyDto } from '../dto/variant-inventory.dto';
+import {
+  AdjustVariantQuantityDto,
+  VariantKeyDto,
+} from '../dto/variant-inventory.dto';
 
 @Controller(['inventory', 'api/inventory'])
 @UseGuards(JwtAuthGuard)
@@ -25,7 +38,16 @@ export class InventoryController {
   ) {
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 10;
-    return this.inventoryService.getInventory(user.sub, productId, search, status, conditionStatus, sortBy, pageNum, limitNum);
+    return this.inventoryService.getInventory(
+      user.sub,
+      productId,
+      search,
+      status,
+      conditionStatus,
+      sortBy,
+      pageNum,
+      limitNum,
+    );
   }
 
   @Get('summary')
@@ -69,10 +91,7 @@ export class InventoryController {
   }
 
   @Delete(':itemId')
-  async delete(
-    @CurrentUser() user: AuthUser,
-    @Param('itemId') itemId: string,
-  ) {
+  async delete(@CurrentUser() user: AuthUser, @Param('itemId') itemId: string) {
     return this.inventoryService.deleteInventoryItem(user.sub, itemId);
   }
 }

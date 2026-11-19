@@ -49,7 +49,12 @@ describe('AdminStatsController (VS-103, VS-104, VS-105)', () => {
       adminStatsService.getTopProducts.mockResolvedValue(mockResult);
 
       const user = { sub: 'shop-user-id', roles: ['PROVIDER'] } as any;
-      const res = await controller.getTopProducts(user, 'shop-123', undefined, 5);
+      const res = await controller.getTopProducts(
+        user,
+        'shop-123',
+        undefined,
+        5,
+      );
 
       expect(res).toBe(mockResult);
       expect(adminStatsService.getTopProducts).toHaveBeenCalledWith(
@@ -70,7 +75,11 @@ describe('AdminStatsController (VS-103, VS-104, VS-105)', () => {
       adminStatsService.getInventoryBreakdown.mockResolvedValue(mockResult);
 
       const user = { sub: 'shop-user-id', roles: ['PROVIDER'] } as any;
-      const res = await controller.getInventoryBreakdown(user, 'shop-123', undefined);
+      const res = await controller.getInventoryBreakdown(
+        user,
+        'shop-123',
+        undefined,
+      );
 
       expect(res).toBe(mockResult);
       expect(adminStatsService.getInventoryBreakdown).toHaveBeenCalledWith(

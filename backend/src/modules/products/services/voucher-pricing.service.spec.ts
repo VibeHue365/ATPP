@@ -1,5 +1,9 @@
 import { Types } from 'mongoose';
-import { DiscountType, Promotion, PromotionStatus } from '../schemas/promotion.schema';
+import {
+  DiscountType,
+  Promotion,
+  PromotionStatus,
+} from '../schemas/promotion.schema';
 import {
   PAYOS_MIN_PAYABLE_AMOUNT,
   PricingItemInput,
@@ -152,7 +156,10 @@ describe('VoucherPricingService', () => {
     const alloc1 = result.itemAllocations.find((i) => i.id === 'item_1')!;
     const alloc2 = result.itemAllocations.find((i) => i.id === 'item_2')!;
 
-    expect(alloc1.platformVoucherDiscountAmount + alloc2.platformVoucherDiscountAmount).toBe(100000);
+    expect(
+      alloc1.platformVoucherDiscountAmount +
+        alloc2.platformVoucherDiscountAmount,
+    ).toBe(100000);
   });
 
   it('should NEVER discount rental deposits, even with 100% discount', () => {
@@ -284,7 +291,12 @@ describe('VoucherPricingService', () => {
     } as any;
 
     const items: PricingItemInput[] = [
-      { providerId: shopAId, itemType: 'PRODUCT', unitPrice: 300000, quantity: 1 },
+      {
+        providerId: shopAId,
+        itemType: 'PRODUCT',
+        unitPrice: 300000,
+        quantity: 1,
+      },
     ];
 
     // User is NOT new customer

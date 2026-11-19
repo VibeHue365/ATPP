@@ -241,12 +241,10 @@ function createNotifications(
   sockets: string[] = [],
 ) {
   const saved: Row = { _id: new Types.ObjectId() };
-  const NotificationModel: any = jest
-    .fn()
-    .mockImplementation((data: Row) => ({
-      ...data,
-      save: jest.fn().mockResolvedValue({ ...saved, ...data }),
-    }));
+  const NotificationModel: any = jest.fn().mockImplementation((data: Row) => ({
+    ...data,
+    save: jest.fn().mockResolvedValue({ ...saved, ...data }),
+  }));
   NotificationModel.findOneAndUpdate = jest
     .fn()
     .mockReturnValue({ exec: () => Promise.resolve(null) });

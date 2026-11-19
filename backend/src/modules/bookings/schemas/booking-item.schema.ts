@@ -18,7 +18,11 @@ export interface PhotographyPackageSnapshot {
 
 export interface BookingPriceBreakdownItem {
   type:
-    'BASE_PACKAGE' | 'OVERTIME' | 'TRAVEL' | 'SURCHARGE' | 'MULTI_DAY_DISCOUNT';
+    | 'BASE_PACKAGE'
+    | 'OVERTIME'
+    | 'TRAVEL'
+    | 'SURCHARGE'
+    | 'MULTI_DAY_DISCOUNT';
   label: string;
   amount: number;
   scheduleId?: Types.ObjectId | null;

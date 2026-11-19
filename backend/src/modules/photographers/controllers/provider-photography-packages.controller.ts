@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
@@ -21,7 +30,10 @@ export class ProviderPhotographyPackagesController {
   }
 
   @Post()
-  create(@CurrentUser() user: AuthUser, @Body() dto: CreatePhotographyPackageDto) {
+  create(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreatePhotographyPackageDto,
+  ) {
     return this.photographyPackagesService.create(user.sub, dto);
   }
 

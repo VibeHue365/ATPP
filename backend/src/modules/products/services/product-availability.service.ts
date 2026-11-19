@@ -1,10 +1,21 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ProductsRepository } from '../repositories/products.repository';
 import { InventoryItem } from '../schemas/inventory-item.schema';
-import { InventoryReservation, ReservationStatus } from '../schemas/inventory-reservation.schema';
-import { ProviderSchedule, ScheduleType, ScheduleCapability } from '../schemas/provider-schedule.schema';
+import {
+  InventoryReservation,
+  ReservationStatus,
+} from '../schemas/inventory-reservation.schema';
+import {
+  ProviderSchedule,
+  ScheduleType,
+  ScheduleCapability,
+} from '../schemas/provider-schedule.schema';
 import { Provider } from '../../providers/schemas/provider.schema';
 import {
   InventorySlotLease,
@@ -17,11 +28,15 @@ import { buildReservationOverlapFilter } from '../../bookings/services/reservati
 export class ProductAvailabilityService {
   constructor(
     private readonly products: ProductsRepository,
-    @InjectModel(InventoryItem.name) private readonly inventory: Model<InventoryItem>,
-    @InjectModel(InventoryReservation.name) private readonly reservations: Model<InventoryReservation>,
-    @InjectModel(ProviderSchedule.name) private readonly providerSchedule: Model<ProviderSchedule>,
+    @InjectModel(InventoryItem.name)
+    private readonly inventory: Model<InventoryItem>,
+    @InjectModel(InventoryReservation.name)
+    private readonly reservations: Model<InventoryReservation>,
+    @InjectModel(ProviderSchedule.name)
+    private readonly providerSchedule: Model<ProviderSchedule>,
     @InjectModel(Provider.name) private readonly providerModel: Model<Provider>,
-    @InjectModel(InventorySlotLease.name) private readonly leaseModel: Model<InventorySlotLease>,
+    @InjectModel(InventorySlotLease.name)
+    private readonly leaseModel: Model<InventorySlotLease>,
     private readonly timeEngine: TimeSlotEngineService,
   ) {}
 
@@ -50,7 +65,11 @@ export class ProductAvailabilityService {
 
     const from = parseDateLocal(fromValue);
     const to = parseDateLocal(toValue);
-    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to < from) {
+    if (
+      Number.isNaN(from.getTime()) ||
+      Number.isNaN(to.getTime()) ||
+      to < from
+    ) {
       throw new BadRequestException('Invalid rental period');
     }
 
@@ -64,7 +83,8 @@ export class ProductAvailabilityService {
       from.setHours(sh, sm, 0, 0);
       to.setTime(from.getTime());
       to.setHours(eh, em, 0, 0);
-      if (to <= from) throw new BadRequestException('Invalid hourly rental period');
+      if (to <= from)
+        throw new BadRequestException('Invalid hourly rental period');
     } else {
       from.setHours(0, 0, 0, 0);
       to.setHours(23, 59, 59, 999);
@@ -90,7 +110,10 @@ export class ProductAvailabilityService {
       const schedules = await this.providerSchedule
         .find({
           providerId: new Types.ObjectId(providerId.toString()),
-          $or: [{ capability: null }, { capability: ScheduleCapability.AodaiRental }],
+          $or: [
+            { capability: null },
+            { capability: ScheduleCapability.AodaiRental },
+          ],
         })
         .lean()
         .exec();
@@ -101,7 +124,8 @@ export class ProductAvailabilityService {
           availableQuantity: 0,
           requestedQuantity: Math.max(1, Math.floor(quantityValue || 1)),
           reason: 'NO_SCHEDULE',
-          message: 'Nhà cung cấp chưa thiết lập lịch làm việc. Vui lòng quay lại sau.',
+          message:
+            'Nhà cung cấp chưa thiết lập lịch làm việc. Vui lòng quay lại sau.',
         };
       }
 
@@ -121,10 +145,14 @@ export class ProductAvailabilityService {
       }
 
       // Check for off days
-      const specificSchedules = schedules.filter((s) => s.scheduleType === ScheduleType.SpecificDate);
+      const specificSchedules = schedules.filter(
+        (s) => s.scheduleType === ScheduleType.SpecificDate,
+      );
       const isOffDay = specificSchedules.some((s) =>
         s.offDays?.some((d) => {
-          const offStr = new Date(d).toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+          const offStr = new Date(d).toLocaleDateString('en-CA', {
+            timeZone: 'Asia/Ho_Chi_Minh',
+          });
           return requestedDateKeys.includes(offStr);
         }),
       );
@@ -140,7 +168,9 @@ export class ProductAvailabilityService {
       }
 
       // Check recurring working days
-      const recurringSchedules = schedules.filter((s) => s.scheduleType === ScheduleType.Recurring);
+      const recurringSchedules = schedules.filter(
+        (s) => s.scheduleType === ScheduleType.Recurring,
+      );
       if (recurringSchedules.length > 0) {
         const workingDays = new Set(recurringSchedules.map((s) => s.dayOfWeek));
         const hasNonWorkingDay = requestedDateKeys.some((dateStr) => {
@@ -195,16 +225,19 @@ export class ProductAvailabilityService {
 
     // Check provider's useSlotLeases feature flag
     const providerDoc = providerId
-      ? await this.providerModel.findById(providerId).select({ useSlotLeases: 1 }).lean().exec()
+      ? await this.providerModel
+          .findById(providerId)
+          .select({ useSlotLeases: 1 })
+          .lean()
+          .exec()
       : null;
     const useSlotLeases = !!providerDoc?.useSlotLeases;
 
     let bookedIds = new Set<string>();
 
     if (useSlotLeases && rentalType === 'HOURLY' && startTime && endTime) {
-      const { startSlotIndex, rentalSlotCount } = this.timeEngine.parseAndValidateTimeSlot(
-        `${startTime}-${endTime}`,
-      );
+      const { startSlotIndex, rentalSlotCount } =
+        this.timeEngine.parseAndValidateTimeSlot(`${startTime}-${endTime}`);
       const slotIndices = Array.from(
         { length: rentalSlotCount },
         (_, idx) => startSlotIndex + idx,
@@ -245,7 +278,9 @@ export class ProductAvailabilityService {
         .lean()
         .exec();
 
-      bookedIds = new Set(booked.map((item) => item.inventoryItemId.toString()));
+      bookedIds = new Set(
+        booked.map((item) => item.inventoryItemId.toString()),
+      );
 
       // Daily checkout also blocks confirmed/temporary slot leases (including
       // turnaround days). Mirror that rule here so the product page cannot say
@@ -276,17 +311,23 @@ export class ProductAvailabilityService {
           .select({ inventoryItemId: 1 })
           .lean()
           .exec();
-        for (const lease of busyLeases) bookedIds.add(lease.inventoryItemId.toString());
+        for (const lease of busyLeases)
+          bookedIds.add(lease.inventoryItemId.toString());
       }
     }
 
-    const availableQuantity = items.filter((item) => !bookedIds.has(item._id.toString())).length;
+    const availableQuantity = items.filter(
+      (item) => !bookedIds.has(item._id.toString()),
+    ).length;
 
     return {
       available: availableQuantity >= requestedQuantity,
       availableQuantity,
       requestedQuantity,
-      message: availableQuantity >= requestedQuantity ? undefined : 'Không đủ số lượng cho lịch thuê đã chọn.',
+      message:
+        availableQuantity >= requestedQuantity
+          ? undefined
+          : 'Không đủ số lượng cho lịch thuê đã chọn.',
     };
   }
 }

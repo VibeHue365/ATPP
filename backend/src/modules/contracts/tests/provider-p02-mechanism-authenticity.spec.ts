@@ -11,7 +11,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { MongooseModule, getConnectionToken, getModelToken } from '@nestjs/mongoose';
+import {
+  MongooseModule,
+  getConnectionToken,
+  getModelToken,
+} from '@nestjs/mongoose';
 import { contractTestTarget } from '../contract-test-target';
 import { ContractAccessService } from '../contract-access.service';
 import { ContractPolicyService } from '../contract-policy.service';
@@ -98,35 +102,48 @@ const jwtSecret = 'p02-test-secret-key-32-chars-minimum-safe';
 
       const hello = await connection.db!.admin().command({ hello: 1 });
       if (hello.setName !== 'rsContractTest' || !hello.isWritablePrimary) {
-        throw new Error('P0.2 tests require primary replica set rsContractTest');
+        throw new Error(
+          'P0.2 tests require primary replica set rsContractTest',
+        );
       }
 
       contracts = connection.model(DigitalContract.name, DigitalContractSchema);
       versions = connection.model(ContractVersion.name, ContractVersionSchema);
       consents = connection.model(ContractConsent.name, ContractConsentSchema);
-      acceptances = connection.model(ProviderContractAcceptance.name, ProviderContractAcceptanceSchema);
+      acceptances = connection.model(
+        ProviderContractAcceptance.name,
+        ProviderContractAcceptanceSchema,
+      );
 
-      await connection.db!.collection('digital_contracts').createIndex(
-        { bookingId: 1, providerId: 1, scope: 1 },
-        { unique: true },
-      );
-      await connection.db!.collection('contract_versions').createIndex(
-        { contractId: 1, version: 1 },
-        { unique: true },
-      );
-      await connection.db!.collection('contract_consents').createIndex(
-        { contractVersionId: 1, actorUserId: 1 },
-        { unique: true },
-      );
-      await connection.db!.collection('provider_contract_acceptances').createIndex(
-        { providerId: 1, scope: 1 },
-        { unique: true, partialFilterExpression: { status: 'ACTIVE' } },
-      );
+      await connection
+        .db!.collection('digital_contracts')
+        .createIndex(
+          { bookingId: 1, providerId: 1, scope: 1 },
+          { unique: true },
+        );
+      await connection
+        .db!.collection('contract_versions')
+        .createIndex({ contractId: 1, version: 1 }, { unique: true });
+      await connection
+        .db!.collection('contract_consents')
+        .createIndex(
+          { contractVersionId: 1, actorUserId: 1 },
+          { unique: true },
+        );
+      await connection
+        .db!.collection('provider_contract_acceptances')
+        .createIndex(
+          { providerId: 1, scope: 1 },
+          { unique: true, partialFilterExpression: { status: 'ACTIVE' } },
+        );
     });
 
     afterAll(async () => {
       if (connection) {
-        if (scratchDbName.startsWith('contract_p02_') && scratchDbName.endsWith('_test')) {
+        if (
+          scratchDbName.startsWith('contract_p02_') &&
+          scratchDbName.endsWith('_test')
+        ) {
           await connection.dropDatabase();
         }
         await connection.close();
@@ -160,7 +177,9 @@ const jwtSecret = 'p02-test-secret-key-32-chars-minimum-safe';
       };
     }
 
-    async function seedShopAndBooking(policies: Record<string, unknown> = { terms: 'Standard' }) {
+    async function seedShopAndBooking(
+      policies: Record<string, unknown> = { terms: 'Standard' },
+    ) {
       const providerUserId = oid();
       const providerId = oid();
       const customerId = oid();
@@ -216,7 +235,14 @@ const jwtSecret = 'p02-test-secret-key-32-chars-minimum-safe';
         expiresAt: new Date(Date.now() + 30 * 60 * 1000),
       });
 
-      return { providerUserId, providerId, customerId, bookingId, itemId, policies };
+      return {
+        providerUserId,
+        providerId,
+        customerId,
+        bookingId,
+        itemId,
+        policies,
+      };
     }
 
     describe('P0.2 Section 5 — 10 Mandatory MongoDB Integration Tests', () => {
@@ -233,13 +259,25 @@ const jwtSecret = 'p02-test-secret-key-32-chars-minimum-safe';
           access,
           realDraftMechanismService,
           { getApproved: () => syntheticApprovedTemplate } as any,
-          { currentPoliciesForProvider: () => Promise.resolve(seed.policies) } as any,
+          {
+            currentPoliciesForProvider: () => Promise.resolve(seed.policies),
+          } as any,
         );
 
-        const user = { sub: seed.providerUserId.toString(), roles: ['PROVIDER'], permissions: [], email: '', sessionId: '' };
-        await expect(approval.accept(user, 'any-hash')).rejects.toThrow('CONTRACTS_V2_DISABLED');
+        const user = {
+          sub: seed.providerUserId.toString(),
+          roles: ['PROVIDER'],
+          permissions: [],
+          email: '',
+          sessionId: '',
+        };
+        await expect(approval.accept(user, 'any-hash')).rejects.toThrow(
+          'CONTRACTS_V2_DISABLED',
+        );
 
-        const inDb = await connection.db!.collection('provider_contract_acceptances').countDocuments();
+        const inDb = await connection
+          .db!.collection('provider_contract_acceptances')
+          .countDocuments();
         expect(inDb).toBe(0);
       });
 
@@ -255,17 +293,29 @@ const jwtSecret = 'p02-test-secret-key-32-chars-minimum-safe';
           access,
           realDraftMechanismService,
           { getApproved: () => syntheticApprovedTemplate } as any,
-          { currentPoliciesForProvider: () => Promise.resolve(seed.policies) } as any,
+          {
+            currentPoliciesForProvider: () => Promise.resolve(seed.policies),
+          } as any,
         );
 
-        const user = { sub: seed.providerUserId.toString(), roles: ['PROVIDER'], permissions: [], email: '', sessionId: '' };
+        const user = {
+          sub: seed.providerUserId.toString(),
+          roles: ['PROVIDER'],
+          permissions: [],
+          email: '',
+          sessionId: '',
+        };
 
         // CRITICAL P0.2 ASSERTION: Feature flag ON does NOT bypass DRAFT status!
-        await expect(approval.accept(user, 'some-hash')).rejects.toThrow('CONTRACT_MECHANISM_NOT_APPROVED');
+        await expect(approval.accept(user, 'some-hash')).rejects.toThrow(
+          'CONTRACT_MECHANISM_NOT_APPROVED',
+        );
 
-        const inDb = await connection.db!.collection('provider_contract_acceptances').countDocuments({
-          providerId: seed.providerId,
-        });
+        const inDb = await connection
+          .db!.collection('provider_contract_acceptances')
+          .countDocuments({
+            providerId: seed.providerId,
+          });
         expect(inDb).toBe(0);
       });
 
@@ -287,7 +337,11 @@ const jwtSecret = 'p02-test-secret-key-32-chars-minimum-safe';
         );
 
         await expect(
-          guard.evaluate(seed.bookingId.toString(), 200000, PaymentPurpose.RentalInitial),
+          guard.evaluate(
+            seed.bookingId.toString(),
+            200000,
+            PaymentPurpose.RentalInitial,
+          ),
         ).rejects.toThrow('CONTRACT_MECHANISM_NOT_APPROVED');
       });
 
@@ -305,12 +359,23 @@ const jwtSecret = 'p02-test-secret-key-32-chars-minimum-safe';
           access,
           isolatedFixtureMechanismService,
           { getApproved: () => syntheticApprovedTemplate } as any,
-          { currentPoliciesForProvider: () => Promise.resolve(seed.policies) } as any,
+          {
+            currentPoliciesForProvider: () => Promise.resolve(seed.policies),
+          } as any,
         );
 
-        const user = { sub: seed.providerUserId.toString(), roles: ['PROVIDER'], permissions: [], email: '', sessionId: '' };
+        const user = {
+          sub: seed.providerUserId.toString(),
+          roles: ['PROVIDER'],
+          permissions: [],
+          email: '',
+          sessionId: '',
+        };
         await expect(
-          approval.accept(user, 'outdated_hash_000000000000000000000000000000000000000000000000000000'),
+          approval.accept(
+            user,
+            'outdated_hash_000000000000000000000000000000000000000000000000000000',
+          ),
         ).rejects.toThrow(new ConflictException('CONTRACT_MECHANISM_CHANGED'));
       });
 
@@ -328,11 +393,21 @@ const jwtSecret = 'p02-test-secret-key-32-chars-minimum-safe';
           access,
           isolatedFixtureMechanismService,
           { getApproved: () => syntheticApprovedTemplate } as any,
-          { currentPoliciesForProvider: () => Promise.resolve(seed.policies) } as any,
+          {
+            currentPoliciesForProvider: () => Promise.resolve(seed.policies),
+          } as any,
         );
 
-        const imposterUser = { sub: oid().toString(), roles: ['PROVIDER'], permissions: [], email: '', sessionId: '' };
-        await expect(approval.accept(imposterUser, syntheticApprovedMechanism.hash)).rejects.toThrow('PROVIDER_NOT_FOUND');
+        const imposterUser = {
+          sub: oid().toString(),
+          roles: ['PROVIDER'],
+          permissions: [],
+          email: '',
+          sessionId: '',
+        };
+        await expect(
+          approval.accept(imposterUser, syntheticApprovedMechanism.hash),
+        ).rejects.toThrow('PROVIDER_NOT_FOUND');
       });
 
       it('6. Approval fixture hợp lệ trong isolated test -> Provider chủ động ACCEPT thành công', async () => {
@@ -349,16 +424,29 @@ const jwtSecret = 'p02-test-secret-key-32-chars-minimum-safe';
           access,
           isolatedFixtureMechanismService,
           { getApproved: () => syntheticApprovedTemplate } as any,
-          { currentPoliciesForProvider: () => Promise.resolve(seed.policies) } as any,
+          {
+            currentPoliciesForProvider: () => Promise.resolve(seed.policies),
+          } as any,
         );
 
-        const user = { sub: seed.providerUserId.toString(), roles: ['PROVIDER'], permissions: [], email: '', sessionId: '' };
-        const result = await approval.accept(user, syntheticApprovedMechanism.hash);
+        const user = {
+          sub: seed.providerUserId.toString(),
+          roles: ['PROVIDER'],
+          permissions: [],
+          email: '',
+          sessionId: '',
+        };
+        const result = await approval.accept(
+          user,
+          syntheticApprovedMechanism.hash,
+        );
         expect(result.acceptanceId).toBeDefined();
 
-        const doc = await connection.db!.collection('provider_contract_acceptances').findOne({
-          _id: new Types.ObjectId(result.acceptanceId),
-        });
+        const doc = await connection
+          .db!.collection('provider_contract_acceptances')
+          .findOne({
+            _id: new Types.ObjectId(result.acceptanceId),
+          });
         expect(doc.status).toBe('ACTIVE');
         expect(doc.mechanismHash).toBe(syntheticApprovedMechanism.hash);
       });
@@ -378,10 +466,18 @@ const jwtSecret = 'p02-test-secret-key-32-chars-minimum-safe';
           access,
           isolatedFixtureMechanismService,
           { getApproved: () => syntheticApprovedTemplate } as any,
-          { currentPoliciesForProvider: () => Promise.resolve(seed.policies) } as any,
+          {
+            currentPoliciesForProvider: () => Promise.resolve(seed.policies),
+          } as any,
         );
 
-        const user = { sub: seed.providerUserId.toString(), roles: ['PROVIDER'], permissions: [], email: '', sessionId: '' };
+        const user = {
+          sub: seed.providerUserId.toString(),
+          roles: ['PROVIDER'],
+          permissions: [],
+          email: '',
+          sessionId: '',
+        };
         await approval.accept(user, syntheticApprovedMechanism.hash);
 
         // Shop revokes
@@ -394,7 +490,18 @@ const jwtSecret = 'p02-test-secret-key-32-chars-minimum-safe';
           contracts,
           versions,
           policy,
-          { build: () => Promise.resolve(createValidSnapshot(seed.bookingId, seed.customerId, seed.providerId, [seed.itemId], seed.policies)) } as any,
+          {
+            build: () =>
+              Promise.resolve(
+                createValidSnapshot(
+                  seed.bookingId,
+                  seed.customerId,
+                  seed.providerId,
+                  [seed.itemId],
+                  seed.policies,
+                ),
+              ),
+          } as any,
           { getApproved: () => syntheticApprovedTemplate } as any,
         );
 
@@ -409,24 +516,39 @@ const jwtSecret = 'p02-test-secret-key-32-chars-minimum-safe';
 
         // Seed an active acceptance with old mechanism version v1
         const activeAcceptanceId = oid();
-        await connection.db!.collection('provider_contract_acceptances').insertOne({
-          _id: activeAcceptanceId,
-          providerId: seed.providerId,
-          acceptedByUserId: seed.providerUserId,
-          scope: ContractScope.AoDaiRental,
-          mechanismVersion: 'old-version-v1',
-          mechanismHash: 'old_hash_'.padEnd(64, '0'),
-          policyFingerprint: hashContract(seed.policies),
-          templateVersion: syntheticApprovedTemplate.version,
-          status: ProviderAcceptanceStatus.Active,
-          acceptedAt: new Date(),
-        });
+        await connection
+          .db!.collection('provider_contract_acceptances')
+          .insertOne({
+            _id: activeAcceptanceId,
+            providerId: seed.providerId,
+            acceptedByUserId: seed.providerUserId,
+            scope: ContractScope.AoDaiRental,
+            mechanismVersion: 'old-version-v1',
+            mechanismHash: 'old_hash_'.padEnd(64, '0'),
+            policyFingerprint: hashContract(seed.policies),
+            templateVersion: syntheticApprovedTemplate.version,
+            status: ProviderAcceptanceStatus.Active,
+            acceptedAt: new Date(),
+          });
 
         const contractId = oid();
         const versionId = oid();
-        const snap = createValidSnapshot(seed.bookingId, seed.customerId, seed.providerId, [seed.itemId], seed.policies);
-        const contentHash = hashContract({ template: syntheticApprovedTemplate, snapshot: snap });
-        const bookingFingerprint = hashContract({ booking: snap.booking, providerItems: snap.providerItems, pricing: snap.pricing });
+        const snap = createValidSnapshot(
+          seed.bookingId,
+          seed.customerId,
+          seed.providerId,
+          [seed.itemId],
+          seed.policies,
+        );
+        const contentHash = hashContract({
+          template: syntheticApprovedTemplate,
+          snapshot: snap,
+        });
+        const bookingFingerprint = hashContract({
+          booking: snap.booking,
+          providerItems: snap.providerItems,
+          pricing: snap.pricing,
+        });
 
         await connection.db!.collection('digital_contracts').insertOne({
           _id: contractId,
@@ -486,7 +608,11 @@ const jwtSecret = 'p02-test-secret-key-32-chars-minimum-safe';
 
         // Guard must throw ConflictException('PROVIDER_ACCEPTANCE_STALE')
         await expect(
-          guard.evaluate(seed.bookingId.toString(), 200000, PaymentPurpose.RentalInitial),
+          guard.evaluate(
+            seed.bookingId.toString(),
+            200000,
+            PaymentPurpose.RentalInitial,
+          ),
         ).rejects.toThrow(new ConflictException('PROVIDER_ACCEPTANCE_STALE'));
       });
 
@@ -499,7 +625,18 @@ const jwtSecret = 'p02-test-secret-key-32-chars-minimum-safe';
           contracts,
           versions,
           policy,
-          { build: () => Promise.resolve(createValidSnapshot(seed.bookingId, seed.customerId, seed.providerId, [seed.itemId], seed.policies)) } as any,
+          {
+            build: () =>
+              Promise.resolve(
+                createValidSnapshot(
+                  seed.bookingId,
+                  seed.customerId,
+                  seed.providerId,
+                  [seed.itemId],
+                  seed.policies,
+                ),
+              ),
+          } as any,
           { getApproved: () => syntheticApprovedTemplate } as any,
         );
 
@@ -507,9 +644,11 @@ const jwtSecret = 'p02-test-secret-key-32-chars-minimum-safe';
           prep.prepare(seed.bookingId.toString(), seed.providerId.toString()),
         ).rejects.toThrow('PROVIDER_AUTO_ACCEPTANCE_MISSING');
 
-        const count = await connection.db!.collection('provider_contract_acceptances').countDocuments({
-          providerId: seed.providerId,
-        });
+        const count = await connection
+          .db!.collection('provider_contract_acceptances')
+          .countDocuments({
+            providerId: seed.providerId,
+          });
         expect(count).toBe(0);
       });
 
@@ -529,19 +668,31 @@ const jwtSecret = 'p02-test-secret-key-32-chars-minimum-safe';
         );
 
         // Legacy booking
-        await connection.db!.collection('bookings').updateOne(
-          { _id: seed.bookingId },
-          { $set: { contractFlowVersion: 1 } },
+        await connection
+          .db!.collection('bookings')
+          .updateOne(
+            { _id: seed.bookingId },
+            { $set: { contractFlowVersion: 1 } },
+          );
+        const res = await guard.evaluate(
+          seed.bookingId.toString(),
+          200000,
+          PaymentPurpose.RentalInitial,
         );
-        const res = await guard.evaluate(seed.bookingId.toString(), 200000, PaymentPurpose.RentalInitial);
         expect(res).toEqual({ binding: null, context: null });
 
         // Photography booking
-        await connection.db!.collection('bookings').updateOne(
-          { _id: seed.bookingId },
-          { $set: { contractFlowVersion: 2, bookingType: 'PHOTOGRAPHY' } },
+        await connection
+          .db!.collection('bookings')
+          .updateOne(
+            { _id: seed.bookingId },
+            { $set: { contractFlowVersion: 2, bookingType: 'PHOTOGRAPHY' } },
+          );
+        const photoRes = await guard.evaluate(
+          seed.bookingId.toString(),
+          200000,
+          PaymentPurpose.PhotographyInitial,
         );
-        const photoRes = await guard.evaluate(seed.bookingId.toString(), 200000, PaymentPurpose.PhotographyInitial);
         expect(photoRes).toEqual({ binding: null, context: null });
       });
     });
@@ -590,11 +741,16 @@ const jwtSecret = 'p02-test-secret-key-32-chars-minimum-safe';
             },
           })
           .overrideProvider('PrivateStorageService')
-          .useValue({ uploadPrivateFile: jest.fn(), readPrivateFile: jest.fn() })
+          .useValue({
+            uploadPrivateFile: jest.fn(),
+            readPrivateFile: jest.fn(),
+          })
           .compile();
 
         app = moduleFixture.createNestApplication();
-        app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+        app.useGlobalPipes(
+          new ValidationPipe({ whitelist: true, transform: true }),
+        );
         await app.init();
       });
 

@@ -156,7 +156,8 @@ export class ContractSnapshotService {
       }
       if (!item.pickupReturnLocationSnapshot) {
         item.pickupReturnLocationSnapshot = {
-          address: (provider.address as any)?.fullAddress || 'Tại cửa hàng cung cấp',
+          address:
+            (provider.address as any)?.fullAddress || 'Tại cửa hàng cung cấp',
           geo: { type: 'Point', coordinates: [107.590866, 16.463713] },
         };
       }
@@ -165,7 +166,8 @@ export class ContractSnapshotService {
         !item.priceVersionId ||
         !item.rentalFrom ||
         !item.rentalTo ||
-        new Date(item.rentalFrom).getTime() > new Date(item.rentalTo).getTime() ||
+        new Date(item.rentalFrom).getTime() >
+          new Date(item.rentalTo).getTime() ||
         !item.selectedSize ||
         !item.pickupReturnLocationSnapshot ||
         !Number.isFinite(item.unitPrice) ||
@@ -208,8 +210,7 @@ export class ContractSnapshotService {
             (item as any).productName ||
             (item as any).name ||
             'Áo dài truyền thống Huế',
-          slug:
-            (item as any).productSlug || (item as any).slug || 'ao-dai-hue',
+          slug: (item as any).productSlug || (item as any).slug || 'ao-dai-hue',
         };
       }
       if (!sameContractId(product.providerId, providerId)) {
@@ -224,7 +225,9 @@ export class ContractSnapshotService {
         itemReplacementValue = parsedItemVal;
         replacementStatus = 'VALID';
       } else if (product) {
-        const parsedProductVal = parseValidReplacementValue((product as any).replacementValue);
+        const parsedProductVal = parseValidReplacementValue(
+          (product as any).replacementValue,
+        );
         if (parsedProductVal !== null && parsedProductVal > 0) {
           const isApproved =
             (product as any).moderationStatus === 'APPROVED' ||
@@ -251,7 +254,11 @@ export class ContractSnapshotService {
             'CONTRACT_PRODUCT_REPLACEMENT_VALUE_UNAPPROVED',
           );
         }
-        if (replacementStatus === 'MISSING' || !itemReplacementValue || itemReplacementValue <= 0) {
+        if (
+          replacementStatus === 'MISSING' ||
+          !itemReplacementValue ||
+          itemReplacementValue <= 0
+        ) {
           throw new UnprocessableEntityException(
             'CONTRACT_PRODUCT_REPLACEMENT_VALUE_MISSING',
           );
@@ -324,8 +331,7 @@ export class ContractSnapshotService {
     const provider = (await contractDb(this.connection)
       .collection('providers')
       .findOne({ _id: providerId })) as ProviderSource | null;
-    if (!provider)
-      throw new UnprocessableEntityException('PROVIDER_NOT_FOUND');
+    if (!provider) throw new UnprocessableEntityException('PROVIDER_NOT_FOUND');
     if (!provider.policies) provider.policies = {};
     if (!provider.policies.rentalPolicy) {
       provider.policies.rentalPolicy =
@@ -374,7 +380,8 @@ export class ContractSnapshotService {
         providerLateReturn: approvedStructuredPolicy.lateReturn,
         providerDamageCompensation: approvedStructuredPolicy.damageCompensation,
         providerCancellationPolicy: approvedStructuredPolicy.cancellationPolicy,
-        providerCustomTermsText: approvedStructuredPolicy.customTermsText ?? null,
+        providerCustomTermsText:
+          approvedStructuredPolicy.customTermsText ?? null,
         providerPolicyUpdatedAt:
           approvedStructuredPolicy.approvedAt ??
           approvedStructuredPolicy.updatedAt ??

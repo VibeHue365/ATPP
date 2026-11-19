@@ -119,7 +119,7 @@ export class BookingsController {
 
   /** GET /bookings/provider hoặc GET /api/bookings/provider */
   @Get('provider')
-  @SkipThrottle({ default: true })
+  @SkipThrottle()
   async getProvider(
     @CurrentUser() user: AuthUser,
   ): Promise<Record<string, any>[]> {
@@ -365,7 +365,13 @@ export class BookingsController {
   async customerReturn(
     @Param('id') id: string,
     @CurrentUser() user: AuthUser,
-    @Body() body?: { note?: string; evidencePhotos?: string[]; bookingItemId?: string; itemId?: string },
+    @Body()
+    body?: {
+      note?: string;
+      evidencePhotos?: string[];
+      bookingItemId?: string;
+      itemId?: string;
+    },
   ) {
     return this.bookingsService.customerReturn(
       id,

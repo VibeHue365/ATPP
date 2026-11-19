@@ -138,8 +138,14 @@ const oid = () => new Types.ObjectId();
       contracts = connection.model(DigitalContract.name, DigitalContractSchema);
       versions = connection.model(ContractVersion.name, ContractVersionSchema);
       consents = connection.model(ContractConsent.name, ContractConsentSchema);
-      acceptances = connection.model(ProviderContractAcceptance.name, ProviderContractAcceptanceSchema);
-      policyVersions = connection.model(ProviderContractPolicyVersion.name, ProviderContractPolicyVersionSchema);
+      acceptances = connection.model(
+        ProviderContractAcceptance.name,
+        ProviderContractAcceptanceSchema,
+      );
+      policyVersions = connection.model(
+        ProviderContractPolicyVersion.name,
+        ProviderContractPolicyVersionSchema,
+      );
       bookings = connection.model(Booking.name, BookingSchema);
       bookingItems = connection.model(BookingItem.name, BookingItemSchema);
       payments = connection.model(Payment.name, PaymentSchema);
@@ -157,10 +163,16 @@ const oid = () => new Types.ObjectId();
       // Setup In-memory Private Storage
       storageMap = new Map();
       storageService = {
-        uploadPrivateFile: jest.fn((bucket: string, storageKey: string, buffer: Buffer) => {
-          storageMap.set(`${bucket}:${storageKey}`, buffer);
-          return Promise.resolve({ storageProvider: 'synthetic-test-storage', bucket, storageKey });
-        }),
+        uploadPrivateFile: jest.fn(
+          (bucket: string, storageKey: string, buffer: Buffer) => {
+            storageMap.set(`${bucket}:${storageKey}`, buffer);
+            return Promise.resolve({
+              storageProvider: 'synthetic-test-storage',
+              bucket,
+              storageKey,
+            });
+          },
+        ),
         readPrivateFile: jest.fn((bucket: string, storageKey: string) => {
           const buf = storageMap.get(`${bucket}:${storageKey}`);
           if (!buf) throw new Error('FILE_NOT_FOUND');
@@ -177,9 +189,15 @@ const oid = () => new Types.ObjectId();
       accessService = new ContractAccessService(connection);
 
       mechanismService = {
-        getDraft: () => ({ ...SYNTHETIC_APPROVED_MECHANISM, hash: mockMechanismHash }),
-        getApproved: () => ({ ...SYNTHETIC_APPROVED_MECHANISM, hash: mockMechanismHash }),
-      } as unknown as ContractMechanismService;
+        getDraft: () => ({
+          ...SYNTHETIC_APPROVED_MECHANISM,
+          hash: mockMechanismHash,
+        }),
+        getApproved: () => ({
+          ...SYNTHETIC_APPROVED_MECHANISM,
+          hash: mockMechanismHash,
+        }),
+      };
 
       templateService = {
         getApproved: () => SYNTHETIC_APPROVED_TEMPLATE,
@@ -443,7 +461,9 @@ const oid = () => new Types.ObjectId();
       );
       expect(acceptRes.acceptanceId).toBeDefined();
 
-      const initialStatus = await providerApprovalService.status(ctx.providerUser);
+      const initialStatus = await providerApprovalService.status(
+        ctx.providerUser,
+      );
       expect(initialStatus.status).toBe('ACTIVE');
 
       // Step 2: Provider creates DRAFT policy (4 groups, NO accessories)
@@ -477,15 +497,21 @@ const oid = () => new Types.ObjectId();
           hotline: '0905123456',
           supportWorkingHours: '08:00 - 21:00',
         },
-        customTermsText: 'Khách hàng vui lòng kiểm tra kỹ cúc áo và đường chỉ khi nhận bàn giao.',
+        customTermsText:
+          'Khách hàng vui lòng kiểm tra kỹ cúc áo và đường chỉ khi nhận bàn giao.',
       };
 
-      const draftPolicy = await providerPolicyService.saveDraft(ctx.providerUser, draftDto);
+      const draftPolicy = await providerPolicyService.saveDraft(
+        ctx.providerUser,
+        draftDto,
+      );
       expect(draftPolicy.versionNumber).toBe(1);
       expect(draftPolicy.status).toBe(ProviderPolicyReviewStatus.Draft);
 
       // Step 3: Provider submits draft for review -> PENDING_REVIEW
-      const submitted = await providerPolicyService.submitForReview(ctx.providerUser);
+      const submitted = await providerPolicyService.submitForReview(
+        ctx.providerUser,
+      );
       expect(submitted.status).toBe(ProviderPolicyReviewStatus.PendingReview);
       expect(submitted.policyFingerprint).toBeDefined();
 
@@ -493,7 +519,10 @@ const oid = () => new Types.ObjectId();
       const approved = await providerPolicyService.adminReview(
         ctx.adminUser,
         submitted.id,
-        { action: 'APPROVE', reviewNote: 'Điều khoản đạt tiêu chuẩn sàn VibeHue.' },
+        {
+          action: 'APPROVE',
+          reviewNote: 'Điều khoản đạt tiêu chuẩn sàn VibeHue.',
+        },
       );
       expect(approved.status).toBe(ProviderPolicyReviewStatus.Approved);
       expect(approved.approvedAt).toBeDefined();
@@ -510,7 +539,9 @@ const oid = () => new Types.ObjectId();
       );
       expect(reacceptRes.acceptanceId).toBeDefined();
 
-      const refreshedStatus = await providerApprovalService.status(ctx.providerUser);
+      const refreshedStatus = await providerApprovalService.status(
+        ctx.providerUser,
+      );
       expect(refreshedStatus.status).toBe('ACTIVE');
       expect(refreshedStatus.isStale).toBe(false);
 
@@ -527,7 +558,10 @@ const oid = () => new Types.ObjectId();
       expect(versionDoc?.state).toBe(ContractVersionState.Offered);
 
       // Step 8: Customer reads contract details & A4 Preview
-      const contractDetail = await readService.get(ctx.customerUser, prepRes.contractId.toString());
+      const contractDetail = await readService.get(
+        ctx.customerUser,
+        prepRes.contractId.toString(),
+      );
       expect(contractDetail.contractId).toBe(prepRes.contractId.toString());
       expect(contractDetail.version).toBe(1);
       expect(contractDetail.renderedText).toContain('Áo Dài Cung Đình Huế');
@@ -558,7 +592,9 @@ const oid = () => new Types.ObjectId();
       expect(decision.binding).toBeDefined();
       expect(decision.binding?.flowVersion).toBe(2);
       expect(decision.binding?.versions.length).toBe(1);
-      expect(decision.binding?.versions[0].contentHash).toBe(versionDoc!.contentHash);
+      expect(decision.binding?.versions[0].contentHash).toBe(
+        versionDoc!.contentHash,
+      );
 
       // Step 11: Verify PDF evidence generation and hash verification
       const pdfEvidence = await evidenceService.getPdfStream(
@@ -580,9 +616,14 @@ const oid = () => new Types.ObjectId();
         acceptances,
         accessService,
         {
-          getDraft: () => ({ ...SYNTHETIC_APPROVED_MECHANISM, status: 'DRAFT' }),
+          getDraft: () => ({
+            ...SYNTHETIC_APPROVED_MECHANISM,
+            status: 'DRAFT',
+          }),
           getApproved: () => {
-            throw new UnprocessableEntityException('CONTRACT_MECHANISM_NOT_APPROVED');
+            throw new UnprocessableEntityException(
+              'CONTRACT_MECHANISM_NOT_APPROVED',
+            );
           },
         } as unknown as ContractMechanismService,
         templateService,
@@ -597,31 +638,59 @@ const oid = () => new Types.ObjectId();
     it('3. Negative: ContractCheckoutGuard fails when Provider has NOT accepted mechanism', async () => {
       const ctx = await setupTestContext();
       await expect(
-        preparationService.prepare(ctx.bookingId.toString(), ctx.providerId.toString()),
+        preparationService.prepare(
+          ctx.bookingId.toString(),
+          ctx.providerId.toString(),
+        ),
       ).rejects.toThrow(UnprocessableEntityException);
     });
 
     it('4. Negative: ContractCheckoutGuard fails when Provider acceptance is REVOKED', async () => {
       const ctx = await setupTestContext();
       await providerApprovalService.accept(ctx.providerUser, mockMechanismHash);
-      await preparationService.prepare(ctx.bookingId.toString(), ctx.providerId.toString());
+      await preparationService.prepare(
+        ctx.bookingId.toString(),
+        ctx.providerId.toString(),
+      );
 
       // Provider revokes acceptance
       await providerApprovalService.revoke(ctx.providerUser);
 
       await expect(
-        checkoutGuard.evaluate(ctx.bookingId.toString(), 500000, PaymentPurpose.Deposit),
+        checkoutGuard.evaluate(
+          ctx.bookingId.toString(),
+          500000,
+          PaymentPurpose.Deposit,
+        ),
       ).rejects.toThrow(ConflictException);
     });
 
     it('5. Negative: Provider cannot edit policy when status is PENDING_REVIEW', async () => {
       const ctx = await setupTestContext();
       const draftDto = {
-        garmentCare: { allowIroning: true, allowWashing: false, prohibitedActions: [] },
-        lateReturn: { gracePeriodHours: 2, hourlyLateFee: 20000, dailyLateFee: 100000, maxLateDaysAllowed: 3 },
-        damageCompensation: { minorDamageFee: 50000, moderateDamagePercent: 20, severeDamageOrLossPercent: 100 },
-        cancellationPolicy: { refundRules: [{ daysBeforeRental: 3, refundPercentage: 100 }] },
-        supportContact: { hotline: '0905123456', supportWorkingHours: '08:00 - 21:00' },
+        garmentCare: {
+          allowIroning: true,
+          allowWashing: false,
+          prohibitedActions: [],
+        },
+        lateReturn: {
+          gracePeriodHours: 2,
+          hourlyLateFee: 20000,
+          dailyLateFee: 100000,
+          maxLateDaysAllowed: 3,
+        },
+        damageCompensation: {
+          minorDamageFee: 50000,
+          moderateDamagePercent: 20,
+          severeDamageOrLossPercent: 100,
+        },
+        cancellationPolicy: {
+          refundRules: [{ daysBeforeRental: 3, refundPercentage: 100 }],
+        },
+        supportContact: {
+          hotline: '0905123456',
+          supportWorkingHours: '08:00 - 21:00',
+        },
       };
 
       await providerPolicyService.saveDraft(ctx.providerUser, draftDto);
@@ -636,15 +705,35 @@ const oid = () => new Types.ObjectId();
     it('6. Negative: Admin cannot reject policy without a reason note (Mandatory note)', async () => {
       const ctx = await setupTestContext();
       const draftDto = {
-        garmentCare: { allowIroning: true, allowWashing: false, prohibitedActions: [] },
-        lateReturn: { gracePeriodHours: 2, hourlyLateFee: 20000, dailyLateFee: 100000, maxLateDaysAllowed: 3 },
-        damageCompensation: { minorDamageFee: 50000, moderateDamagePercent: 20, severeDamageOrLossPercent: 100 },
-        cancellationPolicy: { refundRules: [{ daysBeforeRental: 3, refundPercentage: 100 }] },
-        supportContact: { hotline: '0905123456', supportWorkingHours: '08:00 - 21:00' },
+        garmentCare: {
+          allowIroning: true,
+          allowWashing: false,
+          prohibitedActions: [],
+        },
+        lateReturn: {
+          gracePeriodHours: 2,
+          hourlyLateFee: 20000,
+          dailyLateFee: 100000,
+          maxLateDaysAllowed: 3,
+        },
+        damageCompensation: {
+          minorDamageFee: 50000,
+          moderateDamagePercent: 20,
+          severeDamageOrLossPercent: 100,
+        },
+        cancellationPolicy: {
+          refundRules: [{ daysBeforeRental: 3, refundPercentage: 100 }],
+        },
+        supportContact: {
+          hotline: '0905123456',
+          supportWorkingHours: '08:00 - 21:00',
+        },
       };
 
       await providerPolicyService.saveDraft(ctx.providerUser, draftDto);
-      const pending = await providerPolicyService.submitForReview(ctx.providerUser);
+      const pending = await providerPolicyService.submitForReview(
+        ctx.providerUser,
+      );
 
       // Attempt reject with empty note -> rejected
       await expect(
@@ -666,27 +755,38 @@ const oid = () => new Types.ObjectId();
       };
 
       await expect(
-        providerPolicyService.adminReview(nonAdminUser, oid().toString(), { action: 'APPROVE' }),
+        providerPolicyService.adminReview(nonAdminUser, oid().toString(), {
+          action: 'APPROVE',
+        }),
       ).rejects.toThrow(ForbiddenException);
     });
 
     it('8. Negative: Booking hold expiration causes ContractCheckoutGuard to reject (BOOKING_HOLD_EXPIRED)', async () => {
       const ctx = await setupTestContext();
       // Set holdExpiresAt in the past
-      await connection.collection('bookings').updateOne(
-        { _id: ctx.bookingId },
-        { $set: { holdExpiresAt: new Date(Date.now() - 60000) } },
-      );
+      await connection
+        .collection('bookings')
+        .updateOne(
+          { _id: ctx.bookingId },
+          { $set: { holdExpiresAt: new Date(Date.now() - 60000) } },
+        );
 
       await expect(
-        checkoutGuard.evaluate(ctx.bookingId.toString(), 500000, PaymentPurpose.Deposit),
+        checkoutGuard.evaluate(
+          ctx.bookingId.toString(),
+          500000,
+          PaymentPurpose.Deposit,
+        ),
       ).rejects.toThrow(new ConflictException('BOOKING_HOLD_EXPIRED'));
     });
 
     it('9. Negative: Customer cannot access another customer’s contract (IDOR protection)', async () => {
       const ctx = await setupTestContext();
       await providerApprovalService.accept(ctx.providerUser, mockMechanismHash);
-      const prep = await preparationService.prepare(ctx.bookingId.toString(), ctx.providerId.toString());
+      const prep = await preparationService.prepare(
+        ctx.bookingId.toString(),
+        ctx.providerId.toString(),
+      );
 
       const strangerCustomer = {
         sub: oid().toString(),

@@ -29,4 +29,3 @@ export class ProviderOverviewQueryDto {
   })
   month?: string;
 }
-
