@@ -31,10 +31,10 @@ import type { Photographer } from '@/types/photographer';
 import {
   applyCampaignToRate,
   calculateDailyRentalTotal,
+  calculateHourlyRentalTotal,
   formatCampaignPercent,
   formatCampaignRange,
   isSurchargeCampaign,
-  resolveHourlyRate,
 } from '@/utils/campaignPricing';
 import { getMediaUrl } from '@/utils/media';
 import { buildLoginHref } from '@/utils/navigation';
@@ -226,14 +226,17 @@ export default function ProductDetail() {
   // Giá theo ngày thuê, áp chiến dịch giảm/phụ thu của shop cùng công thức với backend (VIB-43).
   const campaign = product.activeCampaign;
   const surcharge = isSurchargeCampaign(campaign);
-  const hourlyRate = applyCampaignToRate(
-    resolveHourlyRate(product.basePrice, product.hourlyPrice),
-    campaign,
-    start || new Date()
-  );
   const [startHour, startMinute] = startTime.split(':').map(Number);
   const [endHour, endMinute] = endTime.split(':').map(Number);
-  const rentalHours = Math.max(1, (endHour * 60 + endMinute - (startHour * 60 + startMinute)) / 60);
+  const rentalHours = Math.max(2, (endHour * 60 + endMinute - (startHour * 60 + startMinute)) / 60);
+  const hourlyQuote = calculateHourlyRentalTotal(
+    product.basePrice,
+    product.hourlyPrice,
+    campaign,
+    start || new Date(),
+    rentalHours,
+  );
+  const hourlyRate = hourlyQuote.hourlyRate;
   const daily =
     mode === 'DAILY' && start && end
       ? calculateDailyRentalTotal(product.basePrice, campaign, start, end)
@@ -242,7 +245,7 @@ export default function ProductDetail() {
 
   const currentRentalPrice =
     mode === 'HOURLY'
-      ? hourlyRate * rentalHours
+      ? hourlyQuote.total
       : (daily?.total ?? applyCampaignToRate(product.basePrice, campaign, start || new Date()));
 
   const add = (goToCart = false) => {
@@ -593,8 +596,20 @@ export default function ProductDetail() {
             <View style={s.pickupTextCol}>
               <Text style={s.pickupTitle}>Nhận và trả trang phục tại tiệm</Text>
               <Text style={s.pickupAddress} numberOfLines={2}>
-                {provider?.address?.addressLine ??
-                  'Địa chỉ chi tiết hiển thị sau khi hoàn tất thanh toán cọc'}
+                {(() => {
+                  const customLoc =
+                    provider?.rentalSettings?.useBusinessAddressForPickup === false
+                      ? provider?.rentalSettings?.pickupLocation
+                      : null;
+                  const loc = customLoc || provider?.address;
+                  const formatted = [loc?.addressLine, loc?.ward, loc?.district, loc?.city]
+                    .filter(Boolean)
+                    .join(', ');
+                  return (
+                    formatted ||
+                    'Địa chỉ chi tiết hiển thị sau khi hoàn tất thanh toán cọc'
+                  );
+                })()}
               </Text>
             </View>
           </View>

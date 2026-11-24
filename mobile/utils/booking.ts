@@ -11,7 +11,7 @@ export const bookingStatus: Record<
 > = {
   DRAFT: { label: 'Bản nháp', tone: 'neutral' },
   PENDING_PAYMENT: { label: 'Chờ ký HĐ & thanh toán', tone: 'warning' },
-  DEPOSIT_PAID: { label: 'Đã đặt cọc · Chờ duyệt', tone: 'success' },
+  DEPOSIT_PAID: { label: 'Đã đặt cọc · Chờ duyệt', tone: 'warning' },
   CONFIRMED: { label: 'Đã xác nhận', tone: 'success' },
   PICKUP_PENDING: { label: 'Chờ bàn giao / nhận áo', tone: 'info' },
   PICKED_UP: { label: 'Đang thuê cổ phục', tone: 'success' },

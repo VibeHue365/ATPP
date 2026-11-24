@@ -74,7 +74,7 @@ vi.mock('../src/services/httpClient', () => {
 const versions = [['current', ProviderDashboard]] as const;
 
 const sampleBooking = {
-  _id: 'booking-fixture-123456', status: 'PENDING', bookingType: 'PHOTOGRAPHY',
+  _id: 'booking-fixture-123456', status: 'DEPOSIT_PAID', bookingType: 'PHOTOGRAPHY',
   customerId: { _id: 'customer-fixture', email: 'customer@example.test', profile: { fullName: 'Khách kiểm thử' } },
   createdAt: '2026-09-20T02:00:00Z', pricingSummary: { totalAmount: 750000, depositTotal: 100000 },
   items: [{ _id: 'item-fixture', itemType: 'PHOTOGRAPHY_PACKAGE', name: 'Gói chụp kiểm thử', quantity: 1, status: 'PENDING' }],
@@ -171,7 +171,7 @@ describe('Provider dashboard behavior', () => {
         fireEvent.change(query.getByPlaceholderText('Ví dụ: Áo dài Ngũ Thân'), { target: { value: 'Áo dài kiểm thử' } });
         fireEvent.change(modal.querySelector('select')!, { target: { value: 'category-test' } });
         fireEvent.change(query.getByPlaceholderText('500000'), { target: { value: '350000' } });
-        fireEvent.change(query.getByPlaceholderText('1000000'), { target: { value: '100000' } });
+        fireEvent.change(query.getByPlaceholderText('200000'), { target: { value: '100000' } });
         fireEvent.change(modal.querySelector('input[type="file"]')!, { target: { files: [new File(['fixture'], 'fixture.jpg', { type: 'image/jpeg' })] } });
         await settle();
         return { view, query };
@@ -232,14 +232,14 @@ describe('Provider dashboard behavior', () => {
         await settle();
         fireEvent.click(view.getByRole('button', { name: /Voucher & Mã giảm giá/ }));
         fireEvent.click(view.getByRole('button', { name: 'Tạo voucher mới', exact: true }));
-        const input = view.getByPlaceholderText('VD: LUMETET26') as HTMLInputElement;
+        const input = view.getByPlaceholderText('VD: TAGOTET26') as HTMLInputElement;
         fireEvent.change(input, { target: { value: 'KEEP-DRAFT' } });
         fireEvent.click(sidebar.getByRole('button', { name: 'Quản lý vai trò', exact: true }));
         await settle();
         fireEvent.click(sidebar.getByRole('button', { name: 'Mã khuyến mãi & Combo', exact: true }));
         await settle();
         fireEvent.click(view.getByRole('button', { name: /Voucher & Mã giảm giá/ }));
-        expect((view.getByPlaceholderText('VD: LUMETET26') as HTMLInputElement).value).toBe('KEEP-DRAFT');
+        expect((view.getByPlaceholderText('VD: TAGOTET26') as HTMLInputElement).value).toBe('KEEP-DRAFT');
       });
 
       it('keeps the socket subscription stable across tabs and removes it on unmount', async () => {

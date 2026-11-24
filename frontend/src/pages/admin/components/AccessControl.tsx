@@ -89,7 +89,7 @@ const AUTHENTIC_ROLES: RoleItem[] = [
   {
     code: 'ADMIN',
     name: 'Quản trị viên',
-    description: 'Toàn quyền quản trị hệ thống LUMÉ, cấu hình danh mục và phân quyền.',
+    description: 'Toàn quyền quản trị hệ thống TàGo, cấu hình danh mục và phân quyền.',
     userCount: 1,
     status: 'ACTIVE',
     createdAt: '15/06/2024',
@@ -163,7 +163,7 @@ const AUTHENTIC_ROLE_PERMS: Record<string, string[]> = {
 
 const AUTHENTIC_PERMISSIONS: PermissionItem[] = [
   { code: 'auth:profile:read', name: 'Xem thông tin tài khoản', module: 'AUTH', description: 'Xem thông tin cá nhân và chi tiết tài khoản' },
-  { code: 'auth:login', name: 'Đăng nhập', module: 'AUTH', description: 'Đăng nhập vào hệ thống LUMÉ' },
+  { code: 'auth:login', name: 'Đăng nhập', module: 'AUTH', description: 'Đăng nhập vào hệ thống TàGo' },
   { code: 'auth:logout', name: 'Đăng xuất', module: 'AUTH', description: 'Đăng xuất khỏi hệ thống' },
   { code: 'role:read', name: 'Xem danh sách vai trò', module: 'AUTH', description: 'Xem cấu hình các vai trò trong hệ thống' },
   { code: 'role:manage', name: 'Quản lý vai trò', module: 'AUTH', description: 'Tạo, sửa và cập nhật quyền hạn cho vai trò' },
@@ -176,7 +176,7 @@ const AUTHENTIC_PERMISSIONS: PermissionItem[] = [
   { code: 'user:manage', name: 'Quản lý người dùng', module: 'USER', description: 'Phân quyền, khóa/mở khóa tài khoản' },
   { code: 'audit:read', name: 'Xem nhật ký hệ thống', module: 'USER', description: 'Xem lịch sử hoạt động bảo mật và kiểm toán' },
   { code: 'system:read', name: 'Xem chính sách hệ thống', module: 'SYSTEM', description: 'Xem các chính sách quy định của sàn' },
-  { code: 'system:manage', name: 'Cấu hình chính sách', module: 'SYSTEM', description: 'Quản lý chính sách nền tảng LUMÉ' },
+  { code: 'system:manage', name: 'Cấu hình chính sách', module: 'SYSTEM', description: 'Quản lý chính sách nền tảng TàGo' },
   { code: 'dashboard:read', name: 'Xem tổng quan Admin', module: 'ADMIN', description: 'Xem số liệu thống kê và KPI quản trị' },
   { code: 'booking:create', name: 'Tạo đơn đặt lịch', module: 'BOOKING', description: 'Cho phép khách hàng tạo đơn thuê đồ và chụp ảnh' },
   { code: 'booking:view_own', name: 'Xem đơn của mình', module: 'BOOKING', description: 'Xem các đơn hàng do mình tạo hoặc nhận' },
@@ -829,7 +829,7 @@ export const AccessControl: React.FC = () => {
         <div>
           <h1 className="ac-header-title">Tài khoản & Phân quyền</h1>
           <p className="ac-header-subtitle">
-            Quản lý tài khoản người dùng, vai trò và thiết lập quyền truy cập trong hệ thống LUMÉ.
+            Quản lý tài khoản người dùng, vai trò và thiết lập quyền truy cập trong hệ thống TàGo.
           </p>
         </div>
         {activeTab === 'USERS' ? (
@@ -2310,7 +2310,7 @@ export const AccessControl: React.FC = () => {
                 <div className="ac-sop-info">
                   <h4>Nguyên tắc phân quyền theo vai trò (RBAC)</h4>
                   <p>
-                    Hệ thống LUMÉ áp dụng mô hình phân quyền tập trung theo vai trò (Role-Based Access
+                    Hệ thống TàGo áp dụng mô hình phân quyền tập trung theo vai trò (Role-Based Access
                     Control). Các quyền truy cập được gắn trực tiếp vào vai trò (`ADMIN`, `PROVIDER`,
                     `CUSTOMER`, `SUPPORT`), không phân quyền riêng rẽ theo cá nhân để bảo đảm tính nhất
                     quán và an toàn dữ liệu.

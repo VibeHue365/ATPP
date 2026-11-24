@@ -1531,7 +1531,7 @@ export default function CustomerHomeScreen() {
                     </View>
                   </View>
                   <Text style={styles.sectionSubheading}>
-                    Hình ảnh & cảm nhận thực tế từ khách hàng đã trải nghiệm cùng VibeHue
+                    Hình ảnh & cảm nhận thực tế từ khách hàng đã trải nghiệm cùng TàGo
                   </Text>
                 </View>
               </View>

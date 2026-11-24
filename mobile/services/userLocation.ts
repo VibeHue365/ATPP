@@ -187,7 +187,7 @@ async function reverseViaNominatim(lat: number, lng: number): Promise<string | n
     fetch(url, {
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'VibeHue/1.0 (https://tago.vn; reverse geocoding)',
+        'User-Agent': 'TaGo/1.0 (https://tago.vn; reverse geocoding)',
       },
     }),
     5000,

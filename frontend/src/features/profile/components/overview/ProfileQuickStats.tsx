@@ -45,7 +45,7 @@ export const ProfileQuickStats: React.FC<ProfileQuickStatsProps> = ({ stats }) =
         </div>
         <div className="lume-stat-info">
           <span className="lume-stat-value">{formattedSpent}</span>
-          <span className="lume-stat-label">Tổng chi tiêu tại LUMÉ</span>
+          <span className="lume-stat-label">Tổng chi tiêu tại TàGo</span>
         </div>
       </div>
 

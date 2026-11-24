@@ -1,4 +1,7 @@
-
+import {
+  BOOKING_STATUS_CODES,
+  BOOKING_STATUS_META,
+} from '../../utils/bookingStatus';
 
 export const PHOTO_START_EARLY_MINUTES = 30;
 
@@ -35,20 +38,11 @@ export const TAG_TO_STYLE_SLUG: Record<string, string> = { TRUYEN_THONG: 'truyen
 export const TAG_TO_EVENT_SLUG: Record<string, string> = { PHU_HOP_LE_CUOI: 'dam-cuoi', CHUP_ANH_KY_YEU: 'ky-yeu', LE_HOI_TRUYEN_THONG: 'le-hoi-truyen-thong', BIEU_DIEN_SU_KIEN: 'bieu-dien-va-su-kien' };
 
 export const statusDisplayMap: Record<string, string> = {
-  PENDING: 'CHỜ XỬ LÝ',
-  PENDING_PAYMENT: 'CHỜ THANH TOÁN',
-  DEPOSIT_PAID: 'ĐÃ ĐẶT CỌC',
-  CONFIRMED: 'ĐANG THỰC HIỆN',
-  IN_PROGRESS: 'ĐANG CHỤP',
-  AWAITING_REVIEW: 'CHỜ KHÁCH XÁC NHẬN ẢNH',
-  PICKUP_PENDING: 'CHỜ NHẬN ĐỒ',
-  PICKED_UP: 'ĐANG THUÊ',
-  COMBO_PHOTOS_APPROVED: 'ĐÃ DUYỆT ẢNH • CHỜ TRẢ ĐỒ',
-  RETURN_PENDING: 'CHỜ KIỂM TRA ĐỒ',
-  RETURNED: 'ĐÃ TRẢ ĐỒ',
-  COMPLETED: 'HOÀN THÀNH',
-  CANCELLED: 'ĐÃ HỦY',
-  DISPUTED: 'ĐANG TRANH CHẤP',
-  PARTIALLY_REFUNDED: 'ĐÃ HOÀN TIỀN MỘT PHẦN',
-  REFUNDED: 'ĐÃ HOÀN TIỀN',
+  ...Object.fromEntries(
+    BOOKING_STATUS_CODES.map((code) => [
+      code,
+      BOOKING_STATUS_META[code].label.toUpperCase(),
+    ]),
+  ),
+  PENDING: BOOKING_STATUS_META.PENDING_PAYMENT.label.toUpperCase(),
 };

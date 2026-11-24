@@ -3,6 +3,7 @@ import { AdminReloadButton } from './AdminReloadButton';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../../services/httpClient';
 import { CheckCircle2, XCircle, Clock, Search, AlertTriangle } from 'lucide-react';
+import { getRefundStatusMeta } from '../../../utils/bookingStatus';
 
 type Refund = {
   _id: string;
@@ -19,25 +20,12 @@ type Refund = {
 
 type RefundAction = 'approve' | 'reject' | 'process' | 'retry';
 
-const refundStatusLabels: Record<string, string> = {
-  PENDING: 'Chờ duyệt',
-  APPROVED: 'Đã duyệt',
-  PROCESSING: 'Đang xử lý',
-  PROCESSED: 'Đã hoàn tiền',
-  COMPLETED: 'Đã hoàn tiền',
-  REJECTED: 'Đã từ chối',
-  FAILED: 'Thất bại',
-  CANCELLED: 'Đã hủy',
-};
-
 const refundTypeLabels: Record<string, string> = {
   CANCELLATION: 'Hủy đơn',
   DISPUTE: 'Tranh chấp',
   DEPOSIT: 'Hoàn tiền cọc',
   OTHER: 'Khác',
 };
-
-const refundStatusLabel = (status: string) => refundStatusLabels[status] ?? status;
 const refundTypeLabel = (type: string) => refundTypeLabels[type] ?? type;
 const formatCurrency = (amount: number) => `${(amount || 0).toLocaleString('vi-VN')}đ`;
 
@@ -123,23 +111,34 @@ export const RefundManagement: React.FC = () => {
   });
 
   const renderStatusBadge = (status: string) => {
-    switch (status) {
-      case 'PENDING':
-        return <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, backgroundColor: '#FEF3C7', color: '#D97706', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Clock size={12} /> Chờ duyệt</span>;
-      case 'APPROVED':
-        return <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, backgroundColor: '#EFF6FF', color: '#1D4ED8', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><CheckCircle2 size={12} /> Đã duyệt</span>;
-      case 'PROCESSING':
-        return <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, backgroundColor: '#F3E8FF', color: '#7E22CE' }}>Đang xử lý</span>;
-      case 'PROCESSED':
-      case 'COMPLETED':
-        return <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, backgroundColor: '#D1FAE5', color: '#059669', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><CheckCircle2 size={12} /> Đã hoàn tiền</span>;
-      case 'REJECTED':
-      case 'FAILED':
-      case 'CANCELLED':
-        return <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, backgroundColor: '#FEE2E2', color: '#DC2626', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><XCircle size={12} /> {refundStatusLabel(status)}</span>;
-      default:
-        return <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, backgroundColor: '#F3F4F6', color: '#6B7280' }}>{status}</span>;
-    }
+    const normalized = status === 'PROCESSED' ? 'COMPLETED' : status;
+    const meta = getRefundStatusMeta(normalized);
+    const Icon =
+      normalized === 'PENDING'
+        ? Clock
+        : normalized === 'APPROVED' || normalized === 'COMPLETED'
+        ? CheckCircle2
+        : normalized === 'REJECTED' || normalized === 'FAILED' || normalized === 'CANCELLED'
+        ? XCircle
+        : null;
+    return (
+      <span
+        style={{
+          padding: '4px 10px',
+          borderRadius: '12px',
+          fontSize: '11px',
+          fontWeight: 700,
+          backgroundColor: meta.bg,
+          color: meta.color,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px',
+        }}
+      >
+        {Icon && <Icon size={12} />}
+        {meta.label}
+      </span>
+    );
   };
 
   return (

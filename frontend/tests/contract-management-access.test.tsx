@@ -249,7 +249,7 @@ describe('Phase 7B: Contract Management & Document Access UI Suite', () => {
       // Provider badge & disclaimer
       expect(screen.getByText(/Phạm vi đối tác \(Isolated\)/i)).toBeTruthy();
       expect(
-        screen.getByText(/Đối tác chấp thuận trước cơ chế theo quy chế nền tảng VibeHue khi công bố sản phẩm/i),
+        screen.getByText(/Đối tác chấp thuận trước cơ chế theo quy chế nền tảng TàGo khi công bố sản phẩm/i),
       ).toBeTruthy();
 
       // Ensure NO unauthorized signing or revocation buttons exist in viewer

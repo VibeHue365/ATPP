@@ -39,6 +39,7 @@ import { createIncidentActions } from '../../features/provider-dashboard/orders/
 import { createOrderDataActions } from '../../features/provider-dashboard/orders/createOrderDataActions';
 import { IncidentReportModal } from '../../features/provider-dashboard/orders/IncidentReportModal';
 import { getOrderGroup } from '../../features/provider-dashboard/orders/orderHelpers';
+import { getBookingStatusGroup, normalizeBookingStatusCode } from '../../utils/bookingStatus';
 
 import { useProviderIncidentState } from '../../features/provider-dashboard/orders/useProviderIncidentState';
 import { useProviderOrderState } from '../../features/provider-dashboard/orders/useProviderOrderState';
@@ -787,21 +788,33 @@ export const ProviderDashboard: React.FC = () => {
 
   const tabs = React.useMemo(() => [
     { label: 'Tất cả', count: roleFilteredOrders.length },
-    { label: 'Chờ xử lý', count: roleFilteredOrders.filter(o => getOrderGroup(o.status) === 'Chờ xử lý').length },
-    { label: 'Đang thực hiện', count: roleFilteredOrders.filter(o => getOrderGroup(o.status) === 'Đang thực hiện').length },
-    { label: 'Hoàn thành', count: roleFilteredOrders.filter(o => getOrderGroup(o.status) === 'Hoàn thành').length },
-    { label: 'Đã hủy', count: roleFilteredOrders.filter(o => getOrderGroup(o.status) === 'Đã hủy').length },
+    { label: 'Chờ xử lý', count: roleFilteredOrders.filter(o => getBookingStatusGroup(o.rawStatus || o.status) === 'PENDING').length },
+    { label: 'Đang thực hiện', count: roleFilteredOrders.filter(o => getBookingStatusGroup(o.rawStatus || o.status) === 'ACTIVE').length },
+    { label: 'Hoàn tất', count: roleFilteredOrders.filter(o => getBookingStatusGroup(o.rawStatus || o.status) === 'COMPLETED').length },
+    { label: 'Đã hủy', count: roleFilteredOrders.filter(o => getBookingStatusGroup(o.rawStatus || o.status) === 'CANCELLED').length },
+    { label: 'Tranh chấp / Hoàn tiền', count: roleFilteredOrders.filter(o => getBookingStatusGroup(o.rawStatus || o.status) === 'DISPUTED').length },
     { label: 'Yêu cầu đổi lịch', count: roleFilteredOrders.filter(o => o.items?.some((item: any) => item?.rescheduleRequest?.status === 'PENDING')).length },
   ], [roleFilteredOrders]);
 
   const filteredOrders = roleFilteredOrders.filter((order) => {
     let matchesStatus = false;
+    const group = getBookingStatusGroup(order.rawStatus || order.status);
     if (orderTab === 'Tất cả') {
       matchesStatus = true;
     } else if (orderTab === 'Yêu cầu đổi lịch') {
       matchesStatus = Boolean(order.items?.some((item: any) => item?.rescheduleRequest?.status === 'PENDING'));
+    } else if (orderTab === 'Chờ xử lý') {
+      matchesStatus = group === 'PENDING';
+    } else if (orderTab === 'Đang thực hiện') {
+      matchesStatus = group === 'ACTIVE';
+    } else if (orderTab === 'Hoàn thành' || orderTab === 'Hoàn tất') {
+      matchesStatus = group === 'COMPLETED';
+    } else if (orderTab === 'Đã hủy') {
+      matchesStatus = group === 'CANCELLED';
+    } else if (orderTab === 'Tranh chấp / Hoàn tiền') {
+      matchesStatus = group === 'DISPUTED';
     } else {
-      matchesStatus = getOrderGroup(order.status) === orderTab;
+      matchesStatus = getOrderGroup(order.rawStatus || order.status) === orderTab;
     }
     const matchesType = (!hasAodaiCapability || !hasPhotographyCapability) ? true : (bookingTypeFilter === 'Tất cả' || order.bookingType === bookingTypeFilter);
     return matchesStatus && matchesType;
@@ -828,7 +841,7 @@ export const ProviderDashboard: React.FC = () => {
             }
           }
         }
-        const isCompleted = o.rawStatus === 'COMPLETED' || o.status === 'HOÀN THÀNH';
+        const isCompleted = normalizeBookingStatusCode(o.rawStatus || o.status) === 'COMPLETED';
         return isCompleted && d && !isNaN(d.getTime()) && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
       })
       .reduce((sum, o) => sum + (o.totalAmount ?? 0), 0);

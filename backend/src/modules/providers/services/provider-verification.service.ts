@@ -1029,7 +1029,7 @@ export class ProviderVerificationService {
           verification.businessProfile.businessName ??
           verification.aodaiInfo.shopName ??
           verification.photographyInfo.studioName ??
-          'VibeHue Provider',
+          'Đối tác TàGo',
         capabilities: verification.requestedCapabilities,
         contact: {
           email: verification.businessProfile.email ?? '',

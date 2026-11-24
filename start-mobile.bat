@@ -1,5 +1,5 @@
 @echo off
-title VibeHue Mobile Launcher
+title TàGo Mobile Launcher
 echo ========================================================
 echo       DANG KHOI DONG MAY AO ANDROID PIXEL 6...
 echo ========================================================
@@ -9,7 +9,7 @@ echo Cho may ao khoi dong trong giay lat...
 timeout /t 6 /nobreak >nul
 
 echo ========================================================
-echo       DANG KHOI DONG METRO VA MO APP VIBEHUE...
+echo       DANG KHOI DONG METRO VA MO APP TAGO...
 echo ========================================================
 cd /d "%~dp0mobile"
 call npm run android

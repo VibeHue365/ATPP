@@ -182,7 +182,7 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
 
     // Invariant: Unapproved platform 72-hour fallback rule MUST NOT be present
     expect(fullText).not.toContain(
-      'Quy định bảo vệ từ Sàn VibeHue: Cho phép hủy miễn phí trước 72 giờ',
+      'Quy định bảo vệ từ Sàn TàGo: Cho phép hủy miễn phí trước 72 giờ',
     );
   });
 

@@ -105,7 +105,7 @@ export const MembershipTierCard: React.FC<MembershipTierCardProps> = ({ stats })
       {/* Action button */}
       <button
         type="button"
-        onClick={() => toast.info('Chương trình Hội viên LUMÉ VIP tích lũy tự động theo chi tiêu của bạn.')}
+        onClick={() => toast.info('Chương trình Hội viên TàGo VIP tích lũy tự động theo chi tiêu của bạn.')}
         style={{
           display: 'flex',
           alignItems: 'center',

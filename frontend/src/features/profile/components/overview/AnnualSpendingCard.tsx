@@ -138,7 +138,7 @@ export const AnnualSpendingCard: React.FC<AnnualSpendingCardProps> = ({
         <span className="lume-savings-text">
           {savingsAmount > 0 ? (
             <>
-              Bạn đã tiết kiệm được <strong>{formattedSavings}</strong> nhờ các ưu đãi & khuyến mãi độc quyền tại LUMÉ.
+              Bạn đã tiết kiệm được <strong>{formattedSavings}</strong> nhờ các ưu đãi & khuyến mãi độc quyền tại TàGo.
             </>
           ) : (
             'Hãy áp dụng các mã ưu đãi độc quyền bên dưới để tiết kiệm chi phí khi đặt dịch vụ.'

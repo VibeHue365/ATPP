@@ -32,7 +32,7 @@ export function RevenuePanel() {
       </div>
 
       <RevenueLineChart
-        title="BIỂU ĐỒ TĂNG TRƯỞNG DOANH THU HỆ THỐNG (TRIỆU ĐỒNG)"
+        title="BIỂU ĐỒ TĂNG TRƯỞNG DOANH THU HỆ THỐNG (VNĐ)"
         period={period}
         onPeriodChange={setPeriod}
         growth={stats.data?.revenue?.growth ?? []}

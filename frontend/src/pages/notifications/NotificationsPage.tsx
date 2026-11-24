@@ -11,6 +11,7 @@ import { adminVerificationApi } from '../../features/admin-verifications/api/adm
 import { adminDisputesApi } from '../../features/admin-disputes/api/adminDisputesApi';
 import { adminReportedReviewsApi } from '../../features/admin-reviews/api/adminReportedReviewsApi';
 import { useAuth } from '../../features/auth/hooks/useAuth';
+import { getNotificationTypeMeta, getVerificationStatusMeta } from '../../utils/bookingStatus';
 
 interface NotificationItem {
   _id: string;
@@ -69,7 +70,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
               allNotis.push({
                 _id: `verif-${item.verificationId}`,
                 title: `Phê duyệt hồ sơ: ${item.businessProfile?.businessName || 'Đối tác mới'}`,
-                content: `Hồ sơ đăng ký nhà cung cấp đang ở trạng thái ${item.status}. Cần Admin thẩm định & phê duyệt.`,
+                content: `Hồ sơ đăng ký nhà cung cấp đang ở trạng thái ${getVerificationStatusMeta(item.status).label}. Cần Admin thẩm định & phê duyệt.`,
                 type: 'VERIFICATION',
                 isRead: false,
                 createdAt: item.createdAt || new Date().toISOString(),
@@ -109,7 +110,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
         const providerBookings = await httpClient.get<any[]>('/bookings/provider').catch(() => []);
         if (Array.isArray(providerBookings)) {
           providerBookings.forEach((b: any) => {
-            if (b.status === 'PENDING') {
+            if (b.status === 'PENDING' || b.status === 'PENDING_PAYMENT' || b.status === 'DEPOSIT_PAID') {
               allNotis.push({
                 _id: `prov-bk-${b._id}`,
                 title: `Đơn hàng mới #${b.bookingCode || b._id.substring(0, 6)}`,
@@ -224,15 +225,17 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
       case 'DISPUTE':
         return { icon: <AlertTriangle size={20} strokeWidth={2.2} />, bg: '#FFF1F2', color: '#E11D48', border: '#FECDD3', label: 'Tranh chấp' };
       case 'BOOKING':
-        return { icon: <Calendar size={20} strokeWidth={2.2} />, bg: '#FAF6F0', color: '#4A0E17', border: '#E8E2D5', label: 'Đặt lịch' };
+        return { icon: <Calendar size={20} strokeWidth={2.2} />, bg: '#FAF6F0', color: '#4A0E17', border: '#E8E2D5', label: getNotificationTypeMeta('BOOKING').label };
       case 'PAYMENT':
-        return { icon: <CreditCard size={20} strokeWidth={2.2} />, bg: '#F0FDF4', color: '#166534', border: '#DCFCE7', label: 'Thanh toán' };
+        return { icon: <CreditCard size={20} strokeWidth={2.2} />, bg: '#F0FDF4', color: '#166534', border: '#DCFCE7', label: getNotificationTypeMeta('PAYMENT').label };
       case 'HANDOVER':
-        return { icon: <Package size={20} strokeWidth={2.2} />, bg: '#FFFBEB', color: '#B45309', border: '#FDE68A', label: 'Giao nhận' };
+        return { icon: <Package size={20} strokeWidth={2.2} />, bg: '#FFFBEB', color: '#B45309', border: '#FDE68A', label: getNotificationTypeMeta('HANDOVER').label };
       case 'REFUND':
-        return { icon: <RotateCcw size={20} strokeWidth={2.2} />, bg: '#F0F9FF', color: '#0284C7', border: '#BAE6FD', label: 'Hoàn tiền' };
+        return { icon: <RotateCcw size={20} strokeWidth={2.2} />, bg: '#F0F9FF', color: '#0284C7', border: '#BAE6FD', label: getNotificationTypeMeta('REFUND').label };
+      case 'WEATHER':
+        return { icon: <Clock size={20} strokeWidth={2.2} />, bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE', label: getNotificationTypeMeta('WEATHER').label };
       default:
-        return { icon: <Bell size={20} strokeWidth={2.2} />, bg: '#F8F5FF', color: '#7C3AED', border: '#DDD6FE', label: 'Hệ thống' };
+        return { icon: <Bell size={20} strokeWidth={2.2} />, bg: '#F8F5FF', color: '#7C3AED', border: '#DDD6FE', label: getNotificationTypeMeta(type).label };
     }
   };
 

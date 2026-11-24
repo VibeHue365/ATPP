@@ -81,7 +81,7 @@ export const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({
           Đặt lại <span>mật khẩu</span>
         </h1>
         <p className="lume-auth-subtitle">
-          Tạo mật khẩu mới an toàn cho tài khoản LUMÉ của bạn.
+          Tạo mật khẩu mới an toàn cho tài khoản TàGo của bạn.
         </p>
       </div>
 

@@ -2050,7 +2050,8 @@ export class PaymentsService {
               i.itemType === BookingItemType.Product,
           );
           const rentalDepositTotal = rentalItems.reduce(
-            (sum: number, i: any) => sum + (i.depositAmount || 0),
+            (sum: number, i: any) =>
+              sum + (i.depositAmount || 0) * (i.quantity || 1),
             0,
           );
           const depositAmt =

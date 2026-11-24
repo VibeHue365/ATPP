@@ -1,6 +1,7 @@
 import {
   applyCampaignToRate,
   calculateDailyRentalTotal,
+  calculateHourlyRentalTotal,
   formatCampaignPercent,
   resolveHourlyRate,
   type PricingCampaign,
@@ -21,10 +22,17 @@ describe('campaignPricing (VIB-43, same numbers as backend and web)', () => {
     });
   });
 
-  it('applies the campaign to the hourly rate only on campaign days', () => {
+  it('applies the campaign to the hourly rate only on campaign days and caps at daily price', () => {
     const hourly = resolveHourlyRate(500000, null);
-    expect(applyCampaignToRate(hourly, tetSurcharge, '2026-12-30')).toBe(180000);
-    expect(applyCampaignToRate(hourly, tetSurcharge, '2027-01-10')).toBe(150000);
+    expect(hourly).toBe(100000);
+    expect(applyCampaignToRate(hourly, tetSurcharge, '2026-12-30')).toBe(120000);
+    expect(applyCampaignToRate(hourly, tetSurcharge, '2027-01-10')).toBe(100000);
+    expect(
+      calculateHourlyRentalTotal(500000, null, null, '2027-01-10', 6).total,
+    ).toBe(500000);
+    expect(
+      calculateHourlyRentalTotal(500000, null, tetSurcharge, '2026-12-30', 6).total,
+    ).toBe(600000);
   });
 
   it('labels a surcharge with + and a discount with -', () => {

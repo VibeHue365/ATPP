@@ -18,6 +18,7 @@ import { contractService } from '../../../../services/contractService';
 import type { CustomerContractItem } from '../../../../services/contractService';
 import { ContractDetailViewerModal } from '../../../../components/contracts/ContractDetailViewerModal';
 import { ContractCodeDisplay } from '../../../../components/contracts/ContractCodeDisplay';
+import { getBookingStatusLabel } from '../../../../utils/bookingStatus';
 
 interface ProfileContractsTabProps {
   onNavigateRental?: () => void;
@@ -449,7 +450,7 @@ export const ProfileContractsTab: React.FC<ProfileContractsTabProps> = ({ onNavi
                           border: '1px solid #fde68a',
                         }}
                       >
-                        {c.bookingStatus}
+                        {getBookingStatusLabel(c.bookingStatus, { uppercase: true })}
                       </span>
                     )}
                   </div>

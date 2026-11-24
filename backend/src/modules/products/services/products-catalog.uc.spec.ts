@@ -200,18 +200,18 @@ describe('Provider Ao Dai catalog use cases (DaiBLL)', () => {
       );
     });
 
-    it('UT-16 UTCID06 accepts a deposit one unit below the rental price', async () => {
+    it('UT-16 UTCID06 accepts a deposit one 1.000đ unit below the rental price', async () => {
       const { service, productsRepository } = createService();
 
       await service.createProduct(
         userId,
-        createDto({ basePrice: 500000, depositAmount: 499999 }),
+        createDto({ basePrice: 500000, depositAmount: 499000 }),
       );
 
       expect(productsRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           basePrice: 500000,
-          depositAmount: 499999,
+          depositAmount: 499000,
           providerId,
         }),
       );
@@ -581,6 +581,53 @@ describe('Provider Ao Dai catalog use cases (DaiBLL)', () => {
         new BadRequestException('Giá cọc phải nhỏ hơn giá thuê'),
       );
       expect(productsRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('enforces market bounds (floor/ceiling, 1.000đ increment, hourly cap, replacement >= basePrice)', async () => {
+      const { service } = createService();
+
+      await expect(
+        service.createProduct(
+          userId,
+          createDto({ basePrice: 30000, depositAmount: 0 }),
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      await expect(
+        service.createProduct(
+          userId,
+          createDto({ basePrice: 500500, depositAmount: 100000 }),
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      await expect(
+        service.createProduct(
+          userId,
+          createDto({ basePrice: 500000, depositAmount: 10000 }),
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      await expect(
+        service.createProduct(
+          userId,
+          createDto({
+            basePrice: 500000,
+            depositAmount: 100000,
+            hourlyPrice: 150000,
+          }),
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      await expect(
+        service.createProduct(
+          userId,
+          createDto({
+            basePrice: 500000,
+            depositAmount: 100000,
+            replacementValue: 400000,
+          }),
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });

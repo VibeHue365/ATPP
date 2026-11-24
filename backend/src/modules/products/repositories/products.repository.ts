@@ -220,7 +220,7 @@ export class ProductsRepository {
       this.productModel
         .find(query)
         .select(
-          'providerId categoryId styleCategoryIds eventCategoryIds name slug images basePrice depositAmount replacementValue sizes colors materials style occasions taggingRevision rating status customTags createdAt',
+          'providerId categoryId styleCategoryIds eventCategoryIds name slug images basePrice hourlyPrice depositAmount replacementValue sizes colors materials style occasions taggingRevision rating status customTags createdAt',
         )
         .populate('categoryId', 'name slug')
         .populate(
@@ -577,7 +577,7 @@ export class ProductsRepository {
     return this.productModel
       .find({ moderationStatus: status })
       .select(
-        'name description images basePrice depositAmount replacementValue status moderationStatus moderationReason updatedAt categoryId providerId taggingRevision',
+        'name description images basePrice hourlyPrice depositAmount replacementValue status moderationStatus moderationReason updatedAt categoryId providerId taggingRevision',
       )
       .sort({ updatedAt: 1 })
       .populate('categoryId', 'name')

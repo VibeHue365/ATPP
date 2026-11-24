@@ -16,6 +16,7 @@ import { useToast } from '../../../../components/feedback/Toast';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../../../services/httpClient';
 import { BookingContractsSection } from '../../../../components/contracts/BookingContractsSection';
+import { getBookingStatusMeta, getPaymentTxStatusMeta } from '../../../../utils/bookingStatus';
 
 interface ProfileBookingDetailModalProps {
   booking: any;
@@ -58,31 +59,16 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
     });
   };
 
-  const statusLabels: Record<string, { label: string; color: string; bg: string }> = {
-    DRAFT: { label: 'Nháp', color: '#7F8C8D', bg: '#F2F4F4' },
-    PENDING_PAYMENT: { label: 'Chờ cọc', color: '#D35400', bg: '#FDEBD0' },
-    DEPOSIT_PAID: { label: 'Đã đặt cọc', color: '#2980B9', bg: '#EBF5FB' },
-    CONFIRMED: { label: 'Đã xác nhận', color: '#27AE60', bg: '#E8F8F5' },
-    PICKUP_PENDING: { label: 'Chờ nhận đồ', color: '#8E44AD', bg: '#F5EEF8' },
-    PICKED_UP: { label: 'Đang thuê', color: '#16A085', bg: '#E8F8F5' },
-    RETURN_PENDING: { label: 'Chờ trả đồ', color: '#F39C12', bg: '#FEF9E7' },
-    RETURNED: { label: 'Đã trả đồ', color: '#2ECC71', bg: '#E8F8F5' },
-    COMPLETED: { label: 'Hoàn thành', color: '#27AE60', bg: '#E8F8F5' },
-    CANCELLED: { label: 'Đã hủy', color: '#C0392B', bg: '#FDEDEC' },
-    DISPUTED: { label: 'Tranh chấp', color: '#78281F', bg: '#F9EBEA' },
-    REFUNDED: { label: 'Đã hoàn tiền', color: '#7F8C8D', bg: '#F2F4F4' }
-  };
-
   const paymentStatusLabels: Record<string, { label: string; color: string; bg: string }> = {
     UNPAID: { label: 'Chưa thanh toán', color: '#C0392B', bg: '#FDEDEC' },
     PARTIALLY_PAID: { label: 'Thanh toán một phần', color: '#D35400', bg: '#FDEBD0' },
-    PAID: { label: 'Đã thanh toán', color: '#27AE60', bg: '#E8F8F5' },
-    REFUNDED: { label: 'Đã hoàn tiền', color: '#7F8C8D', bg: '#F2F4F4' }
+    PAID: getPaymentTxStatusMeta('PAID'),
+    REFUNDED: getBookingStatusMeta('REFUNDED'),
   };
 
-  const matchStatus = statusLabels[booking.status] || { label: booking.status, color: '#333', bg: '#EEE' };
+  const matchStatus = getBookingStatusMeta(booking.status);
   const payStatus = booking.paymentSummary?.paymentStatus || booking.paymentStatus || 'UNPAID';
-  const matchPayStatus = paymentStatusLabels[payStatus] || { label: payStatus, color: '#333', bg: '#EEE' };
+  const matchPayStatus = paymentStatusLabels[payStatus] || getPaymentTxStatusMeta(payStatus);
 
   // Financial values
   const grandTotal = booking.pricingSummary?.grandTotal || booking.totalAmount || 0;

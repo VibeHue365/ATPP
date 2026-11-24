@@ -316,7 +316,7 @@ function ProviderRegisterScreen() {
       await providerApi.acceptVerificationConsent(id, '1.0');
       const submitted = await providerApi.submitVerification(id);
       hydrateFromRecord(submitted);
-      setVerificationStatus(submitted?.status || 'PENDING_REVIEW');
+      setVerificationStatus(submitted?.status || 'SUBMITTED');
       await refreshUser();
       show('Hồ sơ Đối tác đã được gửi xét duyệt thành công!', 'success');
     } catch (cause) {
@@ -351,8 +351,9 @@ function ProviderRegisterScreen() {
 
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
         {/* Status Banner */}
-        {(verificationStatus === 'PENDING_REVIEW' ||
-          verificationStatus === 'SUBMITTED' ||
+        {(verificationStatus === 'SUBMITTED' ||
+          verificationStatus === 'UNDER_REVIEW' ||
+          verificationStatus === 'NEEDS_CHANGES' ||
           verificationStatus === 'APPROVED' ||
           verificationStatus === 'REJECTED') && (
           <View
@@ -384,8 +385,12 @@ function ProviderRegisterScreen() {
                 {verificationStatus === 'APPROVED'
                   ? 'Hồ sơ Đối tác đã được Phê duyệt chính thức'
                   : verificationStatus === 'REJECTED'
-                    ? 'Hồ sơ cần bổ sung thông tin'
-                    : 'Hồ sơ KYC đang chờ Ban Quản Trị phê duyệt'}
+                    ? 'Hồ sơ đã bị từ chối'
+                    : verificationStatus === 'NEEDS_CHANGES'
+                      ? 'Hồ sơ cần bổ sung thông tin'
+                      : verificationStatus === 'UNDER_REVIEW'
+                        ? 'Hồ sơ KYC đang được thẩm định'
+                        : 'Hồ sơ KYC đã gửi · Chờ Ban Quản Trị phê duyệt'}
               </Text>
               <Text style={s.statusSub}>
                 {verificationStatus === 'APPROVED'

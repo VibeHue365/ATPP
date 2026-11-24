@@ -52,8 +52,8 @@ export function AddProductModal({
   const [color, setColor] = useState('Đỏ Chu Sa');
   const [material, setMaterial] = useState(ALL_MATERIALS[0]);
   const [selectedSizes, setSelectedSizes] = useState<string[]>(['S', 'M', 'L']);
-  const [basePrice, setBasePrice] = useState('850000');
-  const [depositAmount, setDepositAmount] = useState('300000');
+  const [basePrice, setBasePrice] = useState('500000');
+  const [depositAmount, setDepositAmount] = useState('200000');
   const [replacementValue, setReplacementValue] = useState('');
   const [description, setDescription] = useState('');
   const [initialQty, setInitialQty] = useState('2');
@@ -99,8 +99,8 @@ export function AddProductModal({
       setColor('Đỏ Chu Sa');
       setMaterial(ALL_MATERIALS[0]);
       setSelectedSizes(['S', 'M', 'L']);
-      setBasePrice('850000');
-      setDepositAmount('300000');
+      setBasePrice('500000');
+      setDepositAmount('200000');
       setReplacementValue('');
       setDescription('');
       setInitialQty('2');
@@ -202,13 +202,47 @@ export function AddProductModal({
       return;
     }
 
+    const parsedPrice = Number(basePrice.replace(/[^0-9]/g, ''));
+    const parsedDeposit = Number(depositAmount.replace(/[^0-9]/g, '') || '0');
+
+    if (
+      !Number.isInteger(parsedPrice) ||
+      parsedPrice < 50000 ||
+      parsedPrice > 10000000 ||
+      parsedPrice % 1000 !== 0
+    ) {
+      show('Giá thuê/ngày phải từ 50.000đ đến 10.000.000đ (bội số 1.000đ)', 'error');
+      return;
+    }
+    if (
+      !Number.isInteger(parsedDeposit) ||
+      parsedDeposit < 0 ||
+      parsedDeposit > 5000000 ||
+      parsedDeposit % 1000 !== 0 ||
+      (parsedDeposit > 0 && parsedDeposit < 20000)
+    ) {
+      show('Tiền cọc phải là 0đ hoặc từ 20.000đ – 5.000.000đ (bội số 1.000đ)', 'error');
+      return;
+    }
+    if (parsedDeposit >= parsedPrice) {
+      show('Tiền đặt cọc phải nhỏ hơn giá thuê mỗi ngày', 'error');
+      return;
+    }
+
     const cleanReplacementStr = replacementValue.replace(/[^0-9]/g, '');
     const parsedReplacement = cleanReplacementStr
       ? Math.round(Number(cleanReplacementStr))
       : null;
 
-    if (replacementValue.trim() && (!parsedReplacement || parsedReplacement <= 0)) {
-      show('Giá trị bồi hoàn trang phục phải lớn hơn 0 VNĐ', 'error');
+    if (
+      replacementValue.trim() &&
+      (!parsedReplacement ||
+        parsedReplacement < 100000 ||
+        parsedReplacement > 50000000 ||
+        parsedReplacement < parsedPrice ||
+        parsedReplacement < parsedDeposit)
+    ) {
+      show('Giá trị bồi hoàn phải từ 100.000đ – 50.000.000đ và >= giá thuê & tiền cọc', 'error');
       return;
     }
 
@@ -235,8 +269,8 @@ export function AddProductModal({
         const updatePayload: Record<string, any> = {
           name: name.trim(),
           style,
-          basePrice: Number(basePrice) || 0,
-          depositAmount: Number(depositAmount) || 0,
+          basePrice: parsedPrice,
+          depositAmount: parsedDeposit,
           sizes: sizesToSave,
           colors: Array.from(new Set([cleanColor, ...existingColors])),
           materials: Array.from(new Set([material, ...existingMaterials])),
@@ -272,8 +306,8 @@ export function AddProductModal({
         name: name.trim(),
         categoryId: firstCategoryId,
         style,
-        basePrice: Number(basePrice) || 500000,
-        depositAmount: Number(depositAmount) || 200000,
+        basePrice: parsedPrice,
+        depositAmount: parsedDeposit,
         sizes: sizesToSave,
         colors: [cleanColor],
         materials: [material],

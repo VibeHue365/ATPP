@@ -90,8 +90,8 @@ export function RfidChipDetailModal({
   useEffect(() => {
     if (visible && product) {
       setEditName(product.name || '');
-      setEditBasePrice(String(product.basePrice ?? 850000));
-      setEditDeposit(String(product.depositAmount ?? 0));
+      setEditBasePrice(String(product.basePrice ?? 500000));
+      setEditDeposit(String(product.depositAmount ?? 200000));
       setEditReplacementValue(
         typeof product.rawProduct?.replacementValue === 'number' &&
           product.rawProduct.replacementValue > 0
@@ -170,16 +170,35 @@ export function RfidChipDetailModal({
       ? Math.round(Number(cleanReplacementStr))
       : null;
 
-    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
-      show('Giá thuê mỗi ngày phải lớn hơn 0 VNĐ', 'error');
+    if (
+      !Number.isInteger(parsedPrice) ||
+      parsedPrice < 50000 ||
+      parsedPrice > 10000000 ||
+      parsedPrice % 1000 !== 0
+    ) {
+      show('Giá thuê mỗi ngày phải từ 50.000đ – 10.000.000đ (bội số 1.000đ)', 'error');
       return;
     }
-    if (!Number.isFinite(parsedDeposit) || parsedDeposit < 0 || parsedDeposit >= parsedPrice) {
-      show('Tiền cọc phải từ 0đ và nhỏ hơn giá thuê mỗi ngày', 'error');
+    if (
+      !Number.isInteger(parsedDeposit) ||
+      parsedDeposit < 0 ||
+      parsedDeposit > 5000000 ||
+      parsedDeposit % 1000 !== 0 ||
+      (parsedDeposit > 0 && parsedDeposit < 20000) ||
+      parsedDeposit >= parsedPrice
+    ) {
+      show('Tiền cọc phải là 0đ hoặc 20.000đ – 5.000.000đ và nhỏ hơn giá thuê (bội số 1.000đ)', 'error');
       return;
     }
-    if (editReplacementValue.trim() && (!parsedReplacement || parsedReplacement <= 0)) {
-      show('Giá trị bồi hoàn trang phục phải lớn hơn 0 VNĐ', 'error');
+    if (
+      editReplacementValue.trim() &&
+      (!parsedReplacement ||
+        parsedReplacement < 100000 ||
+        parsedReplacement > 50000000 ||
+        parsedReplacement < parsedPrice ||
+        parsedReplacement < parsedDeposit)
+    ) {
+      show('Giá trị bồi hoàn phải từ 100.000đ – 50.000.000đ và >= giá thuê & tiền cọc', 'error');
       return;
     }
 

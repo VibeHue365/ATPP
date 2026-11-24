@@ -33,18 +33,19 @@ import {
 } from '../../../features/admin-verifications/api/adminVerificationApi';
 import { documentLabels } from '../../../features/admin-verifications/types';
 import type { ProviderDocumentType } from '../../../features/provider-verifications/types';
+import { VERIFICATION_STATUS_META } from '../../../utils/bookingStatus';
 import './partnerVerificationFigma.css';
 
 type TabStatus = 'ALL' | 'SUBMITTED' | 'UNDER_REVIEW' | 'NEEDS_CHANGES' | 'APPROVED' | 'REJECTED';
 
 const STATUS_LABELS: Record<string, string> = {
   ALL: 'Tất cả',
-  SUBMITTED: 'Mới gửi',
-  UNDER_REVIEW: 'Đang đánh giá',
-  NEEDS_CHANGES: 'Cần bổ sung',
-  APPROVED: 'Đã phê duyệt',
-  REJECTED: 'Đã từ chối',
-  DRAFT: 'Bản nháp',
+  SUBMITTED: VERIFICATION_STATUS_META.SUBMITTED.label,
+  UNDER_REVIEW: VERIFICATION_STATUS_META.UNDER_REVIEW.label,
+  NEEDS_CHANGES: VERIFICATION_STATUS_META.NEEDS_CHANGES.label,
+  APPROVED: VERIFICATION_STATUS_META.APPROVED.label,
+  REJECTED: VERIFICATION_STATUS_META.REJECTED.label,
+  DRAFT: VERIFICATION_STATUS_META.DRAFT.label,
 };
 
 const REJECT_PRESET_REASONS = [
@@ -1282,14 +1283,14 @@ export function PartnerVerificationManagement() {
                         <div className="pv-info-item">
                           <span className="info-label">Email liên hệ</span>
                           <span className="info-val">
-                            {activeVerification.businessProfile?.email || 'mainguyen@gmail.com'}
+                            {activeVerification.businessProfile?.email || 'Đang cập nhật'}
                           </span>
                         </div>
 
                         <div className="pv-info-item" style={{ gridColumn: 'span 2' }}>
                           <span className="info-label">Địa chỉ kinh doanh</span>
                           <span className="info-val">
-                            {activeVerification.businessProfile?.address || '12 Lê Lợi, TP. Huế, Thừa Thiên Huế'}
+                            {activeVerification.businessProfile?.address || 'Đang cập nhật địa chỉ'}
                           </span>
                         </div>
                       </div>

@@ -463,7 +463,7 @@ export class BookingsService implements OnApplicationBootstrap {
           '==================================================================',
         );
         console.error(
-          'FATAL ERROR: VibeHue requires MongoDB to run as a Replica Set to',
+          'FATAL ERROR: TàGo requires MongoDB to run as a Replica Set to',
         );
         console.error('support database transactions for inventory locking.');
         console.error(
@@ -1940,13 +1940,7 @@ export class BookingsService implements OnApplicationBootstrap {
 
           const rType = item.rentalType === 'HOURLY' ? 'HOURLY' : 'DAILY';
           if (rType === 'HOURLY') {
-            // Chiến dịch giá (giảm/phụ thu) áp theo ngày thuê, cả với thuê theo giờ.
-            const hourlyRate = await this.campaignService.calculateHourlyRate(
-              product.basePrice,
-              product.hourlyPrice,
-              product.providerId,
-              item.shootDate ?? new Date(),
-            );
+            // Chiến dịch giá (giảm/phụ thu) áp theo ngày thuê, có trần tối đa bằng giá ngày.
             let durationHours = 2;
             if (item.shootTimeSlot) {
               const parts = item.shootTimeSlot.split('-');
@@ -1965,7 +1959,14 @@ export class BookingsService implements OnApplicationBootstrap {
                 );
               }
             }
-            unitPrice = hourlyRate * durationHours;
+            const hourlyQuote = await this.campaignService.calculateHourlyRental(
+              product.basePrice,
+              product.hourlyPrice,
+              product.providerId,
+              item.shootDate ?? new Date(),
+              durationHours,
+            );
+            unitPrice = hourlyQuote.total;
           } else {
             // Không đủ ngày hợp lệ thì tính 1 ngày (giữ hành vi cũ); chiến dịch áp theo từng ngày thuê.
             let rentalFrom = new Date();
@@ -2580,14 +2581,6 @@ export class BookingsService implements OnApplicationBootstrap {
           'Yêu cầu giờ bắt đầu và giờ kết thúc khi thuê theo giờ',
         );
       }
-      // Chiến dịch giá (giảm/phụ thu) áp theo ngày thuê, cả với thuê theo giờ.
-      const hourlyRate = await this.campaignService.calculateHourlyRate(
-        product.basePrice,
-        product.hourlyPrice,
-        product.providerId,
-        start,
-      );
-
       const [sh, sm] = startTime.split(':').map(Number);
       const [eh, em] = endTime.split(':').map(Number);
 
@@ -2603,8 +2596,17 @@ export class BookingsService implements OnApplicationBootstrap {
         throw new BadRequestException('Thời gian thuê tối thiểu là 2 tiếng');
       }
 
-      unitPrice = hourlyRate;
-      subTotal = unitPrice * durationHours * quantity;
+      // Chiến dịch giá (giảm/phụ thu) áp theo ngày thuê, có trần tối đa bằng giá ngày.
+      const hourlyQuote = await this.campaignService.calculateHourlyRental(
+        product.basePrice,
+        product.hourlyPrice,
+        product.providerId,
+        start,
+        durationHours,
+      );
+
+      unitPrice = hourlyQuote.total;
+      subTotal = hourlyQuote.total * quantity;
       shootDate = start;
       shootTimeSlot = `${startTime}-${endTime}`;
     } else {
@@ -2621,15 +2623,14 @@ export class BookingsService implements OnApplicationBootstrap {
         throw new BadRequestException('Ngày kết thúc phải sau ngày bắt đầu');
       }
 
-      // Chiến dịch giá áp theo từng ngày thuê; unitPrice giữ nghĩa giá một ngày (trung bình).
-      const { total, days: durationDays } =
-        await this.campaignService.calculateDailyRental(
-          product.basePrice,
-          product.providerId,
-          start,
-          end,
-        );
-      unitPrice = Math.round(total / durationDays);
+      // Chiến dịch giá áp theo từng ngày thuê; unitPrice lưu tổng tiền thuê của 1 bộ cho cả kỳ để khớp Settlement.
+      const { total } = await this.campaignService.calculateDailyRental(
+        product.basePrice,
+        product.providerId,
+        start,
+        end,
+      );
+      unitPrice = total;
       subTotal = total * quantity;
       rentalFrom = start;
       rentalTo = end;
@@ -2649,7 +2650,7 @@ export class BookingsService implements OnApplicationBootstrap {
       priceVersion = await this.priceVersionModel.create({
         targetType: PriceTargetType.Product,
         targetId: new Types.ObjectId(productId),
-        price: unitPrice,
+        price: product.basePrice,
         depositAmount: product.depositAmount,
         effectiveFrom: new Date(),
         note: 'Tự động tạo khi booking',
@@ -4751,11 +4752,32 @@ export class BookingsService implements OnApplicationBootstrap {
       }
     }
 
+    const bookingStatusLabels: Record<string, string> = {
+      DRAFT: 'Bản nháp',
+      PENDING_PAYMENT: 'Chờ thanh toán',
+      DEPOSIT_PAID: 'Đã đặt cọc · Chờ duyệt',
+      CONFIRMED: 'Đã xác nhận',
+      PICKUP_PENDING: 'Chờ bàn giao / nhận áo',
+      PICKED_UP: 'Đang thuê',
+      RETURN_PENDING: 'Chờ nhận trả đồ',
+      RETURNED: 'Đã trả đồ · Chờ hoàn cọc',
+      IN_PROGRESS: 'Đang thực hiện buổi chụp',
+      AWAITING_REVIEW: 'Đã giao ảnh · Chờ duyệt',
+      COMBO_PHOTOS_APPROVED: 'Đã duyệt ảnh · Chờ trả đồ',
+      COMPLETED: 'Hoàn tất',
+      CANCELLED: 'Đã hủy',
+      DISPUTED: 'Đang tranh chấp',
+      PARTIALLY_REFUNDED: 'Hoàn tiền một phần',
+      REFUNDED: 'Đã hoàn tiền',
+    };
+
     try {
+      const readableStatus =
+        bookingStatusLabels[String(newStatus).toUpperCase()] ?? newStatus;
       await this.notificationsService.createNotification(
         this.getCustomerIdStr(booking),
         `Cập nhật trạng thái đơn hàng`,
-        `Đơn hàng ${booking.bookingCode} của bạn đã chuyển sang trạng thái: ${newStatus}`,
+        `Đơn hàng ${booking.bookingCode} của bạn đã chuyển sang trạng thái: ${readableStatus}`,
         NotificationType.Booking,
         { bookingId: booking._id },
       );

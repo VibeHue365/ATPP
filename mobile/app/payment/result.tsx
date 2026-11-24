@@ -221,7 +221,24 @@ export default function PaymentResultScreen() {
             label="Mã đơn đặt lịch"
             value={result?.bookingId?.slice(-10).toUpperCase() ?? 'Đang cập nhật'}
           />
-          <Info label="Trạng thái" value={result?.paymentStatus ?? state} color={color} />
+          <Info
+            label="Trạng thái"
+            value={
+              ({
+                PAID: 'Thành công',
+                SUCCESS: 'Thành công',
+                PENDING: 'Chờ thanh toán',
+                PROCESSING: 'Đang xử lý',
+                CANCELLED: 'Đã hủy',
+                FAILED: 'Thất bại',
+                EXPIRED: 'Đã hết hạn',
+                ERROR: 'Lỗi xác minh',
+              } as Record<string, string>)[result?.paymentStatus ?? state] ||
+              result?.paymentStatus ||
+              state
+            }
+            color={color}
+          />
         </View>
 
         <View style={styles.actions}>

@@ -6,6 +6,7 @@ import Swal from 'sweetalert2';
 import { httpClient } from '../../../services/httpClient';
 import { useToast } from '../../../components/feedback/Toast';
 import { Modal } from '../../../components/common/Modal';
+import { getSettlementStatusMeta } from '../../../utils/bookingStatus';
 
 interface SettlementPolicySnapshot {
   policyCode: string;
@@ -485,13 +486,18 @@ export const SettlementManagement: React.FC = () => {
                       <td style={{ padding: '16px 20px', textAlign: 'right', color: '#166534', fontWeight: 800 }}>{(s.payableAmount ?? 0).toLocaleString()}đ</td>
 
                       <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                        <span style={{
-                          padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
-                          backgroundColor: s.status === 'SETTLED' ? '#F0FDF4' : s.status === 'ON_HOLD' ? '#FEE2E2' : s.status === 'CANCELLED' ? '#F3F4F6' : '#FEF3C7',
-                          color: s.status === 'SETTLED' ? '#166534' : s.status === 'ON_HOLD' ? '#991B1B' : s.status === 'CANCELLED' ? '#4B5563' : '#92400E'
-                        }}>
-                          {s.status === 'SETTLED' ? 'Đã quyết toán' : s.status === 'ON_HOLD' ? 'Tạm giữ' : s.status === 'CANCELLED' ? 'Đã hủy' : 'Chờ quyết toán'}
-                        </span>
+                        {(() => {
+                          const sMeta = getSettlementStatusMeta(s.status);
+                          return (
+                            <span style={{
+                              padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
+                              backgroundColor: sMeta.bg,
+                              color: sMeta.color,
+                            }}>
+                              {sMeta.label}
+                            </span>
+                          );
+                        })()}
                       </td>
 
                        <td style={{ padding: '16px 20px', textAlign: 'center' }}>
@@ -568,7 +574,7 @@ export const SettlementManagement: React.FC = () => {
               {[
                 ['Đơn hàng', bookingLabel(selectedSettlement.bookingId)],
                 ['Nhà cung cấp', providerLabel(selectedSettlement.providerId)],
-                ['Trạng thái', selectedSettlement.status],
+                ['Trạng thái', getSettlementStatusMeta(selectedSettlement.status).label],
                 ['Tổng dịch vụ', formatMoney(selectedSettlement.grossAmount)],
                 [`Hoa hồng (${(selectedSettlement.commissionRate * 100).toLocaleString('vi-VN')}%)`, formatMoney(selectedSettlement.commissionAmount)],
                 ['Phí nền tảng', formatMoney(selectedSettlement.allocatedPlatformFee)],

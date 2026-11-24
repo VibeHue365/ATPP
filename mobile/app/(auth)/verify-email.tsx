@@ -363,7 +363,7 @@ export default function VerifyEmailScreen() {
               <Text style={styles.footerDot}>•</Text>
               <View style={styles.footerInlineItem}>
                 <Ionicons name="location-outline" size={12} color="#5B3F43" />
-                <Text style={styles.footerText}>26 Lê Lợi, TP. Huế</Text>
+                <Text style={styles.footerText}>TP. Huế, Việt Nam</Text>
               </View>
             </View>
             <View style={styles.sslPill}>

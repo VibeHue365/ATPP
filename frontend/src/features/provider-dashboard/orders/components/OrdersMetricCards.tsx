@@ -5,7 +5,7 @@ import {
   ShoppingBag,
 } from 'lucide-react';
 import type { Order } from '../types';
-import { getOrderGroup } from '../orderHelpers';
+import { getBookingStatusGroup } from '../../../../utils/bookingStatus';
 
 interface OrdersMetricCardsProps {
   orders: Order[];
@@ -19,11 +19,11 @@ export function OrdersMetricCards({
   onSelectTab,
 }: OrdersMetricCardsProps) {
   const inProgressCount = orders.filter(
-    (o) => getOrderGroup(o.status) === 'Đang thực hiện'
+    (o) => getBookingStatusGroup(o.rawStatus || o.status) === 'ACTIVE'
   ).length;
 
   const pendingCount = orders.filter(
-    (o) => getOrderGroup(o.status) === 'Chờ xử lý'
+    (o) => getBookingStatusGroup(o.rawStatus || o.status) === 'PENDING'
   ).length;
 
   return (

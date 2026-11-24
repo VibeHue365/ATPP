@@ -7,6 +7,10 @@ export interface ProductProvider {
   _id: string;
   businessName: string;
   address?: { addressLine?: string; ward?: string; district?: string; city?: string };
+  rentalSettings?: {
+    useBusinessAddressForPickup?: boolean;
+    pickupLocation?: { addressLine?: string; ward?: string; district?: string; city?: string } | null;
+  };
 }
 
 export interface ProductBadge {

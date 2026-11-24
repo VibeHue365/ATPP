@@ -178,7 +178,7 @@ describe('P1B — Provider Policy Management Form Suite (No Accessories)', () =>
 
     await waitFor(() => {
       expect(contractService.submitProviderPolicyForReview).toHaveBeenCalledTimes(1);
-      expect(screen.getByText(/Đã gửi chính sách lên Ban Quản trị Sàn VibeHue để kiểm duyệt!/i)).toBeTruthy();
+      expect(screen.getByText(/Đã gửi chính sách lên Ban Quản trị Sàn TàGo để kiểm duyệt!/i)).toBeTruthy();
     });
   });
 });

@@ -6,6 +6,7 @@ import { ScheduleUrgentAttentionSection } from './ScheduleUrgentAttentionSection
 import { ScheduleDataTable, type ScheduleRowItem } from './ScheduleDataTable';
 import { useAuth } from '../../../auth/hooks/useAuth';
 import { includesVietnamese } from '../../../../utils/vietnameseUtils';
+import { getBookingStatusMeta } from '../../../../utils/bookingStatus';
 import '../ProfilePage.css';
 
 interface ProfileScheduleTabProps {
@@ -134,91 +135,40 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
           returnTime = 'Dự kiến trả ảnh';
         }
 
-        let statusLabel = b.status || 'ĐANG XỬ LÝ';
-        let statusSubtext = 'Đang cập nhật';
-        let statusBg = '#F2F4F4';
-        let statusColor = '#574D4F';
+        const hasIncident = Boolean(
+          b.activeIncident ||
+          b.hasIncident ||
+          b.statusTimeline?.some((t: any) =>
+            t.status === 'RETURN_PENDING' &&
+            (t.note?.includes('sự cố') || t.note?.includes('báo cáo') || t.note?.includes('đền bù') || t.note?.includes('hỏng'))
+          )
+        );
+        const meta = getBookingStatusMeta(b.status, { hasPendingIncident: hasIncident });
+        const statusLabel = meta.label.toUpperCase();
+        const statusBg = meta.bg;
+        const statusColor = meta.color;
+        let statusSubtext = meta.label;
 
-        if (b.status === 'PENDING_PAYMENT') {
-          statusLabel = 'CHỜ CỌC';
-          statusSubtext = 'Chưa thanh toán cọc';
-          statusBg = '#FEF3C7';
-          statusColor = '#B45309';
-        } else if (b.status === 'DEPOSIT_PAID') {
-          statusLabel = 'CHỜ DUYỆT';
-          statusSubtext = 'Chờ đối tác xác nhận';
-          statusBg = '#FFFBEB';
-          statusColor = '#B45309';
-        } else if (b.status === 'CONFIRMED') {
-          statusLabel = 'SẮP DIỄN RA';
+        if (b.status === 'CONFIRMED') {
           statusSubtext = getDaysDiffText(rawStart, 'Bắt đầu sau') || 'Đã xác nhận lịch combo';
-          statusBg = '#EFF6FF';
-          statusColor = '#1D4ED8';
         } else if (b.status === 'PICKUP_PENDING') {
-          statusLabel = 'CHỜ NHẬN ĐỒ';
           statusSubtext = 'Trang phục sẵn sàng, chờ nhận';
-          statusBg = '#F5EEF8';
-          statusColor = '#8E44AD';
         } else if (b.status === 'PICKED_UP') {
-          statusLabel = 'ĐANG TRẢI NGHIỆM';
           statusSubtext = 'Đã nhận đồ, sẵn sàng chụp';
-          statusBg = '#ECFDF5';
-          statusColor = '#047857';
         } else if (b.status === 'IN_PROGRESS') {
-          statusLabel = 'ĐANG CHỤP ẢNH';
           statusSubtext = 'Đang trong buổi chụp';
-          statusBg = '#ECFDF5';
-          statusColor = '#047857';
         } else if (b.status === 'RETURN_PENDING') {
-          const hasIncident = Boolean(
-            b.activeIncident ||
-            b.hasIncident ||
-            b.statusTimeline?.some((t: any) =>
-              t.status === 'RETURN_PENDING' &&
-              (t.note?.includes('sự cố') || t.note?.includes('báo cáo') || t.note?.includes('đền bù') || t.note?.includes('hỏng'))
-            )
-          );
-          if (hasIncident) {
-            statusLabel = 'CHỜ DUYỆT SỰ CỐ';
-            statusSubtext = 'Shop yêu cầu đền bù hư hỏng';
-            statusBg = '#FFF1F2';
-            statusColor = '#E11D48';
-          } else {
-            statusLabel = 'CHỜ TRẢ ĐỒ';
-            statusSubtext = 'Đang kiểm tra trả đồ combo';
-            statusBg = '#FEF9E7';
-            statusColor = '#F39C12';
-          }
+          statusSubtext = hasIncident ? 'Shop yêu cầu đền bù hư hỏng' : 'Đang kiểm tra trả đồ combo';
         } else if (b.status === 'AWAITING_REVIEW') {
-          statusLabel = 'CHỜ DUYỆT ẢNH';
           statusSubtext = 'Đã có ảnh, vui lòng xem & duyệt';
-          statusBg = '#FEF3C7';
-          statusColor = '#B45309';
         } else if (b.status === 'COMBO_PHOTOS_APPROVED') {
-          statusLabel = 'ĐÃ DUYỆT ẢNH';
           statusSubtext = 'Chờ hoàn tất trả đồ';
-          statusBg = '#E0F2FE';
-          statusColor = '#0369A1';
-        } else if (b.status === 'COMPLETED' || b.status === 'RETURNED') {
-          statusLabel = 'HOÀN TẤT';
+        } else if (b.status === 'RETURNED') {
+          statusSubtext = 'Đã trả đồ, chờ hoàn cọc';
+        } else if (b.status === 'COMPLETED') {
           statusSubtext = 'Đã hoàn tất trải nghiệm';
-          statusBg = '#E8F8F5';
-          statusColor = '#27AE60';
-        } else if (b.status === 'CANCELLED') {
-          statusLabel = 'ĐÃ HỦY';
-          statusSubtext = 'Đơn đã hủy';
-          statusBg = '#FDEDEC';
-          statusColor = '#C0392B';
         } else if (b.status === 'DISPUTED') {
-          statusLabel = 'TRANH CHẤP';
           statusSubtext = 'Đang xử lý khiếu nại';
-          statusBg = '#FEF2F2';
-          statusColor = '#DC2626';
-        } else if (b.status === 'REFUNDED' || b.status === 'PARTIALLY_REFUNDED') {
-          statusLabel = 'ĐÃ HOÀN TIỀN';
-          statusSubtext = 'Đã hoàn tiền đơn';
-          statusBg = '#F3F4F6';
-          statusColor = '#4B5563';
         }
 
         rows.push({
@@ -347,126 +297,43 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
           }
         }
 
-        // Status configuration tailored by booking category
-        let statusLabel = b.status || 'ĐANG XỬ LÝ';
-        let statusSubtext = 'Đang cập nhật';
-        let statusBg = '#F2F4F4';
-        let statusColor = '#574D4F';
+        const hasIncident = Boolean(
+          b.activeIncident ||
+          b.hasIncident ||
+          b.statusTimeline?.some((t: any) =>
+            t.status === 'RETURN_PENDING' &&
+            (t.note?.includes('sự cố') || t.note?.includes('báo cáo') || t.note?.includes('đền bù') || t.note?.includes('hỏng'))
+          )
+        );
+        const meta = getBookingStatusMeta(b.status, { hasPendingIncident: hasIncident });
+        const statusLabel = meta.label.toUpperCase();
+        const statusBg = meta.bg;
+        const statusColor = meta.color;
+        let statusSubtext = meta.label;
 
         if (isPhoto) {
-          if (b.status === 'PENDING_PAYMENT') {
-            statusLabel = 'CHỜ CỌC';
-            statusSubtext = 'Chưa thanh toán cọc';
-            statusBg = '#FEF3C7';
-            statusColor = '#B45309';
-          } else if (b.status === 'DEPOSIT_PAID') {
-            statusLabel = 'CHỜ DUYỆT';
-            statusSubtext = 'Chờ thợ chụp xác nhận';
-            statusBg = '#FFFBEB';
-            statusColor = '#B45309';
-          } else if (b.status === 'CONFIRMED') {
-            statusLabel = 'SẮP CHỤP';
+          if (b.status === 'CONFIRMED') {
             statusSubtext = getDaysDiffText(firstGroupItem.shootDate || rawStart, 'Chụp sau') || 'Đã xác nhận lịch';
-            statusBg = '#EFF6FF';
-            statusColor = '#1D4ED8';
           } else if (b.status === 'IN_PROGRESS') {
-            statusLabel = 'ĐANG CHỤP';
             statusSubtext = 'Đang thực hiện';
-            statusBg = '#ECFDF5';
-            statusColor = '#047857';
           } else if (b.status === 'AWAITING_REVIEW') {
-            statusLabel = 'CHỜ DUYỆT ẢNH';
             statusSubtext = 'Đã có ảnh, vui lòng duyệt';
-            statusBg = '#FEF3C7';
-            statusColor = '#B45309';
           } else if (b.status === 'COMPLETED') {
-            statusLabel = 'HOÀN TẤT';
             statusSubtext = 'Đã nhận đủ ảnh';
-            statusBg = '#E8F8F5';
-            statusColor = '#27AE60';
-          } else if (b.status === 'CANCELLED') {
-            statusLabel = 'ĐÃ HỦY';
-            statusSubtext = 'Đơn đã hủy';
-            statusBg = '#FDEDEC';
-            statusColor = '#C0392B';
-          } else if (b.status === 'DISPUTED') {
-            statusLabel = 'TRANH CHẤP';
-            statusSubtext = 'Đang xử lý khiếu nại';
-            statusBg = '#FEF2F2';
-            statusColor = '#DC2626';
-          } else if (b.status === 'REFUNDED' || b.status === 'PARTIALLY_REFUNDED') {
-            statusLabel = 'ĐÃ HOÀN TIỀN';
-            statusSubtext = 'Đã hoàn tiền đơn';
-            statusBg = '#F3F4F6';
-            statusColor = '#4B5563';
           }
         } else {
-          // RENTAL (Thuê áo dài)
-          if (b.status === 'PENDING_PAYMENT') {
-            statusLabel = 'CHỜ CỌC';
-            statusSubtext = 'Chưa thanh toán cọc';
-            statusBg = '#FEF3C7';
-            statusColor = '#B45309';
-          } else if (b.status === 'DEPOSIT_PAID') {
-            statusLabel = 'CHỜ DUYỆT';
-            statusSubtext = 'Chờ cửa hàng xác nhận';
-            statusBg = '#FFFBEB';
-            statusColor = '#B45309';
-          } else if (b.status === 'CONFIRMED') {
-            statusLabel = 'SẮP NHẬN';
+          if (b.status === 'CONFIRMED') {
             statusSubtext = getDaysDiffText(rawStart, 'Nhận sau') || 'Đã xác nhận lịch';
-            statusBg = '#EFF6FF';
-            statusColor = '#1D4ED8';
           } else if (b.status === 'PICKUP_PENDING') {
-            statusLabel = 'CHỜ NHẬN ĐỒ';
             statusSubtext = 'Đã chuẩn bị đồ, chờ nhận';
-            statusBg = '#F5EEF8';
-            statusColor = '#8E44AD';
           } else if (b.status === 'PICKED_UP' || b.status === 'IN_PROGRESS') {
-            statusLabel = 'ĐANG THUÊ';
             statusSubtext = getDaysDiffText(rawEnd, 'Còn') || 'Đang trong thời gian thuê';
-            statusBg = '#ECFDF5';
-            statusColor = '#047857';
           } else if (b.status === 'RETURN_PENDING') {
-            const hasIncident = Boolean(
-              b.activeIncident ||
-              b.hasIncident ||
-              b.statusTimeline?.some((t: any) =>
-                t.status === 'RETURN_PENDING' &&
-                (t.note?.includes('sự cố') || t.note?.includes('báo cáo') || t.note?.includes('đền bù') || t.note?.includes('hỏng'))
-              )
-            );
-            if (hasIncident) {
-              statusLabel = 'CHỜ DUYỆT SỰ CỐ';
-              statusSubtext = 'Shop yêu cầu đền bù hư hỏng';
-              statusBg = '#FFF1F2';
-              statusColor = '#E11D48';
-            } else {
-              statusLabel = 'CHỜ TRẢ ĐỒ';
-              statusSubtext = 'Đang kiểm tra trả đồ';
-              statusBg = '#FEF9E7';
-              statusColor = '#F39C12';
-            }
-          } else if (b.status === 'RETURNED' || b.status === 'COMPLETED') {
-            statusLabel = 'ĐÃ TRẢ';
-            statusSubtext = 'Đã trả đúng hạn';
-            statusBg = '#F2F4F4';
-            statusColor = '#574D4F';
-          } else if (b.status === 'CANCELLED') {
-            statusLabel = 'ĐÃ HỦY';
-            statusSubtext = 'Đơn đã hủy';
-            statusBg = '#FDEDEC';
-            statusColor = '#C0392B';
-          } else if (b.status === 'DISPUTED') {
-            statusLabel = 'TRANH CHẤP';
-            statusSubtext = 'Đang xử lý khiếu nại';
-            statusBg = '#FEF2F2';
-            statusColor = '#DC2626';
-          } else if (b.status === 'REFUNDED' || b.status === 'PARTIALLY_REFUNDED') {
-            statusLabel = 'ĐÃ HOÀN TIỀN';
-            statusSubtext = 'Đã hoàn tiền đơn';
-            statusBg = '#F3F4F6';
-            statusColor = '#4B5563';
+            statusSubtext = hasIncident ? 'Shop yêu cầu đền bù hư hỏng' : 'Đang kiểm tra trả đồ';
+          } else if (b.status === 'RETURNED') {
+            statusSubtext = 'Đã trả đồ · Chờ hoàn cọc';
+          } else if (b.status === 'COMPLETED') {
+            statusSubtext = 'Đã hoàn tất đơn thuê';
           }
         }
 
@@ -790,7 +657,7 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', minWidth: 0 }}>
       {/* 1. Header & Greeting Summary */}
       <ScheduleHeaderSummary
-        fullName={user?.fullName || 'Khách hàng LUMÉ'}
+        fullName={user?.fullName || 'Khách hàng TàGo'}
         onEditProfile={() => onNavigateTab?.('personal')}
         onViewUrgentDetail={() => urgentItems[0]?.booking && onViewDetails(urgentItems[0].booking)}
         urgentItem={urgentItems[0]}

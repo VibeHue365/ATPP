@@ -217,7 +217,7 @@ export const AoDaiListingPage: React.FC = () => {
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
-  const [maxPrice, setMaxPrice] = useState<number>(1000000);
+  const [maxPrice, setMaxPrice] = useState<number>(2000000);
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
 
   // Sorting and Pagination
@@ -328,7 +328,7 @@ export const AoDaiListingPage: React.FC = () => {
       try {
         setLoading(true);
         const params = new URLSearchParams();
-        if (debouncedMaxPrice < 1000000) {
+        if (debouncedMaxPrice < 2000000) {
           params.append('maxPrice', debouncedMaxPrice.toString());
         }
         if (selectedColors.length > 0) {
@@ -528,7 +528,7 @@ export const AoDaiListingPage: React.FC = () => {
     setSelectedTypes([]);
     setSelectedSizes([]);
     setSelectedColors([]);
-    setMaxPrice(1000000);
+    setMaxPrice(2000000);
     setSelectedAmenities([]);
     setSearchLocation("");
     setSelectedSearchSize("");
@@ -1037,9 +1037,9 @@ export const AoDaiListingPage: React.FC = () => {
                   <div className="lume-range-wrap">
                     <input
                       type="range"
-                      min={90000}
-                      max={1000000}
-                      step={10000}
+                      min={50000}
+                      max={2000000}
+                      step={50000}
                       value={maxPrice}
                       onChange={(e) => {
                         setMaxPrice(Number(e.target.value));
@@ -1048,10 +1048,10 @@ export const AoDaiListingPage: React.FC = () => {
                       className="lume-range-slider"
                     />
                     <div className="lume-range-labels">
-                      <span>90k</span>
-                      <span>1 triệu</span>
+                      <span>50k</span>
+                      <span>2 triệu</span>
                     </div>
-                    {maxPrice < 1000000 && (
+                    {maxPrice < 2000000 && (
                       <div className="lume-current-price-badge">
                         Tối đa: {maxPrice.toLocaleString("vi-VN")}đ
                       </div>
@@ -1180,7 +1180,7 @@ export const AoDaiListingPage: React.FC = () => {
               selectedTypes.length > 0 ||
               selectedSizes.length > 0 ||
               selectedColors.length > 0 ||
-              maxPrice < 1000000) && (
+              maxPrice < 2000000) && (
               <div className="lume-active-chips">
                 {rentalType && (
                   <span
@@ -1279,7 +1279,7 @@ export const AoDaiListingPage: React.FC = () => {
                   const storeName =
                     provider?.businessName ||
                     provider?.brandName ||
-                    "LUMÉ ÁO DÀI";
+                    "TÀGO ÁO DÀI";
                   const city =
                     provider?.address?.city ||
                     provider?.city ||

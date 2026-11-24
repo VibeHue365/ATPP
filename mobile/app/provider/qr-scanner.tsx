@@ -22,6 +22,21 @@ import { getRentalItems, resolveBookingDisplayState } from '@/utils/rentalState'
 
 type ScanTab = 'ORDER' | 'RFID';
 
+const INVENTORY_STATUS_LABELS: Record<string, string> = {
+  AVAILABLE: 'Sẵn sàng',
+  RESERVED: 'Đã giữ lịch',
+  RENTED: 'Đang cho thuê',
+  CLEANING: 'Đang giặt ủi',
+  MAINTENANCE: 'Đang bảo trì',
+  DAMAGED: 'Hư hỏng',
+  RETIRED: 'Ngừng sử dụng',
+};
+
+const getInventoryStatusLabel = (status?: string | null): string => {
+  const key = String(status || '').toUpperCase();
+  return INVENTORY_STATUS_LABELS[key] ?? 'Đang cập nhật';
+};
+
 export default function ProviderQrScannerScreen() {
   const { show } = useToast();
   const { bumpBookingSync } = useNotifications();
@@ -120,11 +135,11 @@ export default function ProviderQrScannerScreen() {
     ) {
       TagoAlert.alert(
         'Quét Tag Chip RFID Hiện vật',
-        `Mã SKU: ${matchedChip.sku}\nBiến thể: Size ${matchedChip.size} • ${matchedChip.color}\nTrạng thái hiện tại: ${matchedChip.status}`,
+        `Mã SKU: ${matchedChip.sku}\nBiến thể: Size ${matchedChip.size} • ${matchedChip.color}\nTrạng thái hiện tại: ${getInventoryStatusLabel(matchedChip.status)}`,
         [
           { text: 'Đóng', style: 'cancel' },
           {
-            text: 'Chuyển Sẵn sàng (Available)',
+            text: 'Chuyển sang Sẵn sàng',
             onPress: async () => {
               setProcessing(true);
               try {

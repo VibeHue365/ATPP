@@ -28,6 +28,12 @@ import { httpClient } from '../../../services/httpClient';
 import { useAuth } from '../../../features/auth/hooks/useAuth';
 import { useSocket } from '../../../context/SocketContext';
 import { BookingContractsSection } from '../../../components/contracts/BookingContractsSection';
+import {
+  BOOKING_STATUS_META,
+  getBookingStatusGroup,
+  getBookingStatusLabel,
+  type CanonicalBookingStatus,
+} from '../../../utils/bookingStatus';
 import './bookingManagementFigma.css';
 
 interface BookingCustomer {
@@ -325,20 +331,21 @@ export const BookingManagementPanel: React.FC = () => {
   };
 
   // Status Badge Helper
-  const renderStatusBadge = (statusLabel: string) => {
-    switch (statusLabel) {
-      case 'Sắp diễn ra':
-        return <span className="lume-status-pill upcoming">Sắp diễn ra</span>;
-      case 'Đã hoàn thành':
-        return <span className="lume-status-pill completed">Đã hoàn thành</span>;
-      case 'Chờ xác nhận':
-        return <span className="lume-status-pill pending">Chờ xác nhận</span>;
-      case 'Đã hủy':
-        return <span className="lume-status-pill cancelled">Đã hủy</span>;
-      case 'Có tranh chấp':
-        return <span className="lume-status-pill disputed">Có tranh chấp</span>;
+  const renderStatusBadge = (statusOrLabel: string) => {
+    const group = getBookingStatusGroup(statusOrLabel);
+    const label = getBookingStatusLabel(statusOrLabel);
+    switch (group) {
+      case 'COMPLETED':
+        return <span className="lume-status-pill completed">{label}</span>;
+      case 'PENDING':
+        return <span className="lume-status-pill pending">{label}</span>;
+      case 'CANCELLED':
+        return <span className="lume-status-pill cancelled">{label}</span>;
+      case 'DISPUTED':
+        return <span className="lume-status-pill disputed">{label}</span>;
+      case 'ACTIVE':
       default:
-        return <span className="lume-status-pill upcoming">{statusLabel}</span>;
+        return <span className="lume-status-pill upcoming">{label}</span>;
     }
   };
 
@@ -400,18 +407,7 @@ export const BookingManagementPanel: React.FC = () => {
   const handleSubmitStatusUpdate = async () => {
     if (!statusModalBooking) return;
     setUpdatingStatus(true);
-    const displayLabel =
-      newStatusValue === 'CONFIRMED'
-        ? 'Sắp diễn ra'
-        : newStatusValue === 'COMPLETED'
-        ? 'Đã hoàn thành'
-        : newStatusValue === 'PENDING'
-        ? 'Chờ xác nhận'
-        : newStatusValue === 'CANCELLED'
-        ? 'Đã hủy'
-        : newStatusValue === 'DISPUTED'
-        ? 'Có tranh chấp'
-        : newStatusValue;
+    const displayLabel = getBookingStatusLabel(newStatusValue);
 
     try {
       await httpClient.patch(`/admin/stats/bookings/${statusModalBooking.bookingId}/status`, {
@@ -614,11 +610,11 @@ export const BookingManagementPanel: React.FC = () => {
                   }}
                 >
                   <option value="Tất cả">Tất cả</option>
-                  <option value="Sắp diễn ra">Sắp diễn ra</option>
-                  <option value="Chờ xác nhận">Chờ xác nhận</option>
-                  <option value="Đã hoàn thành">Đã hoàn thành</option>
-                  <option value="Đã hủy">Đã hủy</option>
-                  <option value="Có tranh chấp">Có tranh chấp</option>
+                  <option value="Sắp diễn ra">Đang thực hiện / Sắp diễn ra</option>
+                  <option value="Chờ xác nhận">Chờ thanh toán / Chờ duyệt</option>
+                  <option value="Đã hoàn thành">Hoàn tất</option>
+                  <option value="Đã hủy">Đã hủy / Hoàn tiền</option>
+                  <option value="Có tranh chấp">Tranh chấp</option>
                 </select>
               </div>
 
@@ -991,7 +987,7 @@ export const BookingManagementPanel: React.FC = () => {
               </div>
 
               <div className="lume-detail-time-sub">
-                Đặt ngày {activeBooking.createdAt ? new Date(activeBooking.createdAt).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' }) : '12/03/2024, 14:32'}{' '}
+                Đặt ngày {activeBooking.createdAt ? new Date(activeBooking.createdAt).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' }) : '—'}{' '}
                 | Cập nhật {activeBooking.updatedAt ? new Date(activeBooking.updatedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : 'vừa xong'}
               </div>
             </div>
@@ -1197,7 +1193,7 @@ export const BookingManagementPanel: React.FC = () => {
                       <span>
                         {activeBooking.createdAt
                           ? new Date(activeBooking.createdAt).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
-                          : '12/03/2024, 14:32'}
+                          : '—'}
                       </span>
                     </div>
                     <div className="lume-summary-item">
@@ -1205,7 +1201,7 @@ export const BookingManagementPanel: React.FC = () => {
                       <span>
                         {activeBooking.updatedAt
                           ? new Date(activeBooking.updatedAt).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
-                          : '12/03/2024, 16:20'}
+                          : '—'}
                       </span>
                     </div>
                   </div>
@@ -1234,7 +1230,7 @@ export const BookingManagementPanel: React.FC = () => {
                         }}
                       >
                         <div>
-                          <strong>{item.status}</strong>
+                          <strong>{getBookingStatusLabel(item.status)}</strong>
                           <div style={{ color: '#64748b' }}>
                             {new Date(item.changedAt).toLocaleString('vi-VN')}
                           </div>
@@ -1305,7 +1301,7 @@ export const BookingManagementPanel: React.FC = () => {
                   ) : (
                     <BookingContractsSection
                       bookingId={activeBooking.bookingId || activeBooking.id}
-                      bookingStatus={activeBooking.statusLabel || activeBooking.status}
+                      bookingStatus={activeBooking.status}
                       viewerRole="admin"
                       hideWhenEmpty={false}
                     />
@@ -1611,7 +1607,7 @@ export const BookingManagementPanel: React.FC = () => {
                 ) : (
                   <BookingContractsSection
                     bookingId={detailModalBooking.bookingId || detailModalBooking.id}
-                    bookingStatus={detailModalBooking.statusLabel || detailModalBooking.status}
+                    bookingStatus={detailModalBooking.status}
                     viewerRole="admin"
                     hideWhenEmpty={false}
                   />
@@ -1691,38 +1687,64 @@ export const BookingManagementPanel: React.FC = () => {
               </p>
 
               <div className="lume-status-radio-grid">
-                {[
-                  {
-                    value: 'CONFIRMED',
-                    title: 'Sắp diễn ra (CONFIRMED)',
-                    desc: 'Đơn đã xác nhận, đối tác đang chuẩn bị phục vụ theo lịch',
-                    color: '#2563eb',
-                  },
-                  {
-                    value: 'COMPLETED',
-                    title: 'Đã hoàn thành (COMPLETED)',
-                    desc: 'Khách hàng đã nhận đủ dịch vụ/sản phẩm và hoàn tất đơn',
-                    color: '#16a34a',
-                  },
-                  {
-                    value: 'PENDING',
-                    title: 'Chờ xác nhận (PENDING)',
-                    desc: 'Chờ đối tác rà soát lịch hẹn và xác nhận nhận đơn',
-                    color: '#d97706',
-                  },
-                  {
-                    value: 'CANCELLED',
-                    title: 'Đã hủy (CANCELLED)',
-                    desc: 'Hủy lịch hẹn theo yêu cầu hoặc do sự cố phát sinh',
-                    color: '#dc2626',
-                  },
-                  {
-                    value: 'DISPUTED',
-                    title: 'Có tranh chấp (DISPUTED)',
-                    desc: 'Đơn hàng gặp sự cố, tạm giữ tiền cọc để hòa giải đối soát',
-                    color: '#9333ea',
-                  },
-                ].map((item) => {
+                {(
+                  [
+                    {
+                      value: 'PENDING_PAYMENT',
+                      title: `${BOOKING_STATUS_META.PENDING_PAYMENT.label} (PENDING_PAYMENT)`,
+                      desc: 'Đơn vừa tạo, chờ khách hàng thanh toán qua PayOS',
+                      color: '#d97706',
+                    },
+                    {
+                      value: 'DEPOSIT_PAID',
+                      title: `${BOOKING_STATUS_META.DEPOSIT_PAID.label} (DEPOSIT_PAID)`,
+                      desc: 'Khách đã thanh toán/đặt cọc, chờ đối tác xác nhận',
+                      color: '#d97706',
+                    },
+                    {
+                      value: 'CONFIRMED',
+                      title: `${BOOKING_STATUS_META.CONFIRMED.label} (CONFIRMED)`,
+                      desc: 'Đơn đã xác nhận, đối tác chuẩn bị phục vụ theo lịch',
+                      color: '#2563eb',
+                    },
+                    {
+                      value: 'PICKUP_PENDING',
+                      title: `${BOOKING_STATUS_META.PICKUP_PENDING.label} (PICKUP_PENDING)`,
+                      desc: 'Đồ đã sẵn sàng tại cửa hàng, chờ bàn giao cho khách',
+                      color: '#d97706',
+                    },
+                    {
+                      value: 'PICKED_UP',
+                      title: `${BOOKING_STATUS_META.PICKED_UP.label} (PICKED_UP)`,
+                      desc: 'Khách đã nhận áo dài và đang trong thời gian thuê',
+                      color: '#16a34a',
+                    },
+                    {
+                      value: 'RETURNED',
+                      title: `${BOOKING_STATUS_META.RETURNED.label} (RETURNED)`,
+                      desc: 'Khách đã trả đồ về cửa hàng, chờ quyết toán / hoàn cọc',
+                      color: '#2563eb',
+                    },
+                    {
+                      value: 'COMPLETED',
+                      title: `${BOOKING_STATUS_META.COMPLETED.label} (COMPLETED)`,
+                      desc: 'Khách hàng đã nhận đủ dịch vụ/sản phẩm và hoàn tất đơn',
+                      color: '#16a34a',
+                    },
+                    {
+                      value: 'CANCELLED',
+                      title: `${BOOKING_STATUS_META.CANCELLED.label} (CANCELLED)`,
+                      desc: 'Hủy lịch hẹn theo yêu cầu hoặc do sự cố phát sinh',
+                      color: '#dc2626',
+                    },
+                    {
+                      value: 'DISPUTED',
+                      title: `${BOOKING_STATUS_META.DISPUTED.label} (DISPUTED)`,
+                      desc: 'Đơn hàng gặp sự cố, tạm giữ tiền cọc để hòa giải đối soát',
+                      color: '#9333ea',
+                    },
+                  ] as Array<{ value: CanonicalBookingStatus; title: string; desc: string; color: string }>
+                ).map((item) => {
                   const isSelected = newStatusValue === item.value;
                   return (
                     <div
@@ -1854,7 +1876,7 @@ export const BookingManagementPanel: React.FC = () => {
                         {disputeModalBooking.issue}
                       </h4>
                       <p style={{ margin: 0, fontSize: '12px', color: '#b91c1c', lineHeight: 1.5 }}>
-                        Đơn booking này đang phát sinh khiếu nại. Cọc thanh toán đang được giữ an toàn trên hệ thống ký quỹ LUMÉ Escrow để đội ngũ CSKH xử lý hòa giải.
+                        Đơn booking này đang phát sinh khiếu nại. Cọc thanh toán đang được giữ an toàn trên hệ thống ký quỹ TàGo Escrow để đội ngũ CSKH xử lý hòa giải.
                       </p>
                     </div>
                   </div>
@@ -1905,7 +1927,7 @@ export const BookingManagementPanel: React.FC = () => {
                   </div>
                   <h4 className="lume-empty-state-title">Không có khiếu nại</h4>
                   <p className="lume-empty-state-desc">
-                    Đơn booking <strong>#{disputeModalBooking.bookingCode}</strong> hiện không có tranh chấp hay khiếu nại nào đang mở. Mọi quyền lợi giao dịch được bảo vệ an toàn bởi LUMÉ Escrow.
+                    Đơn booking <strong>#{disputeModalBooking.bookingCode}</strong> hiện không có tranh chấp hay khiếu nại nào đang mở. Mọi quyền lợi giao dịch được bảo vệ an toàn bởi TàGo Escrow.
                   </p>
 
                   <div
@@ -1925,7 +1947,7 @@ export const BookingManagementPanel: React.FC = () => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <CheckCircle2 size={16} color="#16a34a" />
                       <span style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a' }}>
-                        Bảo vệ ký quỹ LUMÉ
+                        Bảo vệ ký quỹ TàGo
                       </span>
                     </div>
                     <span style={{ fontSize: '12px', color: '#16a34a', fontWeight: 600 }}>

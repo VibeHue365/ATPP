@@ -306,20 +306,38 @@ export function createProductWizardActions({
   };
 
   const validateWizardStep1 = () => {
-    if (!prodName || !prodCategoryId || !prodBasePrice || !prodDepositAmount) {
+    if (!prodName || !prodCategoryId || prodBasePrice === '' || prodDepositAmount === '') {
       toast.error('Vui lòng điền đầy đủ thông tin bắt buộc ở bước 1');
+      return false;
+    }
+    const base = Number(prodBasePrice);
+    const deposit = Number(prodDepositAmount);
+    if (!Number.isInteger(base) || base < 50000 || base > 10000000 || base % 1000 !== 0) {
+      toast.error('Giá thuê/ngày phải từ 50.000đ đến 10.000.000đ và là bội số 1.000đ');
+      return false;
+    }
+    if (!Number.isInteger(deposit) || deposit < 0 || deposit > 5000000 || deposit % 1000 !== 0) {
+      toast.error('Tiền đặt cọc phải là bội số 1.000đ (0đ hoặc tối đa 5.000.000đ)');
+      return false;
+    }
+    if (deposit > 0 && deposit < 20000) {
+      toast.error('Tiền đặt cọc nếu thu phải từ 20.000đ trở lên (hoặc 0đ)');
       return false;
     }
     // Phải dùng >= cho khớp với backend (products.service.ts), nếu chỉ chặn > thì
     // trường hợp cọc BẰNG giá thuê sẽ lọt qua bước 1 rồi mới bị từ chối ở bước 2.
-    if (Number(prodDepositAmount) >= Number(prodBasePrice)) {
+    if (deposit >= base) {
       toast.error('Giá cọc phải nhỏ hơn giá thuê');
       return false;
     }
     if (String(prodReplacementValue ?? '').trim() !== '') {
       const repVal = Number(prodReplacementValue);
-      if (isNaN(repVal) || repVal <= 0) {
-        toast.error('Giá trị bồi hoàn phải là số dương lớn hơn 0');
+      if (!Number.isInteger(repVal) || repVal < 100000 || repVal > 50000000) {
+        toast.error('Giá trị bồi hoàn phải từ 100.000đ đến 50.000.000đ');
+        return false;
+      }
+      if (repVal < base || repVal < deposit) {
+        toast.error('Giá trị bồi hoàn phải lớn hơn hoặc bằng giá thuê và tiền cọc');
         return false;
       }
     }

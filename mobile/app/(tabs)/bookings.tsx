@@ -207,7 +207,7 @@ function BookingsScreen() {
                 setQuery(value);
                 setPage(1);
               }}
-              placeholder="Tìm theo mã đơn (#VH...) hoặc tên dịch vụ..."
+              placeholder="Tìm theo mã đơn (#TG...) hoặc tên dịch vụ..."
               placeholderTextColor="#8F8E8E"
               style={styles.searchInput}
             />

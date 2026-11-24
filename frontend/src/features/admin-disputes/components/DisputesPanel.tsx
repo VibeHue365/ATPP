@@ -28,6 +28,7 @@ import { adminDisputesApi } from '../api/adminDisputesApi';
 import { useDisputes } from '../hooks/useDisputes';
 import type { Dispute, DisputeDecision, ResolvePayload } from '../types';
 import { AdminReloadButton } from '../../../pages/admin/components/AdminReloadButton';
+import { getDisputeStatusMeta, getIncidentStatusMeta } from '../../../utils/bookingStatus';
 import './disputesFigma.css';
 
 const formatCurrency = (amount: number) =>
@@ -187,7 +188,11 @@ export function DisputesPanel() {
   };
 
   const isItemResolved = (d: Dispute) =>
-    d.status === 'RESOLVED' || d.status === 'CLOSED' || Boolean((d as any).resolvedAt) || Boolean((d as any).adminDecision);
+    d.status === 'RESOLVED' ||
+    d.status === 'CANCELLED' ||
+    d.status === 'ACCEPTED' ||
+    Boolean((d as any).resolvedAt) ||
+    Boolean((d as any).adminDecision);
 
   const isItemNegotiating = (d: Dispute) =>
     !isItemResolved(d) && (d.status === 'UNDER_REVIEW' || (d as any).isNegotiating === true);
@@ -547,7 +552,7 @@ export function DisputesPanel() {
         <div className="df-header-left">
           <h1>Giải quyết tranh chấp</h1>
           <p>
-            Hệ thống tiếp nhận, đối soát và đưa ra phán quyết công bằng giữa Khách hàng và Đối tác LUMÉ.
+            Hệ thống tiếp nhận, đối soát và đưa ra phán quyết công bằng giữa Khách hàng và Đối tác TàGo.
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -904,11 +909,16 @@ export function DisputesPanel() {
                       <td>
                         {resolved ? (
                           <span className="df-status-pill df-status-resolved">
-                            <span className="df-status-dot" /> Đã giải quyết
+                            <span className="df-status-dot" />{' '}
+                            {item.status === 'CANCELLED'
+                              ? getDisputeStatusMeta('CANCELLED').label
+                              : item.status === 'ACCEPTED'
+                                ? getIncidentStatusMeta('ACCEPTED').label
+                                : getDisputeStatusMeta('RESOLVED').label}
                           </span>
                         ) : negotiating ? (
                           <span className="df-status-pill df-status-disputed">
-                            <span className="df-status-dot" /> Đang đối chất
+                            <span className="df-status-dot" /> {getDisputeStatusMeta('UNDER_REVIEW').label}
                           </span>
                         ) : (
                           <span className="df-status-pill df-status-pending">
@@ -1010,11 +1020,16 @@ export function DisputesPanel() {
 
                   {isItemResolved(selected) ? (
                     <span className="df-status-pill df-status-resolved">
-                      <span className="df-status-dot" /> Đã giải quyết
+                      <span className="df-status-dot" />{' '}
+                      {selected.status === 'CANCELLED'
+                        ? getDisputeStatusMeta('CANCELLED').label
+                        : selected.status === 'ACCEPTED'
+                          ? getIncidentStatusMeta('ACCEPTED').label
+                          : getDisputeStatusMeta('RESOLVED').label}
                     </span>
                   ) : isItemNegotiating(selected) ? (
                     <span className="df-status-pill df-status-disputed">
-                      <span className="df-status-dot" /> Đang đối chất
+                      <span className="df-status-dot" /> {getDisputeStatusMeta('UNDER_REVIEW').label}
                     </span>
                   ) : (
                     <span className="df-status-pill df-status-pending">
@@ -1718,7 +1733,7 @@ export function DisputesPanel() {
                         </div>
                         <div>
                           <strong>Ý kiến của khách hàng:</strong>{' '}
-                          {selected.customerReason || 'Khách hàng không đồng ý với yêu cầu đền bù của Shop và đề nghị Ban Quản trị LUMÉ phân định công tâm.'}
+                          {selected.customerReason || 'Khách hàng không đồng ý với yêu cầu đền bù của Shop và đề nghị Ban Quản trị TàGo phân định công tâm.'}
                         </div>
                         {selected.customerEvidencePhotos && selected.customerEvidencePhotos.length > 0 && (
                           <div style={{ marginTop: '8px', fontSize: '11px', color: '#9f1239' }}>
@@ -1732,11 +1747,11 @@ export function DisputesPanel() {
                     {isItemResolved(selected) && (selected.adminNotes || (selected as any).adminDecision) && (
                       <div className="df-dialogue-item is-admin">
                         <div className="df-msg-avatar-fallback" style={{ background: '#881337' }}>
-                          LUMÉ
+                          TàGo
                         </div>
                         <div className="df-dialogue-bubble df-bubble-admin">
                           <div className="df-bubble-meta">
-                            <span>Admin Trọng tài LUMÉ (Phán quyết chính thức)</span>
+                            <span>Admin Trọng tài TàGo (Phán quyết chính thức)</span>
                             <span style={{ color: '#fda4af' }}>
                               {selected.resolvedAt ? new Date(selected.resolvedAt).toLocaleDateString('vi-VN') : 'Đã phán quyết'}
                             </span>
@@ -1752,7 +1767,7 @@ export function DisputesPanel() {
                     {customMessages.map((msg, i) => (
                       <div key={i} className="df-dialogue-item is-admin">
                         <div className="df-msg-avatar-fallback" style={{ background: '#881337' }}>
-                          LUMÉ
+                          TàGo
                         </div>
                         <div className="df-dialogue-bubble df-bubble-admin">
                           <div className="df-bubble-meta">
@@ -2078,7 +2093,7 @@ export function DisputesPanel() {
         <div className="df-modal-overlay" onClick={() => setShowGuideModal(false)}>
           <div className="df-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="df-modal-header">
-              <h3>Quy trình chuẩn xử lý khiếu nại & trọng tài LUMÉ</h3>
+              <h3>Quy trình chuẩn xử lý khiếu nại & trọng tài TàGo</h3>
               <button
                 type="button"
                 className="df-dock-close-btn"
@@ -2094,7 +2109,7 @@ export function DisputesPanel() {
                   <div className="df-step-content">
                     <h4>Tiếp nhận & Phong tỏa Escrow</h4>
                     <p>
-                      Ngay khi một bên gửi khiếu nại hoặc từ chối bồi thường, toàn bộ tiền cọc và tiền đơn hàng sẽ tự động đóng băng trong tài khoản ký quỹ trung gian của LUMÉ để đảm bảo quyền lợi tài chính.
+                      Ngay khi một bên gửi khiếu nại hoặc từ chối bồi thường, toàn bộ tiền cọc và tiền đơn hàng sẽ tự động đóng băng trong tài khoản ký quỹ trung gian của TàGo để đảm bảo quyền lợi tài chính.
                     </p>
                   </div>
                 </div>

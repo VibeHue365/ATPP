@@ -68,7 +68,7 @@ export function ProviderHeader({
   const storeName = profile?.businessName || profile?.brandName || 'TàGo Đối Tác';
   const storeCode =
     profile?.providerCode ||
-    (profile?._id ? `#VH-${profile._id.slice(-4).toUpperCase()}` : '#VH-892');
+    (profile?._id ? `#TG-${profile._id.slice(-4).toUpperCase()}` : '#TG-892');
   const city = (profile?.address?.city || 'Huế').replace('Thành phố ', '').replace('TP. ', '');
   const avatarUrl = !avatarFailed ? resolvedAvatarUrl : undefined;
   const ratingVal = profile?.rating?.averageRating

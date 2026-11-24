@@ -2,26 +2,37 @@ import { useEffect, useMemo, useState } from "react";
 import { adminStatsApi } from "../api/adminStatsApi";
 import type { UserGrowthMetrics } from "../types";
 import { AdminReloadButton } from "../../../pages/admin/components/AdminReloadButton";
+import { computeNiceScale } from "../utils/chartScale";
 import "./adminDashboardPanels.css";
 
-const asDate = (date: Date) => date.toISOString().slice(0, 10);
-const defaultTo = asDate(new Date());
-const defaultFrom = asDate(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000));
+const ICT_OFFSET_MS = 7 * 60 * 60 * 1000;
+const getIctDateKey = (offsetDays = 0) =>
+  new Date(Date.now() + ICT_OFFSET_MS + offsetDays * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
 
 export function UserGrowthPanel() {
+  const defaultTo = useMemo(() => getIctDateKey(0), []);
+  const defaultFrom = useMemo(() => getIctDateKey(-6), []);
   const [from, setFrom] = useState(defaultFrom);
   const [to, setTo] = useState(defaultTo);
   const [data, setData] = useState<UserGrowthMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const maxValue = useMemo(
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+
+  const rawMax = useMemo(
     () =>
       Math.max(
-        1,
+        0,
         ...(data?.data.flatMap((row) => [row.newUsers, row.dau]) ?? []),
       ),
     [data],
+  );
+  const yScale = useMemo(
+    () => computeNiceScale(rawMax, 4, { integerOnly: true, minMax: 4 }),
+    [rawMax],
   );
 
   const load = async () => {
@@ -58,6 +69,8 @@ export function UserGrowthPanel() {
       setExporting(false);
     }
   };
+
+  const rows = data?.data ?? [];
 
   return (
     <section className="admin-dashboard-panel">
@@ -130,22 +143,66 @@ export function UserGrowthPanel() {
           <article className="admin-analytics-chart">
             <header>
               <h3>Tăng trưởng người dùng theo ngày</h3>
-              <span>Người mới / DAU</span>
+              <div className="admin-growth-legend">
+                <span>
+                  <i style={{ background: "#b89047" }} /> Người dùng mới
+                </span>
+                <span>
+                  <i style={{ background: "#4a0e17" }} /> DAU
+                </span>
+              </div>
             </header>
-            <div className="admin-analytics-chart__bars">
-              {(data?.data ?? []).map((row) => (
-                <div className="admin-growth-bar" key={row.date}>
-                  <i
-                    title={`${row.newUsers} người mới`}
-                    style={{ height: `${(row.newUsers / maxValue) * 100}%` }}
-                  />
-                  <b
-                    title={`${row.dau} DAU`}
-                    style={{ height: `${(row.dau / maxValue) * 100}%` }}
-                  />
-                  <span>{row.date.slice(5)}</span>
+            <div className="admin-growth-chart-frame">
+              <div className="admin-growth-yaxis">
+                {yScale.ticks.map((tick) => (
+                  <span key={tick}>{tick.toLocaleString("vi-VN")}</span>
+                ))}
+              </div>
+              <div className="admin-growth-plot-scroll">
+                <div
+                  className="admin-analytics-chart__bars"
+                  style={{
+                    minWidth:
+                      rows.length > 12 ? `${rows.length * 46}px` : "100%",
+                  }}
+                >
+                  <div className="admin-growth-gridlines" aria-hidden="true">
+                    {yScale.ticks.map((tick) => (
+                      <div key={tick} />
+                    ))}
+                  </div>
+                  {rows.map((row, idx) => {
+                    const newPct = (row.newUsers / (yScale.max || 1)) * 100;
+                    const dauPct = (row.dau / (yScale.max || 1)) * 100;
+                    const isHovered = hoveredIdx === idx;
+                    return (
+                      <div
+                        className="admin-growth-bar"
+                        key={row.date}
+                        onMouseEnter={() => setHoveredIdx(idx)}
+                        onMouseLeave={() => setHoveredIdx(null)}
+                      >
+                        {isHovered && (
+                          <div className="admin-growth-tooltip">
+                            <strong>{row.date}</strong>
+                            <div>Mới: {row.newUsers.toLocaleString("vi-VN")}</div>
+                            <div>DAU: {row.dau.toLocaleString("vi-VN")}</div>
+                          </div>
+                        )}
+                        <i
+                          title={`${row.newUsers} người mới`}
+                          style={{ height: row.newUsers > 0 ? `${Math.max(2, newPct)}%` : "0%" }}
+                        />
+                        <b
+                          title={`${row.dau} DAU`}
+                          style={{ height: row.dau > 0 ? `${Math.max(2, dauPct)}%` : "0%" }}
+                        />
+                        <span>{row.date.slice(5)}</span>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
+              </div>
             </div>
           </article>
           <article className="admin-analytics-table">
@@ -162,7 +219,7 @@ export function UserGrowthPanel() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(data?.data ?? []).map((row) => (
+                  {rows.map((row) => (
                     <tr key={row.date}>
                       <td>{row.date}</td>
                       <td>{row.newUsers.toLocaleString("vi-VN")}</td>

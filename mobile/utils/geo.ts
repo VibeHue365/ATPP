@@ -1086,7 +1086,7 @@ export async function fetchRoadRoute(
         signal: controller.signal,
         headers: {
           Accept: 'application/json',
-          'User-Agent': 'VibeHue/1.0 (https://tago.vn; location route search)',
+          'User-Agent': 'TaGo/1.0 (https://tago.vn; location route search)',
         },
       });
       clearTimeout(timer);

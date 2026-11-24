@@ -110,17 +110,17 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({
                 padding: '3px 8px',
                 borderRadius: '4px',
                 backgroundColor:
-                  rawStatus === 'DISPUTED' || rentalData.statusLabel === 'TRANH CHẤP'
+                  rawStatus === 'DISPUTED'
                     ? '#FEE2E2'
-                    : rentalData.statusLabel === 'CHỜ DUYỆT SỰ CỐ'
+                    : rawStatus === 'RETURN_PENDING' && rentalData.statusLabel.includes('SỰ CỐ')
                     ? '#FFF1F2'
                     : ['RETURNED', 'COMPLETED', 'COMBO_PHOTOS_APPROVED'].includes(rawStatus)
                     ? '#ECFDF5'
                     : '#FFEDD5',
                 color:
-                  rawStatus === 'DISPUTED' || rentalData.statusLabel === 'TRANH CHẤP'
+                  rawStatus === 'DISPUTED'
                     ? '#991B1B'
-                    : rentalData.statusLabel === 'CHỜ DUYỆT SỰ CỐ'
+                    : rawStatus === 'RETURN_PENDING' && rentalData.statusLabel.includes('SỰ CỐ')
                     ? '#E11D48'
                     : ['RETURNED', 'COMPLETED', 'COMBO_PHOTOS_APPROVED'].includes(rawStatus)
                     ? '#047857'
@@ -263,17 +263,17 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({
                   padding: '3px 8px',
                   borderRadius: '4px',
                   backgroundColor:
-                    rawStatus === 'DISPUTED' || rentalData.statusLabel === 'TRANH CHẤP'
+                    rawStatus === 'DISPUTED'
                       ? '#FEE2E2'
-                      : rentalData.statusLabel === 'CHỜ DUYỆT SỰ CỐ'
+                      : rawStatus === 'RETURN_PENDING' && rentalData.statusLabel.includes('SỰ CỐ')
                       ? '#FFF1F2'
                       : ['RETURNED', 'COMPLETED', 'COMBO_PHOTOS_APPROVED'].includes(rawStatus)
                       ? '#ECFDF5'
                       : '#FFEDD5',
                   color:
-                    rawStatus === 'DISPUTED' || rentalData.statusLabel === 'TRANH CHẤP'
+                    rawStatus === 'DISPUTED'
                       ? '#991B1B'
-                      : rentalData.statusLabel === 'CHỜ DUYỆT SỰ CỐ'
+                      : rawStatus === 'RETURN_PENDING' && rentalData.statusLabel.includes('SỰ CỐ')
                       ? '#E11D48'
                       : ['RETURNED', 'COMPLETED', 'COMBO_PHOTOS_APPROVED'].includes(rawStatus)
                       ? '#047857'

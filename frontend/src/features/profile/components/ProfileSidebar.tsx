@@ -271,7 +271,7 @@ export const ProfileSidebar: React.FC<ProfileSidebarProps> = ({
           </div>
           <div>
             <h4 className="lume-support-title">Bạn cần hỗ trợ?</h4>
-            <p className="lume-support-desc">Đội ngũ LUMÉ luôn sẵn sàng đồng hành</p>
+            <p className="lume-support-desc">Đội ngũ TàGo luôn sẵn sàng đồng hành</p>
           </div>
         </div>
 
@@ -298,12 +298,12 @@ export const ProfileSidebar: React.FC<ProfileSidebarProps> = ({
             Hoặc gửi email
           </div>
           <a
-            href="mailto:support@lume.vn"
+            href="mailto:support@tago.vn"
             className="lume-support-link"
             style={{ justifyContent: 'center', fontSize: '12px' }}
           >
             <Mail size={13} />
-            <span>support@lume.vn</span>
+            <span>support@tago.vn</span>
           </a>
         </div>
       </div>

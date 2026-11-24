@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { CheckCircle2, Clock3, ImagePlus, LoaderCircle, PackageCheck, RotateCcw, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { httpClient } from '../../../services/httpClient';
 import { RentalEvidenceImage } from './RentalEvidenceImage';
+import { RENTAL_FULFILLMENT_STATUS_META } from '../../../utils/bookingStatus';
 import './RentalFulfillmentOperationsPanel.css';
 
 type ViewerRole = 'customer' | 'provider' | 'admin';
@@ -41,13 +42,13 @@ interface Props {
 }
 
 const labelByStatus: Record<string, string> = {
-  PENDING: 'Chờ shop chuẩn bị',
-  READY_FOR_PICKUP: 'Sẵn sàng nhận áo',
-  PICKED_UP: 'Khách đang thuê',
-  CUSTOMER_RETURN_REQUESTED: 'Khách đã trả áo • Chờ shop nhận',
-  RETURNED: 'Đã nhận lại, chờ tất toán',
-  COMPLETED: 'Đã hoàn tất',
-  CANCELLED: 'Đã hủy',
+  PENDING: RENTAL_FULFILLMENT_STATUS_META.PENDING.label,
+  READY_FOR_PICKUP: RENTAL_FULFILLMENT_STATUS_META.READY_FOR_PICKUP.label,
+  PICKED_UP: RENTAL_FULFILLMENT_STATUS_META.PICKED_UP.label,
+  CUSTOMER_RETURN_REQUESTED: RENTAL_FULFILLMENT_STATUS_META.CUSTOMER_RETURN_REQUESTED.label,
+  RETURNED: RENTAL_FULFILLMENT_STATUS_META.RETURNED.label,
+  COMPLETED: RENTAL_FULFILLMENT_STATUS_META.COMPLETED.label,
+  CANCELLED: RENTAL_FULFILLMENT_STATUS_META.CANCELLED.label,
 };
 
 const formatDateTime = (value?: string | null) => value

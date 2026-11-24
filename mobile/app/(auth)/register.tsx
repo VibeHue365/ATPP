@@ -488,7 +488,7 @@ export default function RegisterScreen() {
                 </Text>
               </View>
               <Text style={styles.footerDot}>•</Text>
-              <Text style={styles.footerText}>26 Lê Lợi, TP. Huế</Text>
+              <Text style={styles.footerText}>TP. Huế, Việt Nam</Text>
             </View>
             <View style={styles.footerInlineItem}>
               <MaterialCommunityIcons name="lock-outline" size={13} color="#8F6F73" />

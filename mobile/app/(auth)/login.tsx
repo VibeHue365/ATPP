@@ -349,7 +349,7 @@ export default function LoginScreen() {
               <Text style={styles.footerDot}>•</Text>
               <View style={styles.footerInlineItem}>
                 <Ionicons name="location" size={12} color="#BA0049" />
-                <Text style={styles.footerText}>Flagship: 26 Lê Lợi, TP. Huế</Text>
+                <Text style={styles.footerText}>TP. Huế, Việt Nam</Text>
               </View>
             </View>
             <View style={styles.footerInlineItem}>

@@ -32,6 +32,7 @@ import {
   matchesProviderOrderFilter,
   resolveBookingDisplayState,
 } from '@/utils/rentalState';
+import { bookingStatus } from '@/utils/booking';
 
 import {
   OrderFilterTabs,
@@ -441,7 +442,7 @@ export default function ProviderOrdersScreen() {
       bumpBookingSync(order._id);
       pushLocalBanner({
         title: `Đã cập nhật đơn #${order.bookingCode || ''}`,
-        content: note || `Đơn hàng đã chuyển sang trạng thái ${nextStatus}.`,
+        content: note || `Đơn hàng đã chuyển sang trạng thái ${bookingStatus[nextStatus]?.label || nextStatus}.`,
         type: 'BOOKING_UPDATED',
         metadata: {
           bookingId: order._id,

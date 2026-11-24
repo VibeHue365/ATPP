@@ -1,5 +1,5 @@
 import React, { type ComponentType } from 'react';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
 
 export interface OverviewKpiCardProps {
   label: string;
@@ -52,12 +52,18 @@ export const OverviewKpiCard: React.FC<OverviewKpiCardProps> = ({
         <div className="lume-kpi-card__footer">
           <span
             className={`lume-kpi-card__trend ${
-              growthType === 'up-green'
-                ? 'lume-kpi-card__trend--up-green'
-                : 'lume-kpi-card__trend--up-red'
+              growth < 0
+                ? 'lume-kpi-card__trend--up-red'
+                : growthType === 'up-green'
+                  ? 'lume-kpi-card__trend--up-green'
+                  : 'lume-kpi-card__trend--up-red'
             }`}
           >
-            <ArrowUpRight size={13} strokeWidth={2.5} />
+            {growth < 0 ? (
+              <ArrowDownRight size={13} strokeWidth={2.5} />
+            ) : (
+              <ArrowUpRight size={13} strokeWidth={2.5} />
+            )}
             {growth.toFixed(1)}%
           </span>
           <span className="lume-kpi-card__trend-desc">{growthDesc}</span>

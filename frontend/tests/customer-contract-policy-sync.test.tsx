@@ -141,7 +141,7 @@ describe('P0 Verification: Customer Contract A4 Preview reflects Approved Provid
     expect(fullText).toContain('toàn vẹn kỹ thuật');
 
     // Invariant: Unapproved platform 72h fallback rule MUST NOT appear when approved provider policy exists
-    expect(fullText).not.toContain('Quy định bảo vệ từ Sàn VibeHue: Cho phép hủy miễn phí trước 72 giờ');
+    expect(fullText).not.toContain('Quy định bảo vệ từ Sàn TàGo: Cho phép hủy miễn phí trước 72 giờ');
   });
 
   it('2. Financial amounts match exact test values: 166.665 đ, 11.111 đ, 177.776 đ', () => {

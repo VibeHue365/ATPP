@@ -35,6 +35,7 @@ import { adminStatsApi } from '../../../features/admin-dashboard/api/adminStatsA
 import type { ProviderProduct, ProviderReview } from '../../../features/admin-directory/types';
 import { useToast } from '../../../components/feedback/Toast';
 import { includesVietnamese } from '../../../utils/vietnameseUtils';
+import { getProviderStatusMeta } from '../../../utils/bookingStatus';
 import './partnerManagementFigma.css';
 
 export interface PartnerDetailItem {
@@ -54,7 +55,7 @@ export interface PartnerDetailItem {
   completionRate: number;
   rating: number;
   totalEarnings: number;
-  status: 'ACTIVE' | 'PENDING' | 'SUSPENDED';
+  status: string;
   statusLabel: string;
   isVerified: boolean;
   hasIdCard: boolean;
@@ -192,8 +193,10 @@ export function PartnerManagementPanel() {
       if (resProviders.status === 'fulfilled' && resProviders.value?.items) {
         loadedPartners = resProviders.value.items.map((p, idx) => {
           const codeIndex = String(idx + 1).padStart(4, '0');
-          const isSuspended = (p.status || '').toUpperCase() === 'SUSPENDED';
-          const isPending = (p.status || '').toUpperCase() === 'PENDING';
+          const rawStatus = (p.status || 'ACTIVE').toUpperCase();
+          const statusMeta = getProviderStatusMeta(rawStatus);
+          const isSuspended = rawStatus === 'SUSPENDED';
+          const isPending = rawStatus === 'PENDING_APPROVAL' || rawStatus === 'PENDING';
 
           const caps = Array.isArray(p.capability) && p.capability.length > 0
             ? p.capability
@@ -215,7 +218,7 @@ export function PartnerManagementPanel() {
           return {
             id: p.id,
             partnerCode: `#DT${p.id ? p.id.slice(-6).toUpperCase() : codeIndex}`,
-            businessName: p.businessName || 'Nhà cung cấp LUMÉ',
+            businessName: p.businessName || 'Nhà cung cấp TàGo',
             ownerName: p.ownerName || 'Chủ cơ sở',
             avatar: safeAvatar,
             email: p.email || 'Chưa cập nhật',
@@ -229,8 +232,8 @@ export function PartnerManagementPanel() {
             completionRate,
             rating: p.rating && p.rating > 0 ? p.rating : 5.0,
             totalEarnings: typeof p.totalEarnings === 'number' ? p.totalEarnings : 0,
-            status: isSuspended ? 'SUSPENDED' : isPending ? 'PENDING' : 'ACTIVE',
-            statusLabel: isSuspended ? 'Tạm ngưng' : isPending ? 'Chờ duyệt' : 'Hoạt động',
+            status: statusMeta.code,
+            statusLabel: statusMeta.label,
             isVerified: p.isVerified ?? !isPending,
             hasIdCard: p.hasIdCard ?? (p.isVerified ?? !isPending),
             hasBusinessLicense: p.hasBusinessLicense ?? (p.isVerified ?? !isPending),
@@ -481,7 +484,7 @@ export function PartnerManagementPanel() {
       <div className="lume-partner-header">
         <h1 className="lume-partner-title">Đối tác</h1>
         <p className="lume-partner-subtitle">
-          Quản lý mạng lưới đối tác cung cấp áo dài, studio, thợ chụp ảnh, trạng thái phê duyệt và chất lượng dịch vụ trên LUMÉ.
+          Quản lý mạng lưới đối tác cung cấp áo dài, studio, thợ chụp ảnh, trạng thái phê duyệt và chất lượng dịch vụ trên TàGo.
         </p>
       </div>
 

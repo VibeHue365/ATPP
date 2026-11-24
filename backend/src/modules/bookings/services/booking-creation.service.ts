@@ -26,6 +26,11 @@ import {
 } from '../../products/schemas/promotion.schema';
 import { PaymentsService } from '../../payments/services/payments.service';
 import { ProductsService } from '../../products/services/products.service';
+import { DiscountCampaignService } from '../../products/services/discount-campaign.service';
+import {
+  calculateDailyRentalTotal,
+  calculateHourlyRentalTotal,
+} from '../../products/utils/campaign-pricing.util';
 import {
   Provider,
   ProviderStatus,
@@ -97,6 +102,7 @@ export interface BookingCreationServiceDeps {
   contractPolicyService?: ContractPolicyService;
   providerScheduleModel?: Model<ProviderSchedule>;
   productBusyCacheService?: ProductBusyCacheService;
+  campaignService?: DiscountCampaignService;
 }
 
 export function createBookingCreationServiceForTest(
@@ -122,6 +128,7 @@ export function createBookingCreationServiceForTest(
     deps.contractPolicyService,
     deps.providerScheduleModel,
     deps.productBusyCacheService,
+    deps.campaignService,
   );
 }
 
@@ -159,6 +166,8 @@ export class BookingCreationService {
     private readonly providerScheduleModel?: Model<ProviderSchedule>,
     @Optional()
     private readonly productBusyCacheService?: ProductBusyCacheService,
+    @Optional()
+    private readonly campaignService?: DiscountCampaignService,
   ) {}
 
   private async getProviderScheduleConfig(
@@ -218,6 +227,37 @@ export class BookingCreationService {
     } catch {
       return undefined;
     }
+  }
+
+  private buildProviderPickupLocationSnapshot(provider: any) {
+    if (!provider) return undefined;
+    const useBusiness =
+      provider?.rentalSettings?.useBusinessAddressForPickup !== false;
+    const customLoc = provider?.rentalSettings?.pickupLocation;
+    const loc = !useBusiness && customLoc ? customLoc : provider?.address;
+    if (!loc) return undefined;
+    const address =
+      [loc.addressLine || loc.address, loc.ward, loc.district, loc.city]
+        .filter((part) => typeof part === 'string' && part.trim().length > 0)
+        .map((part) => part.trim())
+        .join(', ') || 'Tại cửa hàng đối tác';
+    const hasValidGeo =
+      Array.isArray(loc?.geo?.coordinates) && loc.geo.coordinates.length === 2;
+    return {
+      address,
+      ...(loc.ward ? { ward: loc.ward } : {}),
+      ...(loc.district ? { district: loc.district } : {}),
+      ...(loc.city ? { city: loc.city } : {}),
+      geo: hasValidGeo
+        ? {
+            type: 'Point' as const,
+            coordinates: [
+              Number(loc.geo.coordinates[0]),
+              Number(loc.geo.coordinates[1]),
+            ] as [number, number],
+          }
+        : null,
+    };
   }
 
   private async determineShopContractStatus(
@@ -493,12 +533,13 @@ export class BookingCreationService {
             }
           }
 
+          const campaign =
+            this.campaignService && providerId
+              ? await this.campaignService.getActiveCampaign(providerId)
+              : null;
+
           const rType = item.rentalType === 'HOURLY' ? 'HOURLY' : 'DAILY';
           if (rType === 'HOURLY') {
-            const hourlyRate =
-              product.hourlyPrice ||
-              Math.round(product.basePrice * 0.3) ||
-              80000;
             let durationHours = 2;
             if (item.shootTimeSlot) {
               const parts = item.shootTimeSlot.split('-');
@@ -517,8 +558,16 @@ export class BookingCreationService {
                 );
               }
             }
-            unitPrice = hourlyRate * durationHours;
+            unitPrice = calculateHourlyRentalTotal(
+              product.basePrice,
+              product.hourlyPrice,
+              campaign,
+              item.shootDate ?? new Date(),
+              durationHours,
+            ).total;
           } else {
+            let rentalStart = new Date();
+            let rentalEnd = rentalStart;
             let durationDays = 1;
             if (item.rentalFrom && item.rentalTo) {
               const start = new Date(item.rentalFrom);
@@ -528,11 +577,20 @@ export class BookingCreationService {
                 !isNaN(end.getTime()) &&
                 end >= start
               ) {
+                rentalStart = start;
+                rentalEnd = end;
                 const diffTime = Math.abs(end.getTime() - start.getTime());
                 durationDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
               }
             }
-            unitPrice = product.basePrice * durationDays;
+            unitPrice = campaign
+              ? calculateDailyRentalTotal(
+                  product.basePrice,
+                  campaign,
+                  rentalStart,
+                  rentalEnd,
+                ).total
+              : product.basePrice * durationDays;
           }
 
           let upfrontBlock: any = null;
@@ -551,11 +609,13 @@ export class BookingCreationService {
                   )
                 : { startSlotIndex: 1, rentalSlotCount: 1 };
 
-              const hourlyRate =
-                product.hourlyPrice ||
-                Math.round(product.basePrice * 0.3) ||
-                80000;
-              unitPrice = hourlyRate * (rentalSlotCount * 2);
+              unitPrice = calculateHourlyRentalTotal(
+                product.basePrice,
+                product.hourlyPrice,
+                campaign,
+                item.shootDate,
+                rentalSlotCount * 2,
+              ).total;
 
               const parts = item.shootTimeSlot.split('-');
               const [sh, sm] = (parts[0]?.trim() || '07:00')
@@ -868,6 +928,9 @@ export class BookingCreationService {
                   : 10
                 : 0;
 
+            const pickupLocationSnapshot =
+              this.buildProviderPickupLocationSnapshot(providerInfo);
+
             for (const availableItem of selectedItems) {
               subTotal += unitPrice;
               const comboDiscountAmount = Math.round(
@@ -896,6 +959,9 @@ export class BookingCreationService {
                 rentalType: rType,
                 comboDiscountPercent,
                 comboDiscountAmount,
+                ...(pickupLocationSnapshot
+                  ? { pickupReturnLocationSnapshot: pickupLocationSnapshot }
+                  : {}),
                 ...(upfrontBlock
                   ? { upfrontBlock, turnaroundSlots, useSlotLeases: true }
                   : {}),
@@ -1414,6 +1480,10 @@ export class BookingCreationService {
       let startDateTime: Date | null = null;
       let endDateTime: Date | null = null;
 
+      const campaign = this.campaignService
+        ? await this.campaignService.getActiveCampaign(product.providerId)
+        : null;
+
       if (rentalType === 'HOURLY') {
         if (!startTime || !endTime) {
           throw new BadRequestException(
@@ -1425,9 +1495,6 @@ export class BookingCreationService {
           ? this.timeEngineService.parseAndValidateTimeSlot(shootTimeSlot)
           : { startSlotIndex: 1, rentalSlotCount: 1 };
 
-        const hourlyRate =
-          product.hourlyPrice || Math.round(product.basePrice * 0.3) || 80000;
-
         const [sh, sm] = startTime.split(':').map(Number);
         const [eh, em] = endTime.split(':').map(Number);
 
@@ -1437,9 +1504,16 @@ export class BookingCreationService {
         endDateTime.setHours(eh, em, 0, 0);
 
         const durationHours = rentalSlotCount * 2;
+        const hourlyQuote = calculateHourlyRentalTotal(
+          product.basePrice,
+          product.hourlyPrice,
+          campaign,
+          start,
+          durationHours,
+        );
 
-        unitPrice = hourlyRate;
-        subTotal = unitPrice * durationHours * quantity;
+        unitPrice = hourlyQuote.total;
+        subTotal = hourlyQuote.total * quantity;
         shootDate = start;
       } else {
         if (!endDate) {
@@ -1455,12 +1529,19 @@ export class BookingCreationService {
           throw new BadRequestException('Ngày kết thúc phải sau ngày bắt đầu');
         }
 
-        const durationDays =
-          Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) +
-          1;
+        const dailyQuote = campaign
+          ? calculateDailyRentalTotal(product.basePrice, campaign, start, end)
+          : {
+              total:
+                product.basePrice *
+                (Math.ceil(
+                  (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24),
+                ) +
+                  1),
+            };
 
-        unitPrice = product.basePrice;
-        subTotal = unitPrice * durationDays * quantity;
+        unitPrice = dailyQuote.total;
+        subTotal = dailyQuote.total * quantity;
         rentalFrom = start;
         rentalTo = end;
       }
@@ -1480,7 +1561,7 @@ export class BookingCreationService {
         priceVersion = new this.priceVersionModel({
           targetType: PriceTargetType.Product,
           targetId: new Types.ObjectId(productId),
-          price: unitPrice,
+          price: product.basePrice,
           depositAmount: product.depositAmount,
           effectiveFrom: new Date(),
           note: 'Tự động tạo khi booking',
@@ -1821,6 +1902,9 @@ export class BookingCreationService {
         session,
       );
 
+      const pickupLocationSnapshot =
+        this.buildProviderPickupLocationSnapshot(provider);
+
       for (let i = 0; i < quantity; i++) {
         const availableItem = selectedItems[i];
         const reservation = reservations[i];
@@ -1845,6 +1929,9 @@ export class BookingCreationService {
               selectedSize: size.toUpperCase(),
               selectedColor: color.toUpperCase(),
               customRequests: null,
+              ...(pickupLocationSnapshot
+                ? { pickupReturnLocationSnapshot: pickupLocationSnapshot }
+                : {}),
             },
             session,
           );

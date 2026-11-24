@@ -123,7 +123,7 @@ export function ProviderOrderWorkflowModal({
     order.pricingSummary?.depositTotal ||
     order.depositAmount ||
     rentalItems.reduce((sum, it) => sum + (it.depositAmount ?? 0) * (it.quantity ?? 1), 0) ||
-    500000;
+    200000;
 
   const uploadSelectedAssets = async (assets: ImagePicker.ImagePickerAsset[]) => {
     if (!assets?.length) return;

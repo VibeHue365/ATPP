@@ -694,7 +694,7 @@ export class BookingStatusService {
         .findOne({ bookingId: booking._id })
         .session(session);
       if (escrow && escrow.status === 'HELD') {
-        escrow.status = refundAmount > 0 ? 'REFUNDED' : 'CANCELLED';
+        escrow.status = 'REFUNDED';
         await escrow.save({ session });
       }
 
@@ -984,30 +984,38 @@ export class BookingStatusService {
 
       const getStatusLabel = (s: BookingStatus): string => {
         switch (s) {
+          case BookingStatus.Draft:
+            return 'Bản nháp';
+          case BookingStatus.PendingPayment:
+            return 'Chờ thanh toán';
           case BookingStatus.Confirmed:
             return 'Đã xác nhận';
           case BookingStatus.DepositPaid:
-            return 'Đã đặt cọc';
+            return 'Đã đặt cọc · Chờ duyệt';
           case BookingStatus.PickupPending:
-            return 'Đang bàn giao nhận áo';
+            return 'Chờ bàn giao / nhận áo';
           case BookingStatus.PickedUp:
             return 'Đang thuê';
           case BookingStatus.InProgress:
-            return 'Đang thực hiện';
+            return 'Đang thực hiện buổi chụp';
           case BookingStatus.ReturnPending:
-            return 'Đang bàn giao trả áo';
+            return 'Chờ nhận trả đồ';
           case BookingStatus.Returned:
-            return 'Đã trả áo';
+            return 'Đã trả đồ · Chờ hoàn cọc';
           case BookingStatus.AwaitingReview:
-            return 'Chờ xác nhận hoàn tất';
+            return 'Đã giao ảnh · Chờ duyệt';
           case BookingStatus.ComboPhotosApproved:
-            return 'Đã duyệt ảnh';
+            return 'Đã duyệt ảnh · Chờ trả đồ';
           case BookingStatus.Completed:
-            return 'Hoàn thành';
+            return 'Hoàn tất';
           case BookingStatus.Cancelled:
             return 'Đã hủy';
           case BookingStatus.Disputed:
-            return 'Tranh chấp';
+            return 'Đang tranh chấp';
+          case BookingStatus.PartiallyRefunded:
+            return 'Hoàn tiền một phần';
+          case BookingStatus.Refunded:
+            return 'Đã hoàn tiền';
           default:
             return s;
         }

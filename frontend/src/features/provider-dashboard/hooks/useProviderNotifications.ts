@@ -73,6 +73,7 @@ export function useProviderNotifications() {
       case 'HANDOVER': return { bg: '#FFF7ED', color: '#C2410C', icon: '🤝' };
       case 'REFUND': return { bg: '#FEF3C7', color: '#92400E', icon: '💰' };
       case 'DISPUTE': return { bg: '#FEE2E2', color: '#991B1B', icon: '⚠️' };
+      case 'WEATHER': return { bg: '#E0F2FE', color: '#0369A1', icon: '🌦️' };
       case 'SYSTEM': return { bg: '#F5F3FF', color: '#7C3AED', icon: '🔔' };
       default: return { bg: '#F9FAFB', color: '#6B7280', icon: '📌' };
     }

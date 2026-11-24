@@ -84,7 +84,7 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
     for (let i = 0; i < 5; i++) {
       rand += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    setVCode(`LUME${rand}`);
+    setVCode(`TAGO${rand}`);
   };
 
   // Quick date presets
@@ -100,7 +100,7 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
 
   // Mock object for real-time live voucher card preview
   const previewVoucher = {
-    code: vCode || 'LUMEVIP',
+    code: vCode || 'TAGOVIP',
     name: vName || 'Tên chương trình ưu đãi của bạn',
     description: vDesc || 'Áp dụng cho mọi khách hàng đặt lịch hoặc thuê áo dài.',
     discountType: vType,
@@ -159,7 +159,7 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
                     <input
                       type="text"
                       className="vc-input-text"
-                      placeholder="VD: LUMETET26"
+                      placeholder="VD: TAGOTET26"
                       required
                       value={vCode}
                       onChange={(e) =>

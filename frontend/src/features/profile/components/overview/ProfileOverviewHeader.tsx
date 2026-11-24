@@ -14,7 +14,7 @@ export const ProfileOverviewHeader: React.FC<ProfileOverviewHeaderProps> = ({
     <div className="lume-overview-header">
       <div className="lume-overview-greeting">
         <h1>Xin chào, {fullName} 👋</h1>
-        <p>Chúc bạn một ngày tuyệt vời cùng LUMÉ Di Sản!</p>
+        <p>Chúc bạn một ngày tuyệt vời cùng TàGo Di Sản!</p>
       </div>
       <button
         type="button"

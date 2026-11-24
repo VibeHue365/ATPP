@@ -25,6 +25,7 @@ import {
 import { httpClient } from '../../../services/httpClient';
 import { useToast } from '../../../components/feedback/Toast';
 import { API_BASE_URL } from '../../../config/env';
+import { getModerationStatusMeta } from '../../../utils/bookingStatus';
 import './productModerationFigma.css';
 
 type ModerationStatus = 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED';
@@ -290,43 +291,20 @@ export const ProductModerationPanel: React.FC = () => {
 
   // Status Badge Renderer
   const renderStatusBadge = (status: ModerationStatus) => {
-    switch (status) {
-      case 'PENDING_REVIEW':
-        return (
-          <span className="lume-mod-status-pill pending">
-            <span className="lume-mod-status-dot" />
-            Chờ duyệt
-          </span>
-        );
-      case 'APPROVED':
-        return (
-          <span className="lume-mod-status-pill approved">
-            <span className="lume-mod-status-dot" />
-            Đã duyệt
-          </span>
-        );
-      case 'REJECTED':
-        return (
-          <span className="lume-mod-status-pill rejected">
-            <span className="lume-mod-status-dot" />
-            Đã từ chối
-          </span>
-        );
-      case 'CHANGES_REQUESTED':
-        return (
-          <span className="lume-mod-status-pill revision">
-            <span className="lume-mod-status-dot" />
-            Cần bổ sung
-          </span>
-        );
-      default:
-        return (
-          <span className="lume-mod-status-pill pending">
-            <span className="lume-mod-status-dot" />
-            Chờ duyệt
-          </span>
-        );
-    }
+    const pillClass =
+      status === 'APPROVED'
+        ? 'approved'
+        : status === 'REJECTED'
+        ? 'rejected'
+        : status === 'CHANGES_REQUESTED'
+        ? 'revision'
+        : 'pending';
+    return (
+      <span className={`lume-mod-status-pill ${pillClass}`}>
+        <span className="lume-mod-status-dot" />
+        {getModerationStatusMeta(status).label}
+      </span>
+    );
   };
 
   // Type Badge Renderer
@@ -1744,7 +1722,7 @@ export const ProductModerationPanel: React.FC = () => {
 
                     <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 18px' }}>
                       <h4 style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
-                        Cam kết chất lượng LUMÉ Quality Guarantee
+                        Cam kết chất lượng TàGo Quality Guarantee
                       </h4>
                       <p style={{ margin: 0, fontSize: 13, color: '#475569', lineHeight: 1.6 }}>
                         Sản phẩm & dịch vụ đăng tải phải tuân thủ nghiêm ngặt bảng giá niêm yết công khai trên TàGo. Đối tác cam kết phục vụ đúng cam kết thời gian, trang phục sạch mới và thái độ chuyên nghiệp, tôn trọng di sản văn hóa xứ Huế.
@@ -2180,7 +2158,7 @@ export const ProductModerationPanel: React.FC = () => {
                   <HelpCircle size={20} />
                 </div>
                 <div>
-                  <h3 className="lume-modal-title">Quy chuẩn kiểm duyệt sản phẩm & dịch vụ LUMÉ</h3>
+                  <h3 className="lume-modal-title">Quy chuẩn kiểm duyệt sản phẩm & dịch vụ TàGo</h3>
                   <p className="lume-modal-subtitle">Bộ nguyên tắc bảo đảm trải nghiệm di sản và niềm tin khách hàng</p>
                 </div>
               </div>
@@ -2248,7 +2226,7 @@ export const ProductModerationPanel: React.FC = () => {
                   </h4>
                   <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: '#475569', lineHeight: 1.6 }}>
                     <li>Đối tác chịu trách nhiệm về tính xác thực của sản phẩm đã đăng.</li>
-                    <li>Hệ thống ký quỹ LUMÉ Escrow bảo vệ cả khách hàng và đối tác đối soát minh bạch.</li>
+                    <li>Hệ thống ký quỹ TàGo Escrow bảo vệ cả khách hàng và đối tác đối soát minh bạch.</li>
                   </ul>
                 </div>
               </div>

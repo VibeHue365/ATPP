@@ -4,7 +4,10 @@ import type { AdminStats, BookingConversionMetrics, PhotographerOverviewMetrics,
 
 export interface OverviewChartPoint {
   day: string;
+  label?: string;
+  fullLabel?: string;
   bookings: number;
+  gmv?: number;
   gmvMillions: number;
 }
 
@@ -64,8 +67,11 @@ export interface AdminOverviewData {
   };
   chart: {
     period: 'day' | 'week' | 'month';
+    periodLabel?: string;
     summaryBookings: number;
     summaryGmv: number;
+    bookingGrowthPct?: number;
+    gmvGrowthPct?: number;
     points: OverviewChartPoint[];
   };
   services: {
@@ -171,8 +177,11 @@ export function useAdminOverviewData() {
         kpis,
         chart: {
           period,
+          periodLabel: backendStats.chart?.periodLabel,
           summaryBookings: backendStats.chart?.summaryBookings ?? totalBookingsCount,
           summaryGmv: backendStats.chart?.summaryGmv ?? totalRevenue,
+          bookingGrowthPct: backendStats.chart?.bookingGrowthPct ?? kpis.totalBookings.growth,
+          gmvGrowthPct: backendStats.chart?.gmvGrowthPct ?? kpis.gmv.growth,
           points: chartPoints,
         },
         services,

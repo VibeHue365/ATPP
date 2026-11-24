@@ -290,8 +290,23 @@ export class AdminStatsService {
       return Number((((current - previous) / previous) * 100).toFixed(1));
     };
 
-    const bookingGrowthPct = extractGrowthPercentage(bookingGrowth);
-    const revenueGrowthPct = extractGrowthPercentage(revenueGrowth);
+    const periodBookings = chartPoints.reduce(
+      (sum, p) => sum + (p.bookings ?? 0),
+      0,
+    );
+    const periodGmv = chartPoints.reduce(
+      (sum, p) =>
+        sum + ((p as any).gmv ?? Math.round((p.gmvMillions ?? 0) * 1_000_000)),
+      0,
+    );
+    const periodComparison = await this.getOverviewPeriodComparison(
+      period,
+      periodBookings,
+      periodGmv,
+    );
+
+    const bookingGrowthPct = periodComparison.bookingGrowthPct;
+    const revenueGrowthPct = periodComparison.gmvGrowthPct;
     const customerGrowthPct = extractGrowthPercentage(registrationGrowth);
 
     return {
@@ -357,8 +372,11 @@ export class AdminStatsService {
       },
       chart: {
         period,
-        summaryBookings: totalBookings,
-        summaryGmv: totalRevenue,
+        periodLabel: this.getOverviewPeriodLabel(period),
+        summaryBookings: chartPoints.length > 0 ? periodBookings : totalBookings,
+        summaryGmv: chartPoints.length > 0 ? periodGmv : totalRevenue,
+        bookingGrowthPct,
+        gmvGrowthPct: revenueGrowthPct,
         points: chartPoints,
       },
       services: serviceShare,
@@ -369,41 +387,164 @@ export class AdminStatsService {
     };
   }
 
-  private async getOverviewChartPoints(
-    period = 'month',
-  ): Promise<Array<{ day: string; bookings: number; gmvMillions: number }>> {
-    const now = new Date();
-    const totalDaysInMonth = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
-      0,
-    ).getDate();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
-      0,
-      23,
-      59,
-      59,
-      999,
-    );
+  private getIctNowParts(now: Date = new Date()) {
+    const vn = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+    return {
+      year: vn.getUTCFullYear(),
+      month: vn.getUTCMonth() + 1,
+      day: vn.getUTCDate(),
+      hour: vn.getUTCHours(),
+    };
+  }
 
-    const [paymentsByDay, bookingsByDay] = await Promise.all([
+  private makeIctDate(
+    year: number,
+    month: number,
+    day: number,
+    hour = 0,
+    minute = 0,
+    second = 0,
+    ms = 0,
+  ): Date {
+    return new Date(
+      Date.UTC(year, month - 1, day, hour, minute, second, ms) -
+        7 * 60 * 60 * 1000,
+    );
+  }
+
+  private getOverviewPeriodLabel(period = 'month'): string {
+    const { year, month, day } = this.getIctNowParts();
+    const dd = String(day).padStart(2, '0');
+    const mm = String(month).padStart(2, '0');
+    if (period === 'day') {
+      return `Hôm nay · ${dd}/${mm}/${year}`;
+    }
+    if (period === 'week') {
+      return '7 ngày gần nhất';
+    }
+    if (period === 'year') {
+      return `Năm ${year}`;
+    }
+    return `Tháng ${mm}/${year}`;
+  }
+
+  private async getOverviewChartPoints(period = 'month'): Promise<
+    Array<{
+      day: string;
+      label: string;
+      fullLabel: string;
+      bookings: number;
+      gmv: number;
+      gmvMillions: number;
+    }>
+  > {
+    const { year, month, day } = this.getIctNowParts();
+    const mm = String(month).padStart(2, '0');
+    const dd = String(day).padStart(2, '0');
+
+    let rangeStart: Date;
+    let rangeEnd: Date;
+    let mongoFormat: string;
+    const slots: Array<{ key: string; day: string; fullLabel: string }> = [];
+
+    if (period === 'day') {
+      rangeStart = this.makeIctDate(year, month, day, 0, 0, 0, 0);
+      rangeEnd = this.makeIctDate(year, month, day, 23, 59, 59, 999);
+      mongoFormat = '%H';
+      for (let h = 0; h < 24; h += 2) {
+        const h1 = String(h).padStart(2, '0');
+        const h2 = String(h + 2).padStart(2, '0');
+        slots.push({
+          key: h1,
+          day: `${h1}h`,
+          fullLabel: `${h1}:00–${h2}:00 · ${dd}/${mm}/${year}`,
+        });
+      }
+    } else if (period === 'week') {
+      const startRef = new Date(Date.UTC(year, month - 1, day - 6));
+      rangeStart = this.makeIctDate(
+        startRef.getUTCFullYear(),
+        startRef.getUTCMonth() + 1,
+        startRef.getUTCDate(),
+        0,
+        0,
+        0,
+        0,
+      );
+      rangeEnd = this.makeIctDate(year, month, day, 23, 59, 59, 999);
+      mongoFormat = '%Y-%m-%d';
+      for (let offset = 6; offset >= 0; offset -= 1) {
+        const dRef = new Date(Date.UTC(year, month - 1, day - offset));
+        const yStr = dRef.getUTCFullYear();
+        const mStr = String(dRef.getUTCMonth() + 1).padStart(2, '0');
+        const dStr = String(dRef.getUTCDate()).padStart(2, '0');
+        slots.push({
+          key: `${yStr}-${mStr}-${dStr}`,
+          day: `${dStr}/${mStr}`,
+          fullLabel: `Ngày ${dStr}/${mStr}/${yStr}`,
+        });
+      }
+    } else if (period === 'year') {
+      const startRef = new Date(Date.UTC(year, month - 12, 1));
+      rangeStart = this.makeIctDate(
+        startRef.getUTCFullYear(),
+        startRef.getUTCMonth() + 1,
+        1,
+        0,
+        0,
+        0,
+        0,
+      );
+      const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      rangeEnd = this.makeIctDate(year, month, lastDay, 23, 59, 59, 999);
+      mongoFormat = '%Y-%m';
+      for (let offset = 11; offset >= 0; offset -= 1) {
+        const dRef = new Date(Date.UTC(year, month - 1 - offset, 1));
+        const yStr = dRef.getUTCFullYear();
+        const mStr = String(dRef.getUTCMonth() + 1).padStart(2, '0');
+        slots.push({
+          key: `${yStr}-${mStr}`,
+          day: `T${dRef.getUTCMonth() + 1}`,
+          fullLabel: `Tháng ${mStr}/${yStr}`,
+        });
+      }
+    } else {
+      const totalDaysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      rangeStart = this.makeIctDate(year, month, 1, 0, 0, 0, 0);
+      rangeEnd = this.makeIctDate(year, month, totalDaysInMonth, 23, 59, 59, 999);
+      mongoFormat = '%d';
+      for (let d = 1; d <= totalDaysInMonth; d += 1) {
+        const dayStr = String(d).padStart(2, '0');
+        slots.push({
+          key: dayStr,
+          day: dayStr,
+          fullLabel: `Ngày ${dayStr}/${mm}/${year}`,
+        });
+      }
+    }
+
+    const [paymentsByBucket, bookingsByBucket] = await Promise.all([
       this.paymentModel.aggregate<{ _id: string; totalAmount: number }>([
         {
           $match: {
             status: { $in: [PaymentStatus.Success, 'SUCCESS', 'PAID'] },
-            createdAt: { $gte: startOfMonth, $lte: endOfMonth },
+            purpose: {
+              $in: [
+                PaymentPurpose.DepositPayment,
+                PaymentPurpose.RemainingPayment,
+                PaymentPurpose.FullPayment,
+              ],
+            },
+            createdAt: { $gte: rangeStart, $lte: rangeEnd },
           },
         },
         {
           $group: {
             _id: {
               $dateToString: {
-                format: '%d',
+                format: mongoFormat,
                 date: '$createdAt',
-                timezone: 'Asia/Bangkok',
+                timezone: 'Asia/Ho_Chi_Minh',
               },
             },
             totalAmount: { $sum: '$amount' },
@@ -414,16 +555,16 @@ export class AdminStatsService {
         {
           $match: {
             status: { $ne: 'CANCELLED' },
-            createdAt: { $gte: startOfMonth, $lte: endOfMonth },
+            createdAt: { $gte: rangeStart, $lte: rangeEnd },
           },
         },
         {
           $group: {
             _id: {
               $dateToString: {
-                format: '%d',
+                format: mongoFormat,
                 date: '$createdAt',
-                timezone: 'Asia/Bangkok',
+                timezone: 'Asia/Ho_Chi_Minh',
               },
             },
             count: { $sum: 1 },
@@ -432,27 +573,172 @@ export class AdminStatsService {
       ]),
     ]);
 
-    const paymentMap = new Map(
-      paymentsByDay.map((p) => [p._id, p.totalAmount]),
-    );
-    const bookingMap = new Map(bookingsByDay.map((b) => [b._id, b.count]));
-
-    const points: Array<{
-      day: string;
-      bookings: number;
-      gmvMillions: number;
-    }> = [];
-    for (let d = 1; d <= totalDaysInMonth; d++) {
-      const dayStr = String(d).padStart(2, '0');
-      const gmv = paymentMap.get(dayStr) ?? 0;
-      points.push({
-        day: dayStr,
-        bookings: bookingMap.get(dayStr) ?? 0,
-        gmvMillions: Number((gmv / 1_000_000).toFixed(2)),
-      });
+    const paymentMap = new Map<string, number>();
+    for (const p of paymentsByBucket) {
+      if (period === 'day') {
+        const h = Number(p._id);
+        const bucketHour = Number.isFinite(h)
+          ? String(Math.floor(h / 2) * 2).padStart(2, '0')
+          : p._id;
+        paymentMap.set(bucketHour, (paymentMap.get(bucketHour) ?? 0) + p.totalAmount);
+      } else {
+        paymentMap.set(p._id, p.totalAmount);
+      }
     }
 
-    return points;
+    const bookingMap = new Map<string, number>();
+    for (const b of bookingsByBucket) {
+      if (period === 'day') {
+        const h = Number(b._id);
+        const bucketHour = Number.isFinite(h)
+          ? String(Math.floor(h / 2) * 2).padStart(2, '0')
+          : b._id;
+        bookingMap.set(bucketHour, (bookingMap.get(bucketHour) ?? 0) + b.count);
+      } else {
+        bookingMap.set(b._id, b.count);
+      }
+    }
+
+    return slots.map((slot) => {
+      const gmv = paymentMap.get(slot.key) ?? 0;
+      return {
+        day: slot.day,
+        label: slot.day,
+        fullLabel: slot.fullLabel,
+        bookings: bookingMap.get(slot.key) ?? 0,
+        gmv,
+        gmvMillions: Number((gmv / 1_000_000).toFixed(2)),
+      };
+    });
+  }
+
+  private async getOverviewPeriodComparison(
+    period: string,
+    currentBookings: number,
+    currentGmv: number,
+  ): Promise<{ bookingGrowthPct: number; gmvGrowthPct: number }> {
+    const { year, month, day } = this.getIctNowParts();
+    let prevStart: Date;
+    let prevEnd: Date;
+
+    if (period === 'day') {
+      const prevRef = new Date(Date.UTC(year, month - 1, day - 1));
+      prevStart = this.makeIctDate(
+        prevRef.getUTCFullYear(),
+        prevRef.getUTCMonth() + 1,
+        prevRef.getUTCDate(),
+        0,
+        0,
+        0,
+        0,
+      );
+      prevEnd = this.makeIctDate(
+        prevRef.getUTCFullYear(),
+        prevRef.getUTCMonth() + 1,
+        prevRef.getUTCDate(),
+        23,
+        59,
+        59,
+        999,
+      );
+    } else if (period === 'week') {
+      const prevStartRef = new Date(Date.UTC(year, month - 1, day - 13));
+      const prevEndRef = new Date(Date.UTC(year, month - 1, day - 7));
+      prevStart = this.makeIctDate(
+        prevStartRef.getUTCFullYear(),
+        prevStartRef.getUTCMonth() + 1,
+        prevStartRef.getUTCDate(),
+        0,
+        0,
+        0,
+        0,
+      );
+      prevEnd = this.makeIctDate(
+        prevEndRef.getUTCFullYear(),
+        prevEndRef.getUTCMonth() + 1,
+        prevEndRef.getUTCDate(),
+        23,
+        59,
+        59,
+        999,
+      );
+    } else if (period === 'year') {
+      const prevStartRef = new Date(Date.UTC(year, month - 24, 1));
+      const prevEndRef = new Date(Date.UTC(year, month - 12, 0));
+      prevStart = this.makeIctDate(
+        prevStartRef.getUTCFullYear(),
+        prevStartRef.getUTCMonth() + 1,
+        1,
+        0,
+        0,
+        0,
+        0,
+      );
+      prevEnd = this.makeIctDate(
+        prevEndRef.getUTCFullYear(),
+        prevEndRef.getUTCMonth() + 1,
+        prevEndRef.getUTCDate(),
+        23,
+        59,
+        59,
+        999,
+      );
+    } else {
+      const prevMonthStartRef = new Date(Date.UTC(year, month - 2, 1));
+      const prevMonthEndRef = new Date(Date.UTC(year, month - 1, 0));
+      prevStart = this.makeIctDate(
+        prevMonthStartRef.getUTCFullYear(),
+        prevMonthStartRef.getUTCMonth() + 1,
+        1,
+        0,
+        0,
+        0,
+        0,
+      );
+      prevEnd = this.makeIctDate(
+        prevMonthEndRef.getUTCFullYear(),
+        prevMonthEndRef.getUTCMonth() + 1,
+        prevMonthEndRef.getUTCDate(),
+        23,
+        59,
+        59,
+        999,
+      );
+    }
+
+    const [prevBookings, prevGmvAgg] = await Promise.all([
+      this.bookingModel.countDocuments({
+        status: { $ne: BookingStatus.Cancelled },
+        createdAt: { $gte: prevStart, $lte: prevEnd },
+      }),
+      this.paymentModel.aggregate<{ total: number }>([
+        {
+          $match: {
+            status: { $in: [PaymentStatus.Success, 'SUCCESS', 'PAID'] },
+            purpose: {
+              $in: [
+                PaymentPurpose.DepositPayment,
+                PaymentPurpose.RemainingPayment,
+                PaymentPurpose.FullPayment,
+              ],
+            },
+            createdAt: { $gte: prevStart, $lte: prevEnd },
+          },
+        },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+    ]);
+
+    const prevGmv = prevGmvAgg[0]?.total ?? 0;
+    const calcPct = (curr: number, prev: number) => {
+      if (prev <= 0) return curr > 0 ? 100 : 0;
+      return Number((((curr - prev) / prev) * 100).toFixed(1));
+    };
+
+    return {
+      bookingGrowthPct: calcPct(currentBookings, prevBookings),
+      gmvGrowthPct: calcPct(currentGmv, prevGmv),
+    };
   }
 
   private async getServiceShare() {
@@ -968,11 +1254,16 @@ export class AdminStatsService {
     const totalSpent = bookings
       .filter((b) =>
         [
-          'COMPLETED',
-          'CONFIRMED',
           'DEPOSIT_PAID',
+          'CONFIRMED',
+          'PICKUP_PENDING',
           'PICKED_UP',
+          'RETURN_PENDING',
           'RETURNED',
+          'IN_PROGRESS',
+          'AWAITING_REVIEW',
+          'COMBO_PHOTOS_APPROVED',
+          'COMPLETED',
         ].includes(b.status),
       )
       .reduce((sum, b) => sum + (b.pricingSummary?.grandTotal || 0), 0);
@@ -1312,24 +1603,33 @@ export class AdminStatsService {
         .lean(),
     ]);
 
+    const pendingStatuses = ['DRAFT', 'PENDING_PAYMENT', 'DEPOSIT_PAID'];
+    const activeStatuses = [
+      'CONFIRMED',
+      'PICKUP_PENDING',
+      'PICKED_UP',
+      'IN_PROGRESS',
+      'AWAITING_REVIEW',
+      'COMBO_PHOTOS_APPROVED',
+      'RETURN_PENDING',
+      'RETURNED',
+    ];
+    const completedStatuses = ['COMPLETED'];
+    const cancelledStatuses = ['CANCELLED'];
+    const disputedStatuses = ['DISPUTED', 'PARTIALLY_REFUNDED', 'REFUNDED'];
+
     const totalAll = allBookingsSummary.length;
     const pendingCount = allBookingsSummary.filter((b: any) =>
-      ['PENDING_PAYMENT', 'DRAFT', 'AWAITING_REVIEW'].includes(b.status),
+      pendingStatuses.includes(b.status),
     ).length;
     const upcomingCount = allBookingsSummary.filter((b: any) =>
-      [
-        'CONFIRMED',
-        'DEPOSIT_PAID',
-        'PICKUP_PENDING',
-        'IN_PROGRESS',
-        'PICKED_UP',
-      ].includes(b.status),
+      activeStatuses.includes(b.status),
     ).length;
     const completedCount = allBookingsSummary.filter((b: any) =>
-      ['COMPLETED', 'RETURNED'].includes(b.status),
+      completedStatuses.includes(b.status),
     ).length;
     const cancelledCount = allBookingsSummary.filter((b: any) =>
-      ['CANCELLED'].includes(b.status),
+      cancelledStatuses.includes(b.status),
     ).length;
 
     const disputeBookingIdSet = new Set(
@@ -1337,7 +1637,7 @@ export class AdminStatsService {
     );
     const disputedCount = allBookingsSummary.filter(
       (b: any) =>
-        ['DISPUTED', 'PARTIALLY_REFUNDED', 'REFUNDED'].includes(b.status) ||
+        disputedStatuses.includes(b.status) ||
         disputeBookingIdSet.has(b._id.toString()),
     ).length;
 
@@ -1369,39 +1669,37 @@ export class AdminStatsService {
     const filter: any = {};
 
     if (statusFilter && statusFilter !== 'ALL' && statusFilter !== 'Tất cả') {
-      if (statusFilter === 'PENDING' || statusFilter === 'Chờ xác nhận') {
-        filter.status = {
-          $in: ['PENDING_PAYMENT', 'DRAFT', 'AWAITING_REVIEW'],
-        };
-      } else if (
-        statusFilter === 'UPCOMING' ||
-        statusFilter === 'Sắp diễn ra'
+      if (
+        statusFilter === 'PENDING' ||
+        statusFilter === 'Chờ xác nhận' ||
+        statusFilter === 'Chờ xử lý'
       ) {
-        filter.status = {
-          $in: [
-            'CONFIRMED',
-            'DEPOSIT_PAID',
-            'PICKUP_PENDING',
-            'IN_PROGRESS',
-            'PICKED_UP',
-          ],
-        };
+        filter.status = { $in: pendingStatuses };
+      } else if (
+        statusFilter === 'ACTIVE' ||
+        statusFilter === 'UPCOMING' ||
+        statusFilter === 'Sắp diễn ra' ||
+        statusFilter === 'Đang thực hiện'
+      ) {
+        filter.status = { $in: activeStatuses };
       } else if (
         statusFilter === 'COMPLETED' ||
-        statusFilter === 'Đã hoàn thành'
+        statusFilter === 'Đã hoàn thành' ||
+        statusFilter === 'Hoàn tất'
       ) {
-        filter.status = { $in: ['COMPLETED', 'RETURNED'] };
+        filter.status = { $in: completedStatuses };
       } else if (statusFilter === 'CANCELLED' || statusFilter === 'Đã hủy') {
-        filter.status = 'CANCELLED';
+        filter.status = { $in: cancelledStatuses };
       } else if (
         statusFilter === 'DISPUTED' ||
-        statusFilter === 'Có tranh chấp'
+        statusFilter === 'Có tranh chấp' ||
+        statusFilter === 'Tranh chấp / Hoàn tiền'
       ) {
         const disputeIds = Array.from(disputeBookingIdSet).map(
           (id) => new Types.ObjectId(id),
         );
         filter.$or = [
-          { status: { $in: ['DISPUTED', 'PARTIALLY_REFUNDED', 'REFUNDED'] } },
+          { status: { $in: disputedStatuses } },
           { _id: { $in: disputeIds } },
         ];
       } else {
@@ -1572,7 +1870,7 @@ export class AdminStatsService {
       let issueText = '—';
       if (disp) {
         const rLower = (disp.reason || '').toLowerCase();
-        if (rLower.includes('hoàn tiền') || disp.status === 'REFUNDED') {
+        if (rLower.includes('hoàn tiền')) {
           issueText = 'Yêu cầu hoàn tiền';
         } else {
           issueText = 'Khách khiếu nại';
@@ -1591,22 +1889,27 @@ export class AdminStatsService {
         (b.pricingSummary?.grandTotal > 0 &&
           b.paymentSummary?.totalPaid >= b.pricingSummary?.grandTotal);
 
-      // Status translation
-      let statusLabel = 'Sắp diễn ra';
-      if (['COMPLETED', 'RETURNED'].includes(b.status)) {
-        statusLabel = 'Đã hoàn thành';
-      } else if (
-        ['PENDING_PAYMENT', 'DRAFT', 'AWAITING_REVIEW'].includes(b.status)
-      ) {
-        statusLabel = 'Chờ xác nhận';
-      } else if (b.status === 'CANCELLED') {
-        statusLabel = 'Đã hủy';
-      } else if (
-        ['DISPUTED', 'PARTIALLY_REFUNDED', 'REFUNDED'].includes(b.status) ||
-        disp
-      ) {
-        statusLabel = 'Có tranh chấp';
-      }
+      // Granular status translation covering all 16 BookingStatus values
+      const adminStatusLabels: Record<string, string> = {
+        DRAFT: 'Bản nháp',
+        PENDING_PAYMENT: 'Chờ thanh toán',
+        DEPOSIT_PAID: 'Đã đặt cọc · Chờ duyệt',
+        CONFIRMED: 'Đã xác nhận',
+        PICKUP_PENDING: 'Chờ bàn giao / nhận áo',
+        PICKED_UP: 'Đang thuê',
+        RETURN_PENDING: 'Chờ nhận trả đồ',
+        RETURNED: 'Đã trả đồ · Chờ hoàn cọc',
+        IN_PROGRESS: 'Đang thực hiện buổi chụp',
+        AWAITING_REVIEW: 'Đã giao ảnh · Chờ duyệt',
+        COMBO_PHOTOS_APPROVED: 'Đã duyệt ảnh · Chờ trả đồ',
+        COMPLETED: 'Hoàn tất',
+        CANCELLED: 'Đã hủy',
+        DISPUTED: 'Đang tranh chấp',
+        PARTIALLY_REFUNDED: 'Hoàn tiền một phần',
+        REFUNDED: 'Đã hoàn tiền',
+      };
+      const statusLabel =
+        adminStatusLabels[b.status] || (disp ? 'Đang tranh chấp' : 'Đang cập nhật');
 
       // Service label
       let serviceLabel = 'Thuê áo dài';
@@ -1801,7 +2104,11 @@ export class AdminStatsService {
             ? 'PAID'
             : t.status === 'PENDING'
               ? 'PENDING'
-              : 'FAILED',
+              : t.status === 'PROCESSING'
+                ? 'PROCESSING'
+                : t.status === 'CANCELLED'
+                  ? 'CANCELLED'
+                  : 'FAILED',
       };
     });
 
@@ -1844,7 +2151,7 @@ export class AdminStatsService {
   }
 
   private periodBuckets(period = 'month') {
-    const now = new Date();
+    const { year, month, day } = this.getIctNowParts();
     const buckets: Array<{
       key: string;
       label: string;
@@ -1852,26 +2159,33 @@ export class AdminStatsService {
       end: Date;
     }> = [];
 
+    if (period === 'day') {
+      for (let offset = 6; offset >= 0; offset -= 1) {
+        const dRef = new Date(Date.UTC(year, month - 1, day - offset));
+        const y = dRef.getUTCFullYear();
+        const m = dRef.getUTCMonth() + 1;
+        const d = dRef.getUTCDate();
+        buckets.push({
+          key: `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+          label: `${d}/${m}`,
+          start: this.makeIctDate(y, m, d, 0, 0, 0, 0),
+          end: this.makeIctDate(y, m, d, 23, 59, 59, 999),
+        });
+      }
+      return { buckets, format: '%Y-%m-%d' };
+    }
+
     if (period === 'week') {
       for (let offset = 6; offset >= 0; offset -= 1) {
-        const date = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate() - offset,
-        );
+        const dRef = new Date(Date.UTC(year, month - 1, day - offset));
+        const y = dRef.getUTCFullYear();
+        const m = dRef.getUTCMonth() + 1;
+        const d = dRef.getUTCDate();
         buckets.push({
-          key: this.dateKey(date),
-          label: `${date.getDate()}/${date.getMonth() + 1}`,
-          start: new Date(date.getFullYear(), date.getMonth(), date.getDate()),
-          end: new Date(
-            date.getFullYear(),
-            date.getMonth(),
-            date.getDate(),
-            23,
-            59,
-            59,
-            999,
-          ),
+          key: `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+          label: `${d}/${m}`,
+          start: this.makeIctDate(y, m, d, 0, 0, 0, 0),
+          end: this.makeIctDate(y, m, d, 23, 59, 59, 999),
         });
       }
       return { buckets, format: '%Y-%m-%d' };
@@ -1879,32 +2193,27 @@ export class AdminStatsService {
 
     if (period === 'year') {
       for (let offset = 4; offset >= 0; offset -= 1) {
-        const year = now.getFullYear() - offset;
+        const targetYear = year - offset;
         buckets.push({
-          key: String(year),
-          label: String(year),
-          start: new Date(year, 0, 1),
-          end: new Date(year, 11, 31, 23, 59, 59, 999),
+          key: String(targetYear),
+          label: String(targetYear),
+          start: this.makeIctDate(targetYear, 1, 1, 0, 0, 0, 0),
+          end: this.makeIctDate(targetYear, 12, 31, 23, 59, 59, 999),
         });
       }
       return { buckets, format: '%Y' };
     }
 
     for (let offset = 5; offset >= 0; offset -= 1) {
-      const date = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      const dRef = new Date(Date.UTC(year, month - 1 - offset, 1));
+      const targetYear = dRef.getUTCFullYear();
+      const targetMonth = dRef.getUTCMonth() + 1;
+      const lastDay = new Date(Date.UTC(targetYear, targetMonth, 0)).getUTCDate();
       buckets.push({
-        key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
-        label: `Thg ${date.getMonth() + 1}`,
-        start: date,
-        end: new Date(
-          date.getFullYear(),
-          date.getMonth() + 1,
-          0,
-          23,
-          59,
-          59,
-          999,
-        ),
+        key: `${targetYear}-${String(targetMonth).padStart(2, '0')}`,
+        label: `Thg ${targetMonth}`,
+        start: this.makeIctDate(targetYear, targetMonth, 1, 0, 0, 0, 0),
+        end: this.makeIctDate(targetYear, targetMonth, lastDay, 23, 59, 59, 999),
       });
     }
     return { buckets, format: '%Y-%m' };
@@ -2026,6 +2335,12 @@ export class AdminStatsService {
   }
 
   async updateBookingStatus(id: string, status: string, note?: string) {
+    if (!Object.values(BookingStatus).includes(status as BookingStatus)) {
+      throw new BadRequestException(
+        `Trạng thái booking "${status}" không hợp lệ.`,
+      );
+    }
+
     let booking: any = null;
     if (Types.ObjectId.isValid(id)) {
       booking = await this.bookingModel.findById(id);
@@ -2917,12 +3232,13 @@ export class AdminStatsService {
     );
     const activeMap = new Map(activeUsers.map((row) => [row._id, row.count]));
     const data: Array<{ date: string; newUsers: number; dau: number }> = [];
+    const cursorEnd = new Date(`${to}T00:00:00.000Z`);
     for (
-      let date = new Date(start);
-      date <= end;
-      date.setUTCDate(date.getUTCDate() + 1)
+      let cursor = new Date(`${from}T00:00:00.000Z`);
+      cursor <= cursorEnd;
+      cursor.setUTCDate(cursor.getUTCDate() + 1)
     ) {
-      const key = date.toISOString().slice(0, 10);
+      const key = cursor.toISOString().slice(0, 10);
       data.push({
         date: key,
         newUsers: registrationMap.get(key) ?? 0,
@@ -2972,18 +3288,20 @@ export class AdminStatsService {
   }
 
   private userGrowthDateRange(from?: string, to?: string) {
-    const parse = (value: string, suffix: string) =>
-      new Date(`${value}${suffix}`);
-    const end = to ? parse(to, 'T23:59:59.999Z') : new Date();
-    const start = from
-      ? parse(from, 'T00:00:00.000Z')
-      : new Date(
-          Date.UTC(
-            end.getUTCFullYear(),
-            end.getUTCMonth(),
-            end.getUTCDate() - 6,
-          ),
-        );
+    const { year, month, day } = this.getIctNowParts();
+    const todayStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const toStr = to || todayStr;
+    const end = new Date(`${toStr}T23:59:59.999+07:00`);
+    let fromStr = from;
+    if (!fromStr) {
+      if (Number.isNaN(end.getTime())) {
+        throw new BadRequestException('Invalid user growth date range');
+      }
+      const startRef = new Date(end.getTime() - 6 * 24 * 60 * 60 * 1000);
+      const p = this.getIctNowParts(startRef);
+      fromStr = `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
+    }
+    const start = new Date(`${fromStr}T00:00:00.000+07:00`);
     if (
       Number.isNaN(start.getTime()) ||
       Number.isNaN(end.getTime()) ||
@@ -2994,8 +3312,8 @@ export class AdminStatsService {
     return {
       start,
       end,
-      from: start.toISOString().slice(0, 10),
-      to: end.toISOString().slice(0, 10),
+      from: fromStr,
+      to: toStr,
     };
   }
 

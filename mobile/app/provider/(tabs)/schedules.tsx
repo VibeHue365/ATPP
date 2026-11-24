@@ -441,7 +441,7 @@ export default function ProviderSchedulesScreen() {
         list.push({
           id,
           bookingId: bId,
-          bookingCode: s.bookingCode || matchedOrder?.bookingCode || '#VH',
+          bookingCode: s.bookingCode || matchedOrder?.bookingCode || '#TG',
           type: itemType,
           timeLabel: s.timeLabel || 'Theo lịch hẹn',
           dateStr: s.providerLocalDate || toVnDayKey(dt),

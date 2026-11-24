@@ -632,6 +632,9 @@ export function ProductWizardModal({
                     <div className="pwm-input-unit-wrap">
                       <input
                         type="number"
+                        min={50000}
+                        max={10000000}
+                        step={1000}
                         value={prodBasePrice}
                         onChange={(e) => setProdBasePrice(e.target.value)}
                         placeholder="500000"
@@ -641,6 +644,9 @@ export function ProductWizardModal({
                       />
                       <span className="pwm-input-unit">VND</span>
                     </div>
+                    <small style={{ color: '#64748B', fontSize: '11.5px', display: 'block', marginTop: '4px' }}>
+                      Từ 50.000đ – 10.000.000đ (bội số 1.000đ). Thuê theo giờ mặc định 20%/giờ, trần tối đa bằng giá ngày.
+                    </small>
                   </div>
 
                   <div className="pwm-form-group">
@@ -650,15 +656,21 @@ export function ProductWizardModal({
                     <div className="pwm-input-unit-wrap">
                       <input
                         type="number"
+                        min={0}
+                        max={5000000}
+                        step={1000}
                         value={prodDepositAmount}
                         onChange={(e) => setProdDepositAmount(e.target.value)}
-                        placeholder="1000000"
+                        placeholder="200000"
                         className="pwm-input"
                         style={{ paddingRight: '50px' }}
                         required
                       />
                       <span className="pwm-input-unit">VND</span>
                     </div>
+                    <small style={{ color: '#64748B', fontSize: '11.5px', display: 'block', marginTop: '4px' }}>
+                      0đ hoặc 20.000đ – 5.000.000đ, và luôn nhỏ hơn giá thuê/ngày (bội số 1.000đ).
+                    </small>
                   </div>
                 </div>
 
@@ -671,10 +683,12 @@ export function ProductWizardModal({
                     <div className="pwm-input-unit-wrap">
                       <input
                         type="number"
-                        min={1}
+                        min={100000}
+                        max={50000000}
+                        step={1000}
                         value={prodReplacementValue}
                         onChange={(e) => setProdReplacementValue(e.target.value)}
-                        placeholder="Ví dụ: 2000000"
+                        placeholder="Ví dụ: 1500000"
                         className="pwm-input"
                         style={{ paddingRight: '50px' }}
                       />

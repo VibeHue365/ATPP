@@ -958,6 +958,14 @@ export class ProviderOverviewService {
       const type = b.status;
 
       switch (b.status) {
+        case 'DRAFT':
+          title = `Đơn nháp ${code}`;
+          description = 'Khách hàng đang chuẩn bị hoàn tất đơn đặt lịch';
+          break;
+        case 'PENDING_PAYMENT':
+          title = `Đơn ${code} chờ thanh toán`;
+          description = `Khách ${custName} chưa hoàn tất thanh toán`;
+          break;
         case 'DEPOSIT_PAID':
           title = `${custName} đã đặt cọc đơn ${code}`;
           description = 'Đơn mới đang chờ đối tác xác nhận lịch hẹn';
@@ -965,6 +973,10 @@ export class ProviderOverviewService {
         case 'CONFIRMED':
           title = `Xác nhận thành công đơn ${code}`;
           description = `Lịch hẹn với khách hàng ${custName} đã được cố định`;
+          break;
+        case 'PICKUP_PENDING':
+          title = `Sẵn sàng bàn giao đơn ${code}`;
+          description = `Đang chờ khách ${custName} đến nhận trang phục`;
           break;
         case 'PICKED_UP':
           title = `Khách hàng đã nhận đồ đơn ${code}`;
@@ -978,6 +990,14 @@ export class ProviderOverviewService {
           title = `Đã giao ảnh xem trước đơn ${code}`;
           description = 'Đang chờ khách duyệt và phản hồi ảnh chụp';
           break;
+        case 'COMBO_PHOTOS_APPROVED':
+          title = `Khách đã duyệt ảnh đơn ${code}`;
+          description = `Khách ${custName} đang trong giai đoạn trả trang phục`;
+          break;
+        case 'RETURN_PENDING':
+          title = `Khách hẹn trả đồ đơn ${code}`;
+          description = `Chờ đối tác kiểm tra và xác nhận nhận lại trang phục`;
+          break;
         case 'RETURNED':
           title = `Đã nhận trả trang phục đơn ${code}`;
           description = `Khách ${custName} đã hoàn trả trang phục thuê`;
@@ -989,6 +1009,18 @@ export class ProviderOverviewService {
         case 'CANCELLED':
           title = `Đơn hàng ${code} đã bị huỷ`;
           description = 'Ghi nhận huỷ lịch theo chính sách của nền tảng';
+          break;
+        case 'DISPUTED':
+          title = `Đơn ${code} đang tranh chấp`;
+          description = 'Đơn hàng đang được Admin và các bên đối soát';
+          break;
+        case 'PARTIALLY_REFUNDED':
+          title = `Đơn ${code} hoàn tiền một phần`;
+          description = 'Hệ thống đã hoàn tiền một phần theo thỏa thuận/chính sách';
+          break;
+        case 'REFUNDED':
+          title = `Đơn ${code} đã hoàn tiền`;
+          description = 'Khoản tiền cọc/thanh toán đã được hoàn lại cho khách';
           break;
       }
 

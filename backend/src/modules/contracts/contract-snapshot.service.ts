@@ -155,10 +155,37 @@ export class ContractSnapshotService {
         item.quantity = 1;
       }
       if (!item.pickupReturnLocationSnapshot) {
+        const useBusinessAddress =
+          (provider as any)?.rentalSettings?.useBusinessAddressForPickup !==
+          false;
+        const customPickup = (provider as any)?.rentalSettings?.pickupLocation;
+        const loc =
+          !useBusinessAddress && customPickup
+            ? customPickup
+            : (provider.address as any);
+        const formattedAddress =
+          [
+            loc?.addressLine || loc?.fullAddress || loc?.address,
+            loc?.ward,
+            loc?.district,
+            loc?.city,
+          ]
+            .filter(
+              (part) => typeof part === 'string' && part.trim().length > 0,
+            )
+            .map((part) => part.trim())
+            .join(', ') || 'Tại cửa hàng cung cấp';
+        const hasValidGeo =
+          Array.isArray(loc?.geo?.coordinates) &&
+          loc.geo.coordinates.length === 2;
         item.pickupReturnLocationSnapshot = {
-          address:
-            (provider.address as any)?.fullAddress || 'Tại cửa hàng cung cấp',
-          geo: { type: 'Point', coordinates: [107.590866, 16.463713] },
+          address: formattedAddress,
+          ...(loc?.ward ? { ward: loc.ward } : {}),
+          ...(loc?.district ? { district: loc.district } : {}),
+          ...(loc?.city ? { city: loc.city } : {}),
+          geo: hasValidGeo
+            ? loc.geo
+            : { type: 'Point', coordinates: [107.590866, 16.463713] },
         };
       }
       if (

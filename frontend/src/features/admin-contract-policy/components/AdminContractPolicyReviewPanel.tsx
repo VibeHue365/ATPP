@@ -22,6 +22,7 @@ import {
   resolveDamageCompensationRules,
 } from '../../../services/contractService';
 import { translateError } from '../../../utils/errorTranslator';
+import { getModerationStatusMeta } from '../../../utils/bookingStatus';
 import { validateDisputeResolutionClause } from '../../provider-dashboard/service-profile/disputeTermsGuardrail';
 
 function renderDamageReviewSummary(damageCompensation: any) {
@@ -625,22 +626,28 @@ export const AdminContractPolicyReviewPanel: React.FC = () => {
                     <div className="space-y-2 pt-2">
                       <span className="font-semibold text-stone-700 block">Lịch sử các phiên bản trước đó:</span>
                       <div className="flex flex-wrap gap-2">
-                        {detailData.history.map((h) => (
-                          <span
-                            key={h.id || h.versionNumber}
-                            className={`px-2.5 py-1 rounded-md text-[11px] border font-mono ${
-                              h.status === 'APPROVED'
-                                ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
-                                : h.status === 'REJECTED'
-                                ? 'bg-rose-50 border-rose-300 text-rose-800'
-                                : h.status === 'SUPERSEDED'
-                                ? 'bg-stone-100 border-stone-200 text-stone-500 line-through'
-                                : 'bg-amber-50 border-amber-300 text-amber-800'
-                            }`}
-                          >
-                            v{h.versionNumber} ({h.status})
-                          </span>
-                        ))}
+                        {detailData.history.map((h) => {
+                          const historyStatusLabel =
+                            h.status === 'SUPERSEDED'
+                              ? 'Đã thay thế'
+                              : getModerationStatusMeta(h.status).label;
+                          return (
+                            <span
+                              key={h.id || h.versionNumber}
+                              className={`px-2.5 py-1 rounded-md text-[11px] border font-mono ${
+                                h.status === 'APPROVED'
+                                  ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                                  : h.status === 'REJECTED'
+                                  ? 'bg-rose-50 border-rose-300 text-rose-800'
+                                  : h.status === 'SUPERSEDED'
+                                  ? 'bg-stone-100 border-stone-200 text-stone-500 line-through'
+                                  : 'bg-amber-50 border-amber-300 text-amber-800'
+                              }`}
+                            >
+                              v{h.versionNumber} ({historyStatusLabel})
+                            </span>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

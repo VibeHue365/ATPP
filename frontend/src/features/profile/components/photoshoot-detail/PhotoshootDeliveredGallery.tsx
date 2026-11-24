@@ -18,7 +18,7 @@ interface PhotoshootDeliveredGalleryProps {
 export const PhotoshootDeliveredGallery: React.FC<PhotoshootDeliveredGalleryProps> = ({
   photos = [],
   driveUrl,
-  bookingCode = 'PS-LUME',
+  bookingCode = 'PS-TAGO',
   status,
   onViewPhoto,
   onConfirmComplete,

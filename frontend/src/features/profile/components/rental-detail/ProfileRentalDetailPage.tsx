@@ -12,6 +12,7 @@ import { PrivateEvidenceImage } from '../../../../components/common/PrivateEvide
 import Swal from 'sweetalert2';
 import { httpClient } from '../../../../services/httpClient';
 import { useSocket } from '../../../../context/SocketContext';
+import { getBookingStatusLabel } from '../../../../utils/bookingStatus';
 
 interface ProfileRentalDetailPageProps {
   booking?: any;
@@ -221,32 +222,13 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     incident?.status === 'PENDING_CUSTOMER';
   const isDisputed = booking?.status === 'DISPUTED' || incident?.status === 'DISPUTED';
 
-  const statusLabels: Record<string, string> = {
-    CONFIRMED: isPhoto ? 'SẮP CHỤP' : 'SẮP NHẬN',
-    DEPOSIT_PAID: isPhoto ? 'ĐÃ ĐẶT CỌC' : 'ĐÃ ĐẶT CỌC',
-    PENDING_PAYMENT: 'CHỜ THANH TOÁN',
-    PICKUP_PENDING: 'CHỜ NHẬN ĐỒ',
-    READY_FOR_PICKUP: 'CHỜ NHẬN ĐỒ',
-    PICKED_UP: isPhoto ? 'ĐANG CHỤP' : 'ĐANG THUÊ',
-    IN_PROGRESS: isPhoto ? 'ĐANG CHỤP' : 'ĐANG THUÊ',
-    RENTING: isPhoto ? 'ĐANG CHỤP' : 'ĐANG THUÊ',
-    AWAITING_REVIEW: 'CHỜ DUYỆT ẢNH',
-    RETURN_PENDING: isPendingCustomerIncident ? 'CHỜ DUYỆT SỰ CỐ' : 'CHỜ TRẢ ĐỒ',
-    RETURNED: isPhoto ? 'HOÀN THÀNH' : 'ĐÃ TRẢ ĐỒ',
-    COMBO_PHOTOS_APPROVED: isPhoto ? 'ĐÃ DUYỆT ẢNH' : 'ĐÃ TRẢ ĐỒ',
-    COMPLETED: 'HOÀN THÀNH',
-    CANCELLED: 'ĐÃ HỦY',
-    DISPUTED: 'TRANH CHẤP'
-  };
-
   const currentStatus = isDisputed
     ? 'DISPUTED'
     : booking?.status || item?.rentalFulfillment?.status || 'CONFIRMED';
-  const currentStatusLabel = isPendingCustomerIncident
-    ? 'CHỜ DUYỆT SỰ CỐ'
-    : isDisputed
-    ? 'TRANH CHẤP'
-    : statusLabels[currentStatus] || currentStatus || (isPhoto ? 'SẮP CHỤP' : 'SẮP NHẬN');
+  const currentStatusLabel = getBookingStatusLabel(currentStatus, {
+    hasPendingIncident: isPendingCustomerIncident,
+    uppercase: true,
+  });
 
   // Financial values
   const rentalPrice = (item.unitPrice || 0) * (item.quantity || 1) || booking?.pricingSummary?.subTotal || 0;

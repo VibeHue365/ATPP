@@ -15,6 +15,7 @@ import { CreateCampaignDto } from '../dto/create-campaign.dto';
 import {
   applyCampaignToRate,
   calculateDailyRentalTotal,
+  calculateHourlyRentalTotal,
   getStartOfVnDay,
   resolveHourlyRate,
   toVnDayKey,
@@ -144,7 +145,7 @@ export class DiscountCampaignService {
     return calculateDailyRentalTotal(basePrice, campaign, from, to);
   }
 
-  /** Giá một giờ thuê vào ngày `day`: 30% giá ngày, rồi áp chiến dịch nếu ngày đó thuộc chiến dịch. */
+  /** Giá một giờ thuê vào ngày `day`: mặc định 20% giá ngày, rồi áp chiến dịch nếu ngày đó thuộc chiến dịch. */
   async calculateHourlyRate(
     basePrice: number,
     hourlyPrice: number | null | undefined,
@@ -156,6 +157,24 @@ export class DiscountCampaignService {
       resolveHourlyRate(basePrice, hourlyPrice),
       campaign,
       day,
+    );
+  }
+
+  /** Tổng tiền thuê theo giờ cho 1 ngày, áp chiến dịch và trần tối đa bằng giá thuê trọn ngày. */
+  async calculateHourlyRental(
+    basePrice: number,
+    hourlyPrice: number | null | undefined,
+    providerId: string | Types.ObjectId,
+    day: Date | string,
+    durationHours: number,
+  ): Promise<{ total: number; hourlyRate: number; dailyCap: number; hours: number }> {
+    const campaign = await this.getActiveCampaign(providerId);
+    return calculateHourlyRentalTotal(
+      basePrice,
+      hourlyPrice,
+      campaign,
+      day,
+      durationHours,
     );
   }
 

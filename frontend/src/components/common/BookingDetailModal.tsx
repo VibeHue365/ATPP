@@ -11,6 +11,7 @@ import { downloadPhotosAsZip, downloadSinglePhoto } from '../../utils/downloadUt
 import { useToast } from '../feedback/Toast';
 import { ConfirmModal } from '../../utils/confirmModal';
 import { BookingContractsSection } from '../contracts/BookingContractsSection';
+import { getBookingStatusMeta, getRescheduleStatusMeta } from '../../utils/bookingStatus';
 
 interface BookingDetailModalProps {
   bookingId: string | null;
@@ -233,21 +234,8 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
   };
 
   const getStatusBadge = (status: string) => {
-    const statusMap: Record<string, { text: string; bg: string; color: string }> = {
-      PENDING_PAYMENT: { text: 'Chờ thanh toán', bg: '#FEF3C7', color: '#D97706' },
-      CONFIRMED: { text: 'Đã xác nhận', bg: '#E0F2FE', color: '#0284C7' },
-      PICKUP_PENDING: { text: 'Chờ nhận đồ', bg: '#EEF2F6', color: '#4B5563' },
-      PICKED_UP: { text: 'Đang thuê', bg: '#F5F3FF', color: '#7C3AED' },
-      RETURN_PENDING: incident
-        ? { text: 'Chờ duyệt sự cố', bg: '#FFF1F2', color: '#E11D48' }
-        : { text: 'Chờ kiểm tra đồ', bg: '#FAF6F0', color: '#7A6B58' },
-      RETURNED: { text: 'Đã trả đồ', bg: '#ECFDF5', color: '#059669' },
-      COMPLETED: { text: 'Đã hoàn thành', bg: '#D1FAE5', color: '#065F46' },
-      CANCELLED: { text: 'Đã hủy', bg: '#FEE2E2', color: '#B91C1C' },
-      DISPUTED: { text: 'Tranh chấp', bg: '#FEE2E2', color: '#991B1B' }
-    };
-
-    const config = statusMap[status] || { text: status, bg: '#F3F4F6', color: '#374151' };
+    const meta = getBookingStatusMeta(status, { hasPendingIncident: Boolean(incident) });
+    const config = { text: meta.label, bg: meta.bg, color: meta.color };
     return (
       <span style={{
         padding: '4px 8px',
@@ -685,7 +673,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                       gap: '12px'
                     }}>
                       <div>
-                        <div style={{ fontSize: '11px', fontWeight: 800, color: '#B45309', textTransform: 'uppercase' }}>🔄 YÊU CẦU ĐỔI LỊCH MỚI ({rescheduleReq.status}):</div>
+                        <div style={{ fontSize: '11px', fontWeight: 800, color: '#B45309', textTransform: 'uppercase' }}>🔄 YÊU CẦU ĐỔI LỊCH MỚI ({getRescheduleStatusMeta(rescheduleReq.status).label}):</div>
                         <div style={{ fontSize: '13px', fontWeight: 700, color: '#DC2626', marginTop: '2px' }}>
                           Ngày mới: {new Date(rescheduleReq.newShootDate || rescheduleReq.newRentalFrom).toLocaleDateString('vi-VN')} {rescheduleReq.newShootTimeSlot ? `(${rescheduleReq.newShootTimeSlot.replace('-', ' - ')})` : ''}
                         </div>

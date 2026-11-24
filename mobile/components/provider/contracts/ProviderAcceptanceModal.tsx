@@ -76,7 +76,7 @@ export function ProviderAcceptanceModal({
           >
             <View style={styles.metaCard}>
               <Text style={styles.metaText}>
-                Mã quy chế: <Text style={styles.metaMono}>{mechanism?.regulationCode || 'QC-VIBEHUE-2026-V1'}</Text>
+                Mã quy chế: <Text style={styles.metaMono}>{mechanism?.regulationCode || 'QC-TAGO-2026-V1'}</Text>
               </Text>
               <Text style={styles.metaText}>
                 Phiên bản: <Text style={styles.metaMono}>{mechanism?.version || 'auto-acceptance-v1'}</Text>
@@ -110,7 +110,7 @@ export function ProviderAcceptanceModal({
               </Text>
               <Text style={styles.clauseBody}>
                 {mechanism?.description ||
-                  'Nhà cung cấp cam kết và chấp thuận trước cơ chế giao kết hợp đồng điện tử tự động khi khách hàng đặt thuê áo dài trên nền tảng TàGo / VibeHue.'}
+                  'Nhà cung cấp cam kết và chấp thuận trước cơ chế giao kết hợp đồng điện tử tự động khi khách hàng đặt thuê áo dài trên nền tảng TàGo.'}
               </Text>
               <Text style={styles.clauseBody}>
                 1.1. Khi khách hàng đặt đơn thuê hợp lệ theo sản phẩm, đơn giá,

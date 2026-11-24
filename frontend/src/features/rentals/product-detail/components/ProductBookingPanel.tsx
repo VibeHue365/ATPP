@@ -17,6 +17,7 @@ import type {
   RentalTimeSlot,
 } from "../types/product-detail.types";
 import { RentalDateTimeModal } from "./RentalDateTimeModal";
+import { resolveHourlyRate } from "../../../../shared/pricing/campaignPricing";
 
 export interface ProductBookingPanelProps {
   product: ProductDetail;
@@ -114,7 +115,7 @@ export const ProductBookingPanel: React.FC<{
   const [isRentalModalOpen, setIsRentalModalOpen] = useState(false);
 
   const basePrice = getBasePrice(product);
-  const hourlyRate = product.hourlyPrice || Math.round(basePrice * 0.3);
+  const hourlyRate = resolveHourlyRate(basePrice, product.hourlyPrice);
   const dailyLabel = `${basePrice.toLocaleString("vi-VN")}đ / ngày`;
   const hourlyLabel = `${hourlyRate.toLocaleString("vi-VN")}đ / giờ - tối thiểu 2 giờ`;
   const durationLabel = getDurationLabel(displayPrice, rentalMode);

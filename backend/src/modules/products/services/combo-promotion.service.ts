@@ -5,8 +5,18 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { IsString, IsOptional, IsNumber, IsNotEmpty } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsNotEmpty,
+  Min,
+  Max,
+} from 'class-validator';
 import { Type } from 'class-transformer';
+
+export const MIN_COMBO_PRICE = 50_000;
+export const MAX_COMBO_PRICE = 50_000_000;
 import {
   ComboPromotion,
   ComboPromotionDocument,
@@ -34,11 +44,15 @@ export class CreateComboPromotionDto {
   photographyPackageId: string;
 
   @IsNumber()
+  @Min(1, { message: 'Phần trăm giảm giá phải từ 1% đến 80%' })
+  @Max(80, { message: 'Phần trăm giảm giá phải từ 1% đến 80%' })
   @Type(() => Number)
   discountPercent: number;
 
   @IsNumber()
   @IsOptional()
+  @Min(MIN_COMBO_PRICE, { message: 'Giá combo tối thiểu là 50.000đ' })
+  @Max(MAX_COMBO_PRICE, { message: 'Giá combo tối đa là 50.000.000đ' })
   @Type(() => Number)
   comboPrice?: number;
 
@@ -94,11 +108,15 @@ export class UpdateComboPromotionDto {
 
   @IsNumber()
   @IsOptional()
+  @Min(1, { message: 'Phần trăm giảm giá phải từ 1% đến 80%' })
+  @Max(80, { message: 'Phần trăm giảm giá phải từ 1% đến 80%' })
   @Type(() => Number)
   discountPercent?: number;
 
   @IsNumber()
   @IsOptional()
+  @Min(MIN_COMBO_PRICE, { message: 'Giá combo tối thiểu là 50.000đ' })
+  @Max(MAX_COMBO_PRICE, { message: 'Giá combo tối đa là 50.000.000đ' })
   @Type(() => Number)
   comboPrice?: number;
 
@@ -181,6 +199,15 @@ export class ComboPromotionService {
 
     if (dto.discountPercent < 1 || dto.discountPercent > 80) {
       throw new BadRequestException('Phần trăm giảm giá phải từ 1% đến 80%');
+    }
+    if (
+      dto.comboPrice !== undefined &&
+      dto.comboPrice !== null &&
+      (dto.comboPrice < MIN_COMBO_PRICE || dto.comboPrice > MAX_COMBO_PRICE)
+    ) {
+      throw new BadRequestException(
+        'Giá combo phải nằm trong khoảng từ 50.000đ đến 50.000.000đ',
+      );
     }
 
     const validFromDate = new Date(dto.validFrom);
@@ -535,7 +562,17 @@ export class ComboPromotionService {
       }
       updateData.discountPercent = dto.discountPercent;
     }
-    if (dto.comboPrice !== undefined) updateData.comboPrice = dto.comboPrice;
+    if (dto.comboPrice !== undefined) {
+      if (
+        dto.comboPrice !== null &&
+        (dto.comboPrice < MIN_COMBO_PRICE || dto.comboPrice > MAX_COMBO_PRICE)
+      ) {
+        throw new BadRequestException(
+          'Giá combo phải nằm trong khoảng từ 50.000đ đến 50.000.000đ',
+        );
+      }
+      updateData.comboPrice = dto.comboPrice;
+    }
     if (dto.validFrom !== undefined)
       updateData.validFrom = dto.validFrom ? new Date(dto.validFrom) : null;
     if (dto.validTo !== undefined)

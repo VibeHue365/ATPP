@@ -7,7 +7,7 @@ import {
   Shirt,
 } from 'lucide-react';
 import type { Order } from '../types';
-import { getOrderGroup } from '../orderHelpers';
+import { getBookingStatusGroup, normalizeBookingStatusCode } from '../../../../utils/bookingStatus';
 
 interface OrderTableRowProps {
   order: Order;
@@ -87,21 +87,27 @@ export function OrderTableRow({
   // Status Pill Class
   const statusPillClass = React.useMemo(() => {
     if (order.pickupDamageReport) return 'p-status-pill p-pill-damage';
-    const group = getOrderGroup(order.status);
-    if (group === 'Hoàn thành') return 'p-status-pill p-pill-completed';
-    if (group === 'Đã hủy') return 'p-status-pill p-pill-cancelled';
-    if (order.rawStatus === 'IN_PROGRESS' || order.status === 'ĐANG CHỤP') return 'p-status-pill p-pill-in-progress';
-    if (order.rawStatus === 'PICKUP_PENDING' || order.status === 'CHỜ NHẬN ĐỒ') return 'p-status-pill p-pill-pickup-pending';
-    if (order.rawStatus === 'DEPOSIT_PAID' || order.rawStatus === 'CONFIRMED') return 'p-status-pill p-pill-upcoming';
+    const rawCode = normalizeBookingStatusCode(order.rawStatus || order.status);
+    const group = getBookingStatusGroup(rawCode || order.status);
+    if (group === 'COMPLETED') return 'p-status-pill p-pill-completed';
+    if (group === 'CANCELLED') return 'p-status-pill p-pill-cancelled';
+    if (group === 'DISPUTED') return 'p-status-pill p-pill-damage';
+    if (rawCode === 'IN_PROGRESS') return 'p-status-pill p-pill-in-progress';
+    if (rawCode === 'PICKUP_PENDING' || rawCode === 'RETURN_PENDING') return 'p-status-pill p-pill-pickup-pending';
+    if (rawCode === 'DEPOSIT_PAID' || rawCode === 'CONFIRMED') return 'p-status-pill p-pill-upcoming';
     return 'p-status-pill p-pill-in-progress';
   }, [order]);
 
   const depositSubline = React.useMemo(() => {
-    if (order.rawStatus === 'COMPLETED' || order.status === 'HOÀN THÀNH') {
+    const rawCode = normalizeBookingStatusCode(order.rawStatus || order.status);
+    if (rawCode === 'COMPLETED') {
       return 'Đã thanh toán đủ';
     }
-    if (order.rawStatus === 'PENDING' || order.rawStatus === 'PENDING_PAYMENT') {
+    if (rawCode === 'DRAFT' || rawCode === 'PENDING_PAYMENT') {
       return 'Chờ thanh toán';
+    }
+    if (rawCode === 'CANCELLED' || rawCode === 'REFUNDED' || rawCode === 'PARTIALLY_REFUNDED') {
+      return 'Đã hủy / Hoàn tiền';
     }
     if (order.bookingType === 'PHOTOGRAPHY') {
       return 'Đã cọc 20%';
@@ -125,7 +131,7 @@ export function OrderTableRow({
       {/* 2. Mã đơn */}
       <td style={{ whiteSpace: 'nowrap' }}>
         <span className="p-order-id-badge">
-          {order.id || `#VH-${order._id.slice(-5).toUpperCase()}`}
+          {order.id || `#TG-${order._id.slice(-5).toUpperCase()}`}
         </span>
       </td>
 

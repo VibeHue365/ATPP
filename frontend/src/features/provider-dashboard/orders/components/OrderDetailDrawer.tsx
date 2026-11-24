@@ -33,6 +33,7 @@ import {
 import type { Order } from '../types';
 import traditionalAoDaiImg from '../../../../assets/images/onboarding_traditional.webp';
 import { RentalEvidenceImage } from '../../../rentals/components/RentalEvidenceImage';
+import { getRentalFulfillmentMeta, normalizeBookingStatusCode } from '../../../../utils/bookingStatus';
 import { BookingContractsSection } from '../../../../components/contracts/BookingContractsSection';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../../../services/httpClient';
@@ -183,7 +184,7 @@ export function OrderDetailDrawer({
   );
 
   const copyOrderId = () => {
-    const code = order.id || `#VH-${order._id.slice(-5).toUpperCase()}`;
+    const code = order.id || `#TG-${order._id.slice(-5).toUpperCase()}`;
     navigator.clipboard.writeText(code);
     toast.success('Đã sao chép mã đơn: ' + code);
   };
@@ -191,9 +192,10 @@ export function OrderDetailDrawer({
   const isCombo = order.bookingType === 'COMBO';
   const isPhoto = order.bookingType === 'PHOTOGRAPHY';
   const isAoDai = !isCombo && !isPhoto;
-  const rawStatus = (order.rawStatus || '').toUpperCase();
-  const isOrderCompleted = rawStatus === 'COMPLETED' || (order.status || '').toUpperCase() === 'HOÀN THÀNH' || (order.status || '').toUpperCase() === 'COMPLETED';
-  const isCancelled = rawStatus === 'CANCELLED' || (order.status || '').toUpperCase() === 'ĐÃ HỦY' || (order.status || '').toUpperCase() === 'CANCELLED';
+  const normalizedStatus = normalizeBookingStatusCode(order.rawStatus || order.status);
+  const rawStatus = normalizedStatus || order.rawStatus || '';
+  const isOrderCompleted = normalizedStatus === 'COMPLETED';
+  const isCancelled = normalizedStatus === 'CANCELLED';
   const primaryItem = order.items?.[0];
   const primaryRentalItem = order.items?.find((item: any) =>
     item?.itemType === 'PRODUCT' || item?.productId || (!item?.itemType && !item?.photographyPackageId),
@@ -1349,7 +1351,7 @@ export function OrderDetailDrawer({
                 </h2>
                 <div className="p-dh-subgroup">
                   <span className="p-code-badge">
-                    {order.id || `#VH-${order._id.slice(-5).toUpperCase()}`}
+                    {order.id || `#TG-${order._id.slice(-5).toUpperCase()}`}
                     <button
                       type="button"
                       onClick={copyOrderId}
@@ -1410,7 +1412,7 @@ export function OrderDetailDrawer({
           <div className="p-dh-details-bar">
             <div className="p-dh-item">
               <span className="label">Mã đơn:</span>
-              <span className="val">{order.id || `#VH-${order._id.slice(-5).toUpperCase()}`}</span>
+              <span className="val">{order.id || `#TG-${order._id.slice(-5).toUpperCase()}`}</span>
             </div>
             <div className="p-dh-item">
               <span className="label">Khách hàng:</span>
@@ -1980,7 +1982,7 @@ export function OrderDetailDrawer({
                               display: 'inline-block',
                               marginTop: '4px'
                             }}>
-                              {isOrderCompleted ? '✓ Đã hoàn tất' : (item.rentalFulfillment?.status ? `Trạng thái: ${item.rentalFulfillment.status}` : 'Đang xử lý')}
+                              {isOrderCompleted ? '✓ Đã hoàn tất' : (item.rentalFulfillment?.status ? `Trạng thái: ${getRentalFulfillmentMeta(item.rentalFulfillment.status).label}` : 'Đang xử lý')}
                             </span>
                             {isProd && !isSingleRentalItem && !isCombo && !isOrderCompleted && (
                               <div style={{ marginTop: '8px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
@@ -2061,7 +2063,7 @@ export function OrderDetailDrawer({
                 <div style={{ marginTop: '16px' }}>
                   <BookingContractsSection
                     bookingId={order._id}
-                    bookingStatus={order.status}
+                    bookingStatus={order.rawStatus || order.status}
                     viewerRole="provider"
                     title="Hợp đồng điện tử (Phạm vi đối tác)"
                     hideWhenEmpty={true}
@@ -2142,7 +2144,7 @@ export function OrderDetailDrawer({
                         </div>
                         <div className="p-quick-doc-info">
                           <span className="p-quick-doc-title">Biên bản điện tử đơn đặt lịch</span>
-                          <span className="p-quick-doc-meta">Mã xác nhận đơn {order.id || `#VH-${order._id.slice(-5).toUpperCase()}`}</span>
+                          <span className="p-quick-doc-meta">Mã xác nhận đơn {order.id || `#TG-${order._id.slice(-5).toUpperCase()}`}</span>
                         </div>
                       </div>
                       <span style={{ fontSize: '10.5px', fontWeight: 600, color: '#059669', background: '#ECFDF5', padding: '2px 8px', borderRadius: '4px' }}>
@@ -2169,30 +2171,40 @@ export function OrderDetailDrawer({
 
                 {/* Card 4: Thông tin thanh toán & Escrow */}
                 <div className="p-card-box">
-                  <div className="p-card-header">
-                    <h3 className="p-card-title">
-                      <ShieldCheck size={16} color="#881337" />
-                      <span>Thông tin thanh toán &amp; Ký quỹ (Escrow)</span>
-                    </h3>
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#059669', background: '#ECFDF5', padding: '2px 8px', borderRadius: '6px' }}>
-                      {order.rawStatus === 'PENDING' || order.rawStatus === 'PENDING_PAYMENT' ? 'Chờ thanh toán cọc' : '✓ Đã thanh toán Escrow'}
-                    </span>
-                  </div>
-
                   {(() => {
+                    const rawCode = String(order.rawStatus || '').toUpperCase();
+                    const isUnpaidOrder = !rawCode || ['DRAFT', 'PENDING', 'PENDING_PAYMENT'].includes(rawCode);
+                    const isCancelledOrder = rawCode === 'CANCELLED';
+                    const isRefundedOrder = rawCode === 'REFUNDED' || rawCode === 'PARTIALLY_REFUNDED';
+                    const isPaidStatus = !isUnpaidOrder && !isCancelledOrder && !isRefundedOrder;
+
+                    const escrowBadge = isUnpaidOrder
+                      ? { text: 'Chờ thanh toán cọc', color: '#B45309', background: '#FFFBEB' }
+                      : isCancelledOrder
+                      ? { text: 'Đơn đã hủy', color: '#B91C1C', background: '#FEF2F2' }
+                      : rawCode === 'REFUNDED'
+                      ? { text: 'Đã hoàn tiền', color: '#475569', background: '#F1F5F9' }
+                      : rawCode === 'PARTIALLY_REFUNDED'
+                      ? { text: 'Hoàn tiền một phần', color: '#B45309', background: '#FFFBEB' }
+                      : isOrderCompleted
+                      ? { text: '✓ Đã tất toán Escrow', color: '#059669', background: '#ECFDF5' }
+                      : { text: '✓ Đã thanh toán Escrow', color: '#059669', background: '#ECFDF5' };
+
                     const grandTotal = order.pricingSummary?.grandTotal || order.totalAmount || Number((order.total || '').replace(/[^\d]/g, '')) || 0;
                     const assetDeposit = Number(order.depositTotal || order.pricingSummary?.depositTotal || 0);
                     const isRental = order.bookingType === 'AODAI_RENTAL';
                     const isPhoto = order.bookingType === 'PHOTOGRAPHY';
                     const isCombo = order.bookingType === 'COMBO';
-                    const isPaidStatus = !['PENDING', 'PENDING_PAYMENT'].includes(order.rawStatus || '');
                     const totalPaid = Number(order.paymentSummary?.totalPaid || 0);
                     const serviceAmount = Math.max(0, Number(order.pricingSummary?.subTotal || (grandTotal - assetDeposit)));
 
                     let serviceDepositPaid = 0;
                     let remaining = 0;
 
-                    if (isOrderCompleted || order.paymentSummary?.paymentStatus === 'PAID') {
+                    if (isCancelledOrder || isRefundedOrder) {
+                      serviceDepositPaid = totalPaid > 0 ? Math.min(totalPaid, serviceAmount) : 0;
+                      remaining = 0;
+                    } else if (isOrderCompleted || order.paymentSummary?.paymentStatus === 'PAID') {
                       serviceDepositPaid = serviceAmount;
                       remaining = 0;
                     } else if (isRental) {
@@ -2211,33 +2223,72 @@ export function OrderDetailDrawer({
                       remaining = isPaidStatus ? Math.max(0, grandTotal - serviceDepositPaid - assetDeposit) : grandTotal;
                     }
 
+                    const serviceStatusNote = isCancelledOrder
+                      ? '(Đơn đã hủy)'
+                      : rawCode === 'REFUNDED'
+                      ? '(Đã hoàn tiền)'
+                      : rawCode === 'PARTIALLY_REFUNDED'
+                      ? '(Hoàn tiền một phần)'
+                      : isPaidStatus
+                      ? '(Đã thanh toán)'
+                      : '(Chờ thanh toán)';
+
+                    const depositStatusNote = isOrderCompleted
+                      ? '(Đã tất toán)'
+                      : isCancelledOrder
+                      ? '(Đơn đã hủy)'
+                      : isRefundedOrder
+                      ? '(Đã xử lý hoàn cọc)'
+                      : isUnpaidOrder
+                      ? '(Chờ thanh toán)'
+                      : '(Đang tạm giữ Escrow)';
+
                     return (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
-                          <span>Tổng giá trị đơn hàng:</span>
-                          <strong style={{ color: '#0F172A', fontSize: '14px' }}>{grandTotal.toLocaleString('vi-VN')}đ</strong>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
-                          <span>{isRental ? 'Tiền thuê trang phục:' : 'Đặt cọc dịch vụ trước:'}</span>
-                          <span style={{ fontWeight: 600, color: '#15803D' }}>
-                            {serviceDepositPaid.toLocaleString('vi-VN')}đ {isPaidStatus ? '(Đã thanh toán)' : '(Chờ thanh toán)'}
+                      <>
+                        <div className="p-card-header">
+                          <h3 className="p-card-title">
+                            <ShieldCheck size={16} color="#881337" />
+                            <span>Thông tin thanh toán &amp; Ký quỹ (Escrow)</span>
+                          </h3>
+                          <span style={{ fontSize: '11px', fontWeight: 700, color: escrowBadge.color, background: escrowBadge.background, padding: '2px 8px', borderRadius: '6px' }}>
+                            {escrowBadge.text}
                           </span>
                         </div>
-                        {assetDeposit > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
-                            <span>Tiền cọc tài sản trang phục:</span>
-                            <span style={{ fontWeight: 600, color: '#0284C7' }}>
-                              {assetDeposit.toLocaleString('vi-VN')}đ {isOrderCompleted ? '(Đã tất toán)' : '(Đang tạm giữ Escrow)'}
+                            <span>Tổng giá trị đơn hàng:</span>
+                            <strong style={{ color: '#0F172A', fontSize: '14px' }}>{grandTotal.toLocaleString('vi-VN')}đ</strong>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                            <span>{isRental ? 'Tiền thuê trang phục:' : 'Đặt cọc dịch vụ trước:'}</span>
+                            <span style={{ fontWeight: 600, color: isPaidStatus ? '#15803D' : '#64748B' }}>
+                              {serviceDepositPaid.toLocaleString('vi-VN')}đ {serviceStatusNote}
                             </span>
                           </div>
-                        )}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #e2e8f0', paddingTop: '8px', fontWeight: 700 }}>
-                          <span style={{ color: '#0F172A' }}>Còn lại cần thanh toán:</span>
-                          <span style={{ color: remaining === 0 ? '#10B981' : '#D97706', fontSize: '14px' }}>
-                            {remaining === 0 ? 'Đã thanh toán đủ' : `${remaining.toLocaleString('vi-VN')}đ`}
-                          </span>
+                          {assetDeposit > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                              <span>Tiền cọc tài sản trang phục:</span>
+                              <span style={{ fontWeight: 600, color: '#0284C7' }}>
+                                {assetDeposit.toLocaleString('vi-VN')}đ {depositStatusNote}
+                              </span>
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #e2e8f0', paddingTop: '8px', fontWeight: 700 }}>
+                            <span style={{ color: '#0F172A' }}>Còn lại cần thanh toán:</span>
+                            <span style={{ color: isCancelledOrder || isRefundedOrder ? '#64748B' : remaining === 0 ? '#10B981' : '#D97706', fontSize: '14px' }}>
+                              {isCancelledOrder
+                                ? 'Không thu (Đơn đã hủy)'
+                                : rawCode === 'REFUNDED'
+                                ? 'Đã hoàn tiền'
+                                : rawCode === 'PARTIALLY_REFUNDED'
+                                ? 'Đã hoàn một phần'
+                                : remaining === 0
+                                ? 'Đã thanh toán đủ'
+                                : `${remaining.toLocaleString('vi-VN')}đ`}
+                            </span>
+                          </div>
                         </div>
-                      </div>
+                      </>
                     );
                   })()}
                 </div>
@@ -2559,7 +2610,7 @@ export function OrderDetailDrawer({
               <div style={{ marginTop: '16px' }}>
                 <BookingContractsSection
                   bookingId={order._id}
-                  bookingStatus={order.status}
+                  bookingStatus={order.rawStatus || order.status}
                   viewerRole="provider"
                   title="Hợp đồng điện tử (Phạm vi đối tác)"
                   hideWhenEmpty={true}
@@ -2618,77 +2669,40 @@ export function OrderDetailDrawer({
               ============================================================ */}
           {activeTab === 'payment' && (
             <div className="p-tab-payment-container">
-              <div className="p-payment-summary-box">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#0F172A' }}>
-                    Bảng kê tài chính chi tiết
-                  </span>
-                  <span className="p-payment-badge-paid">
-                    ✓ Đã thanh toán cọc Escrow
-                  </span>
-                </div>
-
-                {order.items && order.items.length > 0 ? (
-                  order.items.map((item: any, idx: number) => {
-                    const itemName = item.name || item.productId?.name || item.photographyPackageId?.name || (item.itemType === 'PRODUCT' ? 'Áo dài' : 'Gói chụp ảnh');
-                    const linePrice = Number(item.subtotal || (item.unitPrice || item.price || 0) * (item.quantity || 1));
-                    return (
-                      <div key={item._id || idx} className="p-payment-row">
-                        <span>{itemName} (x{item.quantity || 1})</span>
-                        <strong>{linePrice.toLocaleString('vi-VN')}đ</strong>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="p-payment-row">
-                    <span>{order.productName || 'Dịch vụ'}</span>
-                    <strong>{order.total}</strong>
-                  </div>
-                )}
-
-                {Boolean(order.depositTotal && order.depositTotal > 0) && (
-                  <div className="p-payment-row">
-                    <span>Tiền cọc tài sản trang phục (Áo dài)</span>
-                    <strong>{Number(order.depositTotal).toLocaleString('vi-VN')}đ</strong>
-                  </div>
-                )}
-
-                {Boolean(order.pricingSummary?.serviceFee && order.pricingSummary.serviceFee > 0) && (
-                  <div className="p-payment-row">
-                    <span>Phí dịch vụ / Vệ sinh</span>
-                    <strong>{Number(order.pricingSummary.serviceFee).toLocaleString('vi-VN')}đ</strong>
-                  </div>
-                )}
-
-                {Boolean((order.pricingSummary?.voucherDiscountTotal || order.pricingSummary?.discountAmount) && (order.pricingSummary.voucherDiscountTotal > 0 || order.pricingSummary.discountAmount > 0)) && (
-                  <div className="p-payment-row" style={{ color: '#059669' }}>
-                    <span>Ưu đãi giảm giá</span>
-                    <strong>-{Number(order.pricingSummary.voucherDiscountTotal || order.pricingSummary.discountAmount).toLocaleString('vi-VN')}đ</strong>
-                  </div>
-                )}
-
-                <div className="p-payment-row total">
-                  <span>Tổng giá trị đơn hàng:</span>
-                  <span style={{ color: '#BE123C', fontSize: '16px' }}>
-                    {order.total || `${(order.totalAmount || 0).toLocaleString('vi-VN')}đ`}
-                  </span>
-                </div>
-              </div>
-
               {(() => {
+                const rawCode = String(order.rawStatus || '').toUpperCase();
+                const isUnpaidOrder = !rawCode || ['DRAFT', 'PENDING', 'PENDING_PAYMENT'].includes(rawCode);
+                const isCancelledOrder = rawCode === 'CANCELLED';
+                const isRefundedOrder = rawCode === 'REFUNDED' || rawCode === 'PARTIALLY_REFUNDED';
+                const isPaidStatus = !isUnpaidOrder && !isCancelledOrder && !isRefundedOrder;
+
+                const paymentBadge = isUnpaidOrder
+                  ? { text: 'Chờ thanh toán cọc', color: '#B45309', background: '#FFFBEB' }
+                  : isCancelledOrder
+                  ? { text: 'Đơn đã hủy', color: '#B91C1C', background: '#FEF2F2' }
+                  : rawCode === 'REFUNDED'
+                  ? { text: 'Đã hoàn tiền', color: '#475569', background: '#F1F5F9' }
+                  : rawCode === 'PARTIALLY_REFUNDED'
+                  ? { text: 'Hoàn tiền một phần', color: '#B45309', background: '#FFFBEB' }
+                  : isOrderCompleted
+                  ? { text: '✓ Đã tất toán Escrow', color: '#059669', background: '#ECFDF5' }
+                  : { text: '✓ Đã thanh toán cọc Escrow', color: '#059669', background: '#ECFDF5' };
+
                 const grandTotal = order.pricingSummary?.grandTotal || order.totalAmount || Number((order.total || '').replace(/[^\d]/g, '')) || 0;
                 const assetDeposit = Number(order.depositTotal || order.pricingSummary?.depositTotal || 0);
                 const isRental = order.bookingType === 'AODAI_RENTAL';
                 const isPhoto = order.bookingType === 'PHOTOGRAPHY';
                 const isCombo = order.bookingType === 'COMBO';
-                const isPaidStatus = !['PENDING', 'PENDING_PAYMENT'].includes(order.rawStatus || '');
                 const totalPaid = Number(order.paymentSummary?.totalPaid || 0);
                 const serviceAmount = Math.max(0, Number(order.pricingSummary?.subTotal || (grandTotal - assetDeposit)));
 
                 let serviceDepositPaid = 0;
                 let remaining = 0;
 
-                if (isOrderCompleted || order.paymentSummary?.paymentStatus === 'PAID') {
+                if (isCancelledOrder || isRefundedOrder) {
+                  serviceDepositPaid = totalPaid > 0 ? Math.min(totalPaid, serviceAmount) : 0;
+                  remaining = 0;
+                } else if (isOrderCompleted || order.paymentSummary?.paymentStatus === 'PAID') {
                   serviceDepositPaid = serviceAmount;
                   remaining = 0;
                 } else if (isRental) {
@@ -2707,48 +2721,138 @@ export function OrderDetailDrawer({
                   remaining = isPaidStatus ? Math.max(0, grandTotal - serviceDepositPaid - assetDeposit) : grandTotal;
                 }
 
-                return (
-                  <div className="p-payment-summary-box">
-                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>
-                      Trạng thái dòng tiền &amp; Ký quỹ Escrow
-                    </span>
+                const serviceFlowNote = isCancelledOrder
+                  ? 'Đơn đã hủy'
+                  : rawCode === 'REFUNDED'
+                  ? 'Đã hoàn tiền'
+                  : rawCode === 'PARTIALLY_REFUNDED'
+                  ? 'Hoàn tiền một phần'
+                  : isPaidStatus
+                  ? 'Đã thu qua Escrow'
+                  : 'Chờ thanh toán';
 
-                    <div className="p-payment-row">
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <CheckCircle size={14} color="#10B981" />
-                        <span>{isRental ? 'Tiền thuê dịch vụ đã thu' : 'Tiền cọc dịch vụ đã thu'}</span>
-                      </span>
-                      <strong style={{ color: '#10B981' }}>
-                        {serviceDepositPaid.toLocaleString('vi-VN')}đ ({isPaidStatus ? 'Đã thu qua Escrow' : 'Chờ thanh toán'})
-                      </strong>
+                const depositFlowNote = isOrderCompleted
+                  ? 'Đã tất toán'
+                  : isCancelledOrder
+                  ? 'Đơn đã hủy'
+                  : isRefundedOrder
+                  ? 'Đã xử lý hoàn cọc'
+                  : isUnpaidOrder
+                  ? 'Chờ thanh toán'
+                  : 'Đang tạm giữ bảo đảm';
+
+                return (
+                  <>
+                    <div className="p-payment-summary-box">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#0F172A' }}>
+                          Bảng kê tài chính chi tiết
+                        </span>
+                        <span
+                          className="p-payment-badge-paid"
+                          style={{ color: paymentBadge.color, background: paymentBadge.background }}
+                        >
+                          {paymentBadge.text}
+                        </span>
+                      </div>
+
+                      {order.items && order.items.length > 0 ? (
+                        order.items.map((item: any, idx: number) => {
+                          const itemName = item.name || item.productId?.name || item.photographyPackageId?.name || (item.itemType === 'PRODUCT' ? 'Áo dài' : 'Gói chụp ảnh');
+                          const linePrice = Number(item.subtotal || (item.unitPrice || item.price || 0) * (item.quantity || 1));
+                          return (
+                            <div key={item._id || idx} className="p-payment-row">
+                              <span>{itemName} (x{item.quantity || 1})</span>
+                              <strong>{linePrice.toLocaleString('vi-VN')}đ</strong>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="p-payment-row">
+                          <span>{order.productName || 'Dịch vụ'}</span>
+                          <strong>{order.total}</strong>
+                        </div>
+                      )}
+
+                      {Boolean(order.depositTotal && order.depositTotal > 0) && (
+                        <div className="p-payment-row">
+                          <span>Tiền cọc tài sản trang phục (Áo dài)</span>
+                          <strong>{Number(order.depositTotal).toLocaleString('vi-VN')}đ</strong>
+                        </div>
+                      )}
+
+                      {Boolean(order.pricingSummary?.serviceFee && order.pricingSummary.serviceFee > 0) && (
+                        <div className="p-payment-row">
+                          <span>Phí dịch vụ / Vệ sinh</span>
+                          <strong>{Number(order.pricingSummary.serviceFee).toLocaleString('vi-VN')}đ</strong>
+                        </div>
+                      )}
+
+                      {Boolean((order.pricingSummary?.voucherDiscountTotal || order.pricingSummary?.discountAmount) && (order.pricingSummary.voucherDiscountTotal > 0 || order.pricingSummary.discountAmount > 0)) && (
+                        <div className="p-payment-row" style={{ color: '#059669' }}>
+                          <span>Ưu đãi giảm giá</span>
+                          <strong>-{Number(order.pricingSummary.voucherDiscountTotal || order.pricingSummary.discountAmount).toLocaleString('vi-VN')}đ</strong>
+                        </div>
+                      )}
+
+                      <div className="p-payment-row total">
+                        <span>Tổng giá trị đơn hàng:</span>
+                        <span style={{ color: '#BE123C', fontSize: '16px' }}>
+                          {order.total || `${(order.totalAmount || 0).toLocaleString('vi-VN')}đ`}
+                        </span>
+                      </div>
                     </div>
 
-                    {assetDeposit > 0 && (
+                    <div className="p-payment-summary-box">
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>
+                        Trạng thái dòng tiền &amp; Ký quỹ Escrow
+                      </span>
+
                       <div className="p-payment-row">
                         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <CheckCircle size={14} color="#10B981" />
-                          <span>Tiền cọc tài sản trang phục</span>
+                          {isPaidStatus ? <CheckCircle size={14} color="#10B981" /> : <Hourglass size={14} color="#D97706" />}
+                          <span>{isRental ? 'Tiền thuê dịch vụ đã thu' : 'Tiền cọc dịch vụ đã thu'}</span>
                         </span>
-                        <strong style={{ color: '#0284C7' }}>
-                          {assetDeposit.toLocaleString('vi-VN')}đ ({isOrderCompleted ? 'Đã tất toán' : 'Đang tạm giữ bảo đảm'})
+                        <strong style={{ color: isPaidStatus ? '#10B981' : '#64748B' }}>
+                          {serviceDepositPaid.toLocaleString('vi-VN')}đ ({serviceFlowNote})
                         </strong>
                       </div>
-                    )}
 
-                    <div className="p-payment-row">
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {remaining === 0 ? <CheckCircle size={14} color="#10B981" /> : <Hourglass size={14} color="#D97706" />}
-                        <span>Số tiền còn lại cần thu</span>
-                      </span>
-                      <strong style={{ color: remaining === 0 ? '#10B981' : '#D97706' }}>
-                        {remaining === 0 ? 'Đã thanh toán đủ' : `${remaining.toLocaleString('vi-VN')}đ (Thanh toán tại chỗ)`}
-                      </strong>
-                    </div>
+                      {assetDeposit > 0 && (
+                        <div className="p-payment-row">
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            {isPaidStatus ? <CheckCircle size={14} color="#10B981" /> : <Hourglass size={14} color="#D97706" />}
+                            <span>Tiền cọc tài sản trang phục</span>
+                          </span>
+                          <strong style={{ color: '#0284C7' }}>
+                            {assetDeposit.toLocaleString('vi-VN')}đ ({depositFlowNote})
+                          </strong>
+                        </div>
+                      )}
 
-                    <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
-                      Cổng ký quỹ: <strong>TàGo Escrow Banking</strong> &nbsp;|&nbsp; Mã đơn: <strong>{order.id || `#VH-${order._id.slice(-5).toUpperCase()}`}</strong>
+                      <div className="p-payment-row">
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {remaining === 0 && isPaidStatus ? <CheckCircle size={14} color="#10B981" /> : <Hourglass size={14} color="#D97706" />}
+                          <span>Số tiền còn lại cần thu</span>
+                        </span>
+                        <strong style={{ color: isCancelledOrder || isRefundedOrder ? '#64748B' : remaining === 0 ? '#10B981' : '#D97706' }}>
+                          {isCancelledOrder
+                            ? 'Không thu (Đơn đã hủy)'
+                            : rawCode === 'REFUNDED'
+                            ? 'Đã hoàn tiền'
+                            : rawCode === 'PARTIALLY_REFUNDED'
+                            ? 'Đã hoàn một phần'
+                            : remaining === 0
+                            ? 'Đã thanh toán đủ'
+                            : `${remaining.toLocaleString('vi-VN')}đ (${isPaidStatus ? 'Thanh toán tại chỗ' : 'Chờ thanh toán'})`}
+                        </strong>
+                      </div>
+
+                      <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
+                        Cổng ký quỹ: <strong>TàGo Escrow Banking</strong> &nbsp;|&nbsp; Mã đơn: <strong>{order.id || `#TG-${order._id.slice(-5).toUpperCase()}`}</strong>
+                      </div>
                     </div>
-                  </div>
+                  </>
                 );
               })()}
 

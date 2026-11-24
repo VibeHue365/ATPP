@@ -12,7 +12,7 @@ export const AuthLayout: React.FC = () => {
   const slides = [
     {
       img: '/images/hero-silk-stone-v2.webp',
-      tag: 'LUMÉ HERITAGE • ÁO DÀI & NHIẾP ẢNH',
+      tag: 'TÀGO HERITAGE • ÁO DÀI & NHIẾP ẢNH',
       title: 'Tôn vinh nét đẹp Áo dài & Nhiếp ảnh',
       desc: 'Nền tảng kết nối tinh hoa trang phục truyền thống Việt cùng các nhiếp ảnh gia tài năng trên toàn quốc.',
       features: [

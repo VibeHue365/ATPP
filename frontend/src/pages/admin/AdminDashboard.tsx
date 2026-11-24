@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { getVerificationStatusMeta } from "../../utils/bookingStatus";
 import {
   Activity,
   AlertOctagon,
@@ -445,7 +446,7 @@ export default function AdminDashboard() {
             tab: "verifications",
             type: "verification",
             title: item.businessProfile?.businessName || "Hồ sơ đối tác",
-            description: `Hồ sơ đang ở trạng thái ${item.status}.`,
+            description: `Hồ sơ đang ở trạng thái ${getVerificationStatusMeta(item.status).label}.`,
             occurredAt: item.createdAt,
           }),
         );
@@ -734,8 +735,13 @@ export default function AdminDashboard() {
               }}
             >
               <Calendar size={13} color="#881337" />
-              <span>01/07/2024 - 31/07/2024</span>
-              <ChevronDown size={13} color="#9CA3AF" />
+              <span>{(() => {
+                const now = new Date();
+                const m = String(now.getMonth() + 1).padStart(2, '0');
+                const y = now.getFullYear();
+                const last = new Date(y, now.getMonth() + 1, 0).getDate();
+                return `01/${m}/${y} - ${last}/${m}/${y}`;
+              })()}</span>
             </div>
 
             <div className="admin-refactor-notification">

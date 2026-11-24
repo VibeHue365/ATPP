@@ -39,12 +39,11 @@ import {
   getHourDuration,
 } from './product-detail/utils/timeSlotUtils';
 import {
-  applyCampaignToRate,
   calculateDailyRentalTotal,
+  calculateHourlyRentalTotal,
   formatCampaignRange,
   isCampaignDay,
   isSurchargeCampaign,
-  resolveHourlyRate,
 } from '../../shared/pricing/campaignPricing';
 
 import { ProductGallery } from './product-detail/components/ProductGallery';
@@ -1013,11 +1012,13 @@ export const ProductDetailPage: React.FC = () => {
       return calculateDailyRentalTotal(product.basePrice, campaign, startDate, endDate).total;
     } else {
       const hours = getHourDuration(startTime, endTime);
-      const baseHourlyRate = resolveHourlyRate(product.basePrice, product.hourlyPrice);
-      const hourlyRate = singleDate
-        ? applyCampaignToRate(baseHourlyRate, campaign, singleDate)
-        : baseHourlyRate;
-      return hourlyRate * hours;
+      return calculateHourlyRentalTotal(
+        product.basePrice,
+        product.hourlyPrice,
+        singleDate ? campaign : null,
+        singleDate || new Date(),
+        hours,
+      ).total;
     }
   }, [product, rentalMode, startDate, endDate, singleDate, startTime, endTime]);
 

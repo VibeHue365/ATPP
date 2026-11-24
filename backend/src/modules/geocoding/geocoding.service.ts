@@ -48,7 +48,7 @@ export class GeocodingService {
         {
           headers: {
             Accept: 'application/json',
-            'User-Agent': 'VibeHue/1.0 (location search)',
+            'User-Agent': 'TaGo/1.0 (location search)',
           },
           signal: AbortSignal.timeout(8_000),
         },
@@ -70,7 +70,7 @@ export class GeocodingService {
         {
           headers: {
             Accept: 'application/json',
-            'User-Agent': 'VibeHue/1.0 (location search)',
+            'User-Agent': 'TaGo/1.0 (location search)',
           },
           signal: AbortSignal.timeout(8_000),
         },

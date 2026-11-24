@@ -32,16 +32,16 @@ export function StoreProfileHeaderCard({
   const [imageFailed, setImageFailed] = useState(false);
 
   const storeName =
-    profile?.businessName || profile?.brandName || 'LUMÉ Flagship Cố Đô';
+    profile?.businessName || profile?.brandName || 'Cửa hàng đối tác TàGo';
   const addressText =
     profile?.address?.addressLine ||
     [profile?.address?.ward, profile?.address?.district, profile?.address?.city]
       .filter(Boolean)
       .join(', ') ||
-    '12 Lê Lợi, TP. Huế';
+    'Đang cập nhật địa chỉ cửa hàng';
   const storeCode =
     profile?.providerCode ||
-    (profile?._id ? `#VH-${profile._id.slice(-4).toUpperCase()}` : '#VH-BE4A');
+    (profile?._id ? `#TG-${profile._id.slice(-4).toUpperCase()}` : '#TG-PARTNER');
 
   const avgRating =
     performance?.averageRating ?? profile?.rating?.averageRating ?? 4.98;

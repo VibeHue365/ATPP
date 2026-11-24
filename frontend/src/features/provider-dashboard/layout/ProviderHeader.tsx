@@ -16,6 +16,7 @@ import { useAuth } from '../../auth/hooks/useAuth';
 import type { useProviderNavigationState } from '../hooks/useProviderNavigationState';
 import type { useProviderSessionState } from '../hooks/useProviderSessionState';
 import { getImageUrl } from '../shared/mediaHelpers';
+import { getNotificationTypeMeta } from '../../../utils/bookingStatus';
 import './providerNavbar.css';
 
 type ProviderHeaderProps = Pick<ReturnType<typeof useProviderNavigationState>,
@@ -259,7 +260,7 @@ export function ProviderHeader({
                                 flexShrink: 0,
                               }}
                             >
-                              {noti.type}
+                              {getNotificationTypeMeta(noti.type).label}
                             </span>
                           </div>
                           <p

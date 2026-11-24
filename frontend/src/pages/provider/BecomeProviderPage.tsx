@@ -3012,13 +3012,13 @@ function isProfileComplete(detail: ProviderVerificationDetail) {
 
 function statusLabel(status: string) {
   const labels: Record<string, string> = {
-    DRAFT: 'Đang soạn thảo',
+    DRAFT: 'Bản nháp',
     SUBMITTED: 'Đã gửi duyệt',
     UNDER_REVIEW: 'Đang thẩm định',
     NEEDS_CHANGES: 'Cần bổ sung',
-    APPROVED: 'Đã phê duyệt',
-    REJECTED: 'Bị từ chối',
-    CANCELLED: 'Đã hủy bỏ',
+    APPROVED: 'Đã duyệt',
+    REJECTED: 'Đã từ chối',
+    CANCELLED: 'Đã hủy',
   };
   return labels[status] ?? status;
 }

@@ -14,6 +14,7 @@ import { ProfileOverviewTab } from '../../features/profile/components/overview/P
 import { CONTRACTS_V2_ENABLED } from '../../config/features';
 import { contractService } from '../../services/contractService';
 import { translateError } from '../../utils/errorTranslator';
+import { getBookingStatusLabel, getBookingStatusMeta } from '../../utils/bookingStatus';
 import { ContractReviewModal } from '../../components/contracts/ContractReviewModal';
 
 // Sub-tabs & Modals lazy-loaded for optimal performance
@@ -363,11 +364,11 @@ export const ProfilePage: React.FC = () => {
           countdownText = 'Sắp diễn ra';
         } else if (b.status === 'PICKUP_PENDING') {
           badgeStatus = 'UPCOMING';
-          badgeLabel = 'CHỜ NHẬN ĐỒ';
+          badgeLabel = getBookingStatusLabel('PICKUP_PENDING', { uppercase: true });
           countdownText = 'Sẵn sàng nhận đồ';
         } else if (b.status === 'AWAITING_REVIEW') {
           badgeStatus = 'URGENT';
-          badgeLabel = 'CHỜ DUYỆT ẢNH';
+          badgeLabel = getBookingStatusLabel('AWAITING_REVIEW', { uppercase: true });
           countdownText = 'Cần duyệt ảnh';
         }
 
@@ -447,7 +448,7 @@ export const ProfilePage: React.FC = () => {
           countdownText = 'Sắp diễn ra';
         } else if (b.status === 'PICKUP_PENDING') {
           badgeStatus = 'UPCOMING';
-          badgeLabel = 'CHỜ NHẬN ĐỒ';
+          badgeLabel = getBookingStatusLabel('PICKUP_PENDING', { uppercase: true });
           countdownText = 'Sẵn sàng nhận đồ';
         }
 
@@ -504,17 +505,6 @@ export const ProfilePage: React.FC = () => {
 
   // 3. Compute Recent Orders for Column 2 (100% Dynamic, Grouped by Booking)
   const recentOrders: RecentOrderItem[] = useMemo(() => {
-    const statusBadges: Record<string, { label: string; bg: string; color: string }> = {
-      PENDING_PAYMENT: { label: 'Chờ thanh toán', bg: '#FEF3C7', color: '#B45309' },
-      WAITING_PAYMENT: { label: 'Chờ thanh toán', bg: '#FEF3C7', color: '#B45309' },
-      CONFIRMED: { label: 'Sắp nhận', bg: '#EFF6FF', color: '#1D4ED8' },
-      DEPOSIT_PAID: { label: 'Đã cọc', bg: '#EBF5FB', color: '#2980B9' },
-      PICKED_UP: { label: 'Đang thuê', bg: '#ECFDF5', color: '#047857' },
-      COMPLETED: { label: 'Đã hoàn thành', bg: '#E8F8F5', color: '#27AE60' },
-      RETURNED: { label: 'Đã trả', bg: '#F2F4F4', color: '#574D4F' },
-      CANCELLED: { label: 'Đã hủy', bg: '#FDEDEC', color: '#C0392B' }
-    };
-
     return bookings.slice(0, 4).map((b) => {
       const items = b.items || [];
       const isBookingCombo =
@@ -526,11 +516,7 @@ export const ProfilePage: React.FC = () => {
         (b.bookingType === 'PHOTOGRAPHY' ||
           (items.length > 0 && items.every((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId)));
 
-      const statusInfo = statusBadges[b.status] || {
-        label: b.status,
-        bg: '#F2F4F4',
-        color: '#574D4F'
-      };
+      const statusInfo = getBookingStatusMeta(b.status);
 
       let orderTitle = '';
       if (isBookingCombo) {
@@ -633,7 +619,7 @@ export const ProfilePage: React.FC = () => {
             id: p._id || p.id,
             code: p.code,
             title: p.name || `Ưu đãi ${p.code}`,
-            description: p.description || 'Áp dụng cho các đơn đặt trên Lumé',
+            description: p.description || 'Áp dụng cho các đơn đặt trên TàGo',
             expiryDate: p.endDate ? new Date(p.endDate).toLocaleDateString('vi-VN') : 'Vô thời hạn',
             type: p.discountType === 'PERCENTAGE' ? 'DISCOUNT_PERCENT' : 'DISCOUNT_FIXED',
             discountValue: p.discountType === 'PERCENTAGE' ? `${p.discountValue}%` : `${Number(p.discountValue).toLocaleString('vi-VN')}đ`,
@@ -696,7 +682,7 @@ export const ProfilePage: React.FC = () => {
   const handleLogout = async () => {
     const result = await Swal.fire({
       title: 'Đăng xuất tài khoản?',
-      text: 'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản LUMÉ không? Phiên làm việc sẽ kết thúc an toàn.',
+      text: 'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản TàGo không? Phiên làm việc sẽ kết thúc an toàn.',
       iconHtml: `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="vh-logout-icon-svg"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>`,
       showCancelButton: true,
       confirmButtonText: 'Đăng xuất',

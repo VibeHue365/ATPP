@@ -33,6 +33,7 @@ import { toLocalDateKey } from '../shared/dateHelpers';
 import type { useProviderCalendarState } from './useProviderCalendarState';
 import './calendarFigma.css';
 import { providerApi } from '../api/providerDashboardApi';
+import { getBookingStatusLabel, normalizeBookingStatusCode } from '../../../utils/bookingStatus';
 
 type PhotographerCalendarEvent = {
   id: string;
@@ -622,15 +623,19 @@ export function CalendarPanel({
 
                       const timeSlot = ord.schedules?.[0]?.timeSlot || (ord.startDate ? new Date(ord.startDate).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '08:00 - 12:00');
 
+                      const isOrdCancelled =
+                        normalizeBookingStatusCode(ord.rawStatus || ord.status) === 'CANCELLED';
+                      const statusText = getBookingStatusLabel(ord.rawStatus || ord.status || 'CONFIRMED');
+
                       return (
-                        <div key={ord._id} className={`cal-order-card ${ord.status === 'CANCELLED' ? 'cal-order-card-cancelled' : ''}`}>
+                        <div key={ord._id} className={`cal-order-card ${isOrdCancelled ? 'cal-order-card-cancelled' : ''}`}>
                           <div className="cal-order-left">
                             <div className={`cal-order-icon ${iconClass}`}>
                               {iconEl}
                             </div>
                             <div className="cal-order-info">
-                              <h4>{ord.customerName || 'Khách hàng LUMÉ'}</h4>
-                              <p>{label} • {ord.status || 'CONFIRMED'}</p>
+                              <h4>{ord.customerName || 'Khách hàng TàGo'}</h4>
+                              <p>{label} • {statusText}</p>
                             </div>
                           </div>
                           <div className="cal-order-time">

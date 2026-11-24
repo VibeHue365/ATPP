@@ -16,6 +16,7 @@ import { providerApi } from '@/apis/providerApi';
 import { TagoConfirmOverlay } from '@/components/ui/TagoAlertModal';
 import { useToast } from '@/contexts/ToastContext';
 import { FontFamily } from '@/constants/theme';
+import { bookingStatus } from '@/utils/booking';
 
 interface ProviderReviewsTrustModalProps {
   visible: boolean;
@@ -419,7 +420,7 @@ export function ProviderReviewsTrustModal({
                         <View style={{ flex: 1 }}>
                           <Text style={styles.reviewerName}>{custName}</Text>
                           <Text style={styles.customerSub}>
-                            Đơn {code} • Trạng thái: {b.status}
+                            Đơn {code} • Trạng thái: {bookingStatus[b.status]?.label || b.status}
                           </Text>
                         </View>
 

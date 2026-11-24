@@ -44,6 +44,12 @@ import { adminDirectoryApi } from '../../../features/admin-directory/api/adminDi
 import { adminStatsApi, type CustomerDetailResponse } from '../../../features/admin-dashboard/api/adminStatsApi';
 import { useToast } from '../../../components/feedback/Toast';
 import { includesVietnamese } from '../../../utils/vietnameseUtils';
+import {
+  getBookingStatusLabel,
+  getDisputeStatusMeta,
+  getRefundStatusMeta,
+  getUserStatusMeta,
+} from '../../../utils/bookingStatus';
 import './customerManagementFigma.css';
 
 export interface CustomerDetailItem {
@@ -241,7 +247,8 @@ export function CustomerManagementPanel() {
       if (resCust.status === 'fulfilled' && resCust.value?.items) {
         loadedCustomers = resCust.value.items.map((c, idx) => {
           const codeIndex = String(idx + 1).padStart(4, '0');
-          const isBanned = c.status === 'BANNED';
+          const rawUserStatus = (c.status || 'ACTIVE').toUpperCase();
+          const userStatusMeta = getUserStatusMeta(rawUserStatus);
           const safeAvatar =
             c.avatar && c.avatar.trim().length > 0 && !c.avatar.includes('unsplash.com') && !c.avatar.includes('example.com')
               ? c.avatar
@@ -262,8 +269,8 @@ export function CustomerManagementPanel() {
             refunds: 0,
             disputes: 0,
             isVerified: Boolean(c.email && c.phone && c.phone !== 'Chưa cập nhật'),
-            status: isBanned ? 'SUSPENDED' : 'ACTIVE',
-            statusLabel: isBanned ? 'Tạm ngưng' : 'Hoạt động',
+            status: rawUserStatus === 'BANNED' || rawUserStatus === 'SUSPENDED' ? 'SUSPENDED' : 'ACTIVE',
+            statusLabel: userStatusMeta.label,
             warning: 'NONE',
             warningLabel: 'Không có',
             riskLevel: 'LOW',
@@ -1403,15 +1410,7 @@ export function CustomerManagementPanel() {
                           Đơn thuê {b.bookingCode}
                         </span>
                         <span className={`lume-cust-pill-${b.status === 'COMPLETED' ? 'verified' : 'unverified'}-modern`}>
-                          {b.status === 'COMPLETED'
-                            ? 'Hoàn thành'
-                            : b.status === 'PENDING'
-                            ? 'Chờ xác nhận'
-                            : b.status === 'CONFIRMED'
-                            ? 'Đã xác nhận'
-                            : b.status === 'CANCELLED'
-                            ? 'Đã hủy'
-                            : b.status}
+                          {getBookingStatusLabel(b.status)}
                         </span>
                       </div>
                       <div style={{ fontSize: 11, color: '#6B7280', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1452,7 +1451,7 @@ export function CustomerManagementPanel() {
                       <div className="lume-cust-tab-card-header">
                         <span className="lume-cust-tab-card-title">Yêu cầu hoàn cọc {r.refundCode}</span>
                         <span className="lume-cust-pill-unverified-modern">
-                          {r.status === 'SUCCESS' ? 'Thành công' : r.status === 'PENDING' ? 'Đang xử lý' : r.status}
+                          {getRefundStatusMeta(r.status === 'SUCCESS' ? 'COMPLETED' : r.status).label}
                         </span>
                       </div>
                       <div style={{ fontSize: 11, color: '#6B7280', display: 'flex', justifyContent: 'space-between' }}>
@@ -1486,7 +1485,7 @@ export function CustomerManagementPanel() {
                       <div className="lume-cust-tab-card-header">
                         <span className="lume-cust-tab-card-title">{d.title} ({d.disputeCode})</span>
                         <span className="lume-cust-status-pill suspended">
-                          {d.status === 'OPEN' ? 'Cần can thiệp' : d.status === 'RESOLVED' ? 'Đã giải quyết' : d.status}
+                          {getDisputeStatusMeta(d.status).label}
                         </span>
                       </div>
                       <p style={{ margin: '4px 0 0 0', fontSize: 11, color: '#4B5563' }}>

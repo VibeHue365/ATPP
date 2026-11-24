@@ -705,17 +705,12 @@ export class ProductsService implements OnModuleInit {
       );
     }
 
-    if (dto.depositAmount >= dto.basePrice) {
-      throw new BadRequestException('Giá cọc phải nhỏ hơn giá thuê');
-    }
-
-    if (dto.replacementValue !== undefined && dto.replacementValue !== null) {
-      if (!Number.isFinite(dto.replacementValue) || dto.replacementValue <= 0) {
-        throw new BadRequestException(
-          'Giá trị bồi hoàn trang phục phải là số dương lớn hơn 0',
-        );
-      }
-    }
+    this.validateProductPricing({
+      basePrice: dto.basePrice,
+      depositAmount: dto.depositAmount,
+      hourlyPrice: dto.hourlyPrice,
+      replacementValue: dto.replacementValue,
+    });
 
     await this.categoriesService.assertActiveProductCategory(dto.categoryId);
     await this.categoriesService.assertActiveCategories(
@@ -776,6 +771,7 @@ export class ProductsService implements OnModuleInit {
       colorImages: this.sanitizeColorImages(dto.colorImages, dto.images || []),
       videos: dto.videos || [],
       basePrice: dto.basePrice,
+      hourlyPrice: dto.hourlyPrice ?? undefined,
       depositAmount: dto.depositAmount,
       replacementValue:
         dto.replacementValue && dto.replacementValue > 0
@@ -870,9 +866,19 @@ export class ProductsService implements OnModuleInit {
       dto.depositAmount !== undefined
         ? dto.depositAmount
         : product.depositAmount;
-    if (checkDeposit >= checkBasePrice) {
-      throw new BadRequestException('Giá cọc phải nhỏ hơn giá thuê');
-    }
+    const checkHourlyPrice =
+      dto.hourlyPrice !== undefined ? dto.hourlyPrice : product.hourlyPrice;
+    const checkReplacementValue =
+      dto.replacementValue !== undefined
+        ? dto.replacementValue
+        : (product as any).replacementValue;
+
+    this.validateProductPricing({
+      basePrice: checkBasePrice,
+      depositAmount: checkDeposit,
+      hourlyPrice: checkHourlyPrice,
+      replacementValue: checkReplacementValue,
+    });
 
     const productProviderId =
       product.providerId &&
@@ -938,10 +944,15 @@ export class ProductsService implements OnModuleInit {
         ) !== JSON.stringify(product.colorImages || [])) ||
       (dto.status !== undefined && dto.status !== product.status);
 
+    const hourlyPriceChanged =
+      dto.hourlyPrice !== undefined &&
+      (dto.hourlyPrice ?? null) !== (product.hourlyPrice ?? null);
+
     const priceChanged =
       (dto.basePrice !== undefined && dto.basePrice !== product.basePrice) ||
       (dto.depositAmount !== undefined &&
-        dto.depositAmount !== product.depositAmount);
+        dto.depositAmount !== product.depositAmount) ||
+      hourlyPriceChanged;
 
     // replacementValue là giá trị tài sản làm căn cứ bồi thường trong hợp đồng điện tử.
     // Nếu có sự thay đổi, sản phẩm bắt buộc phải qua phê duyệt của Ban Quản trị sàn.
@@ -999,22 +1010,14 @@ export class ProductsService implements OnModuleInit {
     }
     if (dto.videos !== undefined) updateData.videos = dto.videos;
     if (dto.basePrice !== undefined) updateData.basePrice = dto.basePrice;
+    if (dto.hourlyPrice !== undefined) {
+      updateData.hourlyPrice = dto.hourlyPrice ?? undefined;
+    }
     if (dto.depositAmount !== undefined)
       updateData.depositAmount = dto.depositAmount;
     if (dto.replacementValue !== undefined) {
-      if (dto.replacementValue !== null) {
-        if (
-          !Number.isFinite(dto.replacementValue) ||
-          dto.replacementValue <= 0
-        ) {
-          throw new BadRequestException(
-            'Giá trị bồi hoàn trang phục phải là số dương lớn hơn 0',
-          );
-        }
-        updateData.replacementValue = Math.round(dto.replacementValue);
-      } else {
-        updateData.replacementValue = null;
-      }
+      updateData.replacementValue =
+        dto.replacementValue !== null ? Math.round(dto.replacementValue) : null;
     }
     if (dto.sizes !== undefined) updateData.sizes = dto.sizes;
     if (dto.colors !== undefined) updateData.colors = dto.colors;
@@ -1307,6 +1310,78 @@ export class ProductsService implements OnModuleInit {
     );
     this.clearPublicFacetsCache();
     return { message: 'Product deleted successfully' };
+  }
+
+  private validateProductPricing(params: {
+    basePrice: number;
+    depositAmount: number;
+    hourlyPrice?: number | null;
+    replacementValue?: number | null;
+  }): void {
+    const { basePrice, depositAmount, hourlyPrice, replacementValue } = params;
+
+    if (
+      !Number.isInteger(basePrice) ||
+      basePrice < 50000 ||
+      basePrice > 10000000 ||
+      basePrice % 1000 !== 0
+    ) {
+      throw new BadRequestException(
+        'Giá thuê ngày phải là bội số 1.000đ trong khoảng 50.000đ – 10.000.000đ',
+      );
+    }
+
+    if (depositAmount >= basePrice) {
+      throw new BadRequestException('Giá cọc phải nhỏ hơn giá thuê');
+    }
+
+    if (
+      !Number.isInteger(depositAmount) ||
+      depositAmount < 0 ||
+      depositAmount > 5000000 ||
+      depositAmount % 1000 !== 0 ||
+      (depositAmount > 0 && depositAmount < 20000)
+    ) {
+      throw new BadRequestException(
+        'Tiền đặt cọc phải là 0đ hoặc bội số 1.000đ trong khoảng 20.000đ – 5.000.000đ',
+      );
+    }
+
+    if (hourlyPrice !== undefined && hourlyPrice !== null) {
+      const maxHourly = Math.min(2500000, Math.round(basePrice * 0.25));
+      if (
+        !Number.isInteger(hourlyPrice) ||
+        hourlyPrice < 10000 ||
+        hourlyPrice > maxHourly ||
+        hourlyPrice % 1000 !== 0
+      ) {
+        throw new BadRequestException(
+          `Giá thuê theo giờ phải là bội số 1.000đ trong khoảng 10.000đ – ${maxHourly.toLocaleString('vi-VN')}đ (tối đa 25% giá ngày)`,
+        );
+      }
+    }
+
+    if (replacementValue !== undefined && replacementValue !== null) {
+      if (!Number.isFinite(replacementValue) || replacementValue <= 0) {
+        throw new BadRequestException(
+          'Giá trị bồi hoàn trang phục phải là số dương lớn hơn 0',
+        );
+      }
+      if (
+        !Number.isInteger(replacementValue) ||
+        replacementValue < 100000 ||
+        replacementValue > 50000000
+      ) {
+        throw new BadRequestException(
+          'Giá trị bồi hoàn trang phục phải là số nguyên từ 100.000đ đến 50.000.000đ',
+        );
+      }
+      if (replacementValue < basePrice || replacementValue < depositAmount) {
+        throw new BadRequestException(
+          'Giá trị bồi hoàn trang phục phải lớn hơn hoặc bằng giá thuê và tiền đặt cọc',
+        );
+      }
+    }
   }
 
   private async attachPublicBadges(products: any[]): Promise<any[]> {

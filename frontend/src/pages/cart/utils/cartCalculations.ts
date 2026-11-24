@@ -2,10 +2,9 @@ import { getMediaUrl } from '../../../shared/media/mediaUrl';
 import type { CartItem } from '../../../context/CartContext';
 import type { EnrichedCartItem, CartTotals } from '../types';
 import {
-  applyCampaignToRate,
   calculateDailyRentalTotal,
+  calculateHourlyRentalTotal,
   countRentalDays,
-  resolveHourlyRate,
 } from '../../../shared/pricing/campaignPricing';
 
 export const isMongoObjectId = (id?: string | null): boolean => /^[a-f\d]{24}$/i.test(id || '');
@@ -107,14 +106,33 @@ export const enrichCartItems = (cart: CartItem[], realProductList: any[]): Enric
 
         // Chiến dịch giá của shop (giảm/phụ thu) áp theo ngày thuê, cùng công thức với backend.
         const campaign = dbProduct.activeCampaign;
-        const baseHourlyRate = resolveHourlyRate(dbProduct.basePrice, dbProduct.hourlyPrice);
+        const hourlyTotal =
+          item.rentalType === 'HOURLY'
+            ? calculateHourlyRentalTotal(
+                dbProduct.basePrice,
+                dbProduct.hourlyPrice,
+                campaign,
+                rentalFrom || new Date(),
+                hours,
+              ).total
+            : 0;
+        const originalHourlyTotal =
+          item.rentalType === 'HOURLY'
+            ? calculateHourlyRentalTotal(
+                dbProduct.basePrice,
+                dbProduct.hourlyPrice,
+                null,
+                rentalFrom || new Date(),
+                hours,
+              ).total
+            : 0;
         const basePrice =
           item.rentalType === 'HOURLY'
-            ? applyCampaignToRate(baseHourlyRate, campaign, rentalFrom || new Date()) * hours
+            ? hourlyTotal
             : calculateDailyRentalTotal(dbProduct.basePrice, campaign, pricingFrom, pricingTo).total;
         const originalBasePrice =
           item.rentalType === 'HOURLY'
-            ? baseHourlyRate * hours
+            ? originalHourlyTotal
             : dbProduct.basePrice * countRentalDays(pricingFrom, pricingTo);
 
         const provId = dbProduct.providerId?._id

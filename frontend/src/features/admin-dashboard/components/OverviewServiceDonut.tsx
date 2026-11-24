@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronDown, Sparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import type { ServiceShareItem } from '../hooks/useAdminOverviewData';
 
 export interface OverviewServiceDonutProps {
@@ -17,6 +17,14 @@ export const OverviewServiceDonut: React.FC<OverviewServiceDonutProps> = ({
 
   let accumulatedPercent = 0;
 
+  const topService = items
+    .slice()
+    .sort((a, b) => (b.count ?? 0) - (a.count ?? 0))[0];
+  const insightText =
+    total <= 0 || !topService || topService.count <= 0
+      ? 'Chưa ghi nhận đơn hàng nào trên hệ thống.'
+      : `${topService.name} đang chiếm tỷ trọng cao nhất (${topService.percentage}% tổng booking).`;
+
   return (
     <div className="lume-chart-card">
       <div className="lume-chart-card__header">
@@ -26,10 +34,9 @@ export const OverviewServiceDonut: React.FC<OverviewServiceDonutProps> = ({
         </div>
 
         <div className="lume-chart-card__controls">
-          <button type="button" className="lume-dropdown-trigger">
-            <span>Tháng này</span>
-            <ChevronDown size={14} />
-          </button>
+          <span className="lume-dropdown-trigger" style={{ cursor: 'default' }}>
+            <span>Toàn thời gian</span>
+          </span>
         </div>
       </div>
 
@@ -100,7 +107,7 @@ export const OverviewServiceDonut: React.FC<OverviewServiceDonutProps> = ({
 
       <div className="lume-donut-footer-note">
         <Sparkles size={14} color="#B89047" />
-        <span>Doanh số tăng trưởng đều ở phân khúc Cho thuê Áo Dài</span>
+        <span>{insightText}</span>
       </div>
     </div>
   );

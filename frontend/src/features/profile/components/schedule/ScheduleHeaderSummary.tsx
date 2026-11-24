@@ -16,7 +16,7 @@ interface ScheduleHeaderSummaryProps {
 }
 
 export const ScheduleHeaderSummary: React.FC<ScheduleHeaderSummaryProps> = ({
-  fullName = 'Khách hàng LUMÉ',
+  fullName = 'Khách hàng TàGo',
   onEditProfile,
   onViewUrgentDetail,
   urgentItem,
@@ -74,7 +74,7 @@ export const ScheduleHeaderSummary: React.FC<ScheduleHeaderSummaryProps> = ({
               Xin chào, {fullName} 👋
             </h2>
             <p style={{ margin: 0, fontSize: '13px', color: '#8C827A' }}>
-              Chúc bạn một ngày tuyệt vời cùng LUMÉ!
+              Chúc bạn một ngày tuyệt vời cùng TàGo!
             </p>
           </div>
         </div>
