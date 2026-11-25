@@ -26,6 +26,10 @@ describe('Contracts V2: Full Contract Flow & 10 Verification Cases', () => {
     policySnapshot: any = {},
     providerOverrides: Record<string, any> = {},
     acceptanceOverrides: Record<string, any> = {},
+    // Result of ContractPolicyService.getProviderContractParticipationStatus. Since the contracts v2 refactor the
+    // policy service (not the read service) compares the policy fingerprint; without it the read service uses a
+    // simple fallback that only knows LEGACY / ACTIVE / REVOKED.
+    participation?: Record<string, any>,
   ) => {
     const mockDb = {
       collection: jest.fn((name: string) => ({
@@ -66,13 +70,17 @@ describe('Contracts V2: Full Contract Flow & 10 Verification Cases', () => {
       currentPoliciesForProvider: jest.fn().mockResolvedValue(policySnapshot),
     } as any;
 
+    const policyService = participation
+      ? { getProviderContractParticipationStatus: jest.fn().mockResolvedValue(participation) }
+      : {};
+
     const readService = new ContractReadService(
       true, // enabled
       {} as any,
       {} as any,
       {} as any,
       {} as any,
-      {} as any,
+      policyService as any,
       {} as any,
       mockSnapshots,
       {} as any,
@@ -738,6 +746,12 @@ describe('Contracts V2: Full Contract Flow & 10 Verification Cases', () => {
         percentagePolicy,
         {},
         { policyFingerprint: 'stale_fingerprint_hash_mismatch' },
+        // what ContractPolicyService returns for this acceptance (fingerprint differs from the current policies)
+        {
+          status: 'CONTRACT_SUSPENDED',
+          reason: 'POLICY_STALE',
+          acceptance: { policyFingerprint: 'stale_fingerprint_hash_mismatch' },
+        },
       );
       const resStale = await svcStale.checkEligibility([
         { productId: prodId.toHexString() },

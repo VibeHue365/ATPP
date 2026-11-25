@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { virtualTryOn2DService } from '../src/services/virtualTryOn2DService';
 
-const DEFAULT_URL = 'https://deferred-particles-idaho-depends.trycloudflare.com';
+// default AI server since the code of 18/11/2026 (Hugging Face space instead of a temporary Cloudflare tunnel)
+const DEFAULT_URL = 'https://kianalover-tago-tryon-api.hf.space';
 const person = new Blob(['person'], { type: 'image/jpeg' });
 const cloth = new Blob(['cloth'], { type: 'image/jpeg' });
 
@@ -46,10 +47,13 @@ describe('UC-25 Virtual Try-On (DaiBLL)', () => {
     expect(localStorage.getItem('atpp_tryon_3d_api_url')).toBe('https://tryon.example.com');
   });
 
-  it('UT-25 UTCID03 still reads an address saved by the older 3D try-on screen', () => {
-    localStorage.setItem('atpp_tryon_3d_api_url', 'https://legacy.example.com/');
+  // since the code of 18/11/2026 an old temporary tunnel address (trycloudflare.com) saved earlier is ignored
+  it('UT-25 UTCID03 ignores an old temporary tunnel address and uses the default AI server', () => {
+    vi.stubEnv('VITE_TRYON_2D_API_URL', '');
+    vi.stubEnv('VITE_TRYON_3D_API_URL', '');
+    localStorage.setItem('atpp_tryon_2d_api_url', 'https://old-tunnel.trycloudflare.com/');
 
-    expect(virtualTryOn2DService.getApiUrl()).toBe('https://legacy.example.com');
+    expect(virtualTryOn2DService.getApiUrl()).toBe(DEFAULT_URL);
   });
 
   it('UT-25 UTCID04 sends the person and outfit photos as a one-piece garment with 10 steps', async () => {

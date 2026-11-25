@@ -26,9 +26,11 @@ describe('campaignPricing (VIB-43 seasonal discount & surcharge, web)', () => {
   });
 
   it('applies the campaign to the hourly rate on the rental day only', () => {
+    // since the pricing rules of 24/11/2026 the default hourly rate is 20% of the daily price (backend, web and mobile)
     const hourly = resolveHourlyRate(500000, null);
-    expect(applyCampaignToRate(hourly, tetSurcharge, '2026-12-30')).toBe(180000);
-    expect(applyCampaignToRate(hourly, tetSurcharge, '2027-01-10')).toBe(150000);
+    expect(hourly).toBe(100000);
+    expect(applyCampaignToRate(hourly, tetSurcharge, '2026-12-30')).toBe(120000);
+    expect(applyCampaignToRate(hourly, tetSurcharge, '2027-01-10')).toBe(100000);
   });
 
   it('treats a campaign without startDate as already running until its end date', () => {

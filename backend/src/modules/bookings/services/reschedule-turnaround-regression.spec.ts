@@ -276,6 +276,7 @@ describe('Reschedule Turnaround & Reservation Boundaries Regression', () => {
     };
 
     const mockScheduleModel = {
+      create: jest.fn().mockResolvedValue([]), // schedules recreated by the approved reschedule (code of 24/11/2026)
       updateMany: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
     };
 
@@ -316,7 +317,9 @@ describe('Reschedule Turnaround & Reservation Boundaries Regression', () => {
     );
 
     // 2. Perform reschedule to 11:00-13:00 (slot 3)
-    const result = await bookingsService.rescheduleBooking(
+    // Since the code of 24/11/2026 the customer only sends a reschedule request (rescheduleBooking); the leases
+    // move when the provider approves it, so the approval step (applyApprovedReschedule) is called here.
+    const result = await (bookingsService as any).applyApprovedReschedule(
       bookingId.toString(),
       customerId.toString(),
       {
@@ -327,7 +330,7 @@ describe('Reschedule Turnaround & Reservation Boundaries Regression', () => {
       },
     );
 
-    expect(result.status).toBe('APPROVED');
+    expect(result.message).toBe('Đổi lịch thành công');
 
     // 3. Verification:
     // a. Reservation must end at 13:00 (contractual rental end), NOT 15:00

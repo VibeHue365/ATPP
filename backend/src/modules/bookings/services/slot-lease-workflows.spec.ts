@@ -16,6 +16,17 @@ import {
 import { RentalFulfillmentStatus } from '../schemas/rental-fulfillment.types';
 
 describe('Production Slot Lease Workflows Integration', () => {
+  // The scenarios use fixed dates in November 2026: freeze the clock (Date only) before them so the
+  // "reschedule at least 24 hours before" rule does not depend on the day the suite runs.
+  beforeAll(() => {
+    jest.useFakeTimers({
+      now: new Date('2026-11-10T01:00:00.000Z'),
+      doNotFake: ['nextTick', 'setImmediate', 'clearImmediate', 'setTimeout', 'clearTimeout', 'setInterval',
+        'clearInterval', 'queueMicrotask', 'hrtime', 'performance'],
+    });
+  });
+  afterAll(() => jest.useRealTimers());
+
   let cacheService: ProductBusyCacheService;
   let timeEngine: TimeSlotEngineService;
   let slotLeaseService: InventorySlotLeaseService;
@@ -585,6 +596,10 @@ describe('Production Slot Lease Workflows Integration', () => {
       };
 
       const mockBookingItemModel = {
+        // markCleaningCompleted (code of 24/11/2026) reads the item: no open incident here
+        findById: jest.fn().mockReturnValue({
+          lean: () => ({ exec: () => Promise.resolve({ rentalFulfillment: {} }) }),
+        }),
         db: {
           model: jest.fn().mockImplementation((name) => {
             if (name === 'InventoryItem') return mockInventoryModel;
@@ -791,6 +806,7 @@ describe('Production Slot Lease Workflows Integration', () => {
       };
 
       const mockScheduleModel = {
+        create: jest.fn().mockResolvedValue([]), // schedules recreated by the approved reschedule (code of 24/11/2026)
         updateMany: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
       };
 
@@ -825,7 +841,9 @@ describe('Production Slot Lease Workflows Integration', () => {
       );
 
       // Reschedule from 07:00-09:00 (slot 1) to 11:00-13:00 (slot 3)
-      const res = await bookingsService.rescheduleBooking(
+      // Since the code of 24/11/2026 the customer only sends a reschedule request (rescheduleBooking); the leases
+      // move when the provider approves it, so the approval step (applyApprovedReschedule) is called here.
+      const res = await (bookingsService as any).applyApprovedReschedule(
         bookingId.toString(),
         customerId.toString(),
         {
@@ -835,7 +853,7 @@ describe('Production Slot Lease Workflows Integration', () => {
         },
       );
 
-      expect(res.status).toBe('APPROVED');
+      expect(res.message).toBe('Đổi lịch thành công');
 
       // Verify old leases were released with RESCHEDULED
       const oldRental = inMemoryLeases.find(
@@ -1020,8 +1038,10 @@ describe('Production Slot Lease Workflows Integration', () => {
       expect(cacheService.has(productId.toString())).toBe(true);
 
       // Attempt to reschedule Booking A to 11:00-13:00 (which conflicts with Booking B)
+      // Since the code of 24/11/2026 the customer only sends a reschedule request (rescheduleBooking); the leases
+      // move when the provider approves it, so the approval step (applyApprovedReschedule) is called here.
       await expect(
-        bookingsService.rescheduleBooking(
+        (bookingsService as any).applyApprovedReschedule(
           bookingAId.toString(),
           customerAId.toString(),
           {
@@ -1156,8 +1176,10 @@ describe('Production Slot Lease Workflows Integration', () => {
         timeEngine,
       );
 
+      // Since the code of 24/11/2026 the customer only sends a reschedule request (rescheduleBooking); the leases
+      // move when the provider approves it, so the approval step (applyApprovedReschedule) is called here.
       await expect(
-        bookingsService.rescheduleBooking(
+        (bookingsService as any).applyApprovedReschedule(
           bookingId.toString(),
           customerId.toString(),
           {
@@ -1279,8 +1301,10 @@ describe('Production Slot Lease Workflows Integration', () => {
         timeEngine,
       );
 
+      // Since the code of 24/11/2026 the customer only sends a reschedule request (rescheduleBooking); the leases
+      // move when the provider approves it, so the approval step (applyApprovedReschedule) is called here.
       await expect(
-        bookingsService.rescheduleBooking(
+        (bookingsService as any).applyApprovedReschedule(
           bookingId.toString(),
           customerId.toString(),
           {

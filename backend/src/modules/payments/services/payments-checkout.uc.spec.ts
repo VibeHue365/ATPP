@@ -63,8 +63,14 @@ function createService(
         lean: () => Promise.resolve(bookingDoc),
       }),
     ),
-    find: jest.fn().mockImplementation(() => {
-      const result = options.bookings ?? [];
+    find: jest.fn().mockImplementation((filter: Row = {}) => {
+      // createPaymentLink (code of 24/11/2026) loads the booking(s) to pay with find({ _id: { $in: [...] } })
+      const ids = filter?._id?.$in;
+      const result = ids
+        ? bookingDoc
+          ? [Object.assign(bookingDoc, { _id: ids[0] })]
+          : []
+        : (options.bookings ?? []);
       return Object.assign(Promise.resolve(result), {
         select: () => ({
           lean: () => ({ exec: () => Promise.resolve(result) }),
@@ -128,6 +134,7 @@ describe('UC-49 Online Payment (HoangLVM)', () => {
     const { service } = createService({
       booking: {
         customerId,
+        bookingCode: 'BK-2026-11',
         status: BookingStatus.Confirmed,
         pricingSummary: {},
         paymentSummary: {},
@@ -141,7 +148,8 @@ describe('UC-49 Online Payment (HoangLVM)', () => {
         customerId.toString(),
       ),
     ).rejects.toThrow(
-      new BadRequestException('Đơn không còn ở trạng thái chờ thanh toán.'),
+      // since the code of 24/11/2026 one payment can cover several bookings, so the message names the booking
+      new BadRequestException('Đơn BK-2026-11 không còn ở trạng thái chờ thanh toán.'),
     );
   });
 
@@ -176,7 +184,7 @@ describe('UC-49 Online Payment (HoangLVM)', () => {
       }),
     );
     expect(payment.paymentCode).toMatch(/^PAY\d{10}$/);
-    expect(payment.payos.checkoutUrl).toContain(
+    expect(payment.payos?.checkoutUrl).toContain(
       `/payments/checkout/${payment.paymentCode}`,
     );
   });

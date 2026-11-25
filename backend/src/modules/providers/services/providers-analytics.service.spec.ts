@@ -27,8 +27,17 @@ describe('ProvidersService.getProviderAnalytics (VS-103, VS-104, VS-105)', () =>
 
     productModel = {
       countDocuments: jest.fn().mockResolvedValue(10),
-      find: jest.fn().mockReturnValue({
-        select: jest.fn().mockResolvedValue([{ _id: new Types.ObjectId() }]),
+      // Top 5 (code of 24/11/2026) loads the products in one query: find({ _id: { $in } }).select().lean()
+      find: jest.fn().mockImplementation((filter: any = {}) => {
+        const ids = filter?._id?.$in;
+        const rows = ids
+          ? ids.map((id: any) => ({ _id: id, name: `Sản phẩm ${id}`, images: ['/img.jpg'] }))
+          : [{ _id: new Types.ObjectId() }];
+        return {
+          select: jest.fn().mockReturnValue(
+            Object.assign(Promise.resolve(rows), { lean: () => Promise.resolve(rows) }),
+          ),
+        };
       }),
       findById: jest.fn().mockImplementation((id) =>
         Promise.resolve({

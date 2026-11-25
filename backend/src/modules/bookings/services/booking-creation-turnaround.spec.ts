@@ -13,6 +13,17 @@ import {
 } from '../../products/schemas/provider-schedule.schema';
 
 describe('BookingCreationService - Turnaround Integration (Phase 1)', () => {
+  // The scenarios use fixed dates in November 2026: freeze the clock (Date only) before them so the
+  // "date in the past" rules do not depend on the day the suite runs.
+  beforeAll(() => {
+    jest.useFakeTimers({
+      now: new Date('2026-11-10T01:00:00.000Z'),
+      doNotFake: ['nextTick', 'setImmediate', 'clearImmediate', 'setTimeout', 'clearTimeout', 'setInterval',
+        'clearInterval', 'queueMicrotask', 'hrtime', 'performance'],
+    });
+  });
+  afterAll(() => jest.useRealTimers());
+
   let service: BookingCreationService;
   let mockBookingsRepo: any;
   let mockProductModel: any;

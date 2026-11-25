@@ -38,10 +38,12 @@ describe('Finance, review and Admin direct use-case contracts', () => {
     };
     const dto = { bookingId: 'booking-1', purpose: 'DEPOSIT_PAYMENT' } as any;
     await paymentController(service).createLink(customer, dto);
+    // since the code of 24/11/2026 the controller also passes the list of booking ids paid together
     expect(service.createPaymentLink).toHaveBeenCalledWith(
       'booking-1',
       'DEPOSIT_PAYMENT',
       'customer-1',
+      ['booking-1'],
     );
   });
 
@@ -151,7 +153,7 @@ describe('Finance, review and Admin direct use-case contracts', () => {
         .fn()
         .mockResolvedValue({ items: [{ id: 'payment-1' }], total: 1 }),
     };
-    const controller = new AdminStatsController(service as any);
+    const controller = new AdminStatsController(service as any, {} as any);
     await controller.getTransactions(admin, 2, 20);
     expect(service.getAllTransactions).toHaveBeenCalledWith(2, 20);
   });
@@ -160,7 +162,7 @@ describe('Finance, review and Admin direct use-case contracts', () => {
     const service = {
       getAllCustomers: jest.fn().mockResolvedValue({ items: [], total: 0 }),
     };
-    const controller = new AdminStatsController(service as any);
+    const controller = new AdminStatsController(service as any, {} as any);
     await controller.getCustomers(admin, 1, 10);
     expect(service.getAllCustomers).toHaveBeenCalledWith(1, 10, undefined);
   });
@@ -172,7 +174,7 @@ describe('Finance, review and Admin direct use-case contracts', () => {
         total: 1,
       }),
     };
-    const controller = new AdminStatsController(service as any);
+    const controller = new AdminStatsController(service as any, {} as any);
     await controller.getProviders(admin, 1, 10);
     expect(service.getAllProviders).toHaveBeenCalledWith(1, 10, undefined);
   });
@@ -180,7 +182,7 @@ describe('Finance, review and Admin direct use-case contracts', () => {
   it('UC-70 exposes photographer totals in the platform dashboard', async () => {
     const dashboard = { photographers: { total: 12, bookings: 30 } };
     const service = { getAdminStats: jest.fn().mockResolvedValue(dashboard) };
-    const controller = new AdminStatsController(service as any);
+    const controller = new AdminStatsController(service as any, {} as any);
     await expect(controller.getStats(admin, 'month')).resolves.toEqual(
       dashboard,
     );
@@ -189,7 +191,7 @@ describe('Finance, review and Admin direct use-case contracts', () => {
   it('UC-71 exposes gross revenue and commission in the platform dashboard', async () => {
     const dashboard = { revenue: { total: 50000000, commission: 5000000 } };
     const service = { getAdminStats: jest.fn().mockResolvedValue(dashboard) };
-    const controller = new AdminStatsController(service as any);
+    const controller = new AdminStatsController(service as any, {} as any);
     await expect(controller.getStats(admin, 'year')).resolves.toEqual(
       dashboard,
     );

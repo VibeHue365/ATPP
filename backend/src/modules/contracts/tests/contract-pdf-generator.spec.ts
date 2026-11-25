@@ -10,8 +10,11 @@ import { ContractVersionSnapshot } from '../schemas/contract-version.schema';
 
 describe('ContractPdfGenerator (Phase 6.1)', () => {
   jest.setTimeout(30000);
+  // Sample PDFs for review go to the OS temp folder (or CONTRACT_PDF_SAMPLE_DIR); the former path was a folder that only
+  // existed on one team member's machine, so the test failed everywhere else.
   const scratchDir =
-    'C:/Users/ASUS/.gemini/antigravity/brain/68c59b7c-6838-4146-a6a9-3a382205b094/scratch';
+    process.env.CONTRACT_PDF_SAMPLE_DIR ||
+    path.join(require('node:os').tmpdir(), 'tago-contract-pdf-samples');
 
   const mockSnapshot: ContractVersionSnapshot = {
     bookingId: '64b0f0000000000000000101',

@@ -54,10 +54,13 @@ function createService(
   const findById = jest.fn().mockImplementation(() => {
     const result =
       options.booking === undefined ? bookingDoc() : options.booking;
-    return Object.assign(Promise.resolve(result), {
-      populate: () => Promise.resolve(result),
-      exec: () => Promise.resolve(result),
-    });
+    // getBookingById (code of 24/11/2026) chains two .populate() calls (customer, providers)
+    const chain = (): any =>
+      Object.assign(Promise.resolve(result), {
+        populate: () => chain(),
+        exec: () => Promise.resolve(result),
+      });
+    return chain();
   });
   const bookingModel = {
     findById,

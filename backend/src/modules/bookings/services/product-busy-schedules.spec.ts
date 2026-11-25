@@ -91,6 +91,7 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
     };
 
     mockBookingScheduleModel = {
+      create: jest.fn().mockResolvedValue([]), // schedules recreated by the approved reschedule (code of 24/11/2026)
       updateMany: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
     };
 
@@ -557,7 +558,9 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
         .slice(0, 10);
 
       // 2. Call public reschedule workflow which executes applyApprovedReschedule
-      const result = await service.rescheduleBooking(
+      // Since the code of 24/11/2026 the customer only sends a reschedule request (rescheduleBooking); the leases
+      // move when the provider approves it, so the approval step (applyApprovedReschedule) is called here.
+      const result = await (service as any).applyApprovedReschedule(
         bookingId.toString(),
         customerId.toString(),
         {
@@ -568,7 +571,7 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
       );
 
       expect(result).toBeDefined();
-      expect(result.status).toBe('APPROVED');
+      expect(result.message).toBe('Đổi lịch thành công');
 
       // 3. Prove cache was invalidated by applyApprovedReschedule
       expect(cacheService.has(productId.toString())).toBe(false);
