@@ -1,15 +1,21 @@
 import React from 'react';
-import { ChevronDown, Sparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import type { ServiceShareItem } from '../hooks/useAdminOverviewData';
 
 export interface OverviewServiceDonutProps {
   total: number;
   items: ServiceShareItem[];
+  selectedMonth: string;
+  onMonthChange: (month: string) => void;
+  monthOptions: Array<{ value: string; label: string }>;
 }
 
 export const OverviewServiceDonut: React.FC<OverviewServiceDonutProps> = ({
   total,
   items,
+  selectedMonth,
+  onMonthChange,
+  monthOptions,
 }) => {
   const radius = 68;
   const strokeWidth = 24;
@@ -26,10 +32,9 @@ export const OverviewServiceDonut: React.FC<OverviewServiceDonutProps> = ({
         </div>
 
         <div className="lume-chart-card__controls">
-          <button type="button" className="lume-dropdown-trigger">
-            <span>Tháng này</span>
-            <ChevronDown size={14} />
-          </button>
+          <select className="lume-dropdown-trigger" value={selectedMonth} onChange={(event) => onMonthChange(event.target.value)} aria-label="Chọn tháng cơ cấu dịch vụ">
+            {monthOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
         </div>
       </div>
 

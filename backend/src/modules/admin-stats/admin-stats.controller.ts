@@ -176,9 +176,10 @@ export class AdminStatsController {
   async getStats(
     @CurrentUser() user: AuthUser,
     @Query('period') period = 'month',
+    @Query('month') month?: string,
   ) {
     this.checkAdminRole(user);
-    return this.adminStatsService.getAdminStats(period);
+    return this.adminStatsService.getAdminStats(period, month);
   }
 
   @Get('customers')

@@ -24,7 +24,14 @@ export interface OverviewPanelProps {
 }
 
 export const OverviewPanel: React.FC<OverviewPanelProps> = ({ onNavigateTab }) => {
-  const { data, isLoading, error, period, setPeriod, refresh } = useAdminOverviewData();
+  const { data, isLoading, error, period, setPeriod, selectedMonth, setSelectedMonth, refresh } = useAdminOverviewData();
+  const monthOptions = useMemo(() => Array.from({ length: 60 }, (_, index) => {
+    const date = new Date();
+    date.setDate(1);
+    date.setMonth(date.getMonth() - index);
+    const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    return { value, label: `Tháng ${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}` };
+  }), []);
 
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('vi-VN').format(val) + 'đ';
@@ -219,11 +226,17 @@ export const OverviewPanel: React.FC<OverviewPanelProps> = ({ onNavigateTab }) =
               summaryBookings={data.chart.summaryBookings}
               summaryGmv={data.chart.summaryGmv}
               points={data.chart.points}
+              selectedMonth={selectedMonth}
+              onMonthChange={setSelectedMonth}
+              monthOptions={monthOptions}
             />
 
             <OverviewServiceDonut
               total={data.services.total}
               items={data.services.items}
+              selectedMonth={selectedMonth}
+              onMonthChange={setSelectedMonth}
+              monthOptions={monthOptions}
             />
           </div>
 

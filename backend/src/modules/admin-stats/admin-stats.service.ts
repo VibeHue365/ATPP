@@ -33,6 +33,7 @@ import {
 } from '../payments/schemas/payment.schema';
 import { RefreshToken } from '../auth/schemas/refresh-token.schema';
 import { AnalyticsService } from '../analytics/services/analytics.service';
+import { resolveOverviewChartRange } from './overview-chart-range';
 import {
   ProviderVerification,
   ProviderVerificationDocument,
@@ -89,32 +90,34 @@ export class AdminStatsService {
     private readonly analyticsService: AnalyticsService,
   ) {}
 
-  async getAdminStats(period = 'month') {
-    const cached = this.overviewStatsCache.get(period);
+  async getAdminStats(period = 'month', selectedMonth?: string) {
+    const range = resolveOverviewChartRange(period, selectedMonth);
+    const cacheKey = `${range.period}:${range.monthKey}`;
+    const cached = this.overviewStatsCache.get(cacheKey);
     if (cached && Date.now() - cached.cachedAt < this.CACHE_TTL_MS) {
       return cached.data;
     }
 
-    if (this.inFlightRequests.has(period)) {
-      return this.inFlightRequests.get(period)!;
+    if (this.inFlightRequests.has(cacheKey)) {
+      return this.inFlightRequests.get(cacheKey)!;
     }
 
-    const computePromise = this.computeAdminStats(period)
+    const computePromise = this.computeAdminStats(range.period, range.monthKey)
       .then((data) => {
-        this.overviewStatsCache.set(period, { data, cachedAt: Date.now() });
-        this.inFlightRequests.delete(period);
+        this.overviewStatsCache.set(cacheKey, { data, cachedAt: Date.now() });
+        this.inFlightRequests.delete(cacheKey);
         return data;
       })
       .catch((err) => {
-        this.inFlightRequests.delete(period);
+        this.inFlightRequests.delete(cacheKey);
         throw err;
       });
 
-    this.inFlightRequests.set(period, computePromise);
+    this.inFlightRequests.set(cacheKey, computePromise);
     return computePromise;
   }
 
-  private async computeAdminStats(period = 'month') {
+  private async computeAdminStats(period = 'month', selectedMonth?: string) {
     const customerFilter = {
       $and: [
         { roles: 'CUSTOMER' },
@@ -269,8 +272,8 @@ export class AdminStatsService {
       taskResult,
       recentActivities,
     ] = await Promise.all([
-      this.getOverviewChartPoints(period),
-      this.getServiceShare(),
+      this.getOverviewChartPoints(period, selectedMonth),
+      this.getServiceShare(selectedMonth),
       this.getTopPartners(),
       this.getPendingTasks(),
       this.getRecentActivities(),
@@ -289,6 +292,8 @@ export class AdminStatsService {
     const bookingGrowthPct = extractGrowthPercentage(bookingGrowth);
     const revenueGrowthPct = extractGrowthPercentage(revenueGrowth);
     const customerGrowthPct = extractGrowthPercentage(registrationGrowth);
+    const chartSummaryBookings = chartPoints.reduce((sum, point) => sum + point.bookings, 0);
+    const chartSummaryGmv = chartPoints.reduce((sum, point) => sum + point.rawGmv, 0);
 
     return {
       customers: {
@@ -353,8 +358,8 @@ export class AdminStatsService {
       },
       chart: {
         period,
-        summaryBookings: totalBookings,
-        summaryGmv: totalRevenue,
+        summaryBookings: chartSummaryBookings,
+        summaryGmv: chartSummaryGmv,
         points: chartPoints,
       },
       services: serviceShare,
@@ -367,39 +372,26 @@ export class AdminStatsService {
 
   private async getOverviewChartPoints(
     period = 'month',
-  ): Promise<Array<{ day: string; bookings: number; gmvMillions: number }>> {
-    const now = new Date();
-    const totalDaysInMonth = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
-      0,
-    ).getDate();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
-      0,
-      23,
-      59,
-      59,
-      999,
-    );
+    selectedMonth?: string,
+  ): Promise<Array<{ day: string; bookings: number; gmvMillions: number; rawGmv: number }>> {
+    const range = resolveOverviewChartRange(period, selectedMonth);
+    const dateFormat = range.period === 'month' ? '%m' : '%d';
 
     const [paymentsByDay, bookingsByDay] = await Promise.all([
       this.paymentModel.aggregate<{ _id: string; totalAmount: number }>([
         {
           $match: {
             status: { $in: [PaymentStatus.Success, 'SUCCESS', 'PAID'] },
-            createdAt: { $gte: startOfMonth, $lte: endOfMonth },
+            createdAt: { $gte: range.start, $lt: range.end },
           },
         },
         {
           $group: {
             _id: {
               $dateToString: {
-                format: '%d',
+                format: dateFormat,
                 date: '$createdAt',
-                timezone: 'Asia/Bangkok',
+                timezone: 'Asia/Ho_Chi_Minh',
               },
             },
             totalAmount: { $sum: '$amount' },
@@ -410,16 +402,16 @@ export class AdminStatsService {
         {
           $match: {
             status: { $ne: 'CANCELLED' },
-            createdAt: { $gte: startOfMonth, $lte: endOfMonth },
+            createdAt: { $gte: range.start, $lt: range.end },
           },
         },
         {
           $group: {
             _id: {
               $dateToString: {
-                format: '%d',
+                format: dateFormat,
                 date: '$createdAt',
-                timezone: 'Asia/Bangkok',
+                timezone: 'Asia/Ho_Chi_Minh',
               },
             },
             count: { $sum: 1 },
@@ -433,30 +425,34 @@ export class AdminStatsService {
     );
     const bookingMap = new Map(bookingsByDay.map((b) => [b._id, b.count]));
 
-    const points: Array<{
-      day: string;
-      bookings: number;
-      gmvMillions: number;
-    }> = [];
-    for (let d = 1; d <= totalDaysInMonth; d++) {
-      const dayStr = String(d).padStart(2, '0');
-      const gmv = paymentMap.get(dayStr) ?? 0;
-      points.push({
-        day: dayStr,
-        bookings: bookingMap.get(dayStr) ?? 0,
-        gmvMillions: Number((gmv / 1_000_000).toFixed(2)),
+    if (range.period === 'month') {
+      return Array.from({ length: 12 }, (_, index) => {
+        const key = String(index + 1).padStart(2, '0');
+        const rawGmv = paymentMap.get(key) ?? 0;
+        return { day: `T${index + 1}`, bookings: bookingMap.get(key) ?? 0, gmvMillions: Number((rawGmv / 1_000_000).toFixed(2)), rawGmv };
       });
     }
-
-    return points;
+    const daysInMonth = new Date(range.year, range.month, 0).getDate();
+    const daily = Array.from({ length: daysInMonth }, (_, index) => {
+      const key = String(index + 1).padStart(2, '0');
+      const rawGmv = paymentMap.get(key) ?? 0;
+      return { day: key, bookings: bookingMap.get(key) ?? 0, gmvMillions: Number((rawGmv / 1_000_000).toFixed(2)), rawGmv };
+    });
+    if (range.period === 'day') return daily;
+    return Array.from({ length: Math.ceil(daysInMonth / 7) }, (_, index) => {
+      const slice = daily.slice(index * 7, index * 7 + 7);
+      const rawGmv = slice.reduce((sum, point) => sum + point.rawGmv, 0);
+      return { day: `Tuần ${index + 1}`, bookings: slice.reduce((sum, point) => sum + point.bookings, 0), gmvMillions: Number((rawGmv / 1_000_000).toFixed(2)), rawGmv };
+    });
   }
 
-  private async getServiceShare() {
+  private async getServiceShare(selectedMonth?: string) {
+    const range = resolveOverviewChartRange('day', selectedMonth);
     const rawCounts = await this.bookingModel.aggregate<{
       _id: string;
       count: number;
     }>([
-      { $match: { status: { $ne: 'CANCELLED' } } },
+      { $match: { status: { $ne: 'CANCELLED' }, createdAt: { $gte: range.monthStart, $lte: range.monthEnd } } },
       { $group: { _id: '$bookingType', count: { $sum: 1 } } },
     ]);
 

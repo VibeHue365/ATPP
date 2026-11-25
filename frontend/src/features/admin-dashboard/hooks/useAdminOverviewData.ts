@@ -88,14 +88,18 @@ const OVERVIEW_CACHE_TTL_MS = 60_000;
 const overviewCache = new Map<string, { data: AdminOverviewData; loadedAt: number }>();
 
 export function useAdminOverviewData() {
-  const [period, setPeriod] = useState<'day' | 'week' | 'month'>('month');
-  const cached = overviewCache.get('month');
+  const now = new Date();
+  const initialMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const [period, setPeriod] = useState<'day' | 'week' | 'month'>('day');
+  const [selectedMonth, setSelectedMonth] = useState(initialMonth);
+  const cached = overviewCache.get(`day:${initialMonth}`);
   const [isLoading, setIsLoading] = useState(!cached);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<AdminOverviewData | null>(cached?.data ?? null);
 
   const fetchOverview = useCallback(async (force = false) => {
-    const cachedResult = overviewCache.get(period);
+    const cacheKey = `${period}:${selectedMonth}`;
+    const cachedResult = overviewCache.get(cacheKey);
     if (!force && cachedResult && Date.now() - cachedResult.loadedAt < OVERVIEW_CACHE_TTL_MS) {
       setData(cachedResult.data);
       setIsLoading(false);
@@ -112,7 +116,7 @@ export function useAdminOverviewData() {
         ShopsOverviewMetrics,
         PhotographerOverviewMetrics,
       ] = await Promise.all([
-        adminStatsApi.get(period),
+        adminStatsApi.get(period, selectedMonth),
         adminStatsApi.getBookingConversion(),
         adminStatsApi.getShopsOverview(),
         adminStatsApi.getPhotographersOverview(),
@@ -184,7 +188,7 @@ export function useAdminOverviewData() {
         shopsOverview,
         photographersOverview,
       };
-      overviewCache.set(period, { data: nextData, loadedAt: Date.now() });
+      overviewCache.set(cacheKey, { data: nextData, loadedAt: Date.now() });
       setData(nextData);
     } catch (err: any) {
       console.error('[useAdminOverviewData] Error fetching:', err);
@@ -192,7 +196,7 @@ export function useAdminOverviewData() {
     } finally {
       setIsLoading(false);
     }
-  }, [period]);
+  }, [period, selectedMonth]);
 
   useEffect(() => {
     void fetchOverview();
@@ -204,6 +208,8 @@ export function useAdminOverviewData() {
     error,
     period,
     setPeriod,
+    selectedMonth,
+    setSelectedMonth,
     refresh: () => fetchOverview(true),
   };
 }

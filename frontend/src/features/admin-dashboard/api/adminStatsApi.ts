@@ -64,7 +64,10 @@ export interface CustomerDetailResponse {
 }
 
 export const adminStatsApi = {
-  get: (period = 'month') => httpClient.get<AdminStats>(`/admin/stats?period=${period}`),
+  get: (period = 'day', month?: string) => {
+    const params = new URLSearchParams({ period, ...(month ? { month } : {}) });
+    return httpClient.get<AdminStats>(`/admin/stats?${params}`);
+  },
   getAiAnalytics: (question?: string) =>
     httpClient.get<AdminAiInsightsResponse>(
       `/admin/stats/ai-analytics${question ? `?question=${encodeURIComponent(question)}` : ''}`

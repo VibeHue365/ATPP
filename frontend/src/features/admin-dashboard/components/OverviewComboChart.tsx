@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { ChevronDown } from 'lucide-react';
 import type { OverviewChartPoint } from '../hooks/useAdminOverviewData';
 
 export interface OverviewComboChartProps {
@@ -8,6 +7,9 @@ export interface OverviewComboChartProps {
   summaryBookings: number;
   summaryGmv: number;
   points: OverviewChartPoint[];
+  selectedMonth: string;
+  onMonthChange: (month: string) => void;
+  monthOptions: Array<{ value: string; label: string }>;
 }
 
 export const OverviewComboChart: React.FC<OverviewComboChartProps> = ({
@@ -16,6 +18,9 @@ export const OverviewComboChart: React.FC<OverviewComboChartProps> = ({
   summaryBookings,
   summaryGmv,
   points,
+  selectedMonth,
+  onMonthChange,
+  monthOptions,
 }) => {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
@@ -30,8 +35,8 @@ export const OverviewComboChart: React.FC<OverviewComboChartProps> = ({
   const chartW = width - padLeft - padRight;
   const chartH = height - padTop - padBottom;
 
-  const maxBookings = 600;
-  const maxGmv = 120; // in Millions
+  const maxBookings = Math.max(1, ...points.map((point) => point.bookings));
+  const maxGmv = Math.max(1, ...points.map((point) => point.gmvMillions));
 
   const stepX = points.length > 1 ? chartW / (points.length - 1) : chartW;
 
@@ -90,10 +95,9 @@ export const OverviewComboChart: React.FC<OverviewComboChartProps> = ({
             </button>
           </div>
 
-          <button type="button" className="lume-dropdown-trigger">
-            <span>Tháng 09/2024</span>
-            <ChevronDown size={14} />
-          </button>
+          <select className="lume-dropdown-trigger" value={selectedMonth} onChange={(event) => onMonthChange(event.target.value)} aria-label="Chọn tháng thống kê">
+            {monthOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
         </div>
       </div>
 
@@ -249,7 +253,7 @@ export const OverviewComboChart: React.FC<OverviewComboChartProps> = ({
               top: '40%',
             }}
           >
-            <strong>Ngày {points[hoveredIdx].day}/09</strong>
+            <strong>{period === 'day' ? `Ngày ${points[hoveredIdx].day}/${selectedMonth.slice(5)}` : points[hoveredIdx].day}</strong>
             <div>
               <span style={{ color: '#F4A6AC' }}>●</span>
               <span>Booking: {points[hoveredIdx].bookings} đơn</span>
