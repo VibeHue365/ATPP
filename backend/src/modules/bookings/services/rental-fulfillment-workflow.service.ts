@@ -20,6 +20,11 @@ import { RentalDepositRefundCoordinatorService } from './rental-deposit-refund-c
 import { InventorySlotLeaseService } from './inventory-slot-lease.service';
 import { ShopScheduleConfig, TimeSlotEngineService } from './time-slot-engine.service';
 import { NotificationsService } from '../../notifications/notifications.service';
+import {
+  assertRentalEvidenceUploadWindow,
+  RENTAL_EVIDENCE_RETENTION_MS,
+  RENTAL_EVIDENCE_UNATTACHED_TTL_MS,
+} from './rental-evidence-policy';
 
 interface RentalItemAccess {
   bookingId: Types.ObjectId;
@@ -27,6 +32,9 @@ interface RentalItemAccess {
   actor: RentalActorSnapshot;
   fulfillmentStatus: RentalFulfillmentStatus;
   bookingStatus: BookingStatus;
+  uploadPurpose?: 'PICKUP' | 'RETURN';
+  pickupDueAt?: Date | null;
+  returnDueAt?: Date | null;
 }
 
 @Injectable()
@@ -388,7 +396,13 @@ export class RentalFulfillmentWorkflowService {
       throw new BadRequestException('Chỉ có thể tải ảnh evidence ở bước giao hoặc nhận lại áo dài.');
     }
     this.requireOperationalBooking(access.bookingStatus, 'tải evidence áo dài');
-    return access;
+    const uploadPurpose = access.fulfillmentStatus === RentalFulfillmentStatus.ReadyForPickup ? 'PICKUP' : 'RETURN';
+    assertRentalEvidenceUploadWindow({
+      purpose: uploadPurpose,
+      dueAt: uploadPurpose === 'PICKUP' ? access.pickupDueAt : access.returnDueAt,
+      isAdmin: access.actor.role === 'ADMIN',
+    });
+    return { ...access, uploadPurpose };
   }
 
   async registerEvidenceUpload(
@@ -404,6 +418,7 @@ export class RentalFulfillmentWorkflowService {
       bucket: file.bucket,
       storageKey: file.storageKey,
       mimeType: file.mimeType,
+      expiresAt: new Date(Date.now() + RENTAL_EVIDENCE_UNATTACHED_TTL_MS),
     });
     return { fileId: file.fileId, type: 'IMAGE' as const };
   }
@@ -472,7 +487,11 @@ export class RentalFulfillmentWorkflowService {
       bookingItemId: access.itemId,
       uploadedBy: new Types.ObjectId(user.sub),
       consumedAt: null,
-    }, { $set: { consumedAt, consumedFor: purpose } }).exec();
+    }, { $set: {
+      consumedAt,
+      consumedFor: purpose,
+      expiresAt: new Date(consumedAt.getTime() + RENTAL_EVIDENCE_RETENTION_MS),
+    } }).exec();
     if (consumption.modifiedCount !== uniqueFileIds.length) {
       throw new ForbiddenException('Evidence đã được dùng bởi thao tác khác. Vui lòng tải ảnh mới.');
     }
@@ -641,6 +660,8 @@ export class RentalFulfillmentWorkflowService {
       actor: this.actor(user, 'SYSTEM'),
       fulfillmentStatus: item.rentalFulfillment.status as RentalFulfillmentStatus,
       bookingStatus: booking.status as BookingStatus,
+      pickupDueAt: item.rentalFulfillment.pickupDueAt ?? item.rentalFrom ?? null,
+      returnDueAt: item.rentalFulfillment.returnDueAt ?? item.rentalTo ?? null,
     };
   }
 

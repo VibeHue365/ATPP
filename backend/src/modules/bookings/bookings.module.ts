@@ -51,6 +51,7 @@ import {
 import { TimeSlotEngineService } from './services/time-slot-engine.service';
 import { InventorySlotLeaseService } from './services/inventory-slot-lease.service';
 import { ProductBusyCacheService } from './services/product-busy-cache.service';
+import { RentalEvidenceCleanupService } from './services/rental-evidence-cleanup.service';
 
 export const bookingModels = MongooseModule.forFeature([
   { name: Cart.name, schema: CartSchema },
@@ -96,6 +97,7 @@ export const bookingModels = MongooseModule.forFeature([
     TimeSlotEngineService,
     InventorySlotLeaseService,
     ProductBusyCacheService,
+    RentalEvidenceCleanupService,
   ],
   exports: [
     bookingModels,

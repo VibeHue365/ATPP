@@ -33,6 +33,10 @@ export class RentalEvidenceUpload {
 
   @Prop({ type: String, enum: ['PICKUP', 'RETURN'], default: null })
   consumedFor?: 'PICKUP' | 'RETURN' | null;
+
+  /** Object cleanup deadline. Cron removes storage first, then this metadata. */
+  @Prop({ type: Date, required: true, index: true })
+  expiresAt: Date;
 }
 
 export const RentalEvidenceUploadSchema = SchemaFactory.createForClass(RentalEvidenceUpload);

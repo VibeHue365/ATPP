@@ -67,7 +67,12 @@ export class RentalFulfillmentController {
       const bucket = 'rental-fulfillment-private';
       const storageKey = `rental-fulfillment/${bookingId}/${itemId}/${new Date().toISOString().slice(0, 10)}/${fileId}${extensionByMime[file.mimetype]}`;
       await this.privateStorage.uploadPrivateFile(bucket, storageKey, file.buffer, file.mimetype);
-      return this.workflow.registerEvidenceUpload(access, user, { fileId, bucket, storageKey, mimeType: file.mimetype });
+      try {
+        return await this.workflow.registerEvidenceUpload(access, user, { fileId, bucket, storageKey, mimeType: file.mimetype });
+      } catch (error) {
+        await this.privateStorage.deletePrivateFile(bucket, storageKey).catch(() => undefined);
+        throw error;
+      }
     }));
     return { files: uploads };
   }
