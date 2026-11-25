@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -11,6 +12,16 @@ import {
   ProviderDocument,
   ProviderStatus,
 } from '../../providers/schemas/provider.schema';
+import {
+  ProviderStaff,
+  ProviderStaffDocument,
+  ProviderStaffStatus,
+} from '../../providers/schemas/provider-staff.schema';
+import {
+  StaffAvailabilityService,
+  parseTimeRangeToMinutes,
+} from '../../bookings/services/staff-availability.service';
+import { getDiscoveryCacheVersion } from '../../bookings/services/provider-availability-version';
 import {
   PackageStatus,
   PhotographyPackage,
@@ -50,6 +61,11 @@ export class PhotographersService {
     @InjectModel(ProviderSchedule.name)
     private readonly providerScheduleModel: Model<ProviderSchedule>,
     private readonly smartTagPublicProjectionService: SmartTagPublicProjectionService,
+    @Optional()
+    @InjectModel(ProviderStaff.name)
+    private readonly staffModel?: Model<ProviderStaffDocument>,
+    @Optional()
+    private readonly staffAvailabilityService?: StaffAvailabilityService,
   ) {
     void this.getPublicPhotographers().catch(() => undefined);
   }
@@ -57,6 +73,7 @@ export class PhotographersService {
   private static publicPhotographersCache?: {
     value: Record<string, unknown>[];
     expiresAt: number;
+    version: number;
   };
   private static publicPhotographersInFlight?: Promise<
     Record<string, unknown>[]
@@ -69,9 +86,11 @@ export class PhotographersService {
 
   private async getPublicPhotographers(): Promise<Record<string, unknown>[]> {
     const now = Date.now();
+    const version = getDiscoveryCacheVersion();
     if (
       PhotographersService.publicPhotographersCache &&
-      PhotographersService.publicPhotographersCache.expiresAt > now
+      PhotographersService.publicPhotographersCache.expiresAt > now &&
+      PhotographersService.publicPhotographersCache.version === version
     ) {
       return PhotographersService.publicPhotographersCache.value;
     }
@@ -84,6 +103,7 @@ export class PhotographersService {
           PhotographersService.publicPhotographersCache = {
             value,
             expiresAt: Date.now() + 120_000,
+            version,
           };
           return value;
         })
@@ -96,13 +116,48 @@ export class PhotographersService {
   async findAll(query: PhotographerDiscoveryQueryDto = {}) {
     const publicPhotographers = await this.getPublicPhotographers();
     const normalizedQuery = this.normalizeDiscoveryQuery(query);
-    const matchingPhotographers = publicPhotographers
+    let matchingPhotographers = publicPhotographers
       .filter((photographer) =>
         this.matchesDiscoveryQuery(photographer, normalizedQuery),
       )
       .sort((left, right) =>
         this.comparePhotographers(left, right, normalizedQuery.sort),
       );
+
+    // Optional real-time slot check when date + timeSlot (and/or requiredSlots) are supplied
+    if (
+      normalizedQuery.date &&
+      normalizedQuery.timeSlot &&
+      this.staffAvailabilityService
+    ) {
+      const parsedRange = parseTimeRangeToMinutes(normalizedQuery.timeSlot);
+      if (parsedRange) {
+        const minRequiredSlots = normalizedQuery.requiredSlots ?? 1;
+        const checked = await Promise.all(
+          matchingPhotographers.map(async (photographer) => {
+            const pId = new Types.ObjectId(String(photographer._id));
+            const evalRes = await this.staffAvailabilityService!.evaluateSessions(
+              pId,
+              [
+                {
+                  clientId: 'discovery',
+                  dateKey: normalizedQuery.date!,
+                  startMin: parsedRange.startMin,
+                  endMin: parsedRange.endMin,
+                },
+              ],
+            );
+            const rem = evalRes.remainingByClientId.get('discovery') ?? 0;
+            return evalRes.valid && rem >= minRequiredSlots
+              ? photographer
+              : null;
+          }),
+        );
+        matchingPhotographers = checked.filter(
+          (item): item is Record<string, unknown> => item !== null,
+        );
+      }
+    }
 
     const total = matchingPhotographers.length;
     const totalPages = Math.max(1, Math.ceil(total / normalizedQuery.limit));
@@ -432,6 +487,33 @@ export class PhotographersService {
         ),
       );
 
+    const staffByProvider = new Map<
+      string,
+      Array<{ _id: string; name: string; avatarUrl: string | null; specialty: string | null }>
+    >();
+    if (this.staffModel && photographers.length > 0) {
+      const staffDocs = await this.staffModel
+        .find({
+          providerId: { $in: photographers.map((p) => p._id) },
+          status: ProviderStaffStatus.Active,
+        })
+        .sort({ sortOrder: 1, createdAt: 1 })
+        .select('_id providerId name avatarUrl specialty')
+        .lean()
+        .exec();
+      for (const st of staffDocs as any[]) {
+        const pKey = st.providerId.toString();
+        const arr = staffByProvider.get(pKey) ?? [];
+        arr.push({
+          _id: st._id.toString(),
+          name: st.name,
+          avatarUrl: st.avatarUrl ?? null,
+          specialty: st.specialty ?? null,
+        });
+        staffByProvider.set(pKey, arr);
+      }
+    }
+
     return Promise.all(
       photographers.map(async (photographer) => {
         const providerId = photographer._id.toString();
@@ -440,6 +522,7 @@ export class PhotographersService {
           packagesByProvider.get(providerId) || [],
           portfolioByProvider.get(providerId) || [],
           portfolioBadgeMap,
+          staffByProvider.get(providerId),
         );
         return {
           ...publicPhotographer,
@@ -500,6 +583,8 @@ export class PhotographersService {
       date: query.date?.trim(),
       groupSize: query.groupSize?.trim(),
       timeSlot: query.timeSlot?.trim(),
+      minPhotographers: query.minPhotographers,
+      requiredSlots: query.requiredSlots,
       page,
       limit,
     };
@@ -637,6 +722,24 @@ export class PhotographersService {
       );
       if (!hasEligiblePackage) return false;
     }
+    if (query.minPhotographers !== undefined) {
+      const teamSize = Math.max(
+        1,
+        Number((photographer as any).activeStaffCount ?? 0) || 1,
+      );
+      if (teamSize < query.minPhotographers) {
+        return false;
+      }
+    }
+    if (query.requiredSlots !== undefined) {
+      const capacity = Math.max(
+        1,
+        Number((photographer as any).effectiveCapacity ?? 1) || 1,
+      );
+      if (capacity < query.requiredSlots) {
+        return false;
+      }
+    }
     return true;
   }
 
@@ -757,6 +860,12 @@ export class PhotographersService {
       taggingRevision: number;
     }>,
     badgeMapOverride?: Map<string, PublicSmartTagBadge[]>,
+    staffPreviewOverride?: Array<{
+      _id: string;
+      name: string;
+      avatarUrl: string | null;
+      specialty: string | null;
+    }>,
   ): Promise<Record<string, unknown>> {
     const portfolioItems =
       portfolioItemsOverride ??
@@ -799,6 +908,34 @@ export class PhotographersService {
       badges: badgeMap.get(item._id.toString()) || [],
     }));
 
+    let activeStaffList = staffPreviewOverride;
+    if (!activeStaffList && this.staffModel) {
+      const docs = await this.staffModel
+        .find({
+          providerId: provider._id,
+          status: ProviderStaffStatus.Active,
+        })
+        .sort({ sortOrder: 1, createdAt: 1 })
+        .select('_id name avatarUrl specialty')
+        .lean()
+        .exec();
+      activeStaffList = docs.map((st: any) => ({
+        _id: st._id.toString(),
+        name: st.name,
+        avatarUrl: st.avatarUrl ?? null,
+        specialty: st.specialty ?? null,
+      }));
+    }
+    const activeStaffCount = activeStaffList?.length ?? 0;
+    const maxConcurrentSessions =
+      photographySettings?.maxConcurrentSessions ?? null;
+    const effectiveCapacity =
+      activeStaffCount <= 0
+        ? 1
+        : maxConcurrentSessions && maxConcurrentSessions > 0
+          ? Math.min(activeStaffCount, maxConcurrentSessions)
+          : activeStaffCount;
+
     return {
       _id: provider._id,
       businessName: provider.businessName,
@@ -812,6 +949,10 @@ export class PhotographersService {
       updatedAt: provider.updatedAt,
       address,
       serviceRadiusKm: photographySettings?.serviceRadiusKm ?? null,
+      activeStaffCount,
+      maxConcurrentSessions,
+      effectiveCapacity,
+      staffPreview: (activeStaffList ?? []).slice(0, 4),
       media,
       portfolioItems: publicPortfolioItems,
       packages,

@@ -63,4 +63,8 @@ export class CreatePhotographyQuoteDto {
   @ValidateNested({ each: true })
   @Type(() => PhotographyQuoteSessionDto)
   sessions: PhotographyQuoteSessionDto[];
+
+  @IsOptional()
+  @IsMongoId()
+  preferredStaffId?: string;
 }

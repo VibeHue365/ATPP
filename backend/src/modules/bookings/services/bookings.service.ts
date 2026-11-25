@@ -106,6 +106,15 @@ import { PolicyResolverService } from '../../system-policies/services/policy-res
 import { pendingBookingExpiryFilter } from './booking-expiry-filter';
 import { freePaymentClaim, newPaymentClaim } from './payment-expiry-claim';
 import { buildReservationOverlapFilter } from './reservation-overlap-filter';
+import {
+  StaffAvailabilityService,
+  parseTimeRangeToMinutes,
+  toIctDateKey,
+} from './staff-availability.service';
+import {
+  bumpProviderAvailabilityVersion,
+  getProviderAvailabilityVersion,
+} from './provider-availability-version';
 
 // ─── DTOs (dùng chung với controller) ────────────────────────────────────────
 
@@ -284,8 +293,13 @@ export class BookingsService implements OnApplicationBootstrap {
           timeSlot: string;
           bookingItemId: string;
         }[];
+        totalActiveStaff?: number;
+        maxConcurrentSessions?: number | null;
+        effectiveCapacity?: number;
+        slotAvailability?: any[];
       };
       expiresAt: number;
+      version: number;
     }
   >();
 
@@ -346,6 +360,8 @@ export class BookingsService implements OnApplicationBootstrap {
     @Optional()
     @InjectModel(ProviderSchedule.name)
     private readonly providerScheduleModel?: Model<ProviderSchedule>,
+    @Optional()
+    private readonly staffAvailabilityService?: StaffAvailabilityService,
   ) {}
 
   private async getProviderScheduleConfig(
@@ -1684,14 +1700,65 @@ export class BookingsService implements OnApplicationBootstrap {
         );
       }
 
-      // Check photographer availability using existing busy schedules logic
       const photographerId = bookingItem.providerId?.toString();
-      if (photographerId) {
-        const busySchedules =
-          await this.getBusySchedulesForProvider(photographerId);
-        const isSlotConflict =
-          dto.newShootTimeSlot &&
-          busySchedules.bookedSlots.some(
+      let reassignedDecision: {
+        assignedStaffId: Types.ObjectId | null;
+        assignedStaffSnapshot: any;
+      } | null = null;
+
+      if (photographerId && dto.newShootTimeSlot) {
+        const parsedRange = parseTimeRangeToMinutes(dto.newShootTimeSlot);
+        if (this.staffAvailabilityService && parsedRange) {
+          const currentSchedule = await this.bookingScheduleModel
+            .findOne({
+              bookingId: booking._id,
+              bookingItemId: bookingItem._id,
+              scheduleType: BookingScheduleType.Photoshoot,
+              status: {
+                $in: [
+                  BookingScheduleStatus.Confirmed,
+                  BookingScheduleStatus.Scheduled,
+                  BookingScheduleStatus.Held,
+                ],
+              },
+            })
+            .select('_id assignedStaffId')
+            .lean()
+            .exec();
+          const evaluation = await this.staffAvailabilityService.evaluateSessions(
+            new Types.ObjectId(photographerId),
+            [
+              {
+                clientId: 'reschedule',
+                dateKey: dto.newShootDate,
+                startMin: parsedRange.startMin,
+                endMin: parsedRange.endMin,
+              },
+            ],
+            {
+              excludeScheduleId: currentSchedule?._id,
+              excludeBookingItemId: bookingItem._id,
+              preferStaffIdForReschedule:
+                (currentSchedule as any)?.assignedStaffId?.toString?.() ?? null,
+            },
+          );
+          if (!evaluation.valid) {
+            throw new BadRequestException(
+              evaluation.errors[0]?.message ||
+                `Thợ ảnh đã có lịch vào ngày ${dto.newShootDate} khung giờ ${dto.newShootTimeSlot}`,
+            );
+          }
+          const decision = evaluation.assignmentsByClientId.get('reschedule');
+          if (decision) {
+            reassignedDecision = {
+              assignedStaffId: decision.assignedStaffId,
+              assignedStaffSnapshot: decision.assignedStaffSnapshot,
+            };
+          }
+        } else {
+          const busySchedules =
+            await this.getBusySchedulesForProvider(photographerId);
+          const isSlotConflict = busySchedules.bookedSlots.some(
             (slot: any) =>
               slot.date === dto.newShootDate &&
               slot.timeSlot &&
@@ -1699,10 +1766,11 @@ export class BookingsService implements OnApplicationBootstrap {
               slot.bookingItemId !== dto.itemId,
           );
 
-        if (isSlotConflict) {
-          throw new BadRequestException(
-            `Thợ ảnh đã có lịch vào ngày ${dto.newShootDate} khung giờ ${dto.newShootTimeSlot}`,
-          );
+          if (isSlotConflict) {
+            throw new BadRequestException(
+              `Thợ ảnh đã có lịch vào ngày ${dto.newShootDate} khung giờ ${dto.newShootTimeSlot}`,
+            );
+          }
         }
       }
 
@@ -1724,6 +1792,46 @@ export class BookingsService implements OnApplicationBootstrap {
         dates: [new Date(dto.newShootDate)],
         timeSlot: dto.newShootTimeSlot ?? null,
       });
+
+      if (dto.newShootTimeSlot) {
+        const parsedRange = parseTimeRangeToMinutes(dto.newShootTimeSlot);
+        if (parsedRange) {
+          const startHHmm = `${String(Math.floor(parsedRange.startMin / 60)).padStart(2, '0')}:${String(parsedRange.startMin % 60).padStart(2, '0')}`;
+          const endHHmm = `${String(Math.floor(parsedRange.endMin / 60)).padStart(2, '0')}:${String(parsedRange.endMin % 60).padStart(2, '0')}`;
+          const nextStartsAt = new Date(`${dto.newShootDate}T${startHHmm}:00+07:00`);
+          const nextEndsAt = new Date(`${dto.newShootDate}T${endHHmm}:00+07:00`);
+          await this.bookingScheduleModel.updateMany(
+            {
+              bookingId: booking._id,
+              bookingItemId: bookingItem._id,
+              scheduleType: BookingScheduleType.Photoshoot,
+              status: {
+                $in: [
+                  BookingScheduleStatus.Scheduled,
+                  BookingScheduleStatus.Confirmed,
+                ],
+              },
+            },
+            {
+              $set: {
+                startsAt: nextStartsAt,
+                endsAt: nextEndsAt,
+                providerLocalDate: dto.newShootDate,
+                ...(reassignedDecision
+                  ? {
+                      assignedStaffId: reassignedDecision.assignedStaffId,
+                      assignedStaffSnapshot:
+                        reassignedDecision.assignedStaffSnapshot,
+                    }
+                  : {}),
+              },
+            },
+          );
+        }
+      }
+      if (photographerId) {
+        bumpProviderAvailabilityVersion(photographerId);
+      }
     }
 
     // Send notification (best effort)
@@ -4099,6 +4207,7 @@ export class BookingsService implements OnApplicationBootstrap {
     deliveryDriveUrl?: string,
     evidencePhotos?: string[],
     isInternalSync = false,
+    assignedStaffId?: string,
   ): Promise<BookingDocument> {
     const booking = await this.bookingModel.findById(bookingIdStr);
     if (!booking) throw new NotFoundException('Không tìm thấy đơn hàng');
@@ -4842,7 +4951,63 @@ export class BookingsService implements OnApplicationBootstrap {
       }
     }
 
+    if (
+      nextStatus === BookingStatus.Confirmed &&
+      assignedStaffId &&
+      this.staffAvailabilityService
+    ) {
+      await this.staffAvailabilityService.assignStaffToBooking(
+        bookingIdStr,
+        assignedStaffId,
+        userId || 'provider',
+        roles,
+        'Chủ Studio phân công thợ khi xác nhận đơn',
+      );
+    }
+
+    for (const pid of booking.providerIds ?? []) {
+      bumpProviderAvailabilityVersion(pid.toString());
+    }
+
     return booking;
+  }
+
+  async getAvailableStaffForSchedule(
+    bookingIdStr: string,
+    scheduleIdStr: string,
+    actorUserId: string,
+    actorRoles?: string[],
+  ) {
+    if (!this.staffAvailabilityService) {
+      throw new NotFoundException('Dịch vụ kiểm tra thợ chụp chưa được bật.');
+    }
+    return this.staffAvailabilityService.getAvailableStaffForSchedule(
+      bookingIdStr,
+      scheduleIdStr,
+      actorUserId,
+      actorRoles,
+    );
+  }
+
+  async assignStaffToSchedule(
+    bookingIdStr: string,
+    scheduleIdStr: string,
+    staffIdStr: string,
+    actorUserId: string,
+    actorRoles?: string[],
+    reason?: string,
+  ) {
+    if (!this.staffAvailabilityService) {
+      throw new NotFoundException('Dịch vụ điều phối thợ chụp chưa được bật.');
+    }
+    return this.staffAvailabilityService.assignStaffToSchedule(
+      bookingIdStr,
+      scheduleIdStr,
+      staffIdStr,
+      actorUserId,
+      actorRoles,
+      reason,
+    );
   }
 
   /** Hủy đơn → trigger hoàn tiền cọc (PaymentsService.refundDeposit) */
@@ -5965,9 +6130,16 @@ export class BookingsService implements OnApplicationBootstrap {
     return value;
   }
 
-  async getBusySchedulesForProvider(providerId: string): Promise<{
+  async getBusySchedulesForProvider(
+    providerId: string,
+    staffId?: string,
+  ): Promise<{
     bookedDates: string[];
     bookedSlots: { date: string; timeSlot: string; bookingItemId: string }[];
+    totalActiveStaff?: number;
+    maxConcurrentSessions?: number | null;
+    effectiveCapacity?: number;
+    slotAvailability?: any[];
   }> {
     const idStr =
       typeof providerId === 'string'
@@ -5981,6 +6153,34 @@ export class BookingsService implements OnApplicationBootstrap {
       throw new BadRequestException('ID nhà cung cấp không hợp lệ');
     }
 
+    const providerObjId = new Types.ObjectId(idStr);
+    const cacheKey = `${providerObjId.toString()}:${staffId || 'ALL'}`;
+    const currentVersion = getProviderAvailabilityVersion(
+      providerObjId.toString(),
+    );
+    const cached = this.providerBusyCache.get(cacheKey);
+    if (
+      cached &&
+      cached.expiresAt > Date.now() &&
+      cached.version === currentVersion
+    ) {
+      return cached.value;
+    }
+
+    if (this.staffAvailabilityService) {
+      const value =
+        await this.staffAvailabilityService.computeBusyScheduleSummary(
+          providerObjId,
+          staffId,
+        );
+      this.providerBusyCache.set(cacheKey, {
+        value,
+        expiresAt: Date.now() + 10_000,
+        version: currentVersion,
+      });
+      return value;
+    }
+
     const bookedDates = new Set<string>();
     const bookedSlots: {
       date: string;
@@ -5988,13 +6188,6 @@ export class BookingsService implements OnApplicationBootstrap {
       bookingItemId: string;
     }[] = [];
     const now = new Date();
-
-    const providerObjId = new Types.ObjectId(idStr);
-    const cacheKey = providerObjId.toString();
-    const cached = this.providerBusyCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) {
-      return cached.value;
-    }
 
     // Start both data sources immediately. They are independent queries and
     // must not wait on each other over the remote MongoDB connection.
@@ -6146,6 +6339,7 @@ export class BookingsService implements OnApplicationBootstrap {
     this.providerBusyCache.set(cacheKey, {
       value,
       expiresAt: Date.now() + 10_000,
+      version: currentVersion,
     });
     return value;
   }

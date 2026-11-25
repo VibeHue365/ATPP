@@ -34,6 +34,7 @@ import {
 import type { Order } from '../types';
 import traditionalAoDaiImg from '../../../../assets/images/onboarding_traditional.webp';
 import { RentalEvidenceImage } from '../../../rentals/components/RentalEvidenceImage';
+import { OrderStaffAssignmentCard } from './OrderStaffAssignmentCard';
 import { getRentalFulfillmentMeta, normalizeBookingStatusCode } from '../../../../utils/bookingStatus';
 import { BookingContractsSection } from '../../../../components/contracts/BookingContractsSection';
 import Swal from 'sweetalert2';
@@ -1991,6 +1992,18 @@ export function OrderDetailDrawer({
                     </div>
                   </div>
                 </div>
+
+                {/* Staff Assignment & Read-Only Chat Supervision */}
+                {photoSchedule && (
+                  <OrderStaffAssignmentCard
+                    orderId={order._id}
+                    bookingStatus={rawStatus}
+                    schedule={photoSchedule}
+                    toast={toast}
+                    onOrderRefreshed={onSelectOrder}
+                    fetchOrders={fetchOrders}
+                  />
+                )}
 
                 {/* Cancellation Detail Box */}
                 {isCancelled && (

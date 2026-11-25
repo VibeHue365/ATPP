@@ -236,6 +236,19 @@ export function PhotographyCard({
             <Ionicons name="sparkles" size={11} color="#D97706" />
             <Text style={styles.perkWarmText}>Tặng toàn bộ ảnh gốc</Text>
           </View>
+
+          {((photographer.activeStaffCount ?? 0) > 1 ||
+            (photographer.effectiveCapacity ?? 1) > 1) && (
+            <View style={styles.perkPillHighlight}>
+              <Ionicons name="camera-outline" size={12} color="#BA0049" />
+              <Text style={styles.perkHighlightText}>
+                Đội ngũ {photographer.activeStaffCount ?? photographer.effectiveCapacity} thợ
+                {(photographer.effectiveCapacity ?? 1) > 1
+                  ? ` · ${photographer.effectiveCapacity} ca/giờ`
+                  : ''}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Pricing & CTA */}

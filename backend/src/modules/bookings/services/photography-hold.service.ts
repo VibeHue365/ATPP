@@ -5,6 +5,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model, Types } from 'mongoose';
@@ -56,6 +57,12 @@ import { VoucherPricingService } from '../../products/services/voucher-pricing.s
 import { DiscountCampaignService } from '../../products/services/discount-campaign.service';
 import { applyCampaignToRate } from '../../products/utils/campaign-pricing.util';
 import { PromotionDocument } from '../../products/schemas/promotion.schema';
+import {
+  StaffAvailabilityService,
+  type StaffAssignmentDecision,
+  toIctMinutes,
+} from './staff-availability.service';
+import { bumpProviderAvailabilityVersion } from './provider-availability-version';
 
 const HOLD_DURATION_MS = 10 * 60 * 1000;
 const BUSINESS_TIME_ZONE = 'Asia/Ho_Chi_Minh';
@@ -120,6 +127,8 @@ export class PhotographyHoldService {
     private readonly promotionsService: PromotionsService,
     private readonly voucherPricingService: VoucherPricingService,
     private readonly discountCampaignService: DiscountCampaignService,
+    @Optional()
+    private readonly staffAvailabilityService?: StaffAvailabilityService,
   ) {}
 
   async createHold(
@@ -269,9 +278,10 @@ export class PhotographyHoldService {
       })),
       session,
     );
-    await this.assertNoActiveOverlap(
+    const staffAssignments = await this.assertCapacityAndAssignStaff(
       photographyPackage.providerId,
       sessions,
+      dto.preferredStaffId,
       session,
     );
 
@@ -537,26 +547,32 @@ export class PhotographyHoldService {
     await photographyItem.save({ session });
 
     await this.bookingScheduleModel.insertMany(
-      sessions.map((item) => ({
-        bookingId: booking._id,
-        bookingItemId: photographyItem._id,
-        providerId: photographyPackage.providerId,
-        scheduleType: BookingScheduleType.Photoshoot,
-        startsAt: item.startsAt,
-        endsAt: item.endsAt,
-        providerLocalDate: item.providerLocalDate,
-        holdExpiresAt,
-        locationAddress: item.locationAddress ?? null,
-        locationSnapshot: this.toLocationSnapshot(item),
-        includedDurationMinutes:
-          photographyPackage.includedDurationMinutes ??
-          Math.round(photographyPackage.durationHours * 60),
-        overtimeMinutes: quote.overtimeMinutesByClientId[item.clientId] ?? 0,
-        scheduleSchemaVersion: 2,
-        status: BookingScheduleStatus.Held,
-      })),
+      sessions.map((item) => {
+        const assignment = staffAssignments.get(item.clientId);
+        return {
+          bookingId: booking._id,
+          bookingItemId: photographyItem._id,
+          providerId: photographyPackage.providerId,
+          scheduleType: BookingScheduleType.Photoshoot,
+          startsAt: item.startsAt,
+          endsAt: item.endsAt,
+          providerLocalDate: item.providerLocalDate,
+          holdExpiresAt,
+          assignedStaffId: assignment?.assignedStaffId ?? null,
+          assignedStaffSnapshot: assignment?.assignedStaffSnapshot ?? null,
+          locationAddress: item.locationAddress ?? null,
+          locationSnapshot: this.toLocationSnapshot(item),
+          includedDurationMinutes:
+            photographyPackage.includedDurationMinutes ??
+            Math.round(photographyPackage.durationHours * 60),
+          overtimeMinutes: quote.overtimeMinutesByClientId[item.clientId] ?? 0,
+          scheduleSchemaVersion: 2,
+          status: BookingScheduleStatus.Held,
+        };
+      }),
       { session },
     );
+    bumpProviderAvailabilityVersion(photographyPackage.providerId.toString());
 
     let aodaiAllocationIndex = 1;
     for (const reservation of aodaiReservations) {
@@ -1242,9 +1258,10 @@ export class PhotographyHoldService {
       providerLocalDate: item.providerLocalDate,
     }));
     await this.acquireLocks(lockKeys, session);
-    await this.assertNoActiveOverlap(
+    const staffAssignments = await this.assertCapacityAndAssignStaff(
       photographyPackage.providerId,
       sessions,
+      dto.preferredStaffId,
       session,
     );
 
@@ -1404,26 +1421,32 @@ export class PhotographyHoldService {
     await bookingItem.save({ session });
 
     await this.bookingScheduleModel.insertMany(
-      sessions.map((item) => ({
-        bookingId: booking._id,
-        bookingItemId: bookingItem._id,
-        providerId: photographyPackage.providerId,
-        scheduleType: BookingScheduleType.Photoshoot,
-        startsAt: item.startsAt,
-        endsAt: item.endsAt,
-        providerLocalDate: item.providerLocalDate,
-        holdExpiresAt,
-        locationAddress: item.locationAddress ?? null,
-        locationSnapshot: this.toLocationSnapshot(item),
-        includedDurationMinutes:
-          photographyPackage.includedDurationMinutes ??
-          Math.round(photographyPackage.durationHours * 60),
-        overtimeMinutes: quote.overtimeMinutesByClientId[item.clientId] ?? 0,
-        scheduleSchemaVersion: 2,
-        status: BookingScheduleStatus.Held,
-      })),
+      sessions.map((item) => {
+        const assignment = staffAssignments.get(item.clientId);
+        return {
+          bookingId: booking._id,
+          bookingItemId: bookingItem._id,
+          providerId: photographyPackage.providerId,
+          scheduleType: BookingScheduleType.Photoshoot,
+          startsAt: item.startsAt,
+          endsAt: item.endsAt,
+          providerLocalDate: item.providerLocalDate,
+          holdExpiresAt,
+          assignedStaffId: assignment?.assignedStaffId ?? null,
+          assignedStaffSnapshot: assignment?.assignedStaffSnapshot ?? null,
+          locationAddress: item.locationAddress ?? null,
+          locationSnapshot: this.toLocationSnapshot(item),
+          includedDurationMinutes:
+            photographyPackage.includedDurationMinutes ??
+            Math.round(photographyPackage.durationHours * 60),
+          overtimeMinutes: quote.overtimeMinutesByClientId[item.clientId] ?? 0,
+          scheduleSchemaVersion: 2,
+          status: BookingScheduleStatus.Held,
+        };
+      }),
       { session },
     );
+    bumpProviderAvailabilityVersion(photographyPackage.providerId.toString());
 
     return this.toHoldResponse(booking, session);
   }
@@ -1456,6 +1479,49 @@ export class PhotographyHoldService {
       }
       throw error;
     }
+  }
+
+  private async assertCapacityAndAssignStaff(
+    providerId: Types.ObjectId,
+    requested: HoldSession[],
+    preferredStaffId: string | undefined,
+    session: ClientSession,
+  ): Promise<Map<string, StaffAssignmentDecision>> {
+    if (!this.staffAvailabilityService) {
+      await this.assertNoActiveOverlap(providerId, requested, session);
+      return new Map();
+    }
+
+    const evaluation = await this.staffAvailabilityService.evaluateSessions(
+      providerId,
+      requested.map((item) => {
+        const startMin = toIctMinutes(item.startsAt);
+        const rawEnd = toIctMinutes(item.endsAt);
+        const endMin =
+          rawEnd === 0 && item.endsAt.getTime() > item.startsAt.getTime()
+            ? 24 * 60
+            : rawEnd;
+        return {
+          clientId: item.clientId,
+          dateKey: item.providerLocalDate,
+          startMin,
+          endMin,
+        };
+      }),
+      {
+        preferredStaffId: preferredStaffId ?? null,
+        session,
+      },
+    );
+
+    if (!evaluation.valid) {
+      throw new ConflictException(
+        evaluation.errors[0]?.message ||
+          'Khung giờ chụp vừa được khách khác giữ hoặc đã hết thợ trống. Vui lòng chọn giờ khác.',
+      );
+    }
+
+    return evaluation.assignmentsByClientId;
   }
 
   private async assertNoActiveOverlap(
@@ -1629,11 +1695,13 @@ export class PhotographyHoldService {
           : BookingScheduleStatus.Expired,
       holdExpiresAt: booking.holdExpiresAt?.toISOString() ?? null,
       paymentRequiredAmount: booking.pricingSummary.depositTotal,
-      schedules: schedules.map((schedule) => ({
+      schedules: schedules.map((schedule: any) => ({
         id: schedule._id.toString(),
         startsAt: schedule.startsAt?.toISOString() ?? null,
         endsAt: schedule.endsAt?.toISOString() ?? null,
         status: schedule.status,
+        assignedStaffId: schedule.assignedStaffId?.toString?.() ?? null,
+        assignedStaff: schedule.assignedStaffSnapshot ?? null,
       })),
     };
   }

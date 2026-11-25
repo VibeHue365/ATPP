@@ -5,6 +5,7 @@ import { PhotoshootMainCard } from './PhotoshootMainCard';
 import { PhotoshootInfoColumns } from './PhotoshootInfoColumns';
 import { PhotoshootDeliveredGallery } from './PhotoshootDeliveredGallery';
 import { PhotoshootBottomActionBar } from './PhotoshootBottomActionBar';
+import { AssignedStaffContactCard } from './AssignedStaffContactCard';
 import { httpClient } from '../../../../services/httpClient';
 import { useToast } from '../../../../components/feedback/Toast';
 import { getMediaUrl } from '../../../../shared/media/mediaUrl';
@@ -50,8 +51,21 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
   const title = pkgObj?.name || item.packageSnapshot?.name || item.name || 'Gói Chụp Ảnh Nghệ Thuật';
   const image = pkgObj?.coverImage || pkgObj?.images?.[0] || item.coverImage || item.images?.[0] || item.image;
   const code = booking?.bookingCode || (booking?._id ? 'PS-' + booking._id.slice(-4) : 'PS-TAGO');
-  const photographerName = provider?.businessName || provider?.fullName || pkgObj?.photographerName || 'Nhiếp ảnh gia đối tác';
-  const photographerPhone = provider?.phone || provider?.businessPhone || '1900 9999';
+  const activePhotoshootSchedule =
+    (Array.isArray(booking?.schedules)
+      ? booking.schedules.find(
+          (s: any) =>
+            s?.scheduleType === 'PHOTOSHOOT' &&
+            s?.status !== 'CANCELLED' &&
+            s?.status !== 'EXPIRED',
+        ) || booking.schedules.find((s: any) => s?.scheduleType === 'PHOTOSHOOT')
+      : null) || null;
+  const assignedStaff = activePhotoshootSchedule?.assignedStaffSnapshot || null;
+  const studioName = provider?.businessName || provider?.fullName || pkgObj?.photographerName || 'Studio đối tác';
+  const photographerName = assignedStaff?.name
+    ? `${assignedStaff.name} (${studioName})`
+    : studioName;
+  const photographerPhone = assignedStaff?.phone || provider?.phone || provider?.businessPhone || '1900 9999';
 
   // Schedule & Time
   const rawDate = item.shootDate || item.startDate || booking?.startDate;
@@ -348,6 +362,9 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
           disputeResult: booking?.disputeResult
         }}
       />
+
+      {/* 2b. Assigned Photographer Staff & Direct Chat Card */}
+      <AssignedStaffContactCard booking={booking} studioName={studioName} />
 
       {/* 3. Info Columns */}
       <PhotoshootInfoColumns

@@ -8,6 +8,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../../common/guards/roles.guard';
+import { Roles } from '../../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { ProvidersService } from '../../providers/services/providers.service';
@@ -30,24 +32,28 @@ export class PhotographersController {
   ) {}
 
   @Get('earnings')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('PROVIDER', 'ADMIN')
   async getEarnings(@CurrentUser() user: AuthUser) {
     return this.providersService.getEarnings(user.sub);
   }
 
   @Get('schedules/calendar')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('PROVIDER', 'ADMIN')
   async getCalendar(
     @CurrentUser() user: AuthUser,
     @Query('month') month?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('staffId') staffId?: string,
   ) {
     return this.providersService.getPhotographerCalendar(
       user.sub,
       month,
       from,
       to,
+      staffId,
     );
   }
 
@@ -78,8 +84,14 @@ export class PhotographersController {
     @Param('id') id: string,
     @Query('month') month: string,
     @Query('packageId') packageId?: string,
+    @Query('staffId') staffId?: string,
   ) {
-    return this.monthlyAvailabilityService.findForMonth(id, month, packageId);
+    return this.monthlyAvailabilityService.findForMonth(
+      id,
+      month,
+      packageId,
+      staffId,
+    );
   }
 
   /**

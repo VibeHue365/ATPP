@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { BookingsService } from '../../bookings/services/bookings.service';
+import { getProviderAvailabilityVersion } from '../../bookings/services/provider-availability-version';
 import {
   PackageStatus,
   PhotographyPackage,
@@ -38,6 +39,7 @@ export class PhotographerMonthlyAvailabilityService {
     {
       value: { month: string; days: MonthlyAvailabilityDay[] };
       expiresAt: number;
+      version: number;
     }
   >();
 
@@ -54,6 +56,7 @@ export class PhotographerMonthlyAvailabilityService {
     providerId: string,
     month: string,
     packageId?: string,
+    staffId?: string,
   ): Promise<{ month: string; days: MonthlyAvailabilityDay[] }> {
     if (!Types.ObjectId.isValid(providerId) || !/^\d{4}-\d{2}$/.test(month)) {
       throw new NotFoundException('Thông tin lịch làm việc không hợp lệ');
@@ -64,9 +67,14 @@ export class PhotographerMonthlyAvailabilityService {
       throw new NotFoundException('Tháng cần kiểm tra không hợp lệ');
     }
 
-    const cacheKey = `${providerId}:${packageId ?? ''}:${month}`;
+    const cacheKey = `${providerId}:${packageId ?? ''}:${staffId ?? 'ALL'}:${month}`;
+    const currentVersion = getProviderAvailabilityVersion(providerId);
     const cached = this.monthlyCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) {
+    if (
+      cached &&
+      cached.expiresAt > Date.now() &&
+      cached.version === currentVersion
+    ) {
       return cached.value;
     }
 
@@ -113,7 +121,9 @@ export class PhotographerMonthlyAvailabilityService {
           })
           .lean()
           .exec(),
-        this.bookingsService.getBusySchedulesForProvider(providerId),
+        staffId
+          ? this.bookingsService.getBusySchedulesForProvider(providerId, staffId)
+          : this.bookingsService.getBusySchedulesForProvider(providerId),
       ]);
 
     const recurringByDay = new Map(
@@ -189,6 +199,7 @@ export class PhotographerMonthlyAvailabilityService {
       // The final booking flow revalidates availability, so this short TTL
       // only removes repeated month-navigation queries.
       expiresAt: Date.now() + 30_000,
+      version: currentVersion,
     });
     return value;
   }

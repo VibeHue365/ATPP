@@ -29,8 +29,9 @@ export const providerApi = {
   getAnalytics<T = unknown>(...args: Tail<Parameters<typeof httpClient.get<T>>>) {
     return httpClient.get<T>(`/providers/me/analytics`, ...args);
   },
-  getCalendar<T = unknown>(month: string, ...args: Tail<Parameters<typeof httpClient.get<T>>>) {
-    return httpClient.get<T>(`/api/v1/photographers/schedules/calendar?month=${encodeURIComponent(month)}`, ...args);
+  getCalendar<T = unknown>(month: string, staffId?: string, ...args: Tail<Parameters<typeof httpClient.get<T>>>) {
+    const staffQuery = staffId ? `&staffId=${encodeURIComponent(staffId)}` : '';
+    return httpClient.get<T>(`/api/v1/photographers/schedules/calendar?month=${encodeURIComponent(month)}${staffQuery}`, ...args);
   },
   updateProfile<T = unknown>(...args: Tail<Parameters<typeof httpClient.patch<T>>>) {
     return httpClient.patch<T>(`/providers/me`, ...args);

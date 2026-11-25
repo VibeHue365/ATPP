@@ -36,6 +36,7 @@ import { BookingFlowStepper } from '@/components/booking/BookingFlowStepper';
 import { BookingContractsSection } from '@/components/contracts/BookingContractsSection';
 import { ContractDetailModal } from '@/components/contracts/ContractDetailModal';
 import { ContractPdfModal } from '@/components/contracts/ContractPdfModal';
+import { OrderStaffAssignmentSection } from '@/components/provider/orders/OrderStaffAssignmentSection';
 
 export type ProviderRentalActionType =
   | 'READY'
@@ -63,6 +64,7 @@ interface OrderDetailModalProps {
   ) => void;
   onOpenChat?: (bookingId: string) => void;
   onOpenNavigationMap?: (order: any) => void;
+  onOrderUpdated?: () => void;
   actionLoading?: boolean;
 }
 
@@ -87,6 +89,7 @@ export function OrderDetailModal({
   onOpenWorkflowModal,
   onOpenChat,
   onOpenNavigationMap,
+  onOrderUpdated,
   actionLoading = false,
 }: OrderDetailModalProps) {
   const [activeContractDetail, setActiveContractDetail] =
@@ -290,6 +293,12 @@ export function OrderDetailModal({
                 </View>
               </View>
             </View>
+
+            {/* Studio Owner Staff Dispatch & Chat Supervision */}
+            <OrderStaffAssignmentSection
+              order={order}
+              onOrderUpdated={onOrderUpdated}
+            />
 
             {/* All Item Details Box */}
             <View style={styles.cardBox}>

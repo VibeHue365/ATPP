@@ -150,6 +150,18 @@ const permissionSeeds = [
     'SMART_TAG',
     'Manage smart tag definitions and taxonomy revisions',
   ],
+  [
+    'staff:schedule_read',
+    'Read Assigned Staff Schedules',
+    'STAFF',
+    'Read own assigned photoshoot schedules',
+  ],
+  [
+    'staff:schedule_operate',
+    'Operate Assigned Staff Schedules',
+    'STAFF',
+    'Check-in and finish own assigned photoshoot schedules',
+  ],
 ] as const;
 
 const customerPermissions = [
@@ -159,6 +171,16 @@ const customerPermissions = [
   'auth:login',
   'auth:logout',
   'booking:create',
+];
+
+const staffPermissions = [
+  'profile:read',
+  'profile:update',
+  'avatar:update',
+  'auth:login',
+  'auth:logout',
+  'staff:schedule_read',
+  'staff:schedule_operate',
 ];
 
 const providerPermissions = [
@@ -190,6 +212,7 @@ const protectedAdminPermissions = [
 const roleSeeds = [
   ['CUSTOMER', 'Customer', 'Customer account', customerPermissions],
   ['PROVIDER', 'Provider', 'Provider account', providerPermissions],
+  ['STAFF', 'Staff', 'Studio photographer staff account', staffPermissions],
   [
     'ADMIN',
     'Admin',
@@ -401,7 +424,7 @@ export class RolesService implements OnModuleInit {
         { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
       );
 
-      if (code === 'ADMIN' || code === 'PROVIDER') {
+      if (code === 'ADMIN' || code === 'PROVIDER' || code === 'STAFF') {
         await this.roleModel.updateOne(
           { code },
           { $addToSet: { permissions: { $each: [...permissions] } } },

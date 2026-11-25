@@ -17,10 +17,16 @@ export function openNotificationData(
       ? data.targetRole.toLowerCase()
       : null;
 
+  const currentMode = getCurrentPortalMode();
+  if (currentMode === "staff" || targetRole === "staff") {
+    router.push("/staff" as Href);
+    return true;
+  }
+
   const isProviderTarget =
     targetRole === "provider" ||
     (targetRole !== "customer" &&
-      (options?.isProviderPortal ?? getCurrentPortalMode() === "provider"));
+      (options?.isProviderPortal ?? currentMode === "provider"));
 
   if (isProviderTarget && bookingId) {
     router.push({

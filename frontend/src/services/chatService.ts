@@ -7,6 +7,8 @@ export interface AvailableChatPartner {
   businessName: string;
   capabilities: string[];
   avatarUrl: string | null;
+  partnerType?: 'STUDIO_OWNER' | 'ASSIGNED_CUSTOMER' | 'STAFF' | 'PROVIDER';
+  subtitle?: string;
 }
 
 export const chatService = {

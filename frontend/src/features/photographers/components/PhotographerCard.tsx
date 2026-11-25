@@ -9,6 +9,7 @@ import {
   Layers,
   Sparkles,
   Star,
+  Users,
 } from 'lucide-react';
 import { ImageWithFallback } from '../../../shared/media/ImageWithFallback';
 import type { PhotographerPackage, PhotographerSummary } from '../types/photographer.types';
@@ -290,6 +291,19 @@ export const PhotographerCard: React.FC<PhotographerCardProps> = ({
             <ImageIcon size={12} className="pl-spec-icon" />
             <span>{editedPhotosCount ? `${editedPhotosCount} ảnh đã chỉnh sửa` : 'Gói chuẩn'}</span>
           </span>
+
+          {((photographer.activeStaffCount ?? 0) >= 2 || (photographer.effectiveCapacity ?? 1) >= 2) && (
+            <span
+              className="pl-spec-chip"
+              style={{ background: '#FDF2F4', color: '#8E1B2E', borderColor: '#F2C6CE' }}
+              title="Hỗ trợ nhận nhiều ca trùng giờ"
+            >
+              <Users size={11} />
+              <span>
+                Đội ngũ {photographer.activeStaffCount ?? photographer.effectiveCapacity ?? 1} thợ · {photographer.effectiveCapacity ?? 1} ca/lúc
+              </span>
+            </span>
+          )}
 
           {hasAoDaiInCart && (
             <span

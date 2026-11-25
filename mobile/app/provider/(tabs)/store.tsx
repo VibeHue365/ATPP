@@ -769,12 +769,24 @@ export default function ProviderStoreScreen() {
               onPressAvatar={() => openStoreHub('SETTINGS')}
             />
 
-            {/* 1b. Quick Store Management Hub Strip (Web Parity: Settings, Contracts V2, Vouchers, Packages, Analytics) */}
+            {/* 1b. Quick Store Management Hub Strip (Web Parity: Settings, Staff, Contracts V2, Vouchers, Packages, Analytics) */}
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.hubStripRow}
             >
+              <Pressable
+                style={styles.hubActionCard}
+                onPress={() => router.push('/provider/staff' as Href)}
+              >
+                <View style={styles.hubIconCircle}>
+                  <Ionicons name="people-outline" size={17} color="#BA0049" />
+                </View>
+                <Text style={styles.hubActionLabel} numberOfLines={1}>
+                  Thợ chụp
+                </Text>
+              </Pressable>
+
               {(
                 [
                   { tab: 'SETTINGS', label: 'Hồ sơ tiệm', icon: 'settings-outline' },

@@ -114,7 +114,10 @@ export function createOrderDataActions({ setLoadingOrders, setOrders, actionMenu
 
         return {
           _id: b._id,
-          id: `#${b._id?.slice(-6).toUpperCase()}`,
+          id: b.bookingCode
+            ? `#${b.bookingCode}`
+            : `#${b._id?.slice(-6).toUpperCase()}`,
+          bookingCode: b.bookingCode || '',
           customerName: custName,
           customerEmail: custEmail,
           customerPhone: cust?.phone || cust?.profile?.phoneNumber || b.contactPhone || b.customerPhone || '0901 234 567',

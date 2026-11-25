@@ -1047,6 +1047,7 @@ export class ProvidersService {
     month?: string,
     from?: string,
     to?: string,
+    staffId?: string,
   ) {
     const provider = await this.requireProvider(userIdStr);
     let start: Date;
@@ -1078,13 +1079,18 @@ export class ProvidersService {
       throw new BadRequestException('Invalid calendar date range');
     }
 
+    const scheduleMatch: Record<string, unknown> = {
+      providerId: provider._id,
+      scheduleType: 'PHOTOSHOOT',
+    };
+    if (staffId && Types.ObjectId.isValid(staffId)) {
+      scheduleMatch.assignedStaffId = new Types.ObjectId(staffId);
+    }
+
     const BookingSchedule = this.bookingModel.db.model('BookingSchedule');
     const schedules = await BookingSchedule.aggregate([
       {
-        $match: {
-          providerId: provider._id,
-          scheduleType: 'PHOTOSHOOT',
-        },
+        $match: scheduleMatch,
       },
       {
         $addFields: { eventDate: { $ifNull: ['$startsAt', '$scheduledDate'] } },
@@ -1117,6 +1123,11 @@ export class ProvidersService {
           startsAt: 1,
           endsAt: 1,
           timeSlot: 1,
+          assignedStaffId: 1,
+          assignedStaffSnapshot: 1,
+          checkedInAt: 1,
+          shootFinishedAt: 1,
+          staffFieldNote: 1,
           scheduleStatus: '$status',
           bookingStatus: '$booking.status',
           bookingCode: '$booking.bookingCode',
@@ -1152,6 +1163,11 @@ export class ProvidersService {
         endsAt: schedule.endsAt || null,
         timeSlot: schedule.timeSlot || null,
         location: schedule.location || '',
+        assignedStaffId: schedule.assignedStaffId?.toString() ?? null,
+        assignedStaffSnapshot: schedule.assignedStaffSnapshot ?? null,
+        checkedInAt: schedule.checkedInAt ?? null,
+        shootFinishedAt: schedule.shootFinishedAt ?? null,
+        staffFieldNote: schedule.staffFieldNote ?? null,
         status: cancelled
           ? 'CANCELLED'
           : schedule.scheduleStatus || 'CONFIRMED',

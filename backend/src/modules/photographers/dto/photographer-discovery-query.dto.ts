@@ -120,6 +120,22 @@ export class PhotographerDiscoveryQueryDto {
   @Min(0)
   @Max(500)
   searchRadiusKm?: number;
+  /** Minimum active photographer staff members required on the studio team. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(30)
+  minPhotographers?: number;
+
+  /** Minimum open concurrent slots required when searching (e.g. 2 slots in the same time window). */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(30)
+  requiredSlots?: number;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

@@ -353,3 +353,43 @@ describe('UC-24 View Photography Concept (DaiBLL)', () => {
     await expect(service.findConcepts()).resolves.toEqual({ data: [] });
   });
 });
+
+describe('Multi-photographer team & capacity discovery filters', () => {
+  it('filters studios by minPhotographers, requiredSlots, and groupSize together', async () => {
+    const { service } = createService([
+      photographer({
+        businessName: 'Solo Photographer',
+        activeStaffCount: 1,
+        effectiveCapacity: 1,
+        packages: [{ price: 1_000_000, maxPeople: 4 }],
+      }),
+      photographer({
+        businessName: 'Huế Team Studio',
+        activeStaffCount: 3,
+        effectiveCapacity: 2,
+        packages: [{ price: 1_500_000, maxPeople: 5 }],
+      }),
+      photographer({
+        businessName: 'Small Duo Studio',
+        activeStaffCount: 2,
+        effectiveCapacity: 2,
+        packages: [{ price: 1_200_000, maxPeople: 2 }],
+      }),
+    ]);
+
+    const multiRes = await service.findAll({ minPhotographers: 2 });
+    expect(multiRes.data.map((p: Row) => p.businessName)).toEqual([
+      'Huế Team Studio',
+      'Small Duo Studio',
+    ]);
+
+    const combinedRes = await service.findAll({
+      minPhotographers: 2,
+      requiredSlots: 2,
+      groupSize: '3-5',
+    });
+    expect(combinedRes.data.map((p: Row) => p.businessName)).toEqual([
+      'Huế Team Studio',
+    ]);
+  });
+});

@@ -20,6 +20,7 @@ export type BookingStatus =
 
 export interface BookingProvider {
   _id: string;
+  userId?: string | null;
   businessName?: string;
   contact?: { phone?: string; email?: string };
   address?: {
@@ -162,6 +163,15 @@ export interface BookingItem {
   rescheduleRequest?: RescheduleRequest | null;
 }
 
+export interface AssignedStaffSnapshot {
+  staffId: string;
+  name: string;
+  phone?: string | null;
+  avatarUrl?: string | null;
+  specialty?: string | null;
+  linkedUserId?: string | null;
+}
+
 export interface BookingSchedule {
   _id: string;
   bookingItemId?: string;
@@ -178,6 +188,11 @@ export interface BookingSchedule {
     geo?: { coordinates?: number[] };
   } | null;
   actualTime?: string | null;
+  assignedStaffId?: string | null;
+  assignedStaffSnapshot?: AssignedStaffSnapshot | null;
+  checkedInAt?: string | null;
+  shootFinishedAt?: string | null;
+  staffFieldNote?: string | null;
   locationChangeRequest?: {
     status?: string;
     note?: string | null;
@@ -278,9 +293,13 @@ export interface ProviderAvailability {
 }
 
 export interface ProviderBusyDates {
+  activeStaffCount?: number;
+  maxConcurrentSessions?: number | null;
+  effectiveCapacity?: number;
   bookedSlots?: Array<{
     date: string;
     timeSlot: string;
     bookingItemId?: string;
+    assignedStaffId?: string | null;
   }>;
 }

@@ -24,12 +24,36 @@ import { useToast } from '@/contexts/ToastContext';
 import type { ChatMessage } from '@/types/chat';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { getMediaUrl } from '@/utils/media';
+import { isPartnerPortalUser, isStaffPortalUser } from '@/utils/navigation';
 
-const QUICK_REPLIES = [
-  'Chào tiệm, mình muốn tư vấn chọn size cổ phục ạ',
-  'Mẫu này có kèm phụ kiện mấn/quạt không ạ?',
-  'Mình muốn xác nhận lại giờ nhận đồ / chụp ảnh',
-];
+type MobileChatMode = 'staff' | 'provider' | 'customer';
+
+const QUICK_REPLIES_BY_MODE: Record<MobileChatMode, string[]> = {
+  customer: [
+    'Cho mình hỏi lịch chụp & size Áo Dài còn trống ạ',
+    'Điểm hẹn & giờ chụp chính xác ở đâu vậy ạ?',
+    'Nhờ cập nhật giúp mình tiến độ ảnh nhé',
+  ],
+  provider: [
+    'Studio đã xác nhận lịch hẹn của bạn!',
+    'Nhờ bạn rà lại địa điểm & giờ ca chụp hôm nay',
+    'Ảnh của bạn đang được xử lý hậu kỳ',
+  ],
+  staff: [
+    'Mình đã có mặt tại điểm chụp rồi ạ',
+    'Đang di chuyển tới điểm hẹn, khoảng 10 phút nữa tới',
+    'Đã hoàn thành buổi chụp hôm nay!',
+  ],
+};
+
+const EMPTY_SUBTITLE_BY_MODE: Record<MobileChatMode, string> = {
+  customer:
+    'Bạn có thể hỏi về số đo trang phục, lịch trống hoặc trao đổi điểm hẹn với Thợ chụp.',
+  provider:
+    'Trao đổi chi tiết đơn đặt lịch với khách hàng hoặc dặn dò Thợ chụp trong Studio.',
+  staff:
+    'Trao đổi nhanh điểm hẹn với khách chụp hoặc báo cáo tiến độ ca chụp cho Chủ Studio.',
+};
 
 export default function Screen() {
   return (
@@ -40,10 +64,29 @@ export default function Screen() {
 }
 
 function Conversation() {
-  const { id, name = 'Đối tác TàGo' } = useLocalSearchParams<{ id: string; name?: string }>();
+  const {
+    id,
+    name = 'Đối tác TàGo',
+    roleBadge = '',
+    bookingCode = '',
+    bookingSummary = '',
+  } = useLocalSearchParams<{
+    id: string;
+    name?: string;
+    roleBadge?: string;
+    bookingCode?: string;
+    bookingSummary?: string;
+  }>();
   const { user } = useAuth();
   const { socket, isConnected } = useSocket();
   const { show } = useToast();
+  const chatMode: MobileChatMode = isStaffPortalUser(user)
+    ? 'staff'
+    : isPartnerPortalUser(user)
+      ? 'provider'
+      : 'customer';
+  const quickReplies = QUICK_REPLIES_BY_MODE[chatMode];
+  const emptySubtitle = EMPTY_SUBTITLE_BY_MODE[chatMode];
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -182,9 +225,16 @@ function Conversation() {
             <Text style={s.partnerInitial}>{name.charAt(0).toUpperCase()}</Text>
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={s.name} numberOfLines={1}>
-              {name}
-            </Text>
+            <View style={s.nameRow}>
+              <Text style={s.name} numberOfLines={1}>
+                {name}
+              </Text>
+              {roleBadge ? (
+                <View style={s.rolePill}>
+                  <Text style={s.rolePillText}>{roleBadge}</Text>
+                </View>
+              ) : null}
+            </View>
             <View style={s.connection}>
               <View style={[s.dot, isConnected ? s.online : s.offline]} />
               <Text style={s.sub}>
@@ -193,6 +243,21 @@ function Conversation() {
             </View>
           </View>
         </View>
+
+        {bookingCode || bookingSummary ? (
+          <View style={s.contextBanner}>
+            {bookingCode ? (
+              <View style={s.contextCodeBadge}>
+                <Text style={s.contextCodeText}>Đơn #{bookingCode}</Text>
+              </View>
+            ) : null}
+            {bookingSummary ? (
+              <Text style={s.contextSummary} numberOfLines={2}>
+                {bookingSummary}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
 
         <ScrollView
           ref={scroll}
@@ -203,9 +268,7 @@ function Conversation() {
             <View style={s.emptyBox}>
               <Ionicons name="chatbubbles-outline" size={32} color={Colors.primary} />
               <Text style={s.emptyTitle}>Bắt đầu cuộc trò chuyện với {name}</Text>
-              <Text style={s.empty}>
-                Bạn có thể hỏi về số đo trang phục, lịch trống hoặc gửi hình ảnh mẫu tham khảo.
-              </Text>
+              <Text style={s.empty}>{emptySubtitle}</Text>
             </View>
           ) : (
             messages.map((message, index) => {
@@ -247,7 +310,7 @@ function Conversation() {
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={s.quickRow}>
-            {QUICK_REPLIES.map((qr) => (
+            {quickReplies.map((qr) => (
               <Pressable key={qr} onPress={() => void send(qr)} style={s.quickChip}>
                 <Text style={s.quickChipText}>{qr}</Text>
               </Pressable>
@@ -354,7 +417,47 @@ const s = StyleSheet.create({
     fontSize: 16,
     color: Colors.primary,
   },
-  name: { fontFamily: FontFamily.bodyBold, fontSize: 14.5, color: '#1B1C1C' },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  name: { flexShrink: 1, fontFamily: FontFamily.bodyBold, fontSize: 14.5, color: '#1B1C1C' },
+  rolePill: {
+    backgroundColor: '#FFF0F3',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  rolePillText: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: 10,
+    color: Colors.primary,
+  },
+  contextBanner: {
+    backgroundColor: '#FFF9F2',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0E4D2',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+  },
+  contextCodeBadge: {
+    backgroundColor: '#FFF0F3',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  contextCodeText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 10.5,
+    color: Colors.primary,
+  },
+  contextSummary: {
+    flex: 1,
+    fontFamily: FontFamily.body,
+    fontSize: 11.5,
+    color: '#5F5143',
+  },
   connection: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
   dot: { width: 6, height: 6, borderRadius: 3 },
   online: { backgroundColor: Colors.success },

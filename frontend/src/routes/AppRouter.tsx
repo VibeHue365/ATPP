@@ -39,6 +39,9 @@ const SettingsPage = lazy(() => import('../pages/dashboard/SettingsPage'));
 const NotFoundPage = lazy(() => import('../pages/errors/NotFoundPage'));
 const OnboardingPage = lazy(() => import('../pages/onboarding/OnboardingPage'));
 const ProviderDashboard = lazy(() => import('../pages/providerdashboard/ProviderDashboard'));
+const StaffPortalPage = lazy(() =>
+  import('../pages/staff/StaffPortalPage').then((m) => ({ default: m.StaffPortalPage }))
+);
 const BecomeProviderPage = lazy(() => import('../pages/provider/BecomeProviderPage'));
 const AdminDashboard = lazy(() => import('../pages/admin/AdminDashboard'));
 const ComboListingPage = lazy(() =>
@@ -128,6 +131,7 @@ export const AppRouter: React.FC = () => {
         <Route element={<ProtectedRoute />}>
           {/* Onboarding is account-specific and saves preferences to /users/me. */}
           <Route path={ROUTES.ONBOARDING} element={<OnboardingPage />} />
+          <Route path={ROUTES.STAFF_PORTAL} element={<StaffPortalPage />} />
           <Route element={<MainLayout />}>
             {/* Redirect /dashboard to /dashboard/profile */}
             <Route path={ROUTES.DASHBOARD} element={<Navigate to={ROUTES.PROFILE} replace />} />

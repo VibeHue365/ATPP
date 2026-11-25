@@ -76,6 +76,17 @@ export const ScheduleBookingCard: React.FC<ScheduleBookingCardProps> = ({
     item.providerId?.fullName ||
     'Đối tác TàGo';
 
+  const activePhotoSchedule = Array.isArray(booking.schedules)
+    ? booking.schedules.find(
+        (s: any) =>
+          s?.scheduleType === 'PHOTOSHOOT' &&
+          s?.status !== 'CANCELLED' &&
+          s?.status !== 'EXPIRED',
+      ) || booking.schedules.find((s: any) => s?.scheduleType === 'PHOTOSHOOT')
+    : null;
+  const assignedStaffName: string | null =
+    activePhotoSchedule?.assignedStaffSnapshot?.name || null;
+
   // Date formatting
   const rawDate = item.shootDate || item.startDate || item.rentalFrom || booking.startDate;
   const dateFormatted = rawDate
@@ -173,8 +184,25 @@ export const ScheduleBookingCard: React.FC<ScheduleBookingCardProps> = ({
             </span>
           </div>
 
-          {/* Additional details: size / color or countdown pill */}
+          {/* Additional details: size / color, assigned photographer, or countdown pill */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
+            {(isPhoto || isCombo) && (
+              <span
+                style={{
+                  fontSize: '11.5px',
+                  color: assignedStaffName ? '#8E1B2E' : '#B45309',
+                  background: assignedStaffName ? '#FDF2F4' : '#FFFBEB',
+                  border: `1px solid ${assignedStaffName ? '#F5D0D6' : '#FDE68A'}`,
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  fontWeight: 700,
+                }}
+              >
+                {assignedStaffName
+                  ? `Thợ chụp: ${assignedStaffName}`
+                  : 'Chờ Studio phân công thợ'}
+              </span>
+            )}
             {!isPhoto && (item.selectedSize || item.size) && (
               <span style={{ fontSize: '11.5px', color: '#7D736B', background: '#F5EFE6', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
                 Size: {item.selectedSize || item.size}

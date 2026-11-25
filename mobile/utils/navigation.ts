@@ -27,6 +27,24 @@ export function isPartnerPortalUser(
   );
 }
 
+/**
+ * Isolated Studio Staff Photographer account (`role: STAFF`, not a Studio Owner or Admin).
+ * Staff accounts are strictly confined to the `/staff` operational portal + `/chat` + `/notifications`.
+ */
+export function isStaffPortalUser(
+  user?: Pick<SessionUser, 'roles'> | null,
+): boolean {
+  const normalized = (user?.roles ?? []).map((role) =>
+    String(role).toUpperCase(),
+  );
+  return (
+    normalized.includes('STAFF') &&
+    !normalized.includes('PROVIDER') &&
+    !normalized.includes('PHOTOGRAPHER') &&
+    !normalized.includes('ADMIN')
+  );
+}
+
 export function isProfileEntryPath(path?: string | null): boolean {
   if (!path) return false;
   const clean = stripQueryAndHash(path.trim()).replace(/\/+$/, '') || '/';
@@ -69,6 +87,10 @@ export function resolvePostAuthDestination(
   user: Pick<SessionUser, 'roles' | 'hasCompletedOnboarding'>,
   returnTo?: string | string[] | null,
 ): Href {
+  if (isStaffPortalUser(user)) {
+    return '/staff' as Href;
+  }
+
   if (isPartnerPortalUser(user)) {
     return '/provider' as Href;
   }
@@ -134,7 +156,7 @@ export async function clearPendingOAuthReturnTo(): Promise<void> {
 }
 
 const ACTIVE_PORTAL_MODE_KEY = 'vh_active_portal_mode';
-export type PortalMode = 'provider' | 'customer';
+export type PortalMode = 'provider' | 'customer' | 'staff';
 let currentPortalModeCache: PortalMode | null = null;
 const portalModeListeners = new Set<(mode: PortalMode) => void>();
 
@@ -164,7 +186,7 @@ export async function getActivePortalMode(): Promise<PortalMode | null> {
   if (currentPortalModeCache) return currentPortalModeCache;
   try {
     const raw = await appStorage.get(ACTIVE_PORTAL_MODE_KEY);
-    if (raw === 'provider' || raw === 'customer') {
+    if (raw === 'provider' || raw === 'customer' || raw === 'staff') {
       currentPortalModeCache = raw;
       return raw;
     }

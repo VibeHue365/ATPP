@@ -9,6 +9,10 @@ import {
   ProviderVerification,
   ProviderVerificationSchema,
 } from './schemas/provider-verification.schema';
+import {
+  ProviderStaff,
+  ProviderStaffSchema,
+} from './schemas/provider-staff.schema';
 import { ProductsModule } from '../products/products.module';
 import { StorageModule } from '../storage/storage.module';
 import { userModels } from '../users/users.module';
@@ -41,8 +45,10 @@ import { ProviderVerificationsController } from './controllers/provider-verifica
 import { AdminProviderVerificationsController } from './controllers/admin-provider-verifications.controller';
 import { AdminProvidersController } from './controllers/admin-providers.controller';
 import { ProvidersController } from './controllers/providers.controller';
+import { ProviderStaffController } from './controllers/provider-staff.controller';
 import { AdminPortfolioModerationController } from './controllers/admin-portfolio-moderation.controller';
 import { ProvidersService } from './services/providers.service';
+import { ProviderStaffService } from './services/provider-staff.service';
 import { ProviderOverviewService } from './services/provider-overview.service';
 import { ProvidersRepository } from './repositories/providers.repository';
 import { ProviderVerificationService } from './services/provider-verification.service';
@@ -72,6 +78,7 @@ export const providerModels = MongooseModule.forFeature([
     schema: ProviderVerificationOcrOutboxEventSchema,
   },
   { name: PortfolioItem.name, schema: PortfolioItemSchema },
+  { name: ProviderStaff.name, schema: ProviderStaffSchema },
 ]);
 
 const providerSupportModels = MongooseModule.forFeature([
@@ -97,6 +104,7 @@ const providerSupportModels = MongooseModule.forFeature([
     SmartTaggingModule,
   ],
   controllers: [
+    ProviderStaffController,
     ProvidersController,
     ProviderVerificationsController,
     AdminProviderVerificationsController,
@@ -105,6 +113,7 @@ const providerSupportModels = MongooseModule.forFeature([
   ],
   providers: [
     ProvidersService,
+    ProviderStaffService,
     ProviderOverviewService,
     ProvidersRepository,
     ProviderVerificationService,
@@ -117,6 +126,7 @@ const providerSupportModels = MongooseModule.forFeature([
   exports: [
     providerModels,
     ProvidersService,
+    ProviderStaffService,
     ProviderOverviewService,
     ProvidersRepository,
     ProviderVerificationService,

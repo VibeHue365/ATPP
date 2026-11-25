@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { bookingApi, type BookingIncident } from '@/apis/bookingApi';
+import { chatApi } from '@/apis/chatApi';
 import { checkoutApi } from '@/apis/checkoutApi';
 import { contractApi } from '@/apis/contractApi';
 import { BookingContractsSection } from '@/components/contracts/BookingContractsSection';
@@ -186,6 +187,7 @@ function BookingDetail() {
   const [returnNote, setReturnNote] = useState('');
   const [returnPhotos, setReturnPhotos] = useState<string[]>([]);
   const [returnUploading, setReturnUploading] = useState(false);
+  const [chatOpeningKey, setChatOpeningKey] = useState<string | null>(null);
 
   if (loading) return <LoadingState label="Đang tải chi tiết vé đặt lịch..." />;
   if (error || !booking)
@@ -438,7 +440,41 @@ function BookingDetail() {
     booking.status
   );
   const canReschedule = ['DEPOSIT_PAID', 'CONFIRMED'].includes(booking.status);
-  const photoshootSchedule = booking.schedules?.find((item) => item.scheduleType === 'PHOTOSHOOT');
+  const photoshootSchedule =
+    booking.schedules?.find(
+      (item) =>
+        item.scheduleType === 'PHOTOSHOOT' &&
+        item.status !== 'CANCELLED' &&
+        item.status !== 'EXPIRED',
+    ) ?? booking.schedules?.find((item) => item.scheduleType === 'PHOTOSHOOT');
+  const assignedStaff = photoshootSchedule?.assignedStaffSnapshot;
+
+  const openDirectChat = async (
+    targetUserId: string | null | undefined,
+    title: string,
+    key: string,
+  ) => {
+    if (!targetUserId) {
+      show('Tài khoản nhận tin nhắn hiện chưa được kích hoạt', 'info');
+      return;
+    }
+    setChatOpeningKey(key);
+    try {
+      const room = await chatApi.createRoom(targetUserId);
+      if (room?.id) {
+        router.push({
+          pathname: '/chat/[id]',
+          params: { id: room.id, name: title },
+        } as unknown as Href);
+        return;
+      }
+      router.push('/chat' as Href);
+    } catch (cause) {
+      show(getApiErrorMessage(cause, 'Không thể mở cuộc trò chuyện'), 'error');
+    } finally {
+      setChatOpeningKey(null);
+    }
+  };
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=8&data=${encodeURIComponent(
     booking.bookingCode
   )}`;
@@ -582,6 +618,20 @@ function BookingDetail() {
                 style={styles.contact}>
                 <Ionicons name="storefront-outline" size={17} color={Colors.primary} />
               </Pressable>
+              {!!provider.userId && (
+                <Pressable
+                  disabled={chatOpeningKey === `provider-${provider._id}`}
+                  onPress={() =>
+                    void openDirectChat(
+                      provider.userId,
+                      provider.businessName ?? 'Studio',
+                      `provider-${provider._id}`,
+                    )
+                  }
+                  style={styles.contact}>
+                  <Ionicons name="chatbubble-ellipses-outline" size={17} color={Colors.primary} />
+                </Pressable>
+              )}
               {!!provider.contact?.phone && (
                 <Pressable
                   onPress={() => Linking.openURL(`tel:${provider.contact?.phone}`)}
@@ -592,6 +642,68 @@ function BookingDetail() {
             </View>
           </View>
         ))}
+
+        {photoItems.length > 0 && (
+          <View style={styles.staffAssignedCard}>
+            <View style={{ flex: 1, gap: 3 }}>
+              <Text style={styles.smallLabel}>NHIẾP ẢNH GIA PHỤ TRÁCH</Text>
+              {assignedStaff ? (
+                <>
+                  <Text style={styles.providerName}>{assignedStaff.name}</Text>
+                  <Text style={styles.staffAssignedSub}>
+                    {assignedStaff.specialty || 'Nhiếp ảnh gia chuyên trách Studio'}
+                  </Text>
+                  {photoshootSchedule?.shootFinishedAt ? (
+                    <Text style={styles.staffProgressBadge}>
+                      ✓ Đã hoàn tất buổi chụp lúc{' '}
+                      {formatDateTime(photoshootSchedule.shootFinishedAt)}
+                    </Text>
+                  ) : photoshootSchedule?.checkedInAt ? (
+                    <Text style={styles.staffProgressBadge}>
+                      ✓ Thợ đã check-in lúc{' '}
+                      {formatDateTime(photoshootSchedule.checkedInAt)}
+                    </Text>
+                  ) : null}
+                </>
+              ) : (
+                <Text style={styles.staffPendingText}>
+                  Studio đang điều phối thợ chụp phụ trách cho lịch hẹn của bạn.
+                </Text>
+              )}
+            </View>
+
+            {assignedStaff && (
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {!!assignedStaff.phone && (
+                  <Pressable
+                    onPress={() =>
+                      Linking.openURL(
+                        `tel:${assignedStaff.phone!.replace(/[^0-9+]/g, '')}`,
+                      )
+                    }
+                    style={styles.contact}
+                  >
+                    <Ionicons name="call-outline" size={17} color={Colors.primary} />
+                  </Pressable>
+                )}
+                <Pressable
+                  disabled={chatOpeningKey === 'assigned-staff'}
+                  onPress={() =>
+                    void openDirectChat(
+                      assignedStaff.linkedUserId || assignedStaff.staffId,
+                      assignedStaff.name,
+                      'assigned-staff',
+                    )
+                  }
+                  style={styles.chatStaffBtn}
+                >
+                  <Ionicons name="chatbubble-outline" size={15} color="#FFFFFF" />
+                  <Text style={styles.chatStaffText}>Chat với thợ</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+        )}
 
         <Section
           title={
@@ -2007,5 +2119,47 @@ const styles = StyleSheet.create({
     height: 72,
     borderRadius: 10,
     backgroundColor: '#FFF0F3',
+  },
+  staffAssignedCard: {
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FFD9E2',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    ...Shadow,
+  },
+  staffAssignedSub: {
+    fontFamily: FontFamily.body,
+    fontSize: 11,
+    color: '#5F5E5E',
+  },
+  staffProgressBadge: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: 10.5,
+    color: '#047857',
+    marginTop: 2,
+  },
+  staffPendingText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: 11.5,
+    color: '#B45309',
+    marginTop: 2,
+  },
+  chatStaffBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 11,
+    height: 38,
+    borderRadius: 19,
+  },
+  chatStaffText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 11,
+    color: '#FFFFFF',
   },
 });

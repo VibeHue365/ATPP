@@ -13,6 +13,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { chatApi } from '@/apis/chatApi';
 import { photographerApi } from '@/apis/photographerApi';
+import { staffApi, type PublicProviderStaffMember } from '@/apis/staffApi';
 import { TagoLocationPicker } from '@/components/map/TagoLocationPicker';
 import { PhotographerReviews } from '@/components/photographer/PhotographerReviews';
 import { PhotographyGallery } from '@/components/photographer/PhotographyGallery';
@@ -195,7 +196,16 @@ export default function PhotographerDetailScreen() {
     lng: 107.5786,
   });
   const [concept, setConcept] = useState('');
+  const [publicStaff, setPublicStaff] = useState<PublicProviderStaffMember[]>([]);
+  const [teamCapacity, setTeamCapacity] = useState<{
+    activeStaffCount: number;
+    effectiveCapacity: number;
+  }>({ activeStaffCount: 1, effectiveCapacity: 1 });
+  const [preferredStaffId, setPreferredStaffId] = useState<string | null>(null);
   const [monthStatuses, setMonthStatuses] = useState<Record<string, string>>({});
+  const [monthDayMeta, setMonthDayMeta] = useState<
+    Record<string, { status: string; remainingCapacity?: number; totalCapacity?: number }>
+  >({});
   const [timeRanges, setTimeRanges] = useState<Array<{ start: string; end: string }>>([]);
   const [scheduleLoading, setScheduleLoading] = useState(false);
   const [quote, setQuote] = useState<PhotographyQuote | null>(null);
@@ -300,29 +310,68 @@ export default function PhotographerDetailScreen() {
   }, [photographer]);
 
   useEffect(() => {
+    if (!photographer?._id) return;
+    let active = true;
+    setPreferredStaffId(null);
+    staffApi
+      .listPublic(photographer._id)
+      .then((res) => {
+        if (!active) return;
+        setPublicStaff(Array.isArray(res?.staff) ? res.staff : []);
+        setTeamCapacity({
+          activeStaffCount: Number(res?.activeStaffCount ?? 1),
+          effectiveCapacity: Number(res?.effectiveCapacity ?? 1),
+        });
+      })
+      .catch(() => {
+        if (!active) return;
+        setPublicStaff([]);
+        setTeamCapacity({ activeStaffCount: 1, effectiveCapacity: 1 });
+      });
+    return () => {
+      active = false;
+    };
+  }, [photographer?._id]);
+
+  useEffect(() => {
     if (!photographer || !selectedPackage) return;
     let active = true;
     const months = [...new Set(dates.map((item) => item.value.slice(0, 7)))];
     Promise.all(
       months.map((month) =>
         photographerApi
-          .monthAvailability(photographer._id, month, selectedPackage._id)
+          .monthAvailability(
+            photographer._id,
+            month,
+            selectedPackage._id,
+            preferredStaffId || undefined,
+          )
           .catch(() => null)
       )
     ).then((responses) => {
       if (!active) return;
       const next: Record<string, string> = {};
+      const meta: Record<
+        string,
+        { status: string; remainingCapacity?: number; totalCapacity?: number }
+      > = {};
       responses.forEach((response) =>
         response?.days?.forEach((day) => {
           next[day.date] = day.status;
+          meta[day.date] = {
+            status: day.status,
+            remainingCapacity: day.remainingCapacity,
+            totalCapacity: day.totalCapacity,
+          };
         })
       );
       setMonthStatuses(next);
+      setMonthDayMeta(meta);
     });
     return () => {
       active = false;
     };
-  }, [photographer?._id, selectedPackage?._id]);
+  }, [photographer?._id, selectedPackage?._id, preferredStaffId]);
 
   useEffect(() => {
     if (!photographer || !selectedDate) {
@@ -388,16 +437,21 @@ export default function PhotographerDetailScreen() {
       setQuoteLoading(true);
       setQuoteError(null);
       photographerApi
-        .quote(photographer._id, selectedPackage._id, [
-          {
-            clientId: 'mobile-main-session',
-            startsAt: `${selectedDate}T${startTime}:00+07:00`,
-            endsAt: `${selectedDate}T${endTime}:00+07:00`,
-            locationAddress: location.trim(),
-            locationLatitude: coords.lat,
-            locationLongitude: coords.lng,
-          },
-        ])
+        .quote(
+          photographer._id,
+          selectedPackage._id,
+          [
+            {
+              clientId: 'mobile-main-session',
+              startsAt: `${selectedDate}T${startTime}:00+07:00`,
+              endsAt: `${selectedDate}T${endTime}:00+07:00`,
+              locationAddress: location.trim(),
+              locationLatitude: coords.lat,
+              locationLongitude: coords.lng,
+            },
+          ],
+          preferredStaffId || undefined,
+        )
         .then((result) => {
           if (active) {
             setQuote(result);
@@ -455,7 +509,7 @@ export default function PhotographerDetailScreen() {
       active = false;
       clearTimeout(timer);
     };
-  }, [photographer?._id, selectedPackage?._id, selectedDate, startTime, endTime, location, coords, durationMinutes]);
+  }, [photographer?._id, selectedPackage?._id, selectedDate, startTime, endTime, location, coords, durationMinutes, preferredStaffId]);
 
   if (loading) return <LoadingState label="Đang tải thông tin gói chụp..." />;
   if (error || !photographer)
@@ -520,6 +574,9 @@ export default function PhotographerDetailScreen() {
     }
 
     const priceToCharge = quote?.totals?.totalAmount ?? selectedPackage.price ?? 0;
+    const selectedStaffObj = preferredStaffId
+      ? publicStaff.find((s) => s._id === preferredStaffId)
+      : null;
 
     addItem({
       itemType: 'PHOTOGRAPHY_PACKAGE',
@@ -535,10 +592,14 @@ export default function PhotographerDetailScreen() {
       shootLocationLongitude: coords.lng,
       shootConcept: concept.trim() || 'Cổ phục truyền thống',
       providerAddress: fullAddress(photographer),
+      preferredStaffId: preferredStaffId || undefined,
+      preferredStaffName: selectedStaffObj?.name || undefined,
       metadata: {
         providerId: photographer._id,
         packageName: selectedPackage.name,
         durationMinutes,
+        preferredStaffId: preferredStaffId || undefined,
+        preferredStaffName: selectedStaffObj?.name || undefined,
         quoteBreakdown: quote?.breakdown,
       },
     });
@@ -729,6 +790,81 @@ export default function PhotographerDetailScreen() {
           </Pressable>
         </View>
 
+        {/* Optional Staff Picker & Team Capacity Banner */}
+        {publicStaff.length > 0 && (
+          <Section title="Đội ngũ & Chọn thợ chụp (Tùy chọn)" icon="people-outline">
+            {teamCapacity.effectiveCapacity > 1 && (
+              <View style={styles.teamBanner}>
+                <Ionicons name="sparkles" size={14} color="#BA0049" />
+                <Text style={styles.teamBannerText}>
+                  Studio có {teamCapacity.activeStaffCount} thợ chụp · nhận tối đa{' '}
+                  {teamCapacity.effectiveCapacity} ca chụp song song cùng khung giờ.
+                </Text>
+              </View>
+            )}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.staffRow}
+            >
+              <Pressable
+                onPress={() => {
+                  setPreferredStaffId(null);
+                  setStartTime('');
+                  setQuote(null);
+                }}
+                style={[
+                  styles.staffChipCard,
+                  preferredStaffId === null && styles.staffChipCardActive,
+                ]}
+              >
+                <View style={styles.staffChipAvatar}>
+                  <Ionicons name="shuffle" size={16} color="#BA0049" />
+                </View>
+                <Text style={styles.staffChipName} numberOfLines={1}>
+                  Studio tự điều phối
+                </Text>
+                <Text style={styles.staffChipSub} numberOfLines={1}>
+                  Tối ưu giờ trống
+                </Text>
+              </Pressable>
+
+              {publicStaff.map((member) => {
+                const selected = preferredStaffId === member._id;
+                return (
+                  <Pressable
+                    key={member._id}
+                    onPress={() => {
+                      setPreferredStaffId(member._id);
+                      setStartTime('');
+                      setQuote(null);
+                    }}
+                    style={[
+                      styles.staffChipCard,
+                      selected && styles.staffChipCardActive,
+                    ]}
+                  >
+                    <View style={styles.staffChipAvatar}>
+                      <Text style={styles.staffChipInitial}>
+                        {(member.name || 'T').charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                    <Text style={styles.staffChipName} numberOfLines={1}>
+                      {member.name}
+                    </Text>
+                    <Text style={styles.staffChipSub} numberOfLines={1}>
+                      {member.specialty ||
+                        (member.experienceYears
+                          ? `${member.experienceYears} năm KN`
+                          : 'Nhiếp ảnh gia')}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </Section>
+        )}
+
         {/* Step 1: Date & Time */}
         <Section title="1. Chọn ngày & khung giờ chụp" stepNumber="1">
           <Text style={styles.helper}>
@@ -769,7 +905,18 @@ export default function PhotographerDetailScreen() {
               </View>
             ) : slots.length ? (
               <View style={styles.slotsSection}>
-                <Text style={styles.slotSectionTitle}>CHỌN CA CHỤP PHÙ HỢP:</Text>
+                <View style={styles.slotTitleRow}>
+                  <Text style={styles.slotSectionTitle}>CHỌN CA CHỤP PHÙ HỢP:</Text>
+                  {monthDayMeta[selectedDate]?.remainingCapacity !== undefined &&
+                    (monthDayMeta[selectedDate]?.totalCapacity ?? teamCapacity.effectiveCapacity) > 1 && (
+                      <View style={styles.capacityAvailPill}>
+                        <Text style={styles.capacityAvailText}>
+                          Còn {monthDayMeta[selectedDate].remainingCapacity}/
+                          {monthDayMeta[selectedDate].totalCapacity ?? teamCapacity.effectiveCapacity} suất
+                        </Text>
+                      </View>
+                    )}
+                </View>
                 <View style={styles.slotGrid}>
                   {slots.map((slot) => {
                     const active = startTime === slot.start;
@@ -2042,4 +2189,79 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
   },
   ctaText: { fontFamily: FontFamily.bodyBold, fontSize: 12.5, color: '#FFFFFF' },
+  teamBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFF0F5',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginBottom: 10,
+  },
+  teamBannerText: {
+    flex: 1,
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: 11.5,
+    color: '#9D174D',
+  },
+  staffRow: {
+    gap: 8,
+    paddingRight: 8,
+  },
+  staffChipCard: {
+    width: 132,
+    padding: 10,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#EFECEB',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    gap: 4,
+  },
+  staffChipCardActive: {
+    borderColor: Colors.primary,
+    backgroundColor: '#FFF5F8',
+  },
+  staffChipAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFF0F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  staffChipInitial: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 14,
+    color: Colors.primary,
+  },
+  staffChipName: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 12,
+    color: '#1B1C1C',
+  },
+  staffChipSub: {
+    fontFamily: FontFamily.body,
+    fontSize: 10.5,
+    color: '#5F5E5E',
+  },
+  slotTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 8,
+  },
+  capacityAvailPill: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  capacityAvailText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 10.5,
+    color: '#047857',
+  },
 });

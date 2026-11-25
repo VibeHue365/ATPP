@@ -16,6 +16,8 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../../common/guards/roles.guard';
+import { Roles } from '../../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { ProvidersService } from '../services/providers.service';
@@ -38,7 +40,8 @@ import {
 } from '../dto/provider-schedule.dto';
 
 @Controller('providers')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('PROVIDER', 'ADMIN')
 export class ProvidersController {
   constructor(
     private readonly providersService: ProvidersService,
@@ -127,12 +130,14 @@ export class ProvidersController {
     @Query('month') month?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('staffId') staffId?: string,
   ) {
     return this.providersService.getPhotographerCalendar(
       user.sub,
       month,
       from,
       to,
+      staffId,
     );
   }
 

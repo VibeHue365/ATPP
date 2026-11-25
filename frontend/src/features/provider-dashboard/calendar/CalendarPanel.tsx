@@ -33,6 +33,7 @@ import { toLocalDateKey } from '../shared/dateHelpers';
 import type { useProviderCalendarState } from './useProviderCalendarState';
 import './calendarFigma.css';
 import { providerApi } from '../api/providerDashboardApi';
+import { staffApi, type ProviderStaffItem } from '../staff/staffApi';
 import { getBookingStatusLabel, normalizeBookingStatusCode } from '../../../utils/bookingStatus';
 
 type PhotographerCalendarEvent = {
@@ -44,6 +45,15 @@ type PhotographerCalendarEvent = {
   location: string;
   status: string;
   cancelled: boolean;
+  assignedStaffId?: string | null;
+  assignedStaffSnapshot?: {
+    name?: string;
+    phone?: string | null;
+    avatarUrl?: string | null;
+  } | null;
+  checkedInAt?: string | null;
+  shootFinishedAt?: string | null;
+  staffFieldNote?: string | null;
 };
 
 type CalendarPanelProps = Pick<ReturnType<typeof useProviderSessionState>,
@@ -134,11 +144,34 @@ export function CalendarPanel({
   const isHybrid = Boolean(hasPhotographyCapability && hasAodaiCapability);
 
   const [detailFilter, setDetailFilter] = useState<'ALL' | 'PHOTO' | 'AODAI'>('ALL');
+  const [staffList, setStaffList] = useState<ProviderStaffItem[]>([]);
+  const [selectedStaffId, setSelectedStaffId] = useState<string>('');
 
   // Month navigation helpers
   const currentYear = calendarMonth.getFullYear();
   const currentMonthIdx = calendarMonth.getMonth(); // 0-indexed
   const [photographyEvents, setPhotographyEvents] = useState<PhotographerCalendarEvent[]>([]);
+
+  useEffect(() => {
+    if (!hasPhotographyCapability) {
+      setStaffList([]);
+      return;
+    }
+    let active = true;
+    staffApi
+      .listMine()
+      .then((res) => {
+        if (active && Array.isArray(res?.items)) {
+          setStaffList(res.items);
+        }
+      })
+      .catch(() => {
+        // Keep calendar functional even if staff list endpoint is unavailable in mocks
+      });
+    return () => {
+      active = false;
+    };
+  }, [hasPhotographyCapability]);
 
   useEffect(() => {
     if (!hasPhotographyCapability) {
@@ -148,7 +181,10 @@ export function CalendarPanel({
     let active = true;
     const month = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, '0')}`;
     providerApi
-      .getCalendar<{ events?: PhotographerCalendarEvent[] }>(month)
+      .getCalendar<{ events?: PhotographerCalendarEvent[] }>(
+        month,
+        selectedStaffId || undefined,
+      )
       .then((response) => {
         if (active) setPhotographyEvents(response.events || []);
       })
@@ -156,7 +192,7 @@ export function CalendarPanel({
         if (active) setPhotographyEvents([]);
       });
     return () => { active = false; };
-  }, [currentYear, currentMonthIdx, hasPhotographyCapability]);
+  }, [currentYear, currentMonthIdx, hasPhotographyCapability, selectedStaffId]);
 
   const handlePrevMonth = () => {
     setCalendarMonth(new Date(currentYear, currentMonthIdx - 1, 1));
@@ -278,7 +314,19 @@ export function CalendarPanel({
         customerName: event.location || 'Chưa cập nhật địa điểm',
         status: event.cancelled ? 'CANCELLED' : event.status,
         startDate: event.startsAt,
-        schedules: [{ timeSlot: event.timeSlot }],
+        schedules: [
+          {
+            timeSlot: event.timeSlot,
+            assignedStaffId: event.assignedStaffId ?? null,
+            assignedStaffSnapshot: event.assignedStaffSnapshot ?? null,
+            checkedInAt: event.checkedInAt ?? null,
+            shootFinishedAt: event.shootFinishedAt ?? null,
+          },
+        ],
+        assignedStaffId: event.assignedStaffId ?? null,
+        assignedStaffSnapshot: event.assignedStaffSnapshot ?? null,
+        checkedInAt: event.checkedInAt ?? null,
+        shootFinishedAt: event.shootFinishedAt ?? null,
         isPhotographerCalendarEvent: true,
       });
       ordersByDateMap.set(event.date, ordersForDate);
@@ -328,8 +376,15 @@ export function CalendarPanel({
   const filteredSelectedDateOrders = selectedDateOrders.filter((ord: any) => {
     const isPhoto = ord.bookingType === 'PHOTOGRAPHY' || ord.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY');
     const isAoDai = ord.bookingType === 'AODAI_RENTAL' || ord.items?.some((i: any) => i.itemType === 'AODAI_RENTAL');
-    if (detailFilter === 'PHOTO') return isPhoto;
-    if (detailFilter === 'AODAI') return isAoDai;
+    if (detailFilter === 'PHOTO' && !isPhoto) return false;
+    if (detailFilter === 'AODAI' && !isAoDai) return false;
+    if (selectedStaffId) {
+      const matchDirect = ord.assignedStaffId === selectedStaffId;
+      const matchSchedule =
+        Array.isArray(ord.schedules) &&
+        ord.schedules.some((s: any) => s?.assignedStaffId === selectedStaffId);
+      return matchDirect || matchSchedule;
+    }
     return true;
   });
 
@@ -337,6 +392,36 @@ export function CalendarPanel({
   const selectedDateSchedule = recurringSchedules.find(
     (s) => Number(s.dayOfWeek) === selectedDateObj.getDay()
   );
+
+  const visibleStaffPool = hasPhotographyCapability
+    ? (selectedStaffId
+        ? staffList.filter((st) => st._id === selectedStaffId)
+        : staffList.filter((st) => st.status === 'ACTIVE'))
+    : [];
+
+  const staffBlocksByDateMap = new Map<
+    string,
+    Array<{
+      staffId: string;
+      staffName: string;
+      startTime?: string | null;
+      endTime?: string | null;
+      reason?: string | null;
+    }>
+  >();
+  for (const st of visibleStaffPool) {
+    for (const blk of st.blockedSlots ?? []) {
+      const list = staffBlocksByDateMap.get(blk.date) ?? [];
+      list.push({
+        staffId: st._id,
+        staffName: st.name,
+        startTime: blk.startTime,
+        endTime: blk.endTime,
+        reason: blk.reason,
+      });
+      staffBlocksByDateMap.set(blk.date, list);
+    }
+  }
 
   const headerTitle = isPurePhoto
     ? 'Lịch ca chụp & Chặn ngày bận'
@@ -466,6 +551,28 @@ export function CalendarPanel({
                   </button>
                 </div>
 
+                {hasPhotographyCapability && staffList.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '12px', padding: '8px 12px', background: '#FCF9F2', borderRadius: '10px', border: '1px solid #ECE5DB' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#4A3F35', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <Users size={14} color="#8E1B2E" />
+                      <span>Lọc theo thợ chụp:</span>
+                    </span>
+                    <select
+                      aria-label="Lọc theo thợ chụp"
+                      value={selectedStaffId}
+                      onChange={(e) => setSelectedStaffId(e.target.value)}
+                      style={{ flex: 1, maxWidth: '240px', border: '1px solid #D8CAB9', borderRadius: '8px', padding: '5px 8px', fontSize: '12.5px', fontWeight: 600, background: '#FFF', color: '#231F20' }}
+                    >
+                      <option value="">Toàn bộ Studio ({staffList.length} thợ)</option>
+                      {staffList.map((st) => (
+                        <option key={st._id} value={st._id}>
+                          {st.name}{st.status === 'INACTIVE' ? ' (Tạm ngưng)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 {/* Modern Vector Legend */}
                 <div className="cal-legend">
                   <div className="cal-legend-item">
@@ -498,6 +605,20 @@ export function CalendarPanel({
                     const isWorking = recurringDaysSet.has(jsDay) && !isBlocked;
                     const ordersForCell = ordersByDateMap.get(cell.dateKey) || [];
                     const hasOrders = ordersForCell.length > 0;
+                    const staffBlocksForCell = staffBlocksByDateMap.get(cell.dateKey) || [];
+                    const uniqueBlockedStaffCount = new Set(
+                      staffBlocksForCell.map((item) => item.staffId)
+                    ).size;
+                    const staffBlocksTooltip = staffBlocksForCell
+                      .map(
+                        (item) =>
+                          `${item.staffName}: ${
+                            item.startTime && item.endTime
+                              ? `${item.startTime}-${item.endTime}`
+                              : 'Cả ngày'
+                          }${item.reason ? ` (${item.reason})` : ''}`
+                      )
+                      .join('\n');
                     const isSelected = selectedDate === cell.dateKey;
                     const isToday = cell.dateKey === toLocalDateKey();
                     const shiftsCount = recurringSchedules.find((s) => Number(s.dayOfWeek) === jsDay)?.workingHours?.length || 1;
@@ -528,6 +649,23 @@ export function CalendarPanel({
                                 <span className="cal-day-badge cal-day-badge-order" title={`${ordersForCell.length} đơn đặt`}>
                                   <Users size={9} />
                                   <span>{ordersForCell.length}</span>
+                                </span>
+                              )}
+                              {uniqueBlockedStaffCount > 0 && (
+                                <span
+                                  className="cal-day-badge"
+                                  style={{
+                                    backgroundColor: '#FEF3C7',
+                                    color: '#92400E',
+                                  }}
+                                  title={staffBlocksTooltip}
+                                >
+                                  <CalendarOff size={9} />
+                                  <span>
+                                    {selectedStaffId
+                                      ? 'Nghỉ'
+                                      : `${uniqueBlockedStaffCount} bận`}
+                                  </span>
                                 </span>
                               )}
                             </>
@@ -626,6 +764,16 @@ export function CalendarPanel({
                       const isOrdCancelled =
                         normalizeBookingStatusCode(ord.rawStatus || ord.status) === 'CANCELLED';
                       const statusText = getBookingStatusLabel(ord.rawStatus || ord.status || 'CONFIRMED');
+                      const assignedStaffName =
+                        ord.assignedStaffSnapshot?.name ||
+                        ord.schedules?.[0]?.assignedStaffSnapshot?.name ||
+                        null;
+                      const isCheckedIn = Boolean(
+                        ord.checkedInAt || ord.schedules?.[0]?.checkedInAt,
+                      );
+                      const isShootFinished = Boolean(
+                        ord.shootFinishedAt || ord.schedules?.[0]?.shootFinishedAt,
+                      );
 
                       return (
                         <div key={ord._id} className={`cal-order-card ${isOrdCancelled ? 'cal-order-card-cancelled' : ''}`}>
@@ -636,6 +784,24 @@ export function CalendarPanel({
                             <div className="cal-order-info">
                               <h4>{ord.customerName || 'Khách hàng TàGo'}</h4>
                               <p>{label} • {statusText}</p>
+                              {(assignedStaffName || isCheckedIn || isShootFinished) && (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                                  {assignedStaffName && (
+                                    <span style={{ fontSize: '11px', fontWeight: 700, background: '#FDF2F4', color: '#8E1B2E', padding: '2px 7px', borderRadius: '999px' }}>
+                                      Thợ: {assignedStaffName}
+                                    </span>
+                                  )}
+                                  {isShootFinished ? (
+                                    <span style={{ fontSize: '11px', fontWeight: 700, background: '#ECFDF5', color: '#047857', padding: '2px 7px', borderRadius: '999px' }}>
+                                      Đã chụp xong
+                                    </span>
+                                  ) : isCheckedIn ? (
+                                    <span style={{ fontSize: '11px', fontWeight: 700, background: '#FFFBEB', color: '#B45309', padding: '2px 7px', borderRadius: '999px' }}>
+                                      Đang tác nghiệp
+                                    </span>
+                                  ) : null}
+                                </div>
+                              )}
                             </div>
                           </div>
                           <div className="cal-order-time">
@@ -647,6 +813,132 @@ export function CalendarPanel({
                     })
                   )}
                 </div>
+
+                {/* Staff Team Daily Availability Summary */}
+                {hasPhotographyCapability && visibleStaffPool.length > 0 && (
+                  <div
+                    style={{
+                      marginTop: '14px',
+                      marginBottom: '14px',
+                      padding: '12px 14px',
+                      borderRadius: '12px',
+                      backgroundColor: '#FAF7F2',
+                      border: '1px solid #ECE5DB',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        color: '#4A0E17',
+                      }}
+                    >
+                      <span>Tình trạng đội ngũ ngày {selectedDateFormatted}</span>
+                      <span style={{ color: '#7D736B', fontWeight: 600 }}>
+                        {visibleStaffPool.length} thợ
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {visibleStaffPool.map((st) => {
+                        const dayBlocks = (st.blockedSlots ?? []).filter(
+                          (b) => b.date === selectedDate
+                        );
+                        const dayShootCount = selectedDateOrders.filter((ord: any) => {
+                          const matchDirect = ord.assignedStaffId === st._id;
+                          const matchSch =
+                            Array.isArray(ord.schedules) &&
+                            ord.schedules.some((s: any) => s?.assignedStaffId === st._id);
+                          return matchDirect || matchSch;
+                        }).length;
+
+                        return (
+                          <div
+                            key={st._id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: '8px',
+                              padding: '7px 10px',
+                              borderRadius: '10px',
+                              backgroundColor: '#FFFFFF',
+                              border: '1px solid #EFEAE2',
+                              fontSize: '12px',
+                            }}
+                          >
+                            <span style={{ fontWeight: 700, color: '#231F20' }}>
+                              {st.name}
+                            </span>
+                            <div
+                              style={{
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                justifyContent: 'flex-end',
+                                gap: '5px',
+                              }}
+                            >
+                              {dayShootCount > 0 && (
+                                <span
+                                  style={{
+                                    padding: '2px 8px',
+                                    borderRadius: '999px',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    backgroundColor: '#FDECEF',
+                                    color: '#8E1B2E',
+                                  }}
+                                >
+                                  {dayShootCount} ca chụp
+                                </span>
+                              )}
+                              {dayBlocks.length > 0 ? (
+                                dayBlocks.map((b) => (
+                                  <span
+                                    key={b._id}
+                                    title={b.reason || 'Thợ báo bận / nghỉ'}
+                                    style={{
+                                      padding: '2px 8px',
+                                      borderRadius: '999px',
+                                      fontSize: '11px',
+                                      fontWeight: 700,
+                                      backgroundColor: '#FEF3C7',
+                                      color: '#92400E',
+                                    }}
+                                  >
+                                    Bận{' '}
+                                    {b.startTime && b.endTime
+                                      ? `${b.startTime}-${b.endTime}`
+                                      : 'cả ngày'}
+                                    {b.reason ? ` · ${b.reason}` : ''}
+                                  </span>
+                                ))
+                              ) : dayShootCount === 0 ? (
+                                <span
+                                  style={{
+                                    padding: '2px 8px',
+                                    borderRadius: '999px',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    backgroundColor: '#ECFDF5',
+                                    color: '#047857',
+                                  }}
+                                >
+                                  Sẵn sàng
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Open Slots Section */}
                 <div className="cal-open-slots-section">

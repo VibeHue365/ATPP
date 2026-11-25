@@ -21,9 +21,15 @@ export const checkoutApi = {
   }),
   createPhotographyHold: (photo: CartItem, rentals: CartItem[], promoCode?: string) => {
     const [startTime, endTime] = (photo.shootTimeSlot ?? '').split('-').map(value => value.trim());
+    const preferredStaffId =
+      photo.preferredStaffId ||
+      (typeof photo.metadata?.preferredStaffId === 'string'
+        ? photo.metadata.preferredStaffId
+        : undefined);
     const payload = {
       packageId: photo.photographyPackageId,
       promoCode: promoCode || undefined,
+      ...(preferredStaffId ? { preferredStaffId } : {}),
       sessions: [{
         clientId: photo.id,
         startsAt: `${photo.shootDate}T${startTime}:00+07:00`,
