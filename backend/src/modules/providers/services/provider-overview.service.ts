@@ -678,6 +678,8 @@ export class ProviderOverviewService {
           avatarUrl,
         },
         serviceName,
+        assignedStaffId: s.assignedStaffId?.toString?.() ?? null,
+        assignedStaffSnapshot: s.assignedStaffSnapshot ?? null,
         status: statusStr,
         statusTone,
       });

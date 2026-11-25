@@ -18,6 +18,7 @@ import { UserStatus } from '../schemas/user.schema';
 export enum UserRole {
   Customer = 'CUSTOMER',
   Provider = 'PROVIDER',
+  Staff = 'STAFF',
   Admin = 'ADMIN',
   Support = 'SUPPORT',
 }

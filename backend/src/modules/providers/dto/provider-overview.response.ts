@@ -46,6 +46,14 @@ export interface ProviderOverviewScheduleItem {
     avatarUrl: string | null;
   };
   serviceName: string;
+  assignedStaffId?: string | null;
+  assignedStaffSnapshot?: {
+    name: string;
+    phone?: string | null;
+    avatarUrl?: string | null;
+    specialty?: string | null;
+    linkedUserId?: string | null;
+  } | null;
   status: string;
   statusTone: 'amber' | 'blue' | 'green' | 'gray';
 }

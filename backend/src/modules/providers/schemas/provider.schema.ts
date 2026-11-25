@@ -49,6 +49,10 @@ export interface ProviderRentalSettings {
 export interface ProviderPhotographySettings {
   /** Maximum straight-line distance from the provider base location in kilometres. */
   serviceRadiusKm?: number | null;
+  /** Maximum concurrent photography sessions allowed in the same time window (<= active staff count). */
+  maxConcurrentSessions?: number | null;
+  /** Optional cap on total photography sessions accepted in one local day. */
+  maxDailySessions?: number | null;
 }
 
 export interface ProviderAddress {

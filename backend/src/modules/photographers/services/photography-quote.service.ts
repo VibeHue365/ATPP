@@ -4,7 +4,9 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { StaffAvailabilityService } from '../../bookings/services/staff-availability.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { BookingsService } from '../../bookings/services/bookings.service';
@@ -79,6 +81,8 @@ export class PhotographyQuoteService {
     private readonly bookingScheduleModel: Model<BookingSchedule>,
     @Inject(forwardRef(() => BookingsService))
     private readonly bookingsService: BookingsService,
+    @Optional()
+    private readonly staffAvailabilityService?: StaffAvailabilityService,
   ) {}
 
   /**
@@ -127,11 +131,12 @@ export class PhotographyQuoteService {
     const dateKeys = [
       ...new Set(sessions.map((session) => session.providerLocalDate)),
     ];
-    const [busyRangesByDate, workingRangesByDate] = await Promise.all([
-      this.getBusyRanges(providerId, dateKeys),
-      this.getWorkingRanges(providerId, dateKeys),
-    ]);
+    const workingRangesByDate = await this.getWorkingRanges(
+      providerId,
+      dateKeys,
+    );
 
+    const workingValidSessions: ParsedSession[] = [];
     for (const session of sessions) {
       const workingRanges =
         workingRangesByDate.get(session.providerLocalDate) ?? [];
@@ -144,16 +149,48 @@ export class PhotographyQuoteService {
         });
         continue;
       }
+      workingValidSessions.push(session);
+    }
 
-      const busyRanges = busyRangesByDate.get(session.providerLocalDate) ?? [];
-      if (busyRanges.some((range) => this.overlaps(range, session))) {
-        errors.push({
+    let staffEvaluation: Awaited<
+      ReturnType<StaffAvailabilityService['evaluateSessions']>
+    > | null = null;
+    if (this.staffAvailabilityService && workingValidSessions.length > 0) {
+      staffEvaluation = await this.staffAvailabilityService.evaluateSessions(
+        providerId,
+        workingValidSessions.map((session) => ({
           clientId: session.clientId,
-          code: 'SLOT_UNAVAILABLE',
-          message:
-            'Khung giờ này vừa có người khác đặt hoặc đang được giữ chỗ.',
-        });
+          dateKey: session.providerLocalDate,
+          startMin: session.startMinutes,
+          endMin: session.endMinutes,
+        })),
+        { preferredStaffId: dto.preferredStaffId ?? null },
+      );
+      if (!staffEvaluation.valid) {
+        for (const err of staffEvaluation.errors) {
+          errors.push({
+            clientId: err.clientId,
+            code: 'SLOT_UNAVAILABLE',
+            message: err.message,
+          });
+        }
       }
+    } else if (workingValidSessions.length > 0) {
+      const busyRangesByDate = await this.getBusyRanges(providerId, dateKeys);
+      for (const session of workingValidSessions) {
+        const busyRanges = busyRangesByDate.get(session.providerLocalDate) ?? [];
+        if (busyRanges.some((range) => this.overlaps(range, session))) {
+          errors.push({
+            clientId: session.clientId,
+            code: 'SLOT_UNAVAILABLE',
+            message:
+              'Khung giờ này vừa có người khác đặt hoặc đang được giữ chỗ.',
+          });
+        }
+      }
+    }
+
+    for (const session of sessions) {
 
       const radiusKm = (providerDoc as any)?.photographySettings
         ?.serviceRadiusKm;
@@ -229,7 +266,15 @@ export class PhotographyQuoteService {
           overtimeMinutes:
             quote.overtimeMinutesByClientId[session.clientId] ?? 0,
           locationAddress: session.locationAddress ?? null,
+          remainingStaffCount:
+            staffEvaluation?.remainingByClientId.get(session.clientId) ?? null,
         })),
+        staffCapacity: staffEvaluation
+          ? {
+              activeStaffCount: staffEvaluation.activeStaffCount,
+              effectiveCapacity: staffEvaluation.configuredCapacity,
+            }
+          : null,
         errors: [],
         breakdown: quote.breakdown,
         totals: {

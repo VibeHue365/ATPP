@@ -38,6 +38,11 @@ import {
 } from '../../bookings/services/time-slot-engine.service';
 import { ProductBusyCacheService } from '../../bookings/services/product-busy-cache.service';
 import {
+  StaffAvailabilityService,
+  toIctMinutes,
+} from '../../bookings/services/staff-availability.service';
+import { bumpProviderAvailabilityVersion } from '../../bookings/services/provider-availability-version';
+import {
   InventoryReservation,
   InventoryReservationDocument,
   ReservationStatus,
@@ -81,6 +86,8 @@ export class ComboRescheduleCoordinatorService {
     private readonly timeSlotEngine?: TimeSlotEngineService,
     @Optional()
     private readonly productBusyCacheService?: ProductBusyCacheService,
+    @Optional()
+    private readonly staffAvailabilityService?: StaffAvailabilityService,
   ) {}
 
   /**
@@ -621,6 +628,53 @@ export class ComboRescheduleCoordinatorService {
       `${proposed.date}T${String(eH || 11).padStart(2, '0')}:${String(eM || 0).padStart(2, '0')}:00+07:00`,
     );
 
+    let staffReassignFields: Record<string, unknown> = {};
+    if (
+      this.staffAvailabilityService &&
+      typeof this.bookingScheduleModel?.findOne === 'function'
+    ) {
+      const existingPhotoSchedule = await this.bookingScheduleModel
+        .findOne({
+          bookingId: booking._id,
+          scheduleType: BookingScheduleType.Photoshoot,
+        })
+        .lean()
+        .exec();
+
+      if (existingPhotoSchedule?.providerId) {
+        const evalResult = await this.staffAvailabilityService.evaluateSessions(
+          existingPhotoSchedule.providerId,
+          [
+            {
+              clientId: 'combo_reschedule',
+              dateKey: proposed.date,
+              startMin: toIctMinutes(startsAt),
+              endMin: toIctMinutes(endsAt),
+            },
+          ],
+          {
+            excludeScheduleId: existingPhotoSchedule._id,
+            preferStaffIdForReschedule:
+              (existingPhotoSchedule as any)?.assignedStaffId?.toString?.() ??
+              null,
+          },
+        );
+        if (evalResult.valid) {
+          const decision =
+            evalResult.assignmentsByClientId.get('combo_reschedule');
+          if (decision) {
+            staffReassignFields = {
+              assignedStaffId: decision.assignedStaffId,
+              assignedStaffSnapshot: decision.assignedStaffSnapshot,
+            };
+          }
+        }
+        bumpProviderAvailabilityVersion(
+          existingPhotoSchedule.providerId.toString(),
+        );
+      }
+    }
+
     await this.bookingScheduleModel.updateOne(
       {
         bookingId: booking._id,
@@ -632,6 +686,7 @@ export class ComboRescheduleCoordinatorService {
           endsAt,
           providerLocalDate: proposed.date,
           timeSlot: proposed.timeSlot,
+          ...staffReassignFields,
         },
       },
     );

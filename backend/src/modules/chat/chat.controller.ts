@@ -14,6 +14,8 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../common/decorators/current-user.decorator';
 import { RateLimitService } from '../auth/services/rate-limit.service';
@@ -34,12 +36,12 @@ export class ChatController {
 
   @Get('rooms')
   async getRooms(@CurrentUser() user: AuthUser) {
-    return this.chatService.getRooms(user.sub);
+    return this.chatService.getRooms(user.sub, user.roles);
   }
 
   @Get('partners')
   async getAvailablePartners(@CurrentUser() user: AuthUser) {
-    return this.chatService.getAvailablePartners(user.sub);
+    return this.chatService.getAvailablePartners(user.sub, user.roles);
   }
 
   @Get('rooms/:roomId/messages')
@@ -65,7 +67,33 @@ export class ChatController {
     @CurrentUser() user: AuthUser,
     @Body('otherUserId') otherUserId: string,
   ) {
-    return this.chatService.getOrCreateRoom(user.sub, otherUserId);
+    return this.chatService.getOrCreateRoom(user.sub, otherUserId, user.roles);
+  }
+
+  /**
+   * Read-only supervision endpoint allowing the Studio Owner (or Admin) to view
+   * the 1-1 chat history between a customer and the assigned staff photographer for a booking.
+   */
+  @Get('bookings/:bookingId/staff-messages')
+  @UseGuards(RolesGuard)
+  @Roles('PROVIDER', 'ADMIN')
+  async getStaffChatForBookingSupervision(
+    @CurrentUser() user: AuthUser,
+    @Param('bookingId') bookingId: string,
+    @Query('staffId') staffId?: string,
+    @Query('limit') limit?: string,
+    @Query('skip') skip?: string,
+  ) {
+    const limitVal = limit ? parseInt(limit, 10) : 100;
+    const skipVal = skip ? parseInt(skip, 10) : 0;
+    return this.chatService.getStaffChatForBookingSupervision(
+      bookingId,
+      user.sub,
+      user.roles,
+      staffId,
+      limitVal,
+      skipVal,
+    );
   }
 
   @Post('rooms/:roomId/messages')

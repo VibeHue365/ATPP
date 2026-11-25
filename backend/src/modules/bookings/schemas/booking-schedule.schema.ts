@@ -76,6 +76,32 @@ export class BookingSchedule {
   @Prop({ type: Types.ObjectId, ref: 'User', default: null, index: true })
   assignedPhotographerId?: Types.ObjectId | null;
 
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'ProviderStaff',
+    default: null,
+    index: true,
+  })
+  assignedStaffId?: Types.ObjectId | null;
+
+  @Prop({ type: Object, default: null })
+  assignedStaffSnapshot?: {
+    name: string;
+    phone?: string | null;
+    avatarUrl?: string | null;
+    specialty?: string | null;
+    linkedUserId?: string | null;
+  } | null;
+
+  @Prop({ type: Date, default: null })
+  checkedInAt?: Date | null;
+
+  @Prop({ type: Date, default: null })
+  shootFinishedAt?: Date | null;
+
+  @Prop({ type: String, default: null, trim: true, maxlength: 1000 })
+  staffFieldNote?: string | null;
+
   @Prop({ type: String, default: null, trim: true })
   locationAddress?: string | null;
 

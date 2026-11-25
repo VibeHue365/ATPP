@@ -15,6 +15,8 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../../common/guards/roles.guard';
+import { Roles } from '../../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { BookingsService } from '../services/bookings.service';
@@ -119,6 +121,8 @@ export class BookingsController {
 
   /** GET /bookings/provider hoặc GET /api/bookings/provider */
   @Get('provider')
+  @UseGuards(RolesGuard)
+  @Roles('PROVIDER', 'ADMIN')
   @SkipThrottle()
   async getProvider(
     @CurrentUser() user: AuthUser,
@@ -207,9 +211,25 @@ export class BookingsController {
       deliveredPhotos?: string[];
       deliveryDriveUrl?: string;
       evidencePhotos?: string[];
+      assignedStaffId?: string;
     },
   ) {
     if (!body?.status) throw new BadRequestException('Thiếu trường status');
+    if (body.assignedStaffId !== undefined) {
+      return this.bookingsService.updateBookingStatus(
+        id,
+        body.status,
+        body.note,
+        user.sub,
+        user.roles,
+        body.handoverPhotos,
+        body.deliveredPhotos,
+        body.deliveryDriveUrl,
+        body.evidencePhotos,
+        false,
+        body.assignedStaffId,
+      );
+    }
     return this.bookingsService.updateBookingStatus(
       id,
       body.status,
@@ -220,6 +240,46 @@ export class BookingsController {
       body.deliveredPhotos,
       body.deliveryDriveUrl,
       body.evidencePhotos,
+    );
+  }
+
+  /** GET /bookings/:id/schedules/:scheduleId/available-staff */
+  @Get(':id/schedules/:scheduleId/available-staff')
+  @UseGuards(RolesGuard)
+  @Roles('PROVIDER', 'ADMIN')
+  async getAvailableStaffForSchedule(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('scheduleId') scheduleId: string,
+  ) {
+    return this.bookingsService.getAvailableStaffForSchedule(
+      id,
+      scheduleId,
+      user.sub,
+      user.roles,
+    );
+  }
+
+  /** PATCH /bookings/:id/schedules/:scheduleId/assign-staff */
+  @Patch(':id/schedules/:scheduleId/assign-staff')
+  @UseGuards(RolesGuard)
+  @Roles('PROVIDER', 'ADMIN')
+  async assignStaffToSchedule(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('scheduleId') scheduleId: string,
+    @Body() body: { staffId: string; reason?: string },
+  ) {
+    if (!body?.staffId) {
+      throw new BadRequestException('Thiếu mã thợ chụp (staffId)');
+    }
+    return this.bookingsService.assignStaffToSchedule(
+      id,
+      scheduleId,
+      body.staffId,
+      user.sub,
+      user.roles,
+      body.reason,
     );
   }
 

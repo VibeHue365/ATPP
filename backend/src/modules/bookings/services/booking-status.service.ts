@@ -22,7 +22,10 @@ import {
   BookingItemDocument,
 } from '../schemas/booking-item.schema';
 import { Provider } from '../../providers/schemas/provider.schema';
-import { BookingScheduleStatus } from '../schemas/booking-schedule.schema';
+import {
+  BookingScheduleStatus,
+  BookingScheduleType,
+} from '../schemas/booking-schedule.schema';
 import {
   InventoryReservation,
   ReservationStatus,
@@ -930,6 +933,40 @@ export class BookingStatusService {
         changedAt: new Date(),
         note: note || `Cập nhật trạng thái bởi nhà cung cấp`,
       });
+
+      // Side effect: notify assigned STAFF when Studio Owner approves DEPOSIT_PAID -> CONFIRMED
+      if (
+        currentStatus === BookingStatus.DepositPaid &&
+        nextStatus === BookingStatus.Confirmed &&
+        typeof this.bookingsRepository.findSchedules === 'function'
+      ) {
+        try {
+          const shootSchedules = await this.bookingsRepository.findSchedules(
+            {
+              bookingId: booking._id,
+              scheduleType: BookingScheduleType.Photoshoot,
+              status: { $ne: BookingScheduleStatus.Cancelled },
+            },
+            session,
+          );
+          const notifiedStaffUsers = new Set<string>();
+          for (const sch of shootSchedules ?? []) {
+            const linkedUserId = (sch as any)?.assignedStaffSnapshot?.linkedUserId;
+            if (linkedUserId && !notifiedStaffUsers.has(String(linkedUserId))) {
+              notifiedStaffUsers.add(String(linkedUserId));
+              await this.notificationsService.createNotification(
+                String(linkedUserId),
+                'Lịch chụp đã được Chủ Studio xác nhận',
+                `Đơn ${booking.bookingCode} đã được Chủ Studio duyệt. Bạn đã có thể Check-in bắt đầu chụp khi đến giờ hẹn.`,
+                NotificationType.Booking,
+                { bookingId: booking._id, scheduleId: (sch as any)._id },
+              );
+            }
+          }
+        } catch (e) {
+          console.error('Failed to notify assigned staff on CONFIRMED:', e);
+        }
+      }
 
       // Side effect: set awaitingReviewSince timestamp for 48h auto-complete window
       if (nextStatus === BookingStatus.AwaitingReview) {
