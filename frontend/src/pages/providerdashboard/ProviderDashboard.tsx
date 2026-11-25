@@ -80,6 +80,7 @@ const ServiceProfilePanel = React.lazy(() => import('../../features/provider-das
 const TrustPanel = React.lazy(() => import('../../features/provider-dashboard/trust/TrustPanel').then(m => ({ default: m.TrustPanel })));
 
 const PhotographyPackageManager = React.lazy(() => import('../../features/photography-packages/components/PhotographyPackageManager').then(m => ({ default: m.PhotographyPackageManager })));
+const StaffManagementPanel = React.lazy(() => import('../../features/provider-dashboard/staff/StaffManagementPanel').then(m => ({ default: m.StaffManagementPanel })));
 
 const DashboardTabLoader: React.FC = () => (
   <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '320px' }}>
@@ -886,6 +887,7 @@ export const ProviderDashboard: React.FC = () => {
           <main style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
             <ChatPage
               embedded
+              mode="provider"
               excludeProviderId={provider?._id}
               onUnreadCountChange={setChatUnreadCount}
             />
@@ -909,6 +911,12 @@ export const ProviderDashboard: React.FC = () => {
 
         {hasPhotographyCapability && currentView === 'photography-packages' && (
           <PhotographyPackageManager enabled={hasPhotographyCapability} />
+        )}
+
+        {hasPhotographyCapability && currentView === 'staff' && (
+          <main style={{ flex: 1, padding: '28px 32px' }}>
+            <StaffManagementPanel toast={toast} />
+          </main>
         )}
 
         {hasPhotographyCapability && currentView === 'portfolio' && (

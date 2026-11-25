@@ -11,6 +11,7 @@ import { ConfirmModal } from '../../utils/confirmModal';
 import { usePhotographerDetail } from '../../features/photographers/hooks/usePhotographerDetail';
 import type { LocationSelection, PhotographerPackage as Package, PhotographyQuote } from '../../features/photographers/types/photographer.types';
 import { photographersApi } from '../../features/photographers/api/photographers.api';
+import type { PublicProviderStaffMember } from '../../features/provider-dashboard/staff/staffApi';
 import { PhotographerPortfolioLightbox, type PhotographerPortfolioImage } from '../../features/photographers/components/PhotographerPortfolioLightbox';
 import type { PhotographySessionDraft } from '../../features/photographers/components/PhotographyMultiSessionEditor';
 import type { PhotographyCalendarDay } from '../../features/photographers/components/PhotographyScheduleSelector';
@@ -299,6 +300,9 @@ export const PhotographerDetailPage: React.FC = () => {
   const [availableTimeRanges, setAvailableTimeRanges] = useState<Array<{ start: string; end: string }>>([]);
   const [monthlyAvailability, setMonthlyAvailability] = useState<Record<string, PhotographerAvailabilityStatus>>({});
   const [isMonthlyAvailabilityLoading, setIsMonthlyAvailabilityLoading] = useState(false);
+  const [studioStaff, setStudioStaff] = useState<PublicProviderStaffMember[]>([]);
+  const [effectiveCapacity, setEffectiveCapacity] = useState<number>(1);
+  const [preferredStaffId, setPreferredStaffId] = useState<string>('');
 
   // Check if cart has an Ao Dai to auto-fill details
   const aoDaiInCart = cart.find((item) => item.itemType === 'PRODUCT');
@@ -320,11 +324,35 @@ export const PhotographerDetailPage: React.FC = () => {
 
   // Load booking availability separately from the public photographer profile.
   useEffect(() => {
+    const targetId = photographer?.providerId || id;
+    if (!targetId) return;
+    let active = true;
+    photographersApi
+      .getPublicStaff(targetId)
+      .then((res) => {
+        if (!active) return;
+        setStudioStaff(Array.isArray(res?.staff) ? res.staff : []);
+        setEffectiveCapacity(res?.effectiveCapacity ?? 1);
+      })
+      .catch(() => {
+        if (!active) return;
+        setStudioStaff([]);
+        setEffectiveCapacity(1);
+      });
+    return () => {
+      active = false;
+    };
+  }, [id, photographer?.providerId]);
+
+  useEffect(() => {
     const fetchBookingAvailability = async () => {
       const targetId = photographer?.providerId || id;
       if (!targetId) return;
       try {
-        const busyData = await httpClient.get<{ bookedDates: string[]; bookedSlots: { date: string; timeSlot: string }[] }>(`/api/bookings/busy-dates/provider/${targetId}`);
+        const staffQuery = preferredStaffId
+          ? `?staffId=${encodeURIComponent(preferredStaffId)}`
+          : '';
+        const busyData = await httpClient.get<{ bookedDates: string[]; bookedSlots: { date: string; timeSlot: string }[] }>(`/api/bookings/busy-dates/provider/${targetId}${staffQuery}`);
         setBusyDates(busyData.bookedDates || []);
         setBusySlots(busyData.bookedSlots || []);
       } catch (bookingError) {
@@ -335,7 +363,7 @@ export const PhotographerDetailPage: React.FC = () => {
     };
 
     void fetchBookingAvailability();
-  }, [id, photographer?.providerId]);
+  }, [id, photographer?.providerId, preferredStaffId]);
 
   useEffect(() => {
     if (!photographer?.packages.length) {
@@ -458,10 +486,13 @@ export const PhotographerDetailPage: React.FC = () => {
 
     let cancelled = false;
     const month = `${calendarDate.getFullYear()}-${String(calendarDate.getMonth() + 1).padStart(2, '0')}`;
+    const staffQuery = preferredStaffId
+      ? `&staffId=${encodeURIComponent(preferredStaffId)}`
+      : '';
     setIsMonthlyAvailabilityLoading(true);
     httpClient
       .get<MonthlyAvailabilityResponse>(
-        `/api/photographers/${id}/availability/month?month=${month}&packageId=${selectedPkg._id}`,
+        `/api/photographers/${id}/availability/month?month=${month}&packageId=${selectedPkg._id}${staffQuery}`,
       )
       .then((availability) => {
         if (cancelled) return;
@@ -476,7 +507,7 @@ export const PhotographerDetailPage: React.FC = () => {
       });
 
     return () => { cancelled = true; };
-  }, [calendarDate, id, selectedPkg]);
+  }, [calendarDate, id, selectedPkg, preferredStaffId]);
 
   useEffect(() => {
     if (!selectedDate) return;
@@ -601,6 +632,7 @@ export const PhotographerDetailPage: React.FC = () => {
     let cancelled = false;
     const createPayload = (sessions: PhotographySessionDraft[]) => ({
       packageId: selectedPkg._id,
+      ...(preferredStaffId ? { preferredStaffId } : {}),
       sessions: sessions.map((session) => ({
         clientId: session.clientId,
         startsAt: `${session.date}T${session.startTime}:00+07:00`,
@@ -649,7 +681,7 @@ export const PhotographerDetailPage: React.FC = () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [id, selectedPkg, selectedLocation, quoteSessions, isQuoteable, selectedDate, startTime, effectiveDurationMinutes, nextDurationMinutes, canRequestNextDurationQuote]);
+  }, [id, selectedPkg, selectedLocation, quoteSessions, isQuoteable, selectedDate, startTime, effectiveDurationMinutes, nextDurationMinutes, canRequestNextDurationQuote, preferredStaffId]);
 
   const canIncreaseDuration = bookingMode === 'SINGLE' && Boolean(nextDurationQuote?.valid) && !isNextDurationQuoteLoading;
   const increaseUnavailableReason = !selectedDate || !startTime
@@ -893,6 +925,7 @@ export const PhotographerDetailPage: React.FC = () => {
         '/api/bookings/photography/hold',
         {
           packageId: selectedPkg._id,
+          ...(preferredStaffId ? { preferredStaffId } : {}),
           sessions: quoteSessions.map((session) => ({
             clientId: session.clientId,
             startsAt: `${session.date}T${session.startTime}:00+07:00`,
@@ -1040,6 +1073,10 @@ export const PhotographerDetailPage: React.FC = () => {
         setIsVoucherModalOpen(true);
       }}
       onRemoveVoucher={() => setSelectedVoucher(null)}
+      studioStaff={studioStaff}
+      effectiveCapacity={effectiveCapacity}
+      preferredStaffId={preferredStaffId}
+      onSelectPreferredStaff={setPreferredStaffId}
     />
     <VoucherPickerModal
       isOpen={isVoucherModalOpen}

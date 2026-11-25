@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Camera,
   Download,
@@ -6,7 +7,10 @@ import {
   AlertTriangle,
   Calendar,
   MapPin,
-  CheckSquare
+  CheckSquare,
+  MessageSquare,
+  Phone,
+  UserCheck
 } from 'lucide-react';
 import { Modal } from '../../../../components/common/Modal';
 import { ImageWithFallback } from '../../../../shared/media/ImageWithFallback';
@@ -15,6 +19,8 @@ import { API_BASE_URL } from '../../../../config/env';
 import { useToast } from '../../../../components/feedback/Toast';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../../../services/httpClient';
+import { chatService } from '../../../../services/chatService';
+import { ROUTES } from '../../../../config/routes';
 import { BookingContractsSection } from '../../../../components/contracts/BookingContractsSection';
 import { getBookingStatusMeta, getPaymentTxStatusMeta } from '../../../../utils/bookingStatus';
 
@@ -46,6 +52,8 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
   onRefreshBooking,
 }) => {
   const toast = useToast();
+  const navigate = useNavigate();
+  const [openingChatKey, setOpeningChatKey] = useState<'staff' | 'studio' | null>(null);
   if (!booking) return null;
 
   const formatDate = (dateString?: string | null) => {
@@ -91,6 +99,36 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
   const photoshootSchedule = booking.schedules?.find(
     (s: any) => s.scheduleType === 'PHOTOSHOOT'
   );
+  const assignedStaffSnap = photoshootSchedule?.assignedStaffSnapshot || null;
+  const assignedStaffTargetId =
+    assignedStaffSnap?.linkedUserId ||
+    photoshootSchedule?.assignedStaffId?.toString?.() ||
+    photoshootSchedule?.assignedStaffId ||
+    null;
+  const photoProviderId =
+    photoshootSchedule?.providerId?.toString?.() ||
+    photoshootSchedule?.providerId ||
+    booking.items?.find((it: any) => it.itemType === 'PHOTOGRAPHY_PACKAGE')?.providerId?._id?.toString?.() ||
+    booking.items?.find((it: any) => it.itemType === 'PHOTOGRAPHY_PACKAGE')?.providerId?.toString?.() ||
+    booking.providerIds?.[0]?.toString?.() ||
+    null;
+
+  const handleOpenChatTarget = async (targetId: string | null, kind: 'staff' | 'studio') => {
+    if (!targetId) {
+      toast.error('Chưa có thông tin tài khoản trò chuyện cho lựa chọn này.');
+      return;
+    }
+    try {
+      setOpeningChatKey(kind);
+      const room = await chatService.getOrCreateRoom(targetId);
+      onClose();
+      navigate(ROUTES.CHAT, { state: { activeRoomId: room.id } });
+    } catch (err: any) {
+      toast.error(err?.message || 'Không thể mở cuộc trò chuyện lúc này.');
+    } finally {
+      setOpeningChatKey(null);
+    }
+  };
 
   const shootLocationAddress =
     photoshootSchedule?.locationSnapshot?.address ||
@@ -292,6 +330,104 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
             <p style={{ fontSize: '13px', color: '#7F1D1D', margin: 0, fontWeight: 500 }}>
               {booking.cancellation.reason}
             </p>
+          </div>
+        )}
+
+        {/* Assigned Photographer Staff & Direct Chat Card */}
+        {isPhotoshootBooking && photoshootSchedule && (
+          <div style={{ backgroundColor: '#FCF9F2', border: '1px solid #E7DAC9', borderRadius: '12px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#8E1B2E', fontWeight: 800, fontSize: '13px', textTransform: 'uppercase' }}>
+                <UserCheck size={15} />
+                <span>Thợ chụp phụ trách</span>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {photoshootSchedule.checkedInAt && (
+                  <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '999px', backgroundColor: '#FFFBEB', color: '#B45309' }}>
+                    Thợ đã check-in
+                  </span>
+                )}
+                {photoshootSchedule.shootFinishedAt && (
+                  <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '999px', backgroundColor: '#ECFDF5', color: '#047857' }}>
+                    Đã chụp xong
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {assignedStaffSnap ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {assignedStaffSnap.avatarUrl ? (
+                    <img src={assignedStaffSnap.avatarUrl} alt={assignedStaffSnap.name} style={{ width: '40px', height: '40px', borderRadius: '999px', objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ width: '40px', height: '40px', borderRadius: '999px', backgroundColor: '#F5E6E8', color: '#8E1B2E', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '14px' }}>
+                      {assignedStaffSnap.name?.charAt(0)?.toUpperCase() || 'T'}
+                    </div>
+                  )}
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 750, color: '#231F20' }}>
+                      {assignedStaffSnap.name}
+                      {assignedStaffSnap.specialty ? ` · ${assignedStaffSnap.specialty}` : ''}
+                    </div>
+                    {assignedStaffSnap.phone && (
+                      <div style={{ fontSize: '12.5px', color: '#6B5E54' }}>
+                        SĐT liên hệ: <strong>{assignedStaffSnap.phone}</strong>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {assignedStaffTargetId && (
+                    <button
+                      type="button"
+                      disabled={openingChatKey === 'staff'}
+                      onClick={() => handleOpenChatTarget(assignedStaffTargetId, 'staff')}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', backgroundColor: '#8E1B2E', color: '#FFFFFF', border: 'none', borderRadius: '8px', padding: '7px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      <MessageSquare size={13} />
+                      <span>{openingChatKey === 'staff' ? 'Đang mở...' : 'Chat với thợ chụp'}</span>
+                    </button>
+                  )}
+                  {assignedStaffSnap.phone && (
+                    <a
+                      href={`tel:${assignedStaffSnap.phone}`}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', backgroundColor: '#FFFFFF', color: '#3F362F', border: '1px solid #D8CAB9', borderRadius: '8px', padding: '7px 12px', fontSize: '12px', fontWeight: 700, textDecoration: 'none' }}
+                    >
+                      <Phone size={13} />
+                      <span>Gọi thợ</span>
+                    </a>
+                  )}
+                  {photoProviderId && (
+                    <button
+                      type="button"
+                      disabled={openingChatKey === 'studio'}
+                      onClick={() => handleOpenChatTarget(photoProviderId, 'studio')}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', backgroundColor: '#FFFFFF', color: '#3F362F', border: '1px solid #D8CAB9', borderRadius: '8px', padding: '7px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      <MessageSquare size={13} />
+                      <span>Chat với Studio</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', fontSize: '12.5px', color: '#6B5E54' }}>
+                <span>Studio sẽ phân công thợ chụp phụ trách trước giờ chụp.</span>
+                {photoProviderId && (
+                  <button
+                    type="button"
+                    disabled={openingChatKey === 'studio'}
+                    onClick={() => handleOpenChatTarget(photoProviderId, 'studio')}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', backgroundColor: '#FFFFFF', color: '#3F362F', border: '1px solid #D8CAB9', borderRadius: '8px', padding: '6px 11px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    <MessageSquare size={13} />
+                    <span>Chat với Studio</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
 

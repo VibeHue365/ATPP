@@ -23,6 +23,7 @@ import { downloadPhotosAsZip } from '../../../../utils/downloadUtils';
 import { httpClient } from '../../../../services/httpClient';
 import { useToast } from '../../../../components/feedback/Toast';
 import { RentalReturnModal } from '../rental-detail/RentalReturnModal';
+import { AssignedStaffContactCard } from '../photoshoot-detail/AssignedStaffContactCard';
 import { formatLocationAddress } from '../../../../utils/addressFormat';
 import { getBookingStatusLabel } from '../../../../utils/bookingStatus';
 import Swal from 'sweetalert2';
@@ -1163,6 +1164,11 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
                 </span>
               </div>
             </div>
+
+            <AssignedStaffContactCard
+              booking={booking}
+              studioName={photoProvider?.businessName || photoProvider?.fullName}
+            />
           </div>
         )}
       </div>

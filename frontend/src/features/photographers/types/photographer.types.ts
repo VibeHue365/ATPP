@@ -62,7 +62,12 @@ export interface PhotographyQuote {
     durationMinutes: number;
     overtimeMinutes: number;
     locationAddress: string | null;
+    remainingStaffCount?: number | null;
   }>;
+  staffCapacity?: {
+    activeStaffCount: number;
+    effectiveCapacity: number;
+  } | null;
   errors: PhotographyQuoteError[];
   breakdown: PhotographyQuoteBreakdownItem[];
   totals: {
@@ -123,6 +128,15 @@ export interface PhotographerApiResponse {
   activePackageCount?: number;
   isBookable?: boolean;
   serviceRadiusKm?: number | null;
+  activeStaffCount?: number;
+  maxConcurrentSessions?: number | null;
+  effectiveCapacity?: number;
+  staffPreview?: Array<{
+    _id: string;
+    name: string;
+    avatarUrl?: string | null;
+    specialty?: string | null;
+  }>;
 }
 
 /** View model consumed by cards, filters and listing UI. */
@@ -144,6 +158,15 @@ export interface PhotographerSummary {
   packages: PhotographerPackage[];
   isBookable: boolean;
   equipment: string[];
+  activeStaffCount?: number;
+  maxConcurrentSessions?: number | null;
+  effectiveCapacity?: number;
+  staffPreview?: Array<{
+    _id: string;
+    name: string;
+    avatarUrl?: string | null;
+    specialty?: string | null;
+  }>;
 }
 
 export interface PhotographerDetails {
@@ -188,6 +211,8 @@ export interface PhotographerDiscoveryParams {
   latitude?: number;
   longitude?: number;
   searchRadiusKm?: number;
+  minPhotographers?: number;
+  requiredSlots?: number;
   sort?: PhotographerDiscoverySort;
   page?: number;
   limit?: number;

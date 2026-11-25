@@ -310,6 +310,21 @@ export function ProviderSidebar({
             </button>
           )}
 
+          {hasPhotographyCapability && (
+            <button
+              onClick={() => setCurrentView('staff')}
+              className={`p-nav-item ${currentView === 'staff' ? 'active' : ''}`}
+              aria-label="Quản lý Thợ chụp"
+              title="Quản lý Thợ chụp"
+              type="button"
+            >
+              <div className="p-nav-item-left">
+                <Users size={20} />
+                <span>Quản lý Thợ chụp</span>
+              </div>
+            </button>
+          )}
+
           {/* Thông báo */}
           <button
             onClick={() => setCurrentView('notifications')}

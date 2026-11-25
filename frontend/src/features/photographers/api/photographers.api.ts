@@ -1,4 +1,5 @@
 import { httpClient } from '../../../services/httpClient';
+import type { PublicProviderStaffResponse } from '../../provider-dashboard/staff/staffApi';
 import type {
   PhotographerApiResponse,
   PhotographerConcept,
@@ -27,10 +28,15 @@ export const photographersApi = {
   getConcepts: () => httpClient.get<{ data: PhotographerConcept[] }>('/api/photographers/concepts'),
   getPackageCategories: () => httpClient.get<{ data: PhotographerPackageCategory[] }>('/api/photographers/package-categories'),
   getById: (id: string) => httpClient.get<PhotographerApiResponse>(`/api/photographers/${id}`),
+  getPublicStaff: (providerId: string) =>
+    httpClient.get<PublicProviderStaffResponse>(
+      `/api/providers/${encodeURIComponent(providerId)}/staff`,
+    ),
   quote: (
     providerId: string,
     payload: {
       packageId: string;
+      preferredStaffId?: string;
       sessions: Array<{
         clientId: string;
         startsAt: string;

@@ -47,6 +47,10 @@ export const toPhotographerSummary = (response: PhotographerApiResponse): Photog
     packages: (response.packages ?? []).map(mapPackage),
     isBookable: response.isBookable ?? Boolean(defaultPackage),
     equipment: response.equipment ?? [],
+    activeStaffCount: response.activeStaffCount ?? 0,
+    maxConcurrentSessions: response.maxConcurrentSessions ?? null,
+    effectiveCapacity: response.effectiveCapacity ?? 1,
+    staffPreview: response.staffPreview ?? [],
   };
 };
 
