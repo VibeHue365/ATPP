@@ -7,6 +7,20 @@ export function getRentalReturnDueAt(item: any): number {
   return Number.isNaN(timestamp) ? Number.MAX_SAFE_INTEGER : timestamp;
 }
 
+export function isAwaitingRentalReturn(status: string): boolean {
+  return status === "PICKED_UP" || status === "CUSTOMER_RETURN_REQUESTED";
+}
+
+export function isOverdueRentalItem(item: any, now = Date.now()): boolean {
+  const status = item?.rentalFulfillment?.status || "PENDING";
+  const dueAt = getRentalReturnDueAt(item);
+  return (
+    isAwaitingRentalReturn(status) &&
+    dueAt !== Number.MAX_SAFE_INTEGER &&
+    dueAt < now
+  );
+}
+
 export function sortRentalOperationItems<T extends { item: any }>(
   rows: T[],
   sort: RentalReturnSort,

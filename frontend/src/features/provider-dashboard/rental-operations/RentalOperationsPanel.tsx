@@ -30,7 +30,13 @@ import { getImageUrl } from '../shared/mediaHelpers';
 import type { Order } from '../types';
 import traditionalAoDaiImg from '../../../assets/images/onboarding_traditional.webp';
 import { RentalEvidenceImage } from '../../rentals/components/RentalEvidenceImage';
-import { getRentalReturnDueAt, sortRentalOperationItems, type RentalReturnSort } from './rentalOperationSort';
+import {
+  getRentalReturnDueAt,
+  isAwaitingRentalReturn,
+  isOverdueRentalItem,
+  sortRentalOperationItems,
+  type RentalReturnSort,
+} from './rentalOperationSort';
 import './rentalOperationsFigma.css';
 
 const FALLBACK_AODAI_IMAGE = 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=400&q=80';
@@ -117,12 +123,10 @@ export function RentalOperationsPanel({
 
       if (status === 'PENDING') pending++;
       else if (status === 'READY_FOR_PICKUP') ready++;
-      else if (status === 'PICKED_UP') {
-        rented++;
+      else if (isAwaitingRentalReturn(status)) {
+        if (status === 'PICKED_UP') rented++;
         if (returnDue === todayKey) returningToday++;
-        if (returnDueDate && returnDueDate.getTime() < Date.now()) {
-          overdue++;
-        }
+        if (isOverdueRentalItem(item)) overdue++;
       } else if (status === 'COMPLETED') {
         completed++;
       }
@@ -147,13 +151,13 @@ export function RentalOperationsPanel({
       const returnDueValue = fulfillment.returnDueAt || item.rentalTo;
       const returnDueDate = returnDueValue ? parseSafeDate(returnDueValue) : null;
       const returnDue = returnDueDate ? toLocalDateKey(returnDueDate) : null;
-      const isOverdue = returnDueDate && returnDueDate.getTime() < Date.now() && status === 'PICKED_UP';
+      const isOverdue = isOverdueRentalItem(item);
 
       // Status pill filter
       if (activeStatusTab === 'PENDING' && status !== 'PENDING') return false;
       if (activeStatusTab === 'READY' && status !== 'READY_FOR_PICKUP') return false;
       if (activeStatusTab === 'RENTED' && status !== 'PICKED_UP') return false;
-      if (activeStatusTab === 'RETURNING_TODAY' && (status !== 'PICKED_UP' || returnDue !== todayKey)) return false;
+      if (activeStatusTab === 'RETURNING_TODAY' && (!isAwaitingRentalReturn(status) || returnDue !== todayKey)) return false;
       if (activeStatusTab === 'OVERDUE' && !isOverdue) return false;
       if (activeStatusTab === 'COMPLETED' && status !== 'COMPLETED') return false;
 
@@ -198,7 +202,7 @@ export function RentalOperationsPanel({
     const returnDueTimestamp = getRentalReturnDueAt({ ...rentalItem, rentalFulfillment: fulfillment });
     const returnDue = returnDueTimestamp === Number.MAX_SAFE_INTEGER ? null : new Date(returnDueTimestamp);
     const isDueToday = returnDue && toLocalDateKey(returnDue) === todayKey;
-    const isOverdue = returnDue && returnDue.getTime() < Date.now() && status === 'PICKED_UP';
+    const isOverdue = isOverdueRentalItem({ ...rentalItem, rentalFulfillment: fulfillment });
 
     const hasProposedCharges = Object.values(fulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED');
     if (hasProposedCharges || fulfillment?.issueStatus === 'REPORTED') {
@@ -222,6 +226,14 @@ export function RentalOperationsPanel({
       return {
         label: 'Khách trả hôm nay',
         sub: 'Cần kiểm tra',
+        className: 'ro-status-returned-today',
+        dot: '#059669',
+      };
+    }
+    if (status === 'CUSTOMER_RETURN_REQUESTED') {
+      return {
+        label: 'Khách yêu cầu trả',
+        sub: 'Chờ Shop nhận lại',
         className: 'ro-status-returned-today',
         dot: '#059669',
       };
@@ -461,6 +473,7 @@ export function RentalOperationsPanel({
             <option value="PENDING">Cần chuẩn bị</option>
             <option value="READY_FOR_PICKUP">Sẵn sàng giao</option>
             <option value="PICKED_UP">Đang thuê</option>
+            <option value="CUSTOMER_RETURN_REQUESTED">Khách yêu cầu trả</option>
             <option value="RETURNED">Đã nhận lại</option>
             <option value="COMPLETED">Đã hoàn thành</option>
           </select>

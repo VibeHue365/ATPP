@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { sortRentalOperationItems } from "../src/features/provider-dashboard/rental-operations/rentalOperationSort";
+import {
+  isOverdueRentalItem,
+  sortRentalOperationItems,
+} from "../src/features/provider-dashboard/rental-operations/rentalOperationSort";
 
 describe("sortRentalOperationItems", () => {
   const rows = [
@@ -20,5 +23,33 @@ describe("sortRentalOperationItems", () => {
     expect(
       sortRentalOperationItems(rows, "NEAREST_OVERDUE").map((row) => row.id),
     ).toEqual(["near", "late"]);
+  });
+});
+
+describe("isOverdueRentalItem", () => {
+  const now = new Date("2026-11-25T10:00:00.000Z").getTime();
+
+  it("keeps a customer return request in the overdue queue", () => {
+    expect(
+      isOverdueRentalItem(
+        {
+          rentalTo: "2026-11-24T10:00:00.000Z",
+          rentalFulfillment: { status: "CUSTOMER_RETURN_REQUESTED" },
+        },
+        now,
+      ),
+    ).toBe(true);
+  });
+
+  it("does not mark a completed return as overdue", () => {
+    expect(
+      isOverdueRentalItem(
+        {
+          rentalTo: "2026-11-24T10:00:00.000Z",
+          rentalFulfillment: { status: "RETURNED" },
+        },
+        now,
+      ),
+    ).toBe(false);
   });
 });
