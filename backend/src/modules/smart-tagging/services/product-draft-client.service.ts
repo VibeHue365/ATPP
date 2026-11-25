@@ -2,11 +2,20 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 // CLIP is warmed up when the AI service starts; three photos take about a second.
+// The optional Gemini step is capped at 10 s by the AI service, so 20 s still covers both.
 const DEFAULT_TIMEOUT_MS = 20_000;
 const CLOUDINARY_HOST = 'res.cloudinary.com';
 
 export interface ProductDraftAttribute {
-  group: 'color' | 'pattern' | 'gender' | 'style';
+  // material/motif/occasion are only present when the AI service could ask Gemini.
+  group:
+    | 'color'
+    | 'pattern'
+    | 'gender'
+    | 'style'
+    | 'material'
+    | 'motif'
+    | 'occasion';
   key: string;
   label: string;
   confidence: number;
@@ -15,6 +24,8 @@ export interface ProductDraftAttribute {
 
 export interface ProductDraft {
   status: 'SUCCESS' | 'NOT_AO_DAI' | 'UNAVAILABLE';
+  /** GEMINI: style/fabric/motif/occasion were read too; CLIP_ONLY: colours and pattern only. */
+  source: 'GEMINI' | 'CLIP_ONLY';
   attributes: ProductDraftAttribute[];
   name: string;
   description: string;
@@ -23,6 +34,7 @@ export interface ProductDraft {
 
 const UNAVAILABLE: ProductDraft = {
   status: 'UNAVAILABLE',
+  source: 'CLIP_ONLY',
   attributes: [],
   name: '',
   description: '',
@@ -30,8 +42,9 @@ const UNAVAILABLE: ProductDraft = {
 };
 
 /**
- * UC-C10: asks the AI service (local CLIP, no external API) to suggest a product
- * name, description and colours from the provider's uploaded photos.
+ * UC-C10: asks the AI service to suggest a product name, description and colours from
+ * the provider's uploaded photos (local CLIP, plus Gemini for style/fabric/motif/occasion
+ * when it is configured; the AI service falls back to CLIP on any Gemini failure).
  */
 @Injectable()
 export class ProductDraftClientService {
@@ -67,6 +80,7 @@ export class ProductDraftClientService {
       const payload = (await response.json()) as Partial<ProductDraft>;
       return {
         status: payload.status ?? 'UNAVAILABLE',
+        source: payload.source === 'GEMINI' ? 'GEMINI' : 'CLIP_ONLY',
         attributes: Array.isArray(payload.attributes) ? payload.attributes : [],
         name: String(payload.name ?? '').slice(0, 200),
         description: String(payload.description ?? '').slice(0, 1000),

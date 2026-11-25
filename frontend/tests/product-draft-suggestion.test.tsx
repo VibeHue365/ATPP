@@ -132,6 +132,64 @@ describe('ProductDraftSuggestion (UC-C10 name/description from photos)', () => {
     expect(screen.queryByText('Áo dài đỏ thêu hoa')).toBeNull();
   });
 
+  it('pre-selects the style and occasions Gemini read, and rebuilds the text when the provider changes them', async () => {
+    draftImpl = async () => ({
+      status: 'SUCCESS',
+      source: 'GEMINI',
+      attributes: [
+        { group: 'color', key: 'PINK', label: 'hồng', confidence: 0.9, on_cover: true },
+        { group: 'style', key: 'CACH_TAN', label: 'cách tân', confidence: 0.9, on_cover: true },
+        { group: 'material', key: 'LUA', label: 'lụa', confidence: 0.7, on_cover: true },
+        { group: 'motif', key: 'HOA_SEN', label: 'hoa sen', confidence: 0.9, on_cover: true },
+        { group: 'occasion', key: 'PHU_HOP_LE_CUOI', label: 'lễ cưới', confidence: 0.7, on_cover: true },
+      ],
+      name: 'Áo dài cách tân lụa hoa sen',
+      description: 'Mẫu áo dài phong cách cách tân, chất liệu lụa, màu hồng, họa tiết hoa sen. Gam hồng nhẹ nhàng, tôn nét dịu dàng, nữ tính. Phù hợp lễ cưới.',
+      colors: ['PINK'],
+    });
+    const { onApplyName, onApplyDescription } = renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: /Gợi ý tên & mô tả từ ảnh/ }));
+
+    expect(await screen.findByText('Áo dài cách tân lụa hoa sen')).toBeTruthy();
+    expect(screen.getByText(/do AI đọc từ ảnh/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Cách tân' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Lễ cưới' }).getAttribute('aria-pressed')).toBe('true');
+    // Style and occasion are choices, not read-only chips with a percentage.
+    expect(screen.queryByText('cách tân')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dùng tên này' }));
+    expect(onApplyName).toHaveBeenLastCalledWith('Áo dài cách tân lụa hoa sen');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Truyền thống' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lễ hội' }));
+
+    expect(screen.getByText('Áo dài truyền thống lụa hoa sen')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Dùng tên này' })).toBeTruthy(); // changed text is not "used" yet
+    fireEvent.click(screen.getByRole('button', { name: 'Dùng tên này' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Dùng mô tả này' }));
+    expect(onApplyName).toHaveBeenLastCalledWith('Áo dài truyền thống lụa hoa sen');
+    expect(onApplyDescription).toHaveBeenLastCalledWith(expect.stringMatching(/Phù hợp lễ cưới và lễ hội\.$/));
+  });
+
+  it('lets the provider add a style and up to two occasions when only CLIP answered', async () => {
+    const { onApplyDescription } = renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: /Gợi ý tên & mô tả từ ảnh/ }));
+    await screen.findByText('Áo dài đỏ thêu hoa');
+    expect(screen.getByText(/AI chưa nhận ra phong cách và dịp mặc/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cách tân' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Kỷ yếu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lễ hội' }));
+
+    expect(screen.getByText('Áo dài cách tân đỏ thêu hoa')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Biểu diễn' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Dùng mô tả này' }));
+    expect(onApplyDescription).toHaveBeenCalledWith(expect.stringMatching(/Phù hợp chụp ảnh kỷ yếu và lễ hội\.$/));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cách tân' })); // click again to clear
+    expect(screen.getByText('Áo dài đỏ thêu hoa')).toBeTruthy();
+  });
+
   it('keeps the suggestion when the wizard remounts step 1 with the same photos', async () => {
     const { unmount, imageUrls } = renderPanel();
     fireEvent.click(screen.getByRole('button', { name: /Gợi ý tên & mô tả từ ảnh/ }));

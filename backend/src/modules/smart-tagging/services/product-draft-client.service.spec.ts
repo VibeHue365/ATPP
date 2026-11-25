@@ -107,6 +107,23 @@ describe('ProductDraftClientService (UC-C10 name/description from photos)', () =
     expect(draft.name).toHaveLength(200);
     expect(draft.description).toHaveLength(1000);
   });
+
+  it('passes on whether Gemini took part, treating anything else as CLIP only', async () => {
+    respond({ status: 'SUCCESS', source: 'GEMINI', name: 'Áo dài cách tân lụa hoa sen' });
+    await expect(
+      createClient().draftFromPhotos([PHOTO]),
+    ).resolves.toMatchObject({ source: 'GEMINI', name: 'Áo dài cách tân lụa hoa sen' });
+
+    respond({ status: 'SUCCESS', name: 'Áo dài đỏ' });
+    await expect(
+      createClient().draftFromPhotos([PHOTO]),
+    ).resolves.toMatchObject({ source: 'CLIP_ONLY' });
+
+    respond({ detail: 'error' }, 500);
+    await expect(
+      createClient().draftFromPhotos([PHOTO]),
+    ).resolves.toMatchObject({ status: 'UNAVAILABLE', source: 'CLIP_ONLY' });
+  });
 });
 
 describe('ProviderProductDraftController (UC-C10)', () => {
