@@ -96,6 +96,7 @@ export interface Product {
     discountPercent: number;
     suggestedPrice: number | null;
     reason: string | null;
+    reminderNumber: 1 | 2 | 3 | null;
   };
 }
 

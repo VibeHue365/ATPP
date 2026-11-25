@@ -7,6 +7,7 @@ export interface RentalPriceSuggestion {
   discountPercent: number;
   suggestedPrice: number | null;
   reason: string | null;
+  reminderNumber: 1 | 2 | 3 | null;
 }
 
 const CONDITION_DISCOUNT: Record<RentalCondition, number> = {
@@ -23,8 +24,9 @@ export function buildRentalPriceSuggestion(
   rentalCount: number,
   condition: RentalCondition | null,
 ): RentalPriceSuggestion {
-  if (rentalCount <= 10) {
-    return { rentalCount, condition, eligible: false, discountPercent: 0, suggestedPrice: null, reason: null };
+  const reminderNumber = ({ 5: 1, 10: 2, 50: 3 } as const)[rentalCount as 5 | 10 | 50] ?? null;
+  if (reminderNumber === null) {
+    return { rentalCount, condition, eligible: false, discountPercent: 0, suggestedPrice: null, reason: null, reminderNumber: null };
   }
 
   const resolvedCondition = condition ?? 'GOOD';
@@ -38,5 +40,6 @@ export function buildRentalPriceSuggestion(
     discountPercent,
     suggestedPrice,
     reason: `Sản phẩm đã được thuê ${rentalCount} lần; tình trạng hiện tại: ${resolvedCondition}.`,
+    reminderNumber,
   };
 }

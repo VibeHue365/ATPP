@@ -664,7 +664,7 @@ export function ProductWizardModal({
 
                 {editingProduct?.rentalPriceSuggestion?.eligible && editingProduct.rentalPriceSuggestion.suggestedPrice != null && (
                   <div style={{ margin: '0 0 16px', padding: '12px 14px', borderRadius: 10, border: '1px solid #F59E0B', background: '#FFFBEB', color: '#78350F' }}>
-                    <strong>Đề xuất điều chỉnh giá sau {editingProduct.rentalPriceSuggestion.rentalCount} lượt thuê</strong>
+                    <strong>Nhắc giá lần {editingProduct.rentalPriceSuggestion.reminderNumber}/3 sau {editingProduct.rentalPriceSuggestion.rentalCount} lượt thuê</strong>
                     <p style={{ margin: '5px 0 10px', fontSize: 12.5 }}>
                       Tình trạng kho: {editingProduct.rentalPriceSuggestion.condition}. Hệ thống đề xuất giảm {editingProduct.rentalPriceSuggestion.discountPercent}% còn {editingProduct.rentalPriceSuggestion.suggestedPrice.toLocaleString('vi-VN')}đ/ngày. Đây chỉ là đề xuất, Shop có thể sửa lại giá trước khi lưu.
                     </p>
