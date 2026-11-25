@@ -703,6 +703,23 @@ export default function ProviderOrdersScreen() {
           setWorkflowMode(mode);
         }}
         onOpenChat={() => void openOrderCustomerChat(selectedOrder)}
+        onOrderUpdated={() => {
+          if (selectedOrder?._id) {
+            void providerApi
+              .getBookingDetail(selectedOrder._id)
+              .then((detail) => {
+                if (detail?._id === selectedOrder._id) {
+                  setSelectedOrder((prev: any) =>
+                    prev?._id === detail._id
+                      ? { ...prev, ...detail, incident: prev.incident ?? detail.activeIncident }
+                      : prev,
+                  );
+                }
+              })
+              .catch(() => undefined);
+          }
+          void loadOrders(true);
+        }}
         actionLoading={actionLoading}
       />
 

@@ -32,6 +32,7 @@ import { openNotificationData } from '@/utils/notificationNavigation';
 import {
   getCurrentPortalMode,
   isPartnerPortalUser,
+  isStaffPortalUser,
   subscribePortalMode,
   type PortalMode,
 } from '@/utils/navigation';
@@ -128,6 +129,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   const deltaSyncRunningRef = useRef(false);
 
   const resolvePortalRole = useCallback((): PortalMode => {
+    if (isStaffPortalUser(user)) return 'staff';
     const active = getCurrentPortalMode();
     if (active === 'provider' && isPartnerPortalUser(user)) return 'provider';
     if (active === 'customer') return 'customer';
@@ -319,8 +321,14 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   const syncBookingsDelta = useCallback(
     async (targetBookingId?: string) => {
       if (!isAuthenticated || deltaSyncRunningRef.current) return;
-      deltaSyncRunningRef.current = true;
       const portalRole = resolvePortalRole();
+      if (portalRole === 'staff') {
+        if (targetBookingId) {
+          setBookingSyncVersion((v) => v + 1);
+        }
+        return;
+      }
+      deltaSyncRunningRef.current = true;
 
       try {
         if (targetBookingId && snapshotSeededPortalRef.current === portalRole) {

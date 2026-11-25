@@ -18,7 +18,11 @@ import { InAppNotificationBanner } from '@/components/ui/InAppNotificationBanner
 import { ToastProvider } from '@/contexts/ToastContext';
 import { SocketProvider } from '@/contexts/SocketContext';
 import { configureGoogleSignIn } from '@/services/googleAuth';
-import { isPartnerPortalUser, setActivePortalMode } from '@/utils/navigation';
+import {
+  isPartnerPortalUser,
+  isStaffPortalUser,
+  setActivePortalMode,
+} from '@/utils/navigation';
 
 LogBox.ignoreLogs([
   '`expo-notifications` functionality is not fully supported in Expo Go',
@@ -32,6 +36,19 @@ const CUSTOMER_TAB_ENTRY_PATHS = new Set([
   '/bookings',
   '/profile',
 ]);
+
+function isStaffAllowedPath(pathname?: string | null): boolean {
+  if (!pathname) return true;
+  return (
+    pathname === '/staff' ||
+    pathname.startsWith('/staff/') ||
+    pathname === '/chat' ||
+    pathname.startsWith('/chat/') ||
+    pathname === '/notifications' ||
+    pathname.startsWith('/(auth)') ||
+    pathname.startsWith('/auth')
+  );
+}
 
 export const unstable_settings = {
   initialRouteName: '(tabs)',
@@ -53,7 +70,9 @@ function RootNavigator({ fontsReady }: { fontsReady: boolean }) {
 
   useEffect(() => {
     if (!pathname) return;
-    if (pathname.startsWith('/provider')) {
+    if (pathname.startsWith('/staff')) {
+      void setActivePortalMode('staff');
+    } else if (pathname.startsWith('/provider')) {
       void setActivePortalMode('provider');
     } else if (
       CUSTOMER_TAB_ENTRY_PATHS.has(pathname) ||
@@ -71,6 +90,15 @@ function RootNavigator({ fontsReady }: { fontsReady: boolean }) {
       hasAppliedInitialPartnerEntryRef.current = false;
       return;
     }
+
+    // Strictly lock isolated STAFF sessions to /staff (plus /chat and /notifications).
+    if (isStaffPortalUser(user)) {
+      if (!isStaffAllowedPath(pathname)) {
+        router.replace('/staff' as Href);
+      }
+      return;
+    }
+
     if (hasAppliedInitialPartnerEntryRef.current) return;
     hasAppliedInitialPartnerEntryRef.current = true;
 
@@ -94,6 +122,7 @@ function RootNavigator({ fontsReady }: { fontsReady: boolean }) {
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      <Stack.Screen name="staff" options={{ headerShown: false }} />
     </Stack>
   );
 }

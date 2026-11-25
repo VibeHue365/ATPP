@@ -18,6 +18,7 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, useFocusEffect, type Href } from 'expo-router';
 import { providerApi } from '@/apis/providerApi';
+import { staffApi, type ProviderStaffItem } from '@/apis/staffApi';
 import { useToast } from '@/contexts/ToastContext';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { FontFamily } from '@/constants/theme';
@@ -77,6 +78,10 @@ interface UnifiedTimelineItem {
   stageLabel?: string;
   stageTone?: StatusTone;
   depositAmount: number;
+  assignedStaffId?: string | null;
+  assignedStaffName?: string | null;
+  checkedInAt?: string | null;
+  shootFinishedAt?: string | null;
   rawOrder?: any;
 }
 
@@ -90,6 +95,8 @@ export default function ProviderSchedulesScreen() {
   const [bookingsLoaded, setBookingsLoaded] = useState(false);
 
   const [typeFilter, setTypeFilter] = useState<ScheduleFilterType>('ALL');
+  const [staffMembers, setStaffMembers] = useState<ProviderStaffItem[]>([]);
+  const [staffFilter, setStaffFilter] = useState<string>('ALL');
   const [selectedDayKey, setSelectedDayKey] = useState<string>('ALL_DAYS');
   const [viewMode, setViewMode] = useState<'LIST' | 'MAP'>('LIST');
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
@@ -115,11 +122,12 @@ export default function ProviderSchedulesScreen() {
 
   const loadScheduleData = useCallback(async () => {
     try {
-      const [overRes, bookRes, schedRes, meRes] = await Promise.allSettled([
+      const [overRes, bookRes, schedRes, meRes, staffRes] = await Promise.allSettled([
         providerApi.getOverview(),
         providerApi.getBookings(),
         providerApi.listSchedules(),
         providerApi.getMe(),
+        staffApi.listMine(),
       ]);
 
       if (overRes.status === 'fulfilled' && overRes.value) {
@@ -138,6 +146,9 @@ export default function ProviderSchedulesScreen() {
       }
       if (meRes.status === 'fulfilled' && meRes.value) {
         setProviderProfile(meRes.value);
+      }
+      if (staffRes.status === 'fulfilled' && Array.isArray(staffRes.value?.items)) {
+        setStaffMembers(staffRes.value.items);
       }
       if (schedRes.status === 'fulfilled' && Array.isArray(schedRes.value)) {
         const blocked = schedRes.value
@@ -344,6 +355,13 @@ export default function ProviderSchedulesScreen() {
           stageLabel: display.shortLabel,
           stageTone: display.tone,
           depositAmount: display.isPhotoshootOnly ? 0 : deposit,
+          assignedStaffId:
+            photoSched?.assignedStaffId ||
+            photoSched?.assignedStaffSnapshot?.staffId ||
+            null,
+          assignedStaffName: photoSched?.assignedStaffSnapshot?.name || null,
+          checkedInAt: photoSched?.checkedInAt || null,
+          shootFinishedAt: photoSched?.shootFinishedAt || null,
           rawOrder: b,
         });
       }
@@ -465,6 +483,9 @@ export default function ProviderSchedulesScreen() {
           stageLabel: display?.shortLabel,
           stageTone: display?.tone,
           depositAmount: 0,
+          assignedStaffId:
+            s.assignedStaffId || s.assignedStaffSnapshot?.staffId || null,
+          assignedStaffName: s.assignedStaffSnapshot?.name || null,
           rawOrder: matchedOrder,
         });
       }
@@ -507,9 +528,17 @@ export default function ProviderSchedulesScreen() {
       if (typeFilter !== 'ALL' && it.type !== typeFilter) {
         return false;
       }
+      if (staffFilter !== 'ALL') {
+        if (it.type !== 'PHOTOSHOOT') return false;
+        if (staffFilter === 'UNASSIGNED') {
+          if (it.assignedStaffId) return false;
+        } else if (String(it.assignedStaffId || '') !== staffFilter) {
+          return false;
+        }
+      }
       return true;
     });
-  }, [timelineItems, selectedDayKey, typeFilter]);
+  }, [timelineItems, selectedDayKey, typeFilter, staffFilter]);
 
   const handleOpenDetail = (order: any) => {
     setSelectedOrder(order);
@@ -936,6 +965,14 @@ export default function ProviderSchedulesScreen() {
               <Text style={styles.qrQuickBtnText}>Giờ mở cửa</Text>
             </Pressable>
 
+            <Pressable
+              style={styles.qrQuickBtn}
+              onPress={() => router.push('/provider/staff' as Href)}
+            >
+              <Ionicons name="people-outline" size={14} color="#BA0049" />
+              <Text style={styles.qrQuickBtnText}>Đội ngũ</Text>
+            </Pressable>
+
             <Pressable style={styles.qrQuickBtn} onPress={handleBlockDayAction}>
               <Ionicons name="calendar-clear-outline" size={14} color="#BA0049" />
               <Text style={styles.qrQuickBtnText}>Khóa lịch</Text>
@@ -1040,6 +1077,76 @@ export default function ProviderSchedulesScreen() {
             );
           })}
         </ScrollView>
+
+        {/* Staff Filter Pills */}
+        {staffMembers.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.horizontalScrollWrap}
+            contentContainerStyle={styles.typeFilterRow}
+          >
+            <Pressable
+              style={[
+                styles.typePill,
+                staffFilter === 'ALL' && styles.staffPillActive,
+              ]}
+              onPress={() => setStaffFilter('ALL')}
+            >
+              <Text
+                style={[
+                  styles.typePillText,
+                  staffFilter === 'ALL' && styles.typePillTextActive,
+                ]}
+              >
+                Mọi thợ chụp
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.typePill,
+                staffFilter === 'UNASSIGNED' && styles.staffPillActive,
+              ]}
+              onPress={() => setStaffFilter('UNASSIGNED')}
+            >
+              <Text
+                style={[
+                  styles.typePillText,
+                  staffFilter === 'UNASSIGNED' && styles.typePillTextActive,
+                ]}
+              >
+                Chưa phân thợ (
+                {
+                  timelineItems.filter(
+                    (it) => it.type === 'PHOTOSHOOT' && !it.assignedStaffId,
+                  ).length
+                }
+                )
+              </Text>
+            </Pressable>
+
+            {staffMembers.map((st) => {
+              const active = staffFilter === st._id;
+              return (
+                <Pressable
+                  key={st._id}
+                  style={[styles.typePill, active && styles.staffPillActive]}
+                  onPress={() => setStaffFilter(st._id)}
+                >
+                  <Text
+                    style={[
+                      styles.typePillText,
+                      active && styles.typePillTextActive,
+                    ]}
+                  >
+                    {st.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
       </View>
 
       {loading ? (
@@ -1273,6 +1380,53 @@ export default function ProviderSchedulesScreen() {
                             Cọc giữ hộ Escrow: {item.depositAmount.toLocaleString('vi-VN')} đ
                           </Text>
                         )}
+                        {item.type === 'PHOTOSHOOT' && (
+                          <View style={styles.staffBadgeRow}>
+                            <View
+                              style={[
+                                styles.staffAssignedBadge,
+                                item.assignedStaffName
+                                  ? styles.staffAssignedBadgeOk
+                                  : styles.staffAssignedBadgeWarn,
+                              ]}
+                            >
+                              <Ionicons
+                                name={
+                                  item.assignedStaffName
+                                    ? 'camera-outline'
+                                    : 'alert-circle-outline'
+                                }
+                                size={11}
+                                color={
+                                  item.assignedStaffName ? '#047857' : '#B45309'
+                                }
+                              />
+                              <Text
+                                style={[
+                                  styles.staffAssignedBadgeText,
+                                  {
+                                    color: item.assignedStaffName
+                                      ? '#047857'
+                                      : '#B45309',
+                                  },
+                                ]}
+                              >
+                                {item.assignedStaffName
+                                  ? `Thợ: ${item.assignedStaffName}`
+                                  : 'Chưa phân thợ'}
+                              </Text>
+                            </View>
+                            {item.shootFinishedAt ? (
+                              <Text style={styles.staffFieldStatusText}>
+                                · Đã xong chụp
+                              </Text>
+                            ) : item.checkedInAt ? (
+                              <Text style={styles.staffFieldStatusText}>
+                                · Đã check-in
+                              </Text>
+                            ) : null}
+                          </View>
+                        )}
                       </View>
                     </View>
 
@@ -1385,6 +1539,23 @@ export default function ProviderSchedulesScreen() {
           setDetailVisible(false);
           setNavOrder(order);
           setNavModalVisible(true);
+        }}
+        onOrderUpdated={() => {
+          if (selectedOrder?._id) {
+            void providerApi
+              .getBookingDetail(selectedOrder._id)
+              .then((detail) => {
+                if (detail?._id === selectedOrder._id) {
+                  setSelectedOrder((prev: any) =>
+                    prev?._id === detail._id
+                      ? { ...prev, ...detail, incident: prev.incident ?? detail.activeIncident }
+                      : prev,
+                  );
+                }
+              })
+              .catch(() => undefined);
+          }
+          void loadScheduleData();
         }}
       />
 
@@ -2202,5 +2373,38 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: FontFamily.bodyBold,
     color: '#BA0049',
+  },
+  staffPillActive: {
+    backgroundColor: '#BA0049',
+  },
+  staffBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+  },
+  staffAssignedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 99,
+  },
+  staffAssignedBadgeOk: {
+    backgroundColor: '#ECFDF5',
+  },
+  staffAssignedBadgeWarn: {
+    backgroundColor: '#FEF3C7',
+  },
+  staffAssignedBadgeText: {
+    fontSize: 10.5,
+    fontFamily: FontFamily.bodyBold,
+  },
+  staffFieldStatusText: {
+    fontSize: 10.5,
+    fontFamily: FontFamily.bodySemiBold,
+    color: '#0369A1',
   },
 });
