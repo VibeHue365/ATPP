@@ -53,7 +53,12 @@ export class RefundRequest {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   requestedBy: Types.ObjectId;
 
-  @Prop({ type: String, enum: Object.values(RefundType), required: true, index: true })
+  @Prop({
+    type: String,
+    enum: Object.values(RefundType),
+    required: true,
+    index: true,
+  })
   type: RefundType;
 
   @Prop({ required: true, unique: true, index: true })
@@ -75,7 +80,13 @@ export class RefundRequest {
   reservedAmount: number;
 
   @Prop({
-    type: [{ _id: false, paymentId: { type: Types.ObjectId, ref: 'Payment', required: true }, amount: { type: Number, required: true, min: 1 } }],
+    type: [
+      {
+        _id: false,
+        paymentId: { type: Types.ObjectId, ref: 'Payment', required: true },
+        amount: { type: Number, required: true, min: 1 },
+      },
+    ],
     default: [],
   })
   allocations: RefundAllocation[];

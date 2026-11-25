@@ -2,8 +2,15 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { User, UserDocument } from '../users/schemas/user.schema';
-import { Provider, ProviderDocument } from '../providers/schemas/provider.schema';
-import { Booking, BookingDocument, BookingStatus } from '../bookings/schemas/booking.schema';
+import {
+  Provider,
+  ProviderDocument,
+} from '../providers/schemas/provider.schema';
+import {
+  Booking,
+  BookingDocument,
+  BookingStatus,
+} from '../bookings/schemas/booking.schema';
 import { Review, ReviewDocument } from '../reviews/schemas/review.schema';
 import { Dispute, DisputeDocument } from '../disputes/schemas/dispute.schema';
 import { AiService } from '../ai/services/ai.service';
@@ -62,7 +69,11 @@ export interface AdminAiInsightsResponse {
     highRiskShopsCount: number;
     totalUserShopInteractions: number;
     mostActiveCustomer?: { name: string; email: string; bookingCount: number };
-    worstRatedShop?: { name: string; badReviewCount: number; avgRating: number };
+    worstRatedShop?: {
+      name: string;
+      badReviewCount: number;
+      avgRating: number;
+    };
   };
   userShopInteractions: UserShopInteraction[];
   shopRiskProfiles: ShopRiskProfile[];
@@ -83,10 +94,14 @@ export class AdminAiAnalyticsService {
 
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-    @InjectModel(Provider.name) private readonly providerModel: Model<ProviderDocument>,
-    @InjectModel(Booking.name) private readonly bookingModel: Model<BookingDocument>,
-    @InjectModel(Review.name) private readonly reviewModel: Model<ReviewDocument>,
-    @InjectModel(Dispute.name) private readonly disputeModel: Model<DisputeDocument>,
+    @InjectModel(Provider.name)
+    private readonly providerModel: Model<ProviderDocument>,
+    @InjectModel(Booking.name)
+    private readonly bookingModel: Model<BookingDocument>,
+    @InjectModel(Review.name)
+    private readonly reviewModel: Model<ReviewDocument>,
+    @InjectModel(Dispute.name)
+    private readonly disputeModel: Model<DisputeDocument>,
     private readonly aiService: AiService,
   ) {}
 
@@ -97,18 +112,25 @@ export class AdminAiAnalyticsService {
       this.aggregateSentimentClusters(),
     ]);
 
-    const totalReviews = shopProfiles.reduce((acc, s) => acc + s.totalReviews, 0);
+    const totalReviews = shopProfiles.reduce(
+      (acc, s) => acc + s.totalReviews,
+      0,
+    );
     const avgPlatformRating =
       totalReviews > 0
         ? Number(
             (
-              shopProfiles.reduce((acc, s) => acc + s.averageRating * s.totalReviews, 0) /
-              totalReviews
+              shopProfiles.reduce(
+                (acc, s) => acc + s.averageRating * s.totalReviews,
+                0,
+              ) / totalReviews
             ).toFixed(2),
           )
         : 5.0;
 
-    const highRiskCount = shopProfiles.filter((s) => s.riskLevel === 'HIGH_RISK').length;
+    const highRiskCount = shopProfiles.filter(
+      (s) => s.riskLevel === 'HIGH_RISK',
+    ).length;
 
     const mostActive = interactions[0]
       ? {
@@ -118,13 +140,14 @@ export class AdminAiAnalyticsService {
         }
       : undefined;
 
-    const worstShop = shopProfiles[0] && shopProfiles[0].badReviewCount > 0
-      ? {
-          name: shopProfiles[0].businessName,
-          badReviewCount: shopProfiles[0].badReviewCount,
-          avgRating: shopProfiles[0].averageRating,
-        }
-      : undefined;
+    const worstShop =
+      shopProfiles[0] && shopProfiles[0].badReviewCount > 0
+        ? {
+            name: shopProfiles[0].businessName,
+            badReviewCount: shopProfiles[0].badReviewCount,
+            avgRating: shopProfiles[0].averageRating,
+          }
+        : undefined;
 
     const summary = {
       totalReviewsAnalyzed: totalReviews,
@@ -184,11 +207,19 @@ export class AdminAiAnalyticsService {
     try {
       aiResult = await this.aiService.analyzeAdminInsights(aiPayload);
     } catch (err: any) {
-      this.logger.warn(`AI analysis call failed, using heuristic: ${err?.message}`);
+      this.logger.warn(
+        `AI analysis call failed, using heuristic: ${err?.message}`,
+      );
     }
 
     if (!aiResult) {
-      aiResult = this.generateHeuristicAiReport(summary, interactions, shopProfiles, sentimentClusters, question);
+      aiResult = this.generateHeuristicAiReport(
+        summary,
+        interactions,
+        shopProfiles,
+        sentimentClusters,
+        question,
+      );
     }
 
     return {
@@ -197,10 +228,16 @@ export class AdminAiAnalyticsService {
       shopRiskProfiles: shopProfiles,
       sentimentClusters,
       aiAnalysis: {
-        executiveSummary: aiResult.executive_summary || aiResult.executiveSummary || '',
-        badShopsAnalysis: aiResult.bad_shops_analysis || aiResult.badShopsAnalysis || '',
-        userBehaviorAnalysis: aiResult.user_behavior_analysis || aiResult.userBehaviorAnalysis || '',
-        topRecommendations: aiResult.top_recommendations || aiResult.topRecommendations || [],
+        executiveSummary:
+          aiResult.executive_summary || aiResult.executiveSummary || '',
+        badShopsAnalysis:
+          aiResult.bad_shops_analysis || aiResult.badShopsAnalysis || '',
+        userBehaviorAnalysis:
+          aiResult.user_behavior_analysis ||
+          aiResult.userBehaviorAnalysis ||
+          '',
+        topRecommendations:
+          aiResult.top_recommendations || aiResult.topRecommendations || [],
         copilotAnswer: aiResult.copilot_answer || aiResult.copilotAnswer,
         source: aiResult.source || 'heuristic_engine',
       },
@@ -211,7 +248,9 @@ export class AdminAiAnalyticsService {
    * 1. Thống kê tương tác Khách hàng - Shop (User - Shop Affinity)
    * Khách hàng nào vào đặt shop nào nhiều nhất, tổng số tiền, đánh giá ra sao
    */
-  private async aggregateUserShopInteractions(): Promise<UserShopInteraction[]> {
+  private async aggregateUserShopInteractions(): Promise<
+    UserShopInteraction[]
+  > {
     const rawAgg = await this.bookingModel.aggregate([
       {
         $project: {
@@ -221,7 +260,10 @@ export class AdminAiAnalyticsService {
           },
           status: 1,
           grandTotal: {
-            $ifNull: ['$pricingSummary.grandTotal', { $ifNull: ['$grandTotal', 0] }],
+            $ifNull: [
+              '$pricingSummary.grandTotal',
+              { $ifNull: ['$grandTotal', 0] },
+            ],
           },
         },
       },
@@ -237,7 +279,11 @@ export class AdminAiAnalyticsService {
           totalBookings: { $sum: 1 },
           completedBookings: {
             $sum: {
-              $cond: [{ $in: ['$status', ['COMPLETED', BookingStatus.Completed]] }, 1, 0],
+              $cond: [
+                { $in: ['$status', ['COMPLETED', BookingStatus.Completed]] },
+                1,
+                0,
+              ],
             },
           },
           totalSpent: { $sum: '$grandTotal' },
@@ -251,8 +297,12 @@ export class AdminAiAnalyticsService {
       return [];
     }
 
-    const customerIds = Array.from(new Set(rawAgg.map((r) => r._id.customerId)));
-    const providerIds = Array.from(new Set(rawAgg.map((r) => r._id.providerId)));
+    const customerIds = Array.from(
+      new Set(rawAgg.map((r) => r._id.customerId)),
+    );
+    const providerIds = Array.from(
+      new Set(rawAgg.map((r) => r._id.providerId)),
+    );
 
     const [users, providers, reviews] = await Promise.all([
       this.userModel
@@ -264,14 +314,19 @@ export class AdminAiAnalyticsService {
         .select('businessName media.logoUrl media.avatarUrl avatarUrl')
         .lean(),
       this.reviewModel
-        .find({ customerId: { $in: customerIds }, providerId: { $in: providerIds } })
+        .find({
+          customerId: { $in: customerIds },
+          providerId: { $in: providerIds },
+        })
         .select('customerId providerId rating comment createdAt')
         .sort({ createdAt: -1 })
         .lean(),
     ]);
 
     const userMap = new Map(users.map((u: any) => [u._id.toString(), u]));
-    const providerMap = new Map(providers.map((p: any) => [p._id.toString(), p]));
+    const providerMap = new Map(
+      providers.map((p: any) => [p._id.toString(), p]),
+    );
 
     // Map reviews by customerId_providerId
     const reviewMap = new Map<string, any[]>();
@@ -345,7 +400,10 @@ export class AdminAiAnalyticsService {
         {
           $addFields: {
             badReviewPercentage: {
-              $multiply: [{ $divide: ['$badReviewCount', '$totalReviews'] }, 100],
+              $multiply: [
+                { $divide: ['$badReviewCount', '$totalReviews'] },
+                100,
+              ],
             },
           },
         },
@@ -363,7 +421,9 @@ export class AdminAiAnalyticsService {
     }
 
     const providerIds = shopReviewsAgg.map((r) => r._id);
-    const disputeMap = new Map(disputesAgg.map((d) => [d._id?.toString(), d.disputeCount]));
+    const disputeMap = new Map(
+      disputesAgg.map((d) => [d._id?.toString(), d.disputeCount]),
+    );
 
     const [providers, negativeReviews] = await Promise.all([
       this.providerModel
@@ -378,7 +438,9 @@ export class AdminAiAnalyticsService {
         .lean(),
     ]);
 
-    const providerMap = new Map(providers.map((p: any) => [p._id.toString(), p]));
+    const providerMap = new Map(
+      providers.map((p: any) => [p._id.toString(), p]),
+    );
 
     // Nhóm negative reviews theo provider
     const negMap = new Map<string, any[]>();
@@ -395,12 +457,22 @@ export class AdminAiAnalyticsService {
       const disputeCount = disputeMap.get(pId) || 0;
 
       // Nhận diện vấn đề chính từ comment tiêu cực
-      const issues = this.extractIssuesFromComments(provNegs.map((n) => n.comment || ''));
+      const issues = this.extractIssuesFromComments(
+        provNegs.map((n) => n.comment || ''),
+      );
 
       let riskLevel: 'HIGH_RISK' | 'WARNING' | 'HEALTHY' = 'HEALTHY';
-      if (agg.badReviewCount >= 2 || agg.badReviewPercentage >= 20 || disputeCount >= 2) {
+      if (
+        agg.badReviewCount >= 2 ||
+        agg.badReviewPercentage >= 20 ||
+        disputeCount >= 2
+      ) {
         riskLevel = 'HIGH_RISK';
-      } else if (agg.badReviewCount >= 1 || agg.averageRating < 3.8 || disputeCount >= 1) {
+      } else if (
+        agg.badReviewCount >= 1 ||
+        agg.averageRating < 3.8 ||
+        disputeCount >= 1
+      ) {
         riskLevel = 'WARNING';
       }
 
@@ -421,7 +493,9 @@ export class AdminAiAnalyticsService {
           rating: r.rating,
           comment: r.comment,
           customerName: r.customerId?.profile?.fullName || 'Khách hàng',
-          createdAt: r.createdAt ? new Date(r.createdAt).toLocaleDateString('vi-VN') : '',
+          createdAt: r.createdAt
+            ? new Date(r.createdAt).toLocaleDateString('vi-VN')
+            : '',
         })),
       };
     });
@@ -438,7 +512,10 @@ export class AdminAiAnalyticsService {
       .limit(200)
       .lean();
 
-    const clusters: Record<string, { positive: number; negative: number; quotes: string[] }> = {
+    const clusters: Record<
+      string,
+      { positive: number; negative: number; quotes: string[] }
+    > = {
       'Trang phục & Phụ kiện': { positive: 0, negative: 0, quotes: [] },
       'Kỹ năng thợ ảnh & Thái độ': { positive: 0, negative: 0, quotes: [] },
       'Đúng giờ & Giao nhận trả đồ': { positive: 0, negative: 0, quotes: [] },
@@ -449,27 +526,62 @@ export class AdminAiAnalyticsService {
       const text = (r.comment || '').toLowerCase();
       const isPositive = (r.rating || 5) >= 4;
 
-      if (text.includes('vải') || text.includes('áo') || text.includes('gấm') || text.includes('rách') || text.includes('bẩn') || text.includes('form') || text.includes('đẹp')) {
+      if (
+        text.includes('vải') ||
+        text.includes('áo') ||
+        text.includes('gấm') ||
+        text.includes('rách') ||
+        text.includes('bẩn') ||
+        text.includes('form') ||
+        text.includes('đẹp')
+      ) {
         const c = clusters['Trang phục & Phụ kiện'];
-        if (isPositive) c.positive++; else c.negative++;
+        if (isPositive) c.positive++;
+        else c.negative++;
         if (r.comment && c.quotes.length < 2) c.quotes.push(r.comment);
       }
 
-      if (text.includes('thợ') || text.includes('chụp') || text.includes('ảnh') || text.includes('thái độ') || text.includes('nhiệt tình') || text.includes('tạo dáng') || text.includes('cộc')) {
+      if (
+        text.includes('thợ') ||
+        text.includes('chụp') ||
+        text.includes('ảnh') ||
+        text.includes('thái độ') ||
+        text.includes('nhiệt tình') ||
+        text.includes('tạo dáng') ||
+        text.includes('cộc')
+      ) {
         const c = clusters['Kỹ năng thợ ảnh & Thái độ'];
-        if (isPositive) c.positive++; else c.negative++;
+        if (isPositive) c.positive++;
+        else c.negative++;
         if (r.comment && c.quotes.length < 2) c.quotes.push(r.comment);
       }
 
-      if (text.includes('trễ') || text.includes('chậm') || text.includes('giờ') || text.includes('hẹn') || text.includes('chờ') || text.includes('đúng giờ') || text.includes('giao')) {
+      if (
+        text.includes('trễ') ||
+        text.includes('chậm') ||
+        text.includes('giờ') ||
+        text.includes('hẹn') ||
+        text.includes('chờ') ||
+        text.includes('đúng giờ') ||
+        text.includes('giao')
+      ) {
         const c = clusters['Đúng giờ & Giao nhận trả đồ'];
-        if (isPositive) c.positive++; else c.negative++;
+        if (isPositive) c.positive++;
+        else c.negative++;
         if (r.comment && c.quotes.length < 2) c.quotes.push(r.comment);
       }
 
-      if (text.includes('cọc') || text.includes('tiền') || text.includes('hoàn') || text.includes('giá') || text.includes('đắt') || text.includes('phụ thu')) {
+      if (
+        text.includes('cọc') ||
+        text.includes('tiền') ||
+        text.includes('hoàn') ||
+        text.includes('giá') ||
+        text.includes('đắt') ||
+        text.includes('phụ thu')
+      ) {
         const c = clusters['Chi phí & Tiền cọc hoàn trả'];
-        if (isPositive) c.positive++; else c.negative++;
+        if (isPositive) c.positive++;
+        else c.negative++;
         if (r.comment && c.quotes.length < 2) c.quotes.push(r.comment);
       }
     }
@@ -477,7 +589,11 @@ export class AdminAiAnalyticsService {
     return Object.entries(clusters).map(([topic, stat]) => {
       const total = stat.positive + stat.negative;
       const sentiment: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL' =
-        stat.negative > stat.positive ? 'NEGATIVE' : stat.positive > 0 ? 'POSITIVE' : 'NEUTRAL';
+        stat.negative > stat.positive
+          ? 'NEGATIVE'
+          : stat.positive > 0
+            ? 'POSITIVE'
+            : 'NEUTRAL';
       return {
         topic,
         sentiment,
@@ -491,22 +607,49 @@ export class AdminAiAnalyticsService {
     const combined = comments.join(' ').toLowerCase();
     const issues: string[] = [];
 
-    if (combined.includes('rách') || combined.includes('hỏng') || combined.includes('đứt')) {
+    if (
+      combined.includes('rách') ||
+      combined.includes('hỏng') ||
+      combined.includes('đứt')
+    ) {
       issues.push('Trang phục dính rách / hỏng khóa');
     }
-    if (combined.includes('bẩn') || combined.includes('ố') || combined.includes('mùi') || combined.includes('hôi')) {
+    if (
+      combined.includes('bẩn') ||
+      combined.includes('ố') ||
+      combined.includes('mùi') ||
+      combined.includes('hôi')
+    ) {
       issues.push('Áo chưa giặt sạch / có vết bẩn');
     }
-    if (combined.includes('chậm') || combined.includes('trễ') || combined.includes('chờ') || combined.includes('muộn')) {
+    if (
+      combined.includes('chậm') ||
+      combined.includes('trễ') ||
+      combined.includes('chờ') ||
+      combined.includes('muộn')
+    ) {
       issues.push('Chậm trễ giao đồ hoặc trả file ảnh');
     }
-    if (combined.includes('thái độ') || combined.includes('cộc cằn') || combined.includes('khó chịu') || combined.includes('bất lịch sự')) {
+    if (
+      combined.includes('thái độ') ||
+      combined.includes('cộc cằn') ||
+      combined.includes('khó chịu') ||
+      combined.includes('bất lịch sự')
+    ) {
       issues.push('Thái độ phục vụ chưa niềm nở');
     }
-    if (combined.includes('cọc') || combined.includes('hoàn tiền') || combined.includes('trừ tiền')) {
+    if (
+      combined.includes('cọc') ||
+      combined.includes('hoàn tiền') ||
+      combined.includes('trừ tiền')
+    ) {
       issues.push('Tranh chấp tiền cọc');
     }
-    if (combined.includes('không giống') || combined.includes('sai mẫu') || combined.includes('ảnh khác')) {
+    if (
+      combined.includes('không giống') ||
+      combined.includes('sai mẫu') ||
+      combined.includes('ảnh khác')
+    ) {
       issues.push('Đồ thực tế khác với ảnh chụp mẫu');
     }
 
@@ -541,9 +684,12 @@ export class AdminAiAnalyticsService {
         (worstShop.recentNegativeComments[0]
           ? `- **Trích phản hồi thực tế của khách:** "${worstShop.recentNegativeComments[0].comment}" *(bởi ${worstShop.recentNegativeComments[0].customerName})*.\n`
           : '') +
-        (worstShop.disputeCount > 0 ? `- Shop này cũng đang ghi nhận **${worstShop.disputeCount} tranh chấp cọc/dịch vụ** đang hoặc đã xử lý.` : '');
+        (worstShop.disputeCount > 0
+          ? `- Shop này cũng đang ghi nhận **${worstShop.disputeCount} tranh chấp cọc/dịch vụ** đang hoặc đã xử lý.`
+          : '');
     } else {
-      badShopsAnalysis = 'Toàn bộ các nhà cung cấp trên sàn đều duy trì điểm đánh giá tích cực (≥ 4.0 sao), không có đơn vị nào bị đánh giá xấu nghiêm trọng.';
+      badShopsAnalysis =
+        'Toàn bộ các nhà cung cấp trên sàn đều duy trì điểm đánh giá tích cực (≥ 4.0 sao), không có đơn vị nào bị đánh giá xấu nghiêm trọng.';
     }
 
     // User behavior
@@ -558,7 +704,8 @@ export class AdminAiAnalyticsService {
             (topPair.recentComment ? `: "${topPair.recentComment}".` : '.')
           : '- Khách hàng chưa để lại nhận xét chi tiết sau các chuyến trải nghiệm.');
     } else {
-      userBehaviorAnalysis = 'Chưa ghi nhận đủ đơn hàng hoàn tất để trích xuất hành vi khách hàng thân thiết.';
+      userBehaviorAnalysis =
+        'Chưa ghi nhận đủ đơn hàng hoàn tất để trích xuất hành vi khách hàng thân thiết.';
     }
 
     // Recommendations
@@ -576,19 +723,32 @@ export class AdminAiAnalyticsService {
     let copilotAnswer = undefined;
     if (question) {
       const q = question.toLowerCase();
-      if (q.includes('xấu nhất') || q.includes('tệ') || q.includes('phàn nàn') || q.includes('kém')) {
+      if (
+        q.includes('xấu nhất') ||
+        q.includes('tệ') ||
+        q.includes('phàn nàn') ||
+        q.includes('kém')
+      ) {
         if (worstShop) {
           copilotAnswer =
             `**${worstShop.businessName}** là shop có nhiều đánh giá xấu nhất hiện nay:\n\n` +
             `• **Số lượt 1-2★:** ${worstShop.badReviewCount} lượt (${worstShop.badReviewPercentage}% tổng đánh giá)\n` +
             `• **Điểm trung bình:** ${worstShop.averageRating}/5.0\n` +
             `• **Vấn đề chính:** ${worstShop.primaryIssues.join(', ')}\n` +
-            (worstShop.recentNegativeComments[0] ? `• **Ý kiến khách hàng:** "${worstShop.recentNegativeComments[0].comment}"\n\n` : '\n') +
+            (worstShop.recentNegativeComments[0]
+              ? `• **Ý kiến khách hàng:** "${worstShop.recentNegativeComments[0].comment}"\n\n`
+              : '\n') +
             `💡 **Khuyến nghị Admin:** Nên kiểm tra quy trình của shop này và tạm hoãn ưu tiên hiển thị trên trang chủ cho tới khi điểm số được cải thiện.`;
         } else {
-          copilotAnswer = 'Không có shop nào có nhiều đánh giá xấu. Hiện tại các đối tác đều đạt điểm hài lòng tốt trên 4.0★.';
+          copilotAnswer =
+            'Không có shop nào có nhiều đánh giá xấu. Hiện tại các đối tác đều đạt điểm hài lòng tốt trên 4.0★.';
         }
-      } else if (q.includes('nhiều nhất') || q.includes('vào shop') || q.includes('thân thiết') || q.includes('khách nào')) {
+      } else if (
+        q.includes('nhiều nhất') ||
+        q.includes('vào shop') ||
+        q.includes('thân thiết') ||
+        q.includes('khách nào')
+      ) {
         if (topPair) {
           copilotAnswer =
             `Khách hàng đặt nhiều nhất tại một shop là **${topPair.customerName}** (${topPair.customerEmail}):\n\n` +
@@ -596,9 +756,12 @@ export class AdminAiAnalyticsService {
             `• **Số đơn đã đặt:** ${topPair.totalBookings} đơn (${topPair.completedBookings} đơn hoàn thành)\n` +
             `• **Tổng chi tiêu:** ${topPair.totalSpent.toLocaleString('vi-VN')}đ\n` +
             `• **Đánh giá đã cho:** ${topPair.reviewCount} lượt (Điểm TB: ${topPair.averageRatingGiven}/5.0)` +
-            (topPair.recentComment ? `\n• **Bình luận:** "${topPair.recentComment}"` : '');
+            (topPair.recentComment
+              ? `\n• **Bình luận:** "${topPair.recentComment}"`
+              : '');
         } else {
-          copilotAnswer = 'Chưa có đủ dữ liệu đơn hàng để xác định cặp Khách - Shop nhiều nhất.';
+          copilotAnswer =
+            'Chưa có đủ dữ liệu đơn hàng để xác định cặp Khách - Shop nhiều nhất.';
         }
       } else {
         copilotAnswer =
@@ -619,4 +782,3 @@ export class AdminAiAnalyticsService {
     };
   }
 }
-

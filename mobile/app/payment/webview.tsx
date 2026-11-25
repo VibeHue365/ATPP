@@ -16,8 +16,12 @@ export default function PaymentWebViewScreen() {
   }, [code]);
   const shouldLoad = useCallback((request: Pick<WebViewNavigation, 'url'>) => {
     const target = request.url;
-    const isAppCallback = target.startsWith('vibehue://payment/');
-    const isProviderResult = /[?&]status=(?:PAID|SUCCESS|CANCELLED|CANCEL)(?:&|$)/i.test(target);
+    const isAppCallback =
+      target.startsWith('tago://payment/') ||
+      target.startsWith('vibehue://payment/');
+    const isProviderResult =
+      /[?&]status=(?:PAID|SUCCESS|CANCELLED|CANCEL)(?:&|$)/i.test(target) ||
+      /\/checkout\/result(?:[?#]|$)/i.test(target);
     if (isAppCallback || isProviderResult) {
       showResult();
       return false;
@@ -31,12 +35,12 @@ export default function PaymentWebViewScreen() {
   return <SafeAreaView style={styles.safe} edges={['top']}>
     <View style={styles.header}>
       <Pressable accessibilityRole="button" accessibilityLabel="Đóng trang thanh toán" style={styles.close} onPress={showResult}><Ionicons name="close" size={23} color={Colors.text} /></Pressable>
-      <View><Text style={styles.brand}>LUMÉ</Text><Text style={styles.title}>Thanh toán an toàn</Text></View>
+      <View><Text style={styles.brand}>TÀGO</Text><Text style={styles.title}>Thanh toán an toàn</Text></View>
       <View style={styles.placeholder} />
     </View>
     <WebView
       source={{ uri: url }}
-      originWhitelist={['http://*', 'https://*', 'vibehue://*']}
+      originWhitelist={['http://*', 'https://*', 'tago://*', 'vibehue://*']}
       javaScriptEnabled
       domStorageEnabled
       startInLoadingState

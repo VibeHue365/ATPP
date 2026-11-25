@@ -1,8 +1,8 @@
 /**
- * Service ket noi truc tiep voi Kaggle AI Server cho tinh nang Thu Do Ao Dai 2D (Fashn-VTON)
+ * Service kết nối AI Server cho tính năng Thử Đồ Áo Dài 2D (Fashn-VTON)
  */
 
-const DEFAULT_API_URL = 'https://deferred-particles-idaho-depends.trycloudflare.com';
+const DEFAULT_API_URL = 'https://kianalover-tago-tryon-api.hf.space';
 const STORAGE_KEY = 'atpp_tryon_2d_api_url';
 
 export interface TryOn2DParams {
@@ -20,18 +20,19 @@ export interface TryOn2DResult {
 
 export const virtualTryOn2DService = {
   getApiUrl(): string {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved && saved.trim()) return saved.trim().replace(/\/+$/, '');
-    const legacySaved = localStorage.getItem('atpp_tryon_3d_api_url');
-    if (legacySaved && legacySaved.trim()) return legacySaved.trim().replace(/\/+$/, '');
-    
     const envUrl = (import.meta as any).env?.VITE_TRYON_2D_API_URL || (import.meta as any).env?.VITE_TRYON_3D_API_URL;
-    if (envUrl && envUrl.trim()) return envUrl.trim().replace(/\/+$/, '');
+    if (envUrl && envUrl.trim()) return envUrl.trim().replace(/\/+$/, '').replace(/\/health$/, '');
+
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved && saved.trim() && !saved.includes('trycloudflare.com')) {
+      return saved.trim().replace(/\/+$/, '').replace(/\/health$/, '');
+    }
+    
     return DEFAULT_API_URL;
   },
 
   setApiUrl(url: string) {
-    const cleanUrl = url.trim().replace(/\/+$/, '');
+    const cleanUrl = url.trim().replace(/\/+$/, '').replace(/\/health$/, '');
     localStorage.setItem(STORAGE_KEY, cleanUrl);
     localStorage.setItem('atpp_tryon_3d_api_url', cleanUrl);
   },
@@ -142,11 +143,12 @@ export const virtualTryOn2DService = {
 
   async testConnection(url?: string): Promise<{ ok: boolean; gpu?: string; mode?: string }> {
     try {
-      const targetUrl = url ? url.replace(/\/+$/, '') : this.getApiUrl();
+      const rawUrl = url ? url.trim() : this.getApiUrl();
+      const targetUrl = rawUrl.replace(/\/+$/, '').replace(/\/health$/, '');
       const res = await fetch(`${targetUrl}/health`, { method: 'GET' });
       if (!res.ok) return { ok: false };
       const data = await res.json();
-      return { ok: true, gpu: data.gpu_name, mode: data.mode || 'SERVER_ACTIVE' };
+      return { ok: true, gpu: data.gpu_name || (data.gpu_available ? 'NVIDIA GPU' : 'Active'), mode: data.mode || 'SERVER_ACTIVE' };
     } catch (_) {
       return { ok: false };
     }

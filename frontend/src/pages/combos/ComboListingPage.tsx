@@ -28,7 +28,7 @@ import './ComboListingPage.css';
 const DEFAULT_SIDEBAR_VALUES: SidebarFilterValues = {
   regions: [],
   types: [],
-  minPrice: 500000,
+  minPrice: 0,
   maxPrice: 5000000,
   presetPrice: null,
   sortBy: 'popular',
@@ -460,13 +460,13 @@ export const ComboListingPage: React.FC = () => {
           onChange={(val) => {
             setHeroBudget(val);
             if (val === 'under_2m') {
-              setSidebarFilters((prev) => ({ ...prev, minPrice: 500000, maxPrice: 2000000, presetPrice: 'under_1m' }));
+              setSidebarFilters((prev) => ({ ...prev, minPrice: 0, maxPrice: 2000000, presetPrice: 'under_1m' }));
             } else if (val === '2m_3m') {
               setSidebarFilters((prev) => ({ ...prev, minPrice: 2000000, maxPrice: 3000000, presetPrice: '2m_3m' }));
             } else if (val === 'above_3m') {
               setSidebarFilters((prev) => ({ ...prev, minPrice: 3000000, maxPrice: 5000000, presetPrice: 'above_3m' }));
             } else {
-              setSidebarFilters((prev) => ({ ...prev, minPrice: 500000, maxPrice: 5000000, presetPrice: null }));
+              setSidebarFilters((prev) => ({ ...prev, minPrice: 0, maxPrice: 5000000, presetPrice: null }));
             }
           }}
           options={[

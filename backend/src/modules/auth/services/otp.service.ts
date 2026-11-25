@@ -147,7 +147,10 @@ export class OtpService {
     userId: Types.ObjectId,
     email: string,
   ): Promise<string> {
-    const { otp, tokenId } = await this.createEmailVerificationOtp(userId, email);
+    const { otp, tokenId } = await this.createEmailVerificationOtp(
+      userId,
+      email,
+    );
     await this.enqueueVerificationEmail(userId, email, otp, tokenId);
     await this.authRepository.revokeOtherActiveVerificationTokens(
       userId,
@@ -162,7 +165,10 @@ export class OtpService {
     userId: Types.ObjectId,
     email: string,
   ): Promise<string> {
-    const { otp, tokenId } = await this.createEmailVerificationOtp(userId, email);
+    const { otp, tokenId } = await this.createEmailVerificationOtp(
+      userId,
+      email,
+    );
     await this.enqueueVerificationEmail(userId, email, otp, tokenId);
 
     return otp;
@@ -211,7 +217,9 @@ export class OtpService {
   }
 
   private demoTokensEnabled(): boolean {
-    return this.configService.get<string>('AUTH_DEMO_TOKENS_ENABLED') === 'true';
+    return (
+      this.configService.get<string>('AUTH_DEMO_TOKENS_ENABLED') === 'true'
+    );
   }
 
   private normalizeEmail(email: string): string {

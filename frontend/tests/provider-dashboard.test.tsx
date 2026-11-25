@@ -26,6 +26,7 @@ vi.mock('../src/components/common/BookingDetailModal', () => ({ BookingDetailMod
 vi.mock('../src/features/photography-packages/components/PhotographyPackageManager', () => ({ PhotographyPackageManager: () => <div>Photography package manager</div> }));
 vi.mock('../src/features/photographers/components/PhotographyLocationPicker', () => ({ PhotographyLocationPicker: () => <div>Location picker</div> }));
 vi.mock('../src/features/photographers/components/PortfolioItemFormModal', () => ({ PortfolioItemFormModal: () => null }));
+vi.mock('../src/features/provider-dashboard/size-chart/SizeChartEditor', () => ({ SizeChartEditor: () => <div>Size chart editor</div> }));
 vi.mock('../src/features/smart-tagging/components/SmartTagEditor', () => ({ SmartTagEditor: ({ onActiveTagsChange }: { onActiveTagsChange: (tags: string[]) => void }) => <button onClick={() => onActiveTagsChange(['TRUYEN_THONG'])}>Select fixture tag</button> }));
 vi.mock('../src/pages/notifications/NotificationsPage', () => ({ NotificationsPage: () => <div>Notifications page</div> }));
 vi.mock('../src/components/common/PrivateEvidenceImage', () => ({ PrivateEvidenceImage: () => <div>Private evidence</div> }));
@@ -73,7 +74,7 @@ vi.mock('../src/services/httpClient', () => {
 const versions = [['current', ProviderDashboard]] as const;
 
 const sampleBooking = {
-  _id: 'booking-fixture-123456', status: 'PENDING', bookingType: 'PHOTOGRAPHY',
+  _id: 'booking-fixture-123456', status: 'DEPOSIT_PAID', bookingType: 'PHOTOGRAPHY',
   customerId: { _id: 'customer-fixture', email: 'customer@example.test', profile: { fullName: 'Khách kiểm thử' } },
   createdAt: '2026-09-20T02:00:00Z', pricingSummary: { totalAmount: 750000, depositTotal: 100000 },
   items: [{ _id: 'item-fixture', itemType: 'PHOTOGRAPHY_PACKAGE', name: 'Gói chụp kiểm thử', quantity: 1, status: 'PENDING' }],
@@ -81,7 +82,11 @@ const sampleBooking = {
 };
 
 async function settle() {
-  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  await act(async () => {
+    // Dashboard panels are lazy-loaded; wait for their chunks before the next assertion.
+    await vi.dynamicImportSettled();
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
 }
 
 beforeEach(() => {
@@ -166,28 +171,42 @@ describe('Provider dashboard behavior', () => {
         fireEvent.change(query.getByPlaceholderText('Ví dụ: Áo dài Ngũ Thân'), { target: { value: 'Áo dài kiểm thử' } });
         fireEvent.change(modal.querySelector('select')!, { target: { value: 'category-test' } });
         fireEvent.change(query.getByPlaceholderText('500000'), { target: { value: '350000' } });
-        fireEvent.change(query.getByPlaceholderText('1000000'), { target: { value: '100000' } });
+        fireEvent.change(query.getByPlaceholderText('200000'), { target: { value: '100000' } });
         fireEvent.change(modal.querySelector('input[type="file"]')!, { target: { files: [new File(['fixture'], 'fixture.jpg', { type: 'image/jpeg' })] } });
         await settle();
         return { view, query };
       }
 
-      it('creates one hidden draft, updates it on back/next, and removes it on cancel', async () => {
-        const { query } = await openProductWizard();
+      // Step 2: the first "Tiếp tục" saves the variants as a hidden draft and stays for the size chart;
+      // once the chart is confirmed, the next "Tiếp tục" updates the draft and opens the tag step.
+      async function goToTagStep(query: ReturnType<typeof within>) {
+        mocks.responses['/products/my-listings/created-test/size-chart'] = {
+          sizes: ['S'], sizeChart: { status: 'CONFIRMED', rows: [{ size: 'S' }] },
+        };
         fireEvent.click(query.getByRole('button', { name: 'Tiếp tục', exact: true }));
         await settle();
         fireEvent.click(query.getByRole('button', { name: 'S', exact: true }));
         fireEvent.click(query.getByRole('button', { name: 'Đỏ', exact: true }));
         fireEvent.click(query.getByRole('button', { name: 'Tiếp tục', exact: true }));
         await settle();
+        fireEvent.click(query.getByRole('button', { name: 'Tiếp tục', exact: true }));
+        await settle();
+      }
+      const draftPatches = () => mocks.requests.filter(r => r.method === 'PATCH' && r.path === '/products/created-test');
+
+      it('creates one hidden draft, updates it on back/next, and removes it on cancel', async () => {
+        const { query } = await openProductWizard();
+        await goToTagStep(query);
         const created = mocks.requests.filter(r => r.method === 'POST' && r.path === '/products');
         expect(created).toHaveLength(1);
         expect(created[0].body).toMatchObject({ name: 'Áo dài kiểm thử', status: 'DRAFT', basePrice: 350000, depositAmount: 100000 });
+        expect(draftPatches()).toHaveLength(1);
         fireEvent.click(query.getByRole('button', { name: 'Quay lại', exact: true }));
+        await settle();
         fireEvent.click(query.getByRole('button', { name: 'Tiếp tục', exact: true }));
         await settle();
         expect(mocks.requests.filter(r => r.method === 'POST' && r.path === '/products')).toHaveLength(1);
-        expect(mocks.requests.some(r => r.method === 'PATCH' && r.path === '/products/created-test')).toBe(true);
+        expect(draftPatches()).toHaveLength(2);
         fireEvent.click(query.getByRole('button', { name: 'Hủy', exact: true }));
         await settle();
         expect(mocks.confirm).toHaveBeenCalled();
@@ -196,17 +215,12 @@ describe('Provider dashboard behavior', () => {
 
       it('requires a tag before publishing the draft and preserves the publish payload', async () => {
         const { query } = await openProductWizard();
-        fireEvent.click(query.getByRole('button', { name: 'Tiếp tục', exact: true }));
-        await settle();
-        fireEvent.click(query.getByRole('button', { name: 'S', exact: true }));
-        fireEvent.click(query.getByRole('button', { name: 'Đỏ', exact: true }));
-        fireEvent.click(query.getByRole('button', { name: 'Tiếp tục', exact: true }));
-        await settle();
+        await goToTagStep(query);
         expect((query.getByRole('button', { name: 'Đăng áo dài', exact: true }) as HTMLButtonElement).disabled).toBe(true);
         fireEvent.click(query.getByRole('button', { name: 'Select fixture tag' }));
         fireEvent.click(query.getByRole('button', { name: 'Đăng áo dài', exact: true }));
         await settle();
-        expect(mocks.requests.find(r => r.method === 'PATCH' && r.path === '/products/created-test')?.body)
+        expect(draftPatches().at(-1)?.body)
           .toMatchObject({ name: 'Áo dài kiểm thử', status: 'ACTIVE', style: 'traditional', images: ['/fixture-photo.jpg'] });
       });
 
@@ -218,14 +232,14 @@ describe('Provider dashboard behavior', () => {
         await settle();
         fireEvent.click(view.getByRole('button', { name: /Voucher & Mã giảm giá/ }));
         fireEvent.click(view.getByRole('button', { name: 'Tạo voucher mới', exact: true }));
-        const input = view.getByPlaceholderText('VD: LUMETET26') as HTMLInputElement;
+        const input = view.getByPlaceholderText('VD: TAGOTET26') as HTMLInputElement;
         fireEvent.change(input, { target: { value: 'KEEP-DRAFT' } });
         fireEvent.click(sidebar.getByRole('button', { name: 'Quản lý vai trò', exact: true }));
         await settle();
         fireEvent.click(sidebar.getByRole('button', { name: 'Mã khuyến mãi & Combo', exact: true }));
         await settle();
         fireEvent.click(view.getByRole('button', { name: /Voucher & Mã giảm giá/ }));
-        expect((view.getByPlaceholderText('VD: LUMETET26') as HTMLInputElement).value).toBe('KEEP-DRAFT');
+        expect((view.getByPlaceholderText('VD: TAGOTET26') as HTMLInputElement).value).toBe('KEEP-DRAFT');
       });
 
       it('keeps the socket subscription stable across tabs and removes it on unmount', async () => {

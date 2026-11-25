@@ -12,10 +12,7 @@ export class PolicyValidationService {
     }
   }
 
-  validatePolicyValue(
-    code: PolicyCode,
-    value: Record<string, unknown>,
-  ): void {
+  validatePolicyValue(code: PolicyCode, value: Record<string, unknown>): void {
     if (!value || Array.isArray(value) || typeof value !== 'object') {
       throw new BadRequestException(PolicyErrorCode.ValueInvalid);
     }
@@ -69,7 +66,11 @@ export class PolicyValidationService {
       1,
     );
     this.assertNumberAtLeast(value.fixedPlatformFee, 'fixedPlatformFee', 0);
-    this.assertNumberAtLeast(value.minCommissionAmount, 'minCommissionAmount', 0);
+    this.assertNumberAtLeast(
+      value.minCommissionAmount,
+      'minCommissionAmount',
+      0,
+    );
   }
 
   private validateCancellationPolicy(value: Record<string, unknown>): void {
@@ -105,7 +106,10 @@ export class PolicyValidationService {
       0,
       1,
     );
-    if ((value.urgentBookingBeforeHours as number) > (value.freeCancelBeforeHours as number)) {
+    if (
+      (value.urgentBookingBeforeHours as number) >
+      (value.freeCancelBeforeHours as number)
+    ) {
       throw new BadRequestException(
         `${PolicyErrorCode.ValueInvalid}: urgentBookingBeforeHours`,
       );
@@ -122,7 +126,11 @@ export class PolicyValidationService {
       'manualReviewThresholdAmount',
       0,
     );
-    if (!['SIMULATED', 'MANUAL', 'GATEWAY'].includes(String(value.refundProcessingMode))) {
+    if (
+      !['SIMULATED', 'MANUAL', 'GATEWAY'].includes(
+        String(value.refundProcessingMode),
+      )
+    ) {
       throw new BadRequestException(
         `${PolicyErrorCode.ValueInvalid}: refundProcessingMode`,
       );
@@ -142,7 +150,11 @@ export class PolicyValidationService {
       'lateCancelViolationPoint',
       0,
     );
-    this.assertNumberAtLeast(value.noShowViolationPoint, 'noShowViolationPoint', 0);
+    this.assertNumberAtLeast(
+      value.noShowViolationPoint,
+      'noShowViolationPoint',
+      0,
+    );
     this.assertBoolean(value.autoSuspendEnabled, 'autoSuspendEnabled');
   }
 
@@ -168,26 +180,38 @@ export class PolicyValidationService {
     this.assertNumber(value, field);
     const numberValue = value as number;
     if (numberValue < min || numberValue > max) {
-      throw new BadRequestException(`${PolicyErrorCode.ValueInvalid}: ${field}`);
+      throw new BadRequestException(
+        `${PolicyErrorCode.ValueInvalid}: ${field}`,
+      );
     }
   }
 
-  private assertNumberAtLeast(value: unknown, field: string, min: number): void {
+  private assertNumberAtLeast(
+    value: unknown,
+    field: string,
+    min: number,
+  ): void {
     this.assertNumber(value, field);
     if ((value as number) < min) {
-      throw new BadRequestException(`${PolicyErrorCode.ValueInvalid}: ${field}`);
+      throw new BadRequestException(
+        `${PolicyErrorCode.ValueInvalid}: ${field}`,
+      );
     }
   }
 
   private assertNumber(value: unknown, field: string): void {
     if (typeof value !== 'number' || Number.isNaN(value)) {
-      throw new BadRequestException(`${PolicyErrorCode.ValueInvalid}: ${field}`);
+      throw new BadRequestException(
+        `${PolicyErrorCode.ValueInvalid}: ${field}`,
+      );
     }
   }
 
   private assertBoolean(value: unknown, field: string): void {
     if (typeof value !== 'boolean') {
-      throw new BadRequestException(`${PolicyErrorCode.ValueInvalid}: ${field}`);
+      throw new BadRequestException(
+        `${PolicyErrorCode.ValueInvalid}: ${field}`,
+      );
     }
   }
 }

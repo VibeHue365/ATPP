@@ -26,4 +26,3 @@ export const notificationModels = MongooseModule.forFeature([
   exports: [notificationModels, NotificationsService],
 })
 export class NotificationsModule {}
-

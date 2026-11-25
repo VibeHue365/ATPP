@@ -1,4 +1,8 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Provider } from '../../providers/schemas/provider.schema';
@@ -11,7 +15,9 @@ export class SettlementAccessPolicy {
     private readonly providerModel: Model<Provider>,
   ) {}
 
-  async resolveProviderForCurrentUser(userId: string): Promise<Provider & { _id: Types.ObjectId }> {
+  async resolveProviderForCurrentUser(
+    userId: string,
+  ): Promise<Provider & { _id: Types.ObjectId }> {
     if (!Types.ObjectId.isValid(userId)) {
       throw new ForbiddenException(SETTLEMENT_ERROR_CODES.PermissionDenied);
     }

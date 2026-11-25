@@ -43,7 +43,8 @@ export class PasswordResetService {
     context: RequestContext,
   ): Promise<Record<string, unknown>> {
     const userObjectId = new Types.ObjectId(userId);
-    const user = await this.usersRepository.findUserByIdWithPassword(userObjectId);
+    const user =
+      await this.usersRepository.findUserByIdWithPassword(userObjectId);
     if (!user?.auth.passwordHash) {
       throw new BadRequestException(
         'This account does not have a local password',
@@ -195,7 +196,9 @@ export class PasswordResetService {
   }
 
   private demoTokensEnabled(): boolean {
-    return this.configService.get<string>('AUTH_DEMO_TOKENS_ENABLED') === 'true';
+    return (
+      this.configService.get<string>('AUTH_DEMO_TOKENS_ENABLED') === 'true'
+    );
   }
 
   private normalizeEmail(email: string): string {

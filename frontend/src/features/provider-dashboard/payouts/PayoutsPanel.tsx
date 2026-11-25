@@ -8,10 +8,10 @@ type PayoutsPanelProps = Pick<ReturnType<typeof useProviderSessionState>,
   'isLoadingProvider' | 'setSelectedBookingId' | 'setIsDetailModalOpen'
 > &
   Pick<ReturnType<typeof useProviderPayoutsState>,
-    'payouts'
+    'payouts' | 'isLoadingPayouts'
   >;
 
-export function PayoutsPanel({ isLoadingProvider, payouts, setSelectedBookingId, setIsDetailModalOpen }: PayoutsPanelProps) {
+export function PayoutsPanel({ isLoadingProvider, isLoadingPayouts, payouts, setSelectedBookingId, setIsDetailModalOpen }: PayoutsPanelProps) {
   return (
     <main style={{ flex: 1, padding: '40px 32px', overflowY: 'auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
@@ -21,8 +21,21 @@ export function PayoutsPanel({ isLoadingProvider, payouts, setSelectedBookingId,
         </div>
       </div>
 
-      {isLoadingProvider ? (
-        <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Đang tải dữ liệu quyết toán...</div>
+      {(isLoadingProvider || isLoadingPayouts) ? (
+        <div style={{ padding: '64px 24px', textAlign: 'center', color: 'var(--color-text-secondary)', fontWeight: 600, backgroundColor: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-light-border)' }}>
+          <div
+            style={{
+              width: '32px',
+              height: '32px',
+              margin: '0 auto 12px',
+              borderRadius: '50%',
+              border: '3px solid #F3E8E8',
+              borderTopColor: '#881337',
+              animation: 'spin 0.8s linear infinite',
+            }}
+          />
+          <div>Đang tải dữ liệu quyết toán từ hệ thống...</div>
+        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
 
@@ -65,7 +78,14 @@ export function PayoutsPanel({ isLoadingProvider, payouts, setSelectedBookingId,
                         <td style={{ padding: '16px 20px', fontWeight: 700, color: '#1F2937' }}>{(() => { const bId = p.bookingId?._id || (typeof p.bookingId === 'string' ? p.bookingId : (p.bookingId?.id || null)); return bId ? `#${String(bId).slice(-6).toUpperCase()}` : '—'; })()}</td>
                         <td style={{ padding: '16px 20px', fontWeight: 700 }}>{p.settlementCode || p.id}</td>
                         <td style={{ padding: '16px 20px', fontWeight: 600, color: 'var(--color-primary-dark)' }}>{p.bookingId?.bookingCode || p.bookingCode || '—'}</td>
-                        <td style={{ padding: '16px 20px', textAlign: 'right', fontWeight: 800, color: '#166534' }}>{(p.payableAmount ?? p.netAmount ?? p.amount ?? 0).toLocaleString('vi-VN')}đ</td>
+                        <td style={{ padding: '16px 20px', textAlign: 'right', fontWeight: 800, color: '#166534' }}>
+                          {(p.payableAmount ?? p.netAmount ?? p.amount ?? 0).toLocaleString('vi-VN')}đ
+                          {p.compensationAmount && p.compensationAmount > 0 ? (
+                            <span style={{ display: 'block', fontSize: '11px', color: '#15803D', fontWeight: 600, marginTop: '2px' }}>
+                              +{p.compensationAmount.toLocaleString('vi-VN')}đ bồi thường cọc
+                            </span>
+                          ) : null}
+                        </td>
                         <td style={{ padding: '16px 20px', textAlign: 'right', color: 'var(--color-text-secondary)' }}>
                           {(p.grossAmount ?? 0).toLocaleString('vi-VN')}đ
                         </td>

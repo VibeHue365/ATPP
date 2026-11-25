@@ -31,7 +31,11 @@ import {
   NotificationType,
 } from '../../notifications/schemas/notification.schema';
 import { PrivateStorageService } from '../../storage/services/private-storage.service';
-import { User, UserDocument, ProviderStatus as UserProviderStatus } from '../../users/schemas/user.schema';
+import {
+  User,
+  UserDocument,
+  ProviderStatus as UserProviderStatus,
+} from '../../users/schemas/user.schema';
 import { RefreshToken } from '../../auth/schemas/refresh-token.schema';
 import {
   Provider,
@@ -148,7 +152,10 @@ export class ProviderVerificationService {
     dto: CreateProviderVerificationDto,
     meta: RequestMeta,
   ): Promise<Record<string, unknown>> {
-    if (!actor.roles?.includes('CUSTOMER') && !actor.roles?.includes('PROVIDER')) {
+    if (
+      !actor.roles?.includes('CUSTOMER') &&
+      !actor.roles?.includes('PROVIDER')
+    ) {
       throw new ForbiddenException('CUSTOMER or PROVIDER role is required');
     }
     const user = await this.loadUser(actor.sub);
@@ -185,7 +192,9 @@ export class ProviderVerificationService {
       status: { $in: ACTIVE_VERIFICATION_STATUSES },
     });
     if (duplicate) {
-      throw new ConflictException('Active provider verification already exists');
+      throw new ConflictException(
+        'Active provider verification already exists',
+      );
     }
 
     const verification = await this.verificationModel.create({
@@ -227,7 +236,10 @@ export class ProviderVerificationService {
   async getCurrentVerification(
     actor: AuthUser,
   ): Promise<Record<string, unknown> | null> {
-    if (!actor.roles?.includes('CUSTOMER') && !actor.roles?.includes('PROVIDER')) {
+    if (
+      !actor.roles?.includes('CUSTOMER') &&
+      !actor.roles?.includes('PROVIDER')
+    ) {
       throw new ForbiddenException('CUSTOMER or PROVIDER role is required');
     }
     const verification = await this.verificationModel
@@ -277,7 +289,8 @@ export class ProviderVerificationService {
       }
 
       verification.requestedCapabilities = nextCapabilities;
-      verification.documents = this.buildRequiredDocumentItems(nextCapabilities);
+      verification.documents =
+        this.buildRequiredDocumentItems(nextCapabilities);
     }
 
     if (dto.businessProfile) {
@@ -368,7 +381,7 @@ export class ProviderVerificationService {
       throw new BadRequestException('Document file is required');
     }
 
-    return this.withUploadLock(`${id}:${documentType}`, async () => {
+    return this.withUploadLock(id, async () => {
       const verification = await this.loadOwnedEditableVerification(actor, id);
       if (!verification.consent?.accepted) {
         throw new BadRequestException('Consent not accepted');
@@ -376,10 +389,7 @@ export class ProviderVerificationService {
 
       const validation = this.validateFile(file);
       const checksum = createHash('sha256').update(file.buffer).digest('hex');
-      const document = this.getOrCreateDocumentItem(
-        verification,
-        documentType,
-      );
+      const document = this.getOrCreateDocumentItem(verification, documentType);
       const now = new Date();
       const previousCurrentVersion = document.currentVersion ?? 0;
       const nextVersionNo = previousCurrentVersion + 1;
@@ -444,10 +454,16 @@ export class ProviderVerificationService {
 
       document.versions.push(newVersion);
       document.currentVersion = nextVersionNo;
-      const currentVersion = document.versions.find((version) => version.versionNo === nextVersionNo && version.isCurrent);
-      if (!currentVersion) throw new InternalServerErrorException('Unable to create document version');
+      const currentVersion = document.versions.find(
+        (version) => version.versionNo === nextVersionNo && version.isCurrent,
+      );
+      if (!currentVersion)
+        throw new InternalServerErrorException(
+          'Unable to create document version',
+        );
       let ocrRequest: { attemptId: string; operationId: string } | null = null;
-      const requiresOcr = this.ocrOutboxService.isEnabled() && this.isOcrApplicable(documentType);
+      const requiresOcr =
+        this.ocrOutboxService.isEnabled() && this.isOcrApplicable(documentType);
       const persist = async (session?: ClientSession) => {
         if (requiresOcr) {
           ocrRequest = await this.ocrOutboxService.createRequest(
@@ -625,7 +641,9 @@ export class ProviderVerificationService {
     await this.assertOcrRateLimit(actor, verification._id, documentType);
     if (this.ocrOutboxService.isEnabled()) {
       if (version.ocr?.executionStatus === OcrExecutionStatus.Processing) {
-        throw new ConflictException('OCR is already processing for this document');
+        throw new ConflictException(
+          'OCR is already processing for this document',
+        );
       }
       let request: { attemptId: string; operationId: string };
       const session = await this.verificationModel.db.startSession();
@@ -654,13 +672,19 @@ export class ProviderVerificationService {
       } finally {
         await session.endSession();
       }
-      if (!request) throw new InternalServerErrorException('Unable to queue OCR request');
+      if (!request)
+        throw new InternalServerErrorException('Unable to queue OCR request');
       await this.writeAudit(
         actor,
         'RUN_PROVIDER_VERIFICATION_OCR',
         verification._id,
         {},
-        { documentType, versionNo: version.versionNo, stage: 'QUEUED', operationId: request.operationId },
+        {
+          documentType,
+          versionNo: version.versionNo,
+          stage: 'QUEUED',
+          operationId: request.operationId,
+        },
         meta,
       );
       return {
@@ -836,13 +860,13 @@ export class ProviderVerificationService {
       const regex = createSafeRegex(query.search);
       if (regex) {
         filter.$or = [
-        { 'businessProfile.businessName': regex },
-        { partnerCode: regex },
-        { 'businessProfile.ownerName': regex },
-        { 'businessProfile.phone': regex },
-        { 'businessProfile.taxCode': regex },
-        { 'businessProfile.email': regex },
-      ];
+          { 'businessProfile.businessName': regex },
+          { partnerCode: regex },
+          { 'businessProfile.ownerName': regex },
+          { 'businessProfile.phone': regex },
+          { 'businessProfile.taxCode': regex },
+          { 'businessProfile.email': regex },
+        ];
       }
     }
 
@@ -964,11 +988,14 @@ export class ProviderVerificationService {
     });
 
     let provider;
-    const isUpgrade = verification.verificationType === VerificationType.AddCapability;
+    const isUpgrade =
+      verification.verificationType === VerificationType.AddCapability;
 
     if (isUpgrade) {
       if (!existingProvider) {
-        throw new NotFoundException('Không tìm thấy tài khoản Provider hoạt động để nâng cấp vai trò.');
+        throw new NotFoundException(
+          'Không tìm thấy tài khoản Provider hoạt động để nâng cấp vai trò.',
+        );
       }
       const nextCapabilities = Array.from(
         new Set([
@@ -978,7 +1005,11 @@ export class ProviderVerificationService {
       );
       existingProvider.capabilities = nextCapabilities;
 
-      if (verification.requestedCapabilities.includes(ProviderCapability.AoDaiRental)) {
+      if (
+        verification.requestedCapabilities.includes(
+          ProviderCapability.AoDaiRental,
+        )
+      ) {
         if (verification.aodaiInfo?.rentalPolicy) {
           existingProvider.policies = {
             ...existingProvider.policies,
@@ -998,7 +1029,7 @@ export class ProviderVerificationService {
           verification.businessProfile.businessName ??
           verification.aodaiInfo.shopName ??
           verification.photographyInfo.studioName ??
-          'VibeHue Provider',
+          'Đối tác TàGo',
         capabilities: verification.requestedCapabilities,
         contact: {
           email: verification.businessProfile.email ?? '',
@@ -1061,7 +1092,9 @@ export class ProviderVerificationService {
     );
     await this.writeAudit(
       actor,
-      isUpgrade ? 'UPGRADE_PROVIDER_CAPABILITIES' : 'CREATE_PROVIDER_FROM_VERIFICATION',
+      isUpgrade
+        ? 'UPGRADE_PROVIDER_CAPABILITIES'
+        : 'CREATE_PROVIDER_FROM_VERIFICATION',
       provider._id,
       {},
       { verificationId: verification._id, capabilities: provider.capabilities },
@@ -1072,7 +1105,10 @@ export class ProviderVerificationService {
       verification.userId,
       'Hồ sơ đăng ký đối tác đã được phê duyệt',
       'Hồ sơ đăng ký đối tác của bạn đã được phê duyệt. Bạn có thể bắt đầu quản lý dịch vụ.',
-      { verificationId: verification._id.toString(), providerId: provider._id.toString() },
+      {
+        verificationId: verification._id.toString(),
+        providerId: provider._id.toString(),
+      },
     );
 
     return {
@@ -1262,18 +1298,22 @@ export class ProviderVerificationService {
             ? ProviderDocumentType.IdentityCardBack
             : null;
       const document = documentType
-        ? verification.documents.find((item) => item.documentType === documentType)
+        ? verification.documents.find(
+            (item) => item.documentType === documentType,
+          )
         : null;
       const currentVersion = document?.versions.find((item) => item.isCurrent);
 
-      return [{
-        target: request.target,
-        action: request.action,
-        reasonCode: request.reasonCode,
-        note: request.note?.trim() || null,
-        documentVersionNo: currentVersion?.versionNo ?? null,
-        requestedRevision: verification.verificationRevision,
-      }];
+      return [
+        {
+          target: request.target,
+          action: request.action,
+          reasonCode: request.reasonCode,
+          note: request.note?.trim() || null,
+          documentVersionNo: currentVersion?.versionNo ?? null,
+          requestedRevision: verification.verificationRevision,
+        },
+      ];
     });
   }
 
@@ -1321,10 +1361,15 @@ export class ProviderVerificationService {
       meta,
       'providers',
     );
-    await this.notifyUser(provider.userId, notificationTitle, notificationContent, {
-      providerId: provider._id.toString(),
-      reason: dto.reason ?? null,
-    });
+    await this.notifyUser(
+      provider.userId,
+      notificationTitle,
+      notificationContent,
+      {
+        providerId: provider._id.toString(),
+        reason: dto.reason ?? null,
+      },
+    );
 
     return {
       providerId: provider._id,
@@ -1336,12 +1381,24 @@ export class ProviderVerificationService {
     verification: ProviderVerificationDocument,
     action: 'submit' | 'approve',
   ): void {
-    if (action === 'submit' && !EDITABLE_STATUSES.includes(verification.status)) {
+    if (
+      action === 'submit' &&
+      !EDITABLE_STATUSES.includes(verification.status)
+    ) {
       throw new ConflictException('Invalid verification status');
     }
-    if (action === 'submit' && this.hasUnresolvedRequiredReupload(verification)) {
-      throw new ConflictException('Upload a new version of each requested identity document before resubmitting');
-    }    if (action === 'approve' && !REVIEWABLE_STATUSES.includes(verification.status)) {
+    if (
+      action === 'submit' &&
+      this.hasUnresolvedRequiredReupload(verification)
+    ) {
+      throw new ConflictException(
+        'Upload a new version of each requested identity document before resubmitting',
+      );
+    }
+    if (
+      action === 'approve' &&
+      !REVIEWABLE_STATUSES.includes(verification.status)
+    ) {
       throw new ConflictException('Invalid verification status');
     }
     this.validateBusinessProfile(verification);
@@ -1355,7 +1412,9 @@ export class ProviderVerificationService {
     for (const documentType of requiredDocs) {
       const version = this.getDocumentVersion(verification, documentType);
       if (version.uploadStatus !== DocumentUploadStatus.Uploaded) {
-        throw new BadRequestException(`Required document ${documentType} is not uploaded`);
+        throw new BadRequestException(
+          `Required document ${documentType} is not uploaded`,
+        );
       }
     }
   }
@@ -1363,34 +1422,45 @@ export class ProviderVerificationService {
   private validateBusinessProfile(
     verification: ProviderVerificationDocument,
   ): void {
-    const requiredProfileFields: Array<keyof ProviderVerification['businessProfile']> = [
-      'businessName',
-      'ownerName',
-      'phone',
-      'email',
-      'address',
-      'province',
-    ];
+    const requiredProfileFields: Array<
+      keyof ProviderVerification['businessProfile']
+    > = ['businessName', 'ownerName', 'phone', 'email', 'address', 'province'];
     for (const field of requiredProfileFields) {
       if (!verification.businessProfile?.[field]) {
-        throw new BadRequestException(`Missing required field businessProfile.${field}`);
+        throw new BadRequestException(
+          `Missing required field businessProfile.${field}`,
+        );
       }
     }
     if (
-      verification.requestedCapabilities.includes(ProviderCapability.AoDaiRental)
+      verification.requestedCapabilities.includes(
+        ProviderCapability.AoDaiRental,
+      )
     ) {
-      for (const field of ['shopName', 'rentalPolicy', 'depositPolicy', 'pickupAddress', 'sizeSupport'] as const) {
+      for (const field of [
+        'shopName',
+        'rentalPolicy',
+        'depositPolicy',
+        'pickupAddress',
+        'sizeSupport',
+      ] as const) {
         if (!verification.aodaiInfo?.[field]) {
-          throw new BadRequestException(`Missing required field aodaiInfo.${field}`);
+          throw new BadRequestException(
+            `Missing required field aodaiInfo.${field}`,
+          );
         }
       }
     }
     if (
-      verification.requestedCapabilities.includes(ProviderCapability.Photography)
+      verification.requestedCapabilities.includes(
+        ProviderCapability.Photography,
+      )
     ) {
       for (const field of ['studioName', 'workingArea'] as const) {
         if (!verification.photographyInfo?.[field]) {
-          throw new BadRequestException(`Missing required field photographyInfo.${field}`);
+          throw new BadRequestException(
+            `Missing required field photographyInfo.${field}`,
+          );
         }
       }
     }
@@ -1401,7 +1471,9 @@ export class ProviderVerificationService {
   ): ProviderCapability[] {
     const unique = [...new Set(capabilities)];
     if (unique.length !== capabilities.length) {
-      throw new BadRequestException('requestedCapabilities must not contain duplicates');
+      throw new BadRequestException(
+        'requestedCapabilities must not contain duplicates',
+      );
     }
     if (unique.length === 0) {
       throw new BadRequestException('requestedCapabilities must not be empty');
@@ -1508,7 +1580,9 @@ export class ProviderVerificationService {
       magic[3] === 0x46;
 
     if (!isJpeg && !isPng && !isPdf) {
-      throw new UnsupportedMediaTypeException('Only jpg, png, and pdf files are allowed');
+      throw new UnsupportedMediaTypeException(
+        'Only jpg, png, and pdf files are allowed',
+      );
     }
 
     if (isPdf) {
@@ -1545,13 +1619,43 @@ export class ProviderVerificationService {
     buffer: Buffer,
   ): { width: number; height: number } | null {
     let offset = 2;
-    while (offset < buffer.length) {
+    while (offset + 3 < buffer.length) {
       if (buffer[offset] !== 0xff) {
         return null;
       }
+      while (offset + 1 < buffer.length && buffer[offset + 1] === 0xff) {
+        offset += 1;
+      }
+      if (offset + 1 >= buffer.length) {
+        return null;
+      }
       const marker = buffer[offset + 1];
+      if (
+        marker === 0x00 ||
+        marker === 0x01 ||
+        marker === 0xd8 ||
+        marker === 0xd9 ||
+        (marker >= 0xd0 && marker <= 0xd7)
+      ) {
+        offset += 2;
+        continue;
+      }
+      if (offset + 4 > buffer.length) {
+        return null;
+      }
       const length = buffer.readUInt16BE(offset + 2);
-      if (marker >= 0xc0 && marker <= 0xc3) {
+      if (length < 2) {
+        return null;
+      }
+      const isSof =
+        (marker >= 0xc0 && marker <= 0xc3) ||
+        (marker >= 0xc5 && marker <= 0xc7) ||
+        (marker >= 0xc9 && marker <= 0xcb) ||
+        (marker >= 0xcd && marker <= 0xcf);
+      if (isSof) {
+        if (offset + 9 > buffer.length) {
+          return null;
+        }
         return {
           height: buffer.readUInt16BE(offset + 5),
           width: buffer.readUInt16BE(offset + 7),
@@ -1592,10 +1696,10 @@ export class ProviderVerificationService {
     const ownerName = verification.businessProfile.ownerName;
     const ownerNameFound = Boolean(
       ownerName &&
-        text &&
-        this.normalizeForOcrComparison(text).includes(
-          this.normalizeForOcrComparison(ownerName),
-        ),
+      text &&
+      this.normalizeForOcrComparison(text).includes(
+        this.normalizeForOcrComparison(ownerName),
+      ),
     );
 
     if (ownerName && text && !ownerNameFound) {
@@ -1734,7 +1838,8 @@ export class ProviderVerificationService {
       return {
         text: typeof data.text === 'string' ? data.text : '',
         confidence:
-          typeof data.confidence === 'number' && Number.isFinite(data.confidence)
+          typeof data.confidence === 'number' &&
+          Number.isFinite(data.confidence)
             ? data.confidence
             : 0,
       };
@@ -1811,10 +1916,16 @@ export class ProviderVerificationService {
       }),
     ]);
     if (userRuns >= 5) {
-      throw new HttpException('OCR rate limit exceeded for this user', HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        'OCR rate limit exceeded for this user',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
     if (documentRuns >= 3) {
-      throw new HttpException('OCR rate limit exceeded for this document', HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        'OCR rate limit exceeded for this document',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
   }
 
@@ -1844,7 +1955,9 @@ export class ProviderVerificationService {
       .filter((document) => document.required)
       .filter((document) => {
         const current = document.versions.find((version) => version.isCurrent);
-        return !current || current.uploadStatus !== DocumentUploadStatus.Uploaded;
+        return (
+          !current || current.uploadStatus !== DocumentUploadStatus.Uploaded
+        );
       })
       .map((document) => document.documentType);
 
@@ -1945,9 +2058,12 @@ export class ProviderVerificationService {
       required: document.required,
       currentVersion: document.currentVersion ?? null,
       current: current ? this.toVersionSummary(current, false) : null,
-      versions: includeVersions || !includeCurrentOnly
-        ? document.versions.map((version) => this.toVersionSummary(version, includeVersions))
-        : undefined,
+      versions:
+        includeVersions || !includeCurrentOnly
+          ? document.versions.map((version) =>
+              this.toVersionSummary(version, includeVersions),
+            )
+          : undefined,
     };
   }
 
@@ -1966,7 +2082,7 @@ export class ProviderVerificationService {
       fileValidation: version.fileValidation,
       ocrStatus: version.ocrStatus,
       ocrConfidence: version.ocrConfidence ?? null,
-ocr: version.ocr
+      ocr: version.ocr
         ? {
             executionStatus: version.ocr.executionStatus,
             assessment: version.ocr.assessment ?? null,
@@ -1989,21 +2105,38 @@ ocr: version.ocr
       mismatchFlags: version.mismatchFlags,
       uploadedAt: version.uploadedAt ?? null,
       processedAt: version.processedAt ?? null,
-      replacedAt: includeHistoryFields ? version.replacedAt ?? null : undefined,
-      deletedAt: includeHistoryFields ? version.deletedAt ?? null : undefined,
+      replacedAt: includeHistoryFields
+        ? (version.replacedAt ?? null)
+        : undefined,
+      deletedAt: includeHistoryFields ? (version.deletedAt ?? null) : undefined,
     };
   }
 
-private isOcrApplicable(documentType: ProviderDocumentType): boolean {
-    return OCR_REQUIRED_TYPES.includes(documentType) || OCR_OPTIONAL_TYPES.includes(documentType);
+  private isOcrApplicable(documentType: ProviderDocumentType): boolean {
+    return (
+      OCR_REQUIRED_TYPES.includes(documentType) ||
+      OCR_OPTIONAL_TYPES.includes(documentType)
+    );
   }
-  private ocrNextAction(version: ProviderVerificationDocumentVersion): string | null {
+  private ocrNextAction(
+    version: ProviderVerificationDocumentVersion,
+  ): string | null {
     const ocr = version.ocr;
     if (!ocr) return null;
-    if (ocr.executionStatus === 'NOT_STARTED' || ocr.executionStatus === 'PROCESSING') return 'WAIT_FOR_OCR';
+    if (
+      ocr.executionStatus === 'NOT_STARTED' ||
+      ocr.executionStatus === 'PROCESSING'
+    )
+      return 'WAIT_FOR_OCR';
     if (ocr.executionStatus === 'TIMEOUT') return 'RETRY_OCR';
-    if (ocr.assessment === 'REUPLOAD_REQUIRED' || ocr.executionStatus === 'FAILED') return 'UPLOAD_AGAIN';
-    return ocr.assessment === 'PASSED' ? 'READY_TO_SUBMIT' : 'SUBMIT_WITH_MANUAL_REVIEW';
+    if (
+      ocr.assessment === 'REUPLOAD_REQUIRED' ||
+      ocr.executionStatus === 'FAILED'
+    )
+      return 'UPLOAD_AGAIN';
+    return ocr.assessment === 'PASSED'
+      ? 'READY_TO_SUBMIT'
+      : 'SUBMIT_WITH_MANUAL_REVIEW';
   }
   private ocrWarnings(
     verification: ProviderVerificationDocument,
@@ -2041,7 +2174,9 @@ private isOcrApplicable(documentType: ProviderDocumentType): boolean {
   private async loadVerification(
     id: string,
   ): Promise<ProviderVerificationDocument> {
-    const verification = await this.verificationModel.findById(this.toObjectId(id));
+    const verification = await this.verificationModel.findById(
+      this.toObjectId(id),
+    );
     if (!verification) {
       throw new NotFoundException('Provider verification not found');
     }
@@ -2096,7 +2231,10 @@ private isOcrApplicable(documentType: ProviderDocumentType): boolean {
     }
   }
 
-  private assertOwner(actor: AuthUser, verification: ProviderVerificationDocument): void {
+  private assertOwner(
+    actor: AuthUser,
+    verification: ProviderVerificationDocument,
+  ): void {
     if (verification.userId.toString() !== actor.sub) {
       throw new ForbiddenException('Not owner');
     }

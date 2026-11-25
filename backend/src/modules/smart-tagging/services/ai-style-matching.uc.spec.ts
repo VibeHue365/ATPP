@@ -5,7 +5,7 @@ import {
 } from '../constants/smart-tag.constants';
 import { AiTaggingClientService } from './ai-tagging-client.service';
 
-describe('UC-27 AI Style Matching - AI tagging client (DaiBLL)', () => {
+describe('UC-26 AI Style Matching - AI tagging client (DaiBLL)', () => {
   const input = {
     entityType: SmartTagEntityType.Product,
     title: 'Ao dai',
@@ -42,7 +42,7 @@ describe('UC-27 AI Style Matching - AI tagging client (DaiBLL)', () => {
     jest.restoreAllMocks();
   });
 
-  it('UT-27 UTCID09 accepts confidence at the 0.87 threshold and rejects values below it', async () => {
+  it('UT-26 UTCID09 accepts confidence at the 0.87 threshold and rejects values below it', async () => {
     mockAiResponse({
       status: 'SUCCESS',
       suggestions: [
@@ -62,7 +62,7 @@ describe('UC-27 AI Style Matching - AI tagging client (DaiBLL)', () => {
     ).toEqual([0.87]);
   });
 
-  it('UT-27 UTCID10 reports the AI source as unavailable when it returns an HTTP error', async () => {
+  it('UT-26 UTCID10 reports the AI source as unavailable when it returns an HTTP error', async () => {
     mockAiResponse({ status: 'SUCCESS', suggestions: [] }, false, 503);
 
     await expect(enabledService().suggest(input)).resolves.toEqual({
@@ -71,7 +71,7 @@ describe('UC-27 AI Style Matching - AI tagging client (DaiBLL)', () => {
     });
   });
 
-  it('UT-27 UTCID11 ignores a malformed AI payload and non-numeric confidence values', async () => {
+  it('UT-26 UTCID11 ignores a malformed AI payload and non-numeric confidence values', async () => {
     mockAiResponse({
       status: 'FAILED',
       suggestions: [{ code: 'TRUYEN_THONG', confidence: 0.99 }],
@@ -92,7 +92,7 @@ describe('UC-27 AI Style Matching - AI tagging client (DaiBLL)', () => {
     });
   });
 
-  it('UT-27 UTCID12 aborts a slow AI request after the configured timeout', async () => {
+  it('UT-26 UTCID12 aborts a slow AI request after the configured timeout', async () => {
     jest.useFakeTimers();
     jest.spyOn(global, 'fetch').mockImplementation(
       (_url, init) =>
@@ -118,7 +118,7 @@ describe('UC-27 AI Style Matching - AI tagging client (DaiBLL)', () => {
     });
   });
 
-  it('UT-27 UTCID13 limits title and description length and sends only allowlisted tags', async () => {
+  it('UT-26 UTCID13 limits title and description length and sends only allowlisted tags', async () => {
     const fetchMock = mockAiResponse({ status: 'SUCCESS', suggestions: [] });
 
     await enabledService({ AI_SERVICE_URL: 'http://ai.test/' }).suggest({

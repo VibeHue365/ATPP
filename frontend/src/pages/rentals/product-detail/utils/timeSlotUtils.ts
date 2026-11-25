@@ -28,6 +28,8 @@ export const timeSlots = [
   '19:00',
   '19:30',
   '20:00',
+  '20:30',
+  '21:00',
 ];
 
 export const productSlots: ProductSlot[] = [

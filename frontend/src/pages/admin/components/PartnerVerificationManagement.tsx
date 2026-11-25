@@ -33,18 +33,19 @@ import {
 } from '../../../features/admin-verifications/api/adminVerificationApi';
 import { documentLabels } from '../../../features/admin-verifications/types';
 import type { ProviderDocumentType } from '../../../features/provider-verifications/types';
+import { VERIFICATION_STATUS_META } from '../../../utils/bookingStatus';
 import './partnerVerificationFigma.css';
 
 type TabStatus = 'ALL' | 'SUBMITTED' | 'UNDER_REVIEW' | 'NEEDS_CHANGES' | 'APPROVED' | 'REJECTED';
 
 const STATUS_LABELS: Record<string, string> = {
   ALL: 'Tất cả',
-  SUBMITTED: 'Mới gửi',
-  UNDER_REVIEW: 'Đang đánh giá',
-  NEEDS_CHANGES: 'Cần bổ sung',
-  APPROVED: 'Đã phê duyệt',
-  REJECTED: 'Đã từ chối',
-  DRAFT: 'Bản nháp',
+  SUBMITTED: VERIFICATION_STATUS_META.SUBMITTED.label,
+  UNDER_REVIEW: VERIFICATION_STATUS_META.UNDER_REVIEW.label,
+  NEEDS_CHANGES: VERIFICATION_STATUS_META.NEEDS_CHANGES.label,
+  APPROVED: VERIFICATION_STATUS_META.APPROVED.label,
+  REJECTED: VERIFICATION_STATUS_META.REJECTED.label,
+  DRAFT: VERIFICATION_STATUS_META.DRAFT.label,
 };
 
 const REJECT_PRESET_REASONS = [
@@ -52,7 +53,7 @@ const REJECT_PRESET_REASONS = [
   'Ảnh chụp CCCD bị mờ, lóa sáng hoặc mất góc',
   'Thông tin hồ sơ không trùng khớp dữ liệu OCR',
   'Cơ sở vật chất không đáp ứng tiêu chuẩn nền tảng',
-  'Vi phạm quy định chính sách đối tác VibeHue',
+  'Vi phạm quy định chính sách đối tác TàGo',
 ];
 
 const CHANGE_TARGET_OPTIONS = [
@@ -306,7 +307,7 @@ export function PartnerVerificationManagement() {
   const handleApprove = async (id: string) => {
     const result = await Swal.fire({
       title: 'Phê duyệt hồ sơ đối tác?',
-      text: 'Sau khi phê duyệt, tài khoản đối tác sẽ được kích hoạt trên hệ thống VibeHue.',
+      text: 'Sau khi phê duyệt, tài khoản đối tác sẽ được kích hoạt trên hệ thống TàGo.',
       icon: 'question',
       showCancelButton: true,
       confirmButtonColor: '#059669',
@@ -1095,7 +1096,7 @@ export function PartnerVerificationManagement() {
                     <h2>
                       {activeVerification.businessProfile?.businessName ||
                         activeVerification.businessName ||
-                        'Đối tác VibeHue'}
+                        'Đối tác TàGo'}
                     </h2>
                     <div className="pv-dh-subgroup">
                       <span className="pv-partner-code">
@@ -1136,7 +1137,7 @@ export function PartnerVerificationManagement() {
                 <div className="pv-dh-item">
                   <span className="label">Email:</span>
                   <span className="val">
-                    {activeVerification.businessProfile?.email || activeVerification.email || 'partner@vibehue.com'}
+                    {activeVerification.businessProfile?.email || activeVerification.email || 'partner@tago.vn'}
                   </span>
                 </div>
                 <div className="pv-dh-item">
@@ -1202,7 +1203,7 @@ export function PartnerVerificationManagement() {
                         </div>
                         <div className="pv-score-info">
                           <h4>Tiêu chí đạt ({Math.round(((activeVerification.documentsValid ?? 4) / 5) * 100)}%)</h4>
-                          <p>Hồ sơ đáp ứng {activeVerification.documentsValid ?? 4} trên 5 tiêu chuẩn đối tác VibeHue Escrow.</p>
+                          <p>Hồ sơ đáp ứng {activeVerification.documentsValid ?? 4} trên 5 tiêu chuẩn đối tác TàGo Escrow.</p>
                         </div>
                       </div>
 
@@ -1282,14 +1283,14 @@ export function PartnerVerificationManagement() {
                         <div className="pv-info-item">
                           <span className="info-label">Email liên hệ</span>
                           <span className="info-val">
-                            {activeVerification.businessProfile?.email || 'mainguyen@gmail.com'}
+                            {activeVerification.businessProfile?.email || 'Đang cập nhật'}
                           </span>
                         </div>
 
                         <div className="pv-info-item" style={{ gridColumn: 'span 2' }}>
                           <span className="info-label">Địa chỉ kinh doanh</span>
                           <span className="info-val">
-                            {activeVerification.businessProfile?.address || '12 Lê Lợi, TP. Huế, Thừa Thiên Huế'}
+                            {activeVerification.businessProfile?.address || 'Đang cập nhật địa chỉ'}
                           </span>
                         </div>
                       </div>
@@ -1738,7 +1739,7 @@ export function PartnerVerificationManagement() {
                         <span className="pv-tl-title" style={{ color: '#059669' }}>
                           Phê duyệt và kích hoạt đối tác
                         </span>
-                        <span className="pv-tl-meta">Hồ sơ đạt tiêu chuẩn VibeHue</span>
+                        <span className="pv-tl-meta">Hồ sơ đạt tiêu chuẩn TàGo</span>
                       </div>
                     )}
 

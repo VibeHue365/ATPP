@@ -110,10 +110,10 @@ export const ContractDocumentPreview: React.FC<ContractDocumentPreviewProps> = (
     const cancelPolicy = policies.providerCancellationPolicy;
     const customTerms = policies.providerCustomTermsText;
 
-    const provName = provider.businessName || 'Nhà cung cấp đối tác VibeHue';
+    const provName = provider.businessName || 'Nhà cung cấp đối tác TàGo';
     const provAddr = formatAddress(provider.address, 'Chưa cập nhật trên hệ thống');
     const provPhone =
-      provider.contact?.phone || provider.phone || 'Liên hệ qua ứng dụng VibeHue';
+      provider.contact?.phone || provider.phone || 'Liên hệ qua ứng dụng TàGo';
     const provEmail = provider.contact?.email || provider.email || 'Chưa cập nhật trên hệ thống';
 
     const custName = customer.fullName || customerName || 'Chưa cập nhật trên hệ thống';
@@ -389,36 +389,31 @@ export const ContractDocumentPreview: React.FC<ContractDocumentPreviewProps> = (
               </div>
             )}
 
-            {lateReturn ? (
-              <div className="vh-article-block">
-                <h5>ĐIỀU 3: QUY ĐỊNH HOÀN TRẢ VÀ BIỂU PHÍ TRỄ HẠN</h5>
-                <ul>
-                  <li>Hoàn trả trang phục đúng thời hạn và địa điểm quy định tại <strong>Phần II</strong> của hợp đồng.</li>
+            <div className="vh-article-block">
+              <h5>ĐIỀU 3: QUY ĐỊNH HOÀN TRẢ, BIỂU PHÍ QUÁ HẠN VÀ BẢO VỆ LỊCH HẸN</h5>
+              <ul>
+                <li>
+                  <strong>Thời hạn hoàn trả:</strong> Bên B có nghĩa vụ hoàn trả trang phục đúng thời hạn và địa điểm quy định tại <strong>Phần II</strong> của hợp đồng (không áp dụng thời gian ân hạn miễn phí nếu không có thỏa thuận gia hạn hợp lệ trước hạn trả).
+                </li>
+                <li>
+                  <strong>Biểu phí quá hạn trả trang phục:</strong> Kể từ thời điểm quá hạn, hệ thống áp dụng mức phí trễ hạn lũy tiến là <strong>+10% tiền đặt cọc cho mỗi 30 phút trễ</strong> (làm tròn lên theo từng chu kỳ 30 phút, tối thiểu 1.000 đ/30 phút), với <strong>mức trần tối đa bằng 50% tổng tiền đặt cọc</strong> của đơn hàng trong giai đoạn chờ hoàn trả.
+                </li>
+                <li>
+                  <strong>Các mốc cảnh báo và chế tài tài khoản:</strong> Hệ thống gửi thông báo nhắc nhở tại mốc <strong>15 phút</strong> và <strong>1 giờ</strong> quá hạn. Khi quá hạn từ <strong>2 giờ (T+2h)</strong> trở lên, tài khoản Bên B bị <strong>tạm khóa quyền tạo đơn thuê mới</strong> trên nền tảng TàGo cho đến khi hoàn tất trả trang phục và đối soát xong nghĩa vụ quá hạn.
+                </li>
+                <li>
+                  <strong>Mốc quá hạn 24 giờ và xác nhận mất trang phục (LOST_ITEM):</strong> Trường hợp trễ quá <strong>24 giờ</strong> mà Bên B chưa hoàn trả trang phục và Bên A đã liên hệ tối thiểu <strong>03 (ba) lần</strong> bất thành, Bên A có quyền kích hoạt xác nhận <strong>Mất trang phục (LOST_ITEM)</strong> theo Điều 4.
+                </li>
+                <li>
+                  <strong>Bảo vệ lịch hẹn kế tiếp (Cơ chế Domino Recovery):</strong> Trường hợp lịch giao trang phục của Bên B bị ảnh hưởng do khách thuê ca trước trả trễ: (i) Bên A / Nền tảng được quyền tự động điều phối trang phục cùng mẫu và kích thước còn trống lịch trong kho để bàn giao đúng hẹn cho Bên B; hoặc (ii) nếu không còn trang phục cùng mẫu/size, hệ thống đề xuất tối đa <strong>03 mẫu tương đương</strong> (trong biên độ giá 70%–130%) để Bên B lựa chọn trong vòng <strong>60 phút</strong>. Nếu Bên B không đồng ý đổi mẫu hoặc hết 60 phút chưa có phương án thay thế, đơn hàng được hủy và <strong>hoàn trả 100% tiền thuê cùng tiền đặt cọc</strong> cho Bên B.
+                </li>
+                {!lateReturn && policies.providerRental && (
                   <li>
-                    <strong>Thời gian ân hạn:</strong> {lateReturn.gracePeriodHours} giờ kể từ mốc thời gian hoàn trả đã hẹn (trong khoảng thời gian này Bên B không bị tính phí phạt trễ).
+                    <strong>Ghi chú vận hành bổ sung từ Shop:</strong> {policies.providerRental}
                   </li>
-                  <li>
-                    <strong>Biểu phí phạt trễ hạn:</strong> Áp dụng tương ứng theo hình thức thuê ({formatVnd(lateReturn.hourlyLateFee)}/giờ đối với thuê theo giờ, {formatVnd(lateReturn.dailyLateFee)}/ngày đối với thuê theo ngày), không cộng dồn hai mức phí cùng lúc.
-                  </li>
-                  <li>
-                    <strong>Thời gian trễ tối đa cho phép:</strong> {lateReturn.maxLateDaysAllowed ?? 3} ngày.
-                  </li>
-                  <li>
-                    <strong>Xử lý quá hạn tối đa:</strong> Trường hợp trễ quá {lateReturn.maxLateDaysAllowed ?? 3} ngày mà Bên B chưa hoàn trả và không có thông báo/thỏa thuận gia hạn hợp lệ, vụ việc sẽ được chuyển sang quy trình xử lý vi phạm hợp đồng để thực hiện bồi thường theo Điều 4.
-                  </li>
-                </ul>
-              </div>
-            ) : (
-              <div className="vh-article-block">
-                <h5>ĐIỀU 3: THỜI HẠN VÀ QUY ĐỊNH HOÀN TRẢ</h5>
-                <ul>
-                  <li>
-                    Hoàn trả trang phục đúng thời hạn và địa điểm quy định tại <strong>Phần II</strong> của hợp đồng.{' '}
-                    {policies.providerRental || 'Thời gian thuê tối đa và quy định phạt quá hạn áp dụng theo chính sách niêm yết.'}
-                  </li>
-                </ul>
-              </div>
-            )}
+                )}
+              </ul>
+            </div>
 
             {damageComp ? (() => {
               const resolved = resolveDamageCompensationRules(damageComp);
@@ -477,12 +472,15 @@ export const ContractDocumentPreview: React.FC<ContractDocumentPreviewProps> = (
                       </li>
                     )}
                     <li>
-                      <strong>Cơ sở bồi thường và xử lý tiền cọc:</strong> Tiền đặt cọc là khoản bảo đảm thực hiện hợp đồng. Khi phát sinh sự cố, việc xử lý bồi thường và đối trừ tiền cọc được thực hiện theo thỏa thuận thống nhất giữa hai bên trên cơ sở các mức bồi thường đã giao kết; trường hợp giá trị thiệt hại vượt quá tiền cọc, Bên B có trách nhiệm thanh toán bổ sung phần chênh lệch cho Bên A theo quy định thỏa thuận.
+                      <strong>Cơ sở bồi thường và xử lý tiền cọc:</strong> Tiền đặt cọc là khoản bảo đảm thực hiện hợp đồng. Khi Bên B hoàn trả trang phục quá hạn và Bên A xác nhận hoàn tất nhận lại đồ, các bên thống nhất đối trừ khoản phí phạt quá hạn (tối đa 50% tiền cọc theo biểu phí tại Điều 3) từ tiền đặt cọc để chuyển cho Bên A, phần cọc còn dư (nếu có) được hoàn trả về cho Bên B. Trường hợp phát sinh hư hỏng, việc xử lý bồi thường và đối trừ tiền cọc được thực hiện theo thỏa thuận thống nhất giữa hai bên trên cơ sở các mức bồi thường đã giao kết; trường hợp giá trị thiệt hại vượt quá tiền cọc, Bên B có trách nhiệm thanh toán bổ sung phần chênh lệch cho Bên A theo quy định thỏa thuận.
+                    </li>
+                    <li>
+                      <strong>Xử lý trường hợp mất trang phục (LOST_ITEM):</strong> Khi đơn hàng bị xác nhận mất trang phục sau quá hạn 24 giờ và tối thiểu 03 lần liên hệ bất thành, 100% tiền đặt cọc được chuyển cho Bên A để bù đắp thiệt hại trang phục; tài khoản Bên B bị khóa vĩnh viễn khỏi nền tảng TàGo và hồ sơ hợp đồng điện tử cùng thông tin định danh (CCCD) được sử dụng làm căn cứ giải quyết theo quy định pháp luật hiện hành.
                     </li>
                     <li>
                       <strong>Hỗ trợ giải quyết tranh chấp:</strong>{' '}
                       {(resolved.disputeResolutionTerms || damageComp.disputeResolutionNotes || '').trim() ||
-                        'Khi có tranh chấp hoặc bất đồng về tình trạng trang phục, Nền tảng VibeHue đóng vai trò là kênh tiếp nhận phản ánh và hỗ trợ hai bên hòa giải trung gian dựa trên chứng cứ giao nhận, không tự ý phán quyết hay khấu trừ tiền.'}
+                        'Khi có tranh chấp hoặc bất đồng về tình trạng trang phục, Nền tảng TàGo đóng vai trò là kênh tiếp nhận phản ánh và hỗ trợ hai bên hòa giải trung gian dựa trên chứng cứ giao nhận, không tự ý phán quyết hay khấu trừ tiền.'}
                     </li>
                   </ul>
                 </div>
@@ -493,7 +491,8 @@ export const ContractDocumentPreview: React.FC<ContractDocumentPreviewProps> = (
                 <ul>
                   <li>Tiền đặt cọc là khoản bảo đảm thực hiện hợp đồng theo đơn đặt hàng.</li>
                   <li>Khi hoàn trả trang phục đúng hạn, nguyên vẹn không hỏng hóc, Bên B sẽ được nhận lại toàn bộ tiền cọc.</li>
-                  <li>Trường hợp trang phục bị mất mát, hư hỏng hoặc trả muộn, Bên B đồng ý bồi thường theo chi phí phục hồi hoặc giá trị bồi hoàn niêm yết của trang phục.</li>
+                  <li>Đối soát trả muộn &amp; mất trang phục: Khi Bên B trả muộn và Bên A xác nhận nhận lại đồ, các bên thống nhất đối trừ phí quá hạn (+10% tiền cọc/30 phút, tối đa 50% cọc) từ tiền cọc để chuyển cho Bên A và hoàn phần dư cho Bên B. Trường hợp xác nhận mất trang phục (LOST_ITEM) sau quá hạn 24 giờ và tối thiểu 03 lần liên hệ bất thành, 100% tiền cọc được chuyển cho Bên A và tài khoản Bên B bị khóa vĩnh viễn.</li>
+                  <li>Trường hợp trang phục bị mất mát hoặc hư hỏng, Bên B đồng ý bồi thường theo chi phí phục hồi hoặc giá trị bồi hoàn niêm yết của trang phục.</li>
                 </ul>
               </div>
             )}
@@ -556,11 +555,11 @@ export const ContractDocumentPreview: React.FC<ContractDocumentPreviewProps> = (
                 <ul>
                   <li>
                     <strong>Quy định hủy từ Bên Cho Thuê:</strong>{' '}
-                    {policies.providerCancellation || 'Áp dụng theo quy chế hoạt động của nền tảng VibeHue.'}
+                    {policies.providerCancellation || 'Áp dụng theo quy chế hoạt động của nền tảng TàGo.'}
                   </li>
                   {policies.cancellation?.value?.freeCancelBeforeHours && (
                     <li>
-                      <strong>Quy định bảo vệ từ Sàn VibeHue:</strong> Cho phép hủy miễn phí trước{' '}
+                      <strong>Quy định bảo vệ từ Sàn TàGo:</strong> Cho phép hủy miễn phí trước{' '}
                       {policies.cancellation.value.freeCancelBeforeHours} giờ so với thời điểm nhận đồ. Tiền cọc và tiền thuê sẽ được hoàn trả theo quy trình của sàn.
                     </li>
                   )}
@@ -582,7 +581,7 @@ export const ContractDocumentPreview: React.FC<ContractDocumentPreviewProps> = (
             <div className="vh-article-block">
               <h5>ĐIỀU {customTerms && customTerms.trim() ? 7 : 6}: HIỆU LỰC HỢP ĐỒNG VÀ XÁC NHẬN GIAO KẾT ĐIỆN TỬ</h5>
               <ul>
-                <li>Hợp đồng điện tử này được xác lập (formedAt) tại thời điểm Bên B hoàn tất xác nhận chấp thuận điện tử trên hệ thống VibeHue theo quy định của Luật Giao dịch điện tử.</li>
+                <li>Hợp đồng điện tử này được xác lập (formedAt) tại thời điểm Bên B hoàn tất xác nhận chấp thuận điện tử trên hệ thống TàGo theo quy định của Luật Giao dịch điện tử.</li>
                 <li>Điều kiện thực thi và hiệu lực cung cấp dịch vụ (effectiveAt) bắt đầu khi đơn hàng hoàn tất nghĩa vụ thanh toán (paidAt) và được hệ thống xác nhận hợp lệ theo Quy chế nền tảng.</li>
                 <li>Bản ghi hợp đồng điện tử được tạo mã băm SHA-256 để bảo đảm tính toàn vẹn kỹ thuật, chống sửa đổi trái phép và phục vụ tra cứu, đối soát theo quy định.</li>
               </ul>
@@ -603,7 +602,7 @@ export const ContractDocumentPreview: React.FC<ContractDocumentPreviewProps> = (
               <div className="vh-exec-text muted">
                 {policies.providerPolicyVersion
                   ? `Chính sách áp dụng: Phiên bản v${policies.providerPolicyVersion} đã được phê duyệt`
-                  : 'Áp dụng điều kiện giao dịch chung đã cam kết với VibeHue'}
+                  : 'Áp dụng điều kiện giao dịch chung đã cam kết với TàGo'}
               </div>
               <div className="vh-exec-badge platform">[ GHI NHẬN THEO QUY CHẾ NỀN TẢNG ]</div>
             </div>
@@ -655,7 +654,7 @@ export const ContractDocumentPreview: React.FC<ContractDocumentPreviewProps> = (
 
         {/* Document Footer */}
         <div className="vh-doc-footer">
-          Hợp đồng điện tử VibeHue — Nền tảng cho thuê trang phục truyền thống | Bản xem trước chuẩn PDF
+          Hợp đồng điện tử TàGo — Nền tảng cho thuê trang phục truyền thống | Bản xem trước chuẩn PDF
         </div>
       </div>
     );

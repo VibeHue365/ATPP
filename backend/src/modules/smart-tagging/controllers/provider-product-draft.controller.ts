@@ -20,8 +20,15 @@ export class ProviderProductDraftController {
   @Post()
   @HttpCode(200)
   @Permissions('product:manage_own')
-  async draft(@CurrentUser() user: AuthUser, @Body() dto: ProductDraftRequestDto) {
-    await this.rateLimitService.assertRateLimit(`product-draft:user:${user.sub}`, 10, 60);
+  async draft(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: ProductDraftRequestDto,
+  ) {
+    await this.rateLimitService.assertRateLimit(
+      `product-draft:user:${user.sub}`,
+      10,
+      60,
+    );
     return this.draftClient.draftFromPhotos(dto.imageUrls);
   }
 }

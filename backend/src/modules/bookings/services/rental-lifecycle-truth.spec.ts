@@ -70,7 +70,8 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
               itemType: BookingItemType.Product,
               rentalFulfillment: {
                 status: RentalFulfillmentStatus.Returned,
-                depositSettlementStatus: DepositSettlementStatus.PendingSettlement,
+                depositSettlementStatus:
+                  DepositSettlementStatus.PendingSettlement,
                 issueStatus: RentalIssueStatus.None,
               },
             },
@@ -107,7 +108,8 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
               itemType: BookingItemType.Product,
               rentalFulfillment: {
                 status: RentalFulfillmentStatus.PickedUp,
-                depositSettlementStatus: DepositSettlementStatus.PendingSettlement,
+                depositSettlementStatus:
+                  DepositSettlementStatus.PendingSettlement,
               },
             },
           ],
@@ -185,7 +187,9 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
             'prov-user-1',
             ['PROVIDER'],
           ),
-        ).rejects.toThrow('Đơn hàng thuê áo dài có quy trình bàn giao từng sản phẩm');
+        ).rejects.toThrow(
+          'Đơn hàng thuê áo dài có quy trình bàn giao từng sản phẩm',
+        );
       }
     });
   });
@@ -196,7 +200,10 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
     const providerId = new Types.ObjectId();
     const customerId = new Types.ObjectId();
     const providerUserId = new Types.ObjectId();
-    const providerUser = { sub: providerUserId.toString(), roles: ['PROVIDER'] } as any;
+    const providerUser = {
+      sub: providerUserId.toString(),
+      roles: ['PROVIDER'],
+    } as any;
 
     function buildWorkflowService(overrides?: {
       inventoryStatus?: string;
@@ -207,38 +214,68 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
       const invStatus = overrides?.inventoryStatus ?? 'CLEANING';
       const condStatus = overrides?.conditionStatus ?? 'GOOD';
       const issueStatus = overrides?.issueStatus ?? RentalIssueStatus.None;
-      const fulStatus = overrides?.fulfillmentStatus ?? RentalFulfillmentStatus.Returned;
+      const fulStatus =
+        overrides?.fulfillmentStatus ?? RentalFulfillmentStatus.Returned;
 
       const inventoryItemModel = {
-        find: jest.fn(() => query([{ _id: new Types.ObjectId(), status: invStatus, conditionStatus: condStatus }])),
+        find: jest.fn(() =>
+          query([
+            {
+              _id: new Types.ObjectId(),
+              status: invStatus,
+              conditionStatus: condStatus,
+            },
+          ]),
+        ),
         updateMany: jest.fn(() => ({
-          exec: async () => ({ modifiedCount: invStatus === 'CLEANING' && !['LOCKED', 'RETIRED', 'MINOR_DAMAGE'].includes(condStatus) ? 1 : 0 }),
+          exec: async () => ({
+            modifiedCount:
+              invStatus === 'CLEANING' &&
+              !['LOCKED', 'RETIRED', 'MINOR_DAMAGE'].includes(condStatus)
+                ? 1
+                : 0,
+          }),
         })),
       };
       const reservationModel = {
         find: jest.fn(() => query([{ inventoryItemId: new Types.ObjectId() }])),
       };
       const bookingModel = {
-        findById: jest.fn(() => query({ _id: bookingId, customerId, status: 'RETURNED', bookingType: BookingType.AoDaiRental })),
+        findById: jest.fn(() =>
+          query({
+            _id: bookingId,
+            customerId,
+            status: 'RETURNED',
+            bookingType: BookingType.AoDaiRental,
+          }),
+        ),
         findOneAndUpdate: jest.fn(() => query({ _id: bookingId })),
       };
       const itemModel = {
-        findOne: jest.fn(() => query({
-          _id: itemId,
-          bookingId,
-          providerId,
-          itemType: 'PRODUCT',
-          rentalFulfillment: { status: fulStatus, issueStatus },
+        findOne: jest.fn(() =>
+          query({
+            _id: itemId,
+            bookingId,
+            providerId,
+            itemType: 'PRODUCT',
+            rentalFulfillment: { status: fulStatus, issueStatus },
+          }),
+        ),
+        findById: jest.fn(() =>
+          query({
+            _id: itemId,
+            bookingId,
+            providerId,
+            itemType: 'PRODUCT',
+            rentalFulfillment: { status: fulStatus, issueStatus },
+          }),
+        ),
+        updateOne: jest.fn(() => ({
+          exec: async () => ({ modifiedCount: 1 }),
         })),
-        findById: jest.fn(() => query({
-          _id: itemId,
-          bookingId,
-          providerId,
-          itemType: 'PRODUCT',
-          rentalFulfillment: { status: fulStatus, issueStatus },
-        })),
-        updateOne: jest.fn(() => ({ exec: async () => ({ modifiedCount: 1 }) })),
-        find: jest.fn(() => query([{ _id: itemId, rentalFulfillment: { status: fulStatus } }])),
+        find: jest.fn(() =>
+          query([{ _id: itemId, rentalFulfillment: { status: fulStatus } }]),
+        ),
         db: {
           model: jest.fn((name: string) => {
             if (name === 'InventoryItem') return inventoryItemModel;
@@ -299,7 +336,11 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
         conditionStatus: 'LOCKED',
       });
       await expect(
-        lockedWorkflow.markCleaningCompleted(bookingId.toString(), itemId.toString(), providerUser),
+        lockedWorkflow.markCleaningCompleted(
+          bookingId.toString(),
+          itemId.toString(),
+          providerUser,
+        ),
       ).rejects.toThrow(ConflictException);
 
       // 5b. Blocked due to MAINTENANCE asset
@@ -308,7 +349,11 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
         conditionStatus: 'GOOD',
       });
       await expect(
-        maintenanceWorkflow.markCleaningCompleted(bookingId.toString(), itemId.toString(), providerUser),
+        maintenanceWorkflow.markCleaningCompleted(
+          bookingId.toString(),
+          itemId.toString(),
+          providerUser,
+        ),
       ).rejects.toThrow(ConflictException);
 
       // 5c. Blocked due to unresolved issue (REPORTED)
@@ -318,11 +363,21 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
         issueStatus: RentalIssueStatus.Reported,
       });
       await expect(
-        issueWorkflow.markCleaningCompleted(bookingId.toString(), itemId.toString(), providerUser),
+        issueWorkflow.markCleaningCompleted(
+          bookingId.toString(),
+          itemId.toString(),
+          providerUser,
+        ),
       ).rejects.toThrow(ConflictException);
       await expect(
-        issueWorkflow.markCleaningCompleted(bookingId.toString(), itemId.toString(), providerUser),
-      ).rejects.toThrow('Không thể hoàn tất giặt ủi khi sự cố chưa được giải quyết');
+        issueWorkflow.markCleaningCompleted(
+          bookingId.toString(),
+          itemId.toString(),
+          providerUser,
+        ),
+      ).rejects.toThrow(
+        'Không thể hoàn tất giặt ủi khi sự cố chưa được giải quyết',
+      );
     });
   });
 
@@ -345,8 +400,8 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
         {} as any,
         {} as any,
         {} as any,
-        mockBookingModel as any,
-        mockBookingItemModel as any,
+        mockBookingModel,
+        mockBookingItemModel,
         {} as any,
         {} as any,
       );
@@ -361,13 +416,27 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
       };
       mockBookingModel.findById.mockResolvedValue(rentalBooking);
 
-      for (const directStatus of ['COMPLETED', 'PICKED_UP', 'RETURNED', 'PICKUP_PENDING', 'RETURN_PENDING']) {
+      for (const directStatus of [
+        'COMPLETED',
+        'PICKED_UP',
+        'RETURNED',
+        'PICKUP_PENDING',
+        'RETURN_PENDING',
+      ]) {
         await expect(
-          adminStatsService.updateBookingStatus(bookingId, directStatus, 'Admin override attempt'),
+          adminStatsService.updateBookingStatus(
+            bookingId,
+            directStatus,
+            'Admin override attempt',
+          ),
         ).rejects.toThrow(BadRequestException);
 
         await expect(
-          adminStatsService.updateBookingStatus(bookingId, directStatus, 'Admin override attempt'),
+          adminStatsService.updateBookingStatus(
+            bookingId,
+            directStatus,
+            'Admin override attempt',
+          ),
         ).rejects.toThrow('Không được gán trực tiếp trạng thái');
       }
 
@@ -415,7 +484,9 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
     beforeEach(() => {
       mockBookingModel = {
         findById: jest.fn(),
-        updateOne: jest.fn(() => ({ exec: async () => ({ modifiedCount: 1 }) })),
+        updateOne: jest.fn(() => ({
+          exec: async () => ({ modifiedCount: 1 }),
+        })),
       };
       mockBookingItemModel = {
         find: jest.fn(),
@@ -434,15 +505,28 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
       bookingsService = Object.create(BookingsService.prototype);
       bookingsService.bookingModel = mockBookingModel;
       bookingsService.bookingItemModel = mockBookingItemModel;
-      bookingsService.providerModel = { find: jest.fn().mockResolvedValue([{ _id: new Types.ObjectId(providerId) }]) };
+      bookingsService.providerModel = {
+        find: jest
+          .fn()
+          .mockResolvedValue([{ _id: new Types.ObjectId(providerId) }]),
+      };
       bookingsService.notificationsService = { emitBookingUpdate: jest.fn() };
-      bookingsService.getCustomerIdStr = (b: any) => (b.customerId?._id || b.customerId || '').toString();
+      bookingsService.getCustomerIdStr = (b: any) =>
+        (b.customerId?._id || b.customerId || '').toString();
 
-      const RentalFulfillmentService = require('./rental-fulfillment.service').RentalFulfillmentService;
-      rentalFulfillmentService = new RentalFulfillmentService(mockBookingItemModel);
+      const RentalFulfillmentService =
+        require('./rental-fulfillment.service').RentalFulfillmentService;
+      rentalFulfillmentService = new RentalFulfillmentService(
+        mockBookingItemModel,
+      );
 
-      const CoordinatorService = require('./rental-deposit-refund-coordinator.service').RentalDepositRefundCoordinatorService;
-      coordinatorService = new CoordinatorService(mockBookingModel, mockBookingItemModel, mockRefundsWorkflow);
+      const CoordinatorService =
+        require('./rental-deposit-refund-coordinator.service').RentalDepositRefundCoordinatorService;
+      coordinatorService = new CoordinatorService(
+        mockBookingModel,
+        mockBookingItemModel,
+        mockRefundsWorkflow,
+      );
     });
 
     it('Criteria 1: Customer return without evidence photos is rejected (400 BadRequest)', async () => {
@@ -455,12 +539,26 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
       mockBookingModel.findById.mockResolvedValue(booking);
 
       await expect(
-        bookingsService.customerReturn(bookingId, customerId, ['CUSTOMER'], 'note', []),
+        bookingsService.customerReturn(
+          bookingId,
+          customerId,
+          ['CUSTOMER'],
+          'note',
+          [],
+        ),
       ).rejects.toThrow(BadRequestException);
 
       await expect(
-        bookingsService.customerReturn(bookingId, customerId, ['CUSTOMER'], 'note', undefined as any),
-      ).rejects.toThrow('Bắt buộc tải lên ít nhất một ảnh bằng chứng tình trạng áo khi trả');
+        bookingsService.customerReturn(
+          bookingId,
+          customerId,
+          ['CUSTOMER'],
+          'note',
+          undefined as any,
+        ),
+      ).rejects.toThrow(
+        'Bắt buộc tải lên ít nhất một ảnh bằng chứng tình trạng áo khi trả',
+      );
     });
 
     it('Criteria 2: Customer return for item A updates ONLY item A to CUSTOMER_RETURN_REQUESTED and does NOT modify item B', async () => {
@@ -501,7 +599,8 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
         { _id: itemA._id },
         expect.objectContaining({
           $set: expect.objectContaining({
-            'rentalFulfillment.status': RentalFulfillmentStatus.CustomerReturnRequested,
+            'rentalFulfillment.status':
+              RentalFulfillmentStatus.CustomerReturnRequested,
           }),
         }),
       );
@@ -526,7 +625,16 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
         rentalFulfillmentService.markReturned({
           itemId: itemIdA,
           actor: { id: providerId, role: 'PROVIDER' },
-          evidence: { files: [{ fileId: 'f1', type: 'IMAGE', uploadedAt: new Date(), uploadedBy: { id: providerId, role: 'PROVIDER' } }] },
+          evidence: {
+            files: [
+              {
+                fileId: 'f1',
+                type: 'IMAGE',
+                uploadedAt: new Date(),
+                uploadedBy: { id: providerId, role: 'PROVIDER' },
+              },
+            ],
+          },
         }),
       ).rejects.toThrow(ConflictException);
 
@@ -534,7 +642,16 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
         rentalFulfillmentService.markReturned({
           itemId: itemIdA,
           actor: { id: providerId, role: 'PROVIDER' },
-          evidence: { files: [{ fileId: 'f1', type: 'IMAGE', uploadedAt: new Date(), uploadedBy: { id: providerId, role: 'PROVIDER' } }] },
+          evidence: {
+            files: [
+              {
+                fileId: 'f1',
+                type: 'IMAGE',
+                uploadedAt: new Date(),
+                uploadedBy: { id: providerId, role: 'PROVIDER' },
+              },
+            ],
+          },
         }),
       ).rejects.toThrow('Khách hàng chưa gửi yêu cầu trả áo');
     });
@@ -545,7 +662,9 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
           exec: async () => ({
             _id: new Types.ObjectId(itemIdA),
             itemType: BookingItemType.Product,
-            rentalFulfillment: { status: RentalFulfillmentStatus.CustomerReturnRequested },
+            rentalFulfillment: {
+              status: RentalFulfillmentStatus.CustomerReturnRequested,
+            },
           }),
         }),
       });
@@ -573,7 +692,9 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
             itemType: BookingItemType.Product,
             depositAmount: 200000,
             quantity: 1,
-            rentalFulfillment: { status: RentalFulfillmentStatus.CustomerReturnRequested },
+            rentalFulfillment: {
+              status: RentalFulfillmentStatus.CustomerReturnRequested,
+            },
           }),
         }),
       });
@@ -590,19 +711,36 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
       const res = await rentalFulfillmentService.markReturned({
         itemId: itemIdA,
         actor: { id: providerId, role: 'PROVIDER' },
-        evidence: { files: [{ fileId: 'shop-evidence-1.jpg', type: 'IMAGE', uploadedAt: new Date(), uploadedBy: { id: providerId, role: 'PROVIDER' } }] },
+        evidence: {
+          files: [
+            {
+              fileId: 'shop-evidence-1.jpg',
+              type: 'IMAGE',
+              uploadedAt: new Date(),
+              uploadedBy: { id: providerId, role: 'PROVIDER' },
+            },
+          ],
+        },
       });
 
-      expect(res.rentalFulfillment.status).toBe(RentalFulfillmentStatus.Returned);
+      expect(res.rentalFulfillment.status).toBe(
+        RentalFulfillmentStatus.Returned,
+      );
       expect(mockBookingItemModel.findOneAndUpdate).toHaveBeenCalledWith(
         expect.objectContaining({
           _id: new Types.ObjectId(itemIdA),
-          'rentalFulfillment.status': { $in: [RentalFulfillmentStatus.CustomerReturnRequested, RentalFulfillmentStatus.Returned] },
+          'rentalFulfillment.status': {
+            $in: [
+              RentalFulfillmentStatus.CustomerReturnRequested,
+              RentalFulfillmentStatus.Returned,
+            ],
+          },
         }),
         expect.objectContaining({
           $set: expect.objectContaining({
             'rentalFulfillment.status': RentalFulfillmentStatus.Returned,
-            'rentalFulfillment.depositSettlementStatus': DepositSettlementStatus.PendingSettlement,
+            'rentalFulfillment.depositSettlementStatus':
+              DepositSettlementStatus.PendingSettlement,
           }),
         }),
         expect.anything(),
@@ -631,7 +769,8 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
             _id: new Types.ObjectId(itemIdA),
             rentalFulfillment: {
               status: RentalFulfillmentStatus.Returned,
-              depositSettlementStatus: DepositSettlementStatus.PendingSettlement,
+              depositSettlementStatus:
+                DepositSettlementStatus.PendingSettlement,
             },
           }),
         }),
@@ -640,21 +779,33 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
       await rentalFulfillmentService.markReturned({
         itemId: itemIdA,
         actor: { id: providerId, role: 'PROVIDER' },
-        evidence: { files: [{ fileId: 'rec.jpg', type: 'IMAGE', uploadedAt: new Date(), uploadedBy: { id: providerId, role: 'PROVIDER' } }] },
+        evidence: {
+          files: [
+            {
+              fileId: 'rec.jpg',
+              type: 'IMAGE',
+              uploadedAt: new Date(),
+              uploadedBy: { id: providerId, role: 'PROVIDER' },
+            },
+          ],
+        },
       });
 
       expect(mockBookingItemModel.findOneAndUpdate).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
           $set: expect.objectContaining({
-            'rentalFulfillment.depositSettlementStatus': DepositSettlementStatus.PendingSettlement,
+            'rentalFulfillment.depositSettlementStatus':
+              DepositSettlementStatus.PendingSettlement,
             'rentalFulfillment.depositRefundAmount': 0,
             'rentalFulfillment.depositDeductedAmount': 0,
           }),
         }),
         expect.anything(),
       );
-      expect(mockRefundsWorkflow.createFromRentalSettlement).not.toHaveBeenCalled();
+      expect(
+        mockRefundsWorkflow.createFromRentalSettlement,
+      ).not.toHaveBeenCalled();
     });
 
     it('Criteria 7: confirmNoIncident sets deposit to FULLY_RELEASED, and coordinator creates refund exactly once', async () => {
@@ -668,7 +819,8 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
             quantity: 1,
             rentalFulfillment: {
               status: RentalFulfillmentStatus.Returned,
-              depositSettlementStatus: DepositSettlementStatus.PendingSettlement,
+              depositSettlementStatus:
+                DepositSettlementStatus.PendingSettlement,
             },
           }),
         }),
@@ -693,7 +845,9 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
         note: 'Đồ nguyên vẹn',
       });
 
-      expect(updated.rentalFulfillment.depositSettlementStatus).toBe(DepositSettlementStatus.FullyReleased);
+      expect(updated.rentalFulfillment.depositSettlementStatus).toBe(
+        DepositSettlementStatus.FullyReleased,
+      );
 
       mockBookingModel.findById.mockReturnValue(
         query({
@@ -722,8 +876,12 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
 
       const refundResult = await coordinatorService.coordinate(bookingId);
       expect(refundResult.status).toBe('REQUESTED');
-      expect(mockRefundsWorkflow.createFromRentalSettlement).toHaveBeenCalledTimes(1);
-      expect(mockRefundsWorkflow.createFromRentalSettlement).toHaveBeenCalledWith(
+      expect(
+        mockRefundsWorkflow.createFromRentalSettlement,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        mockRefundsWorkflow.createFromRentalSettlement,
+      ).toHaveBeenCalledWith(
         expect.objectContaining({
           bookingId,
           amount: depositAmt,
@@ -747,7 +905,9 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
 
       const result = await coordinatorService.coordinate(bookingId);
       expect(result.status).toBe('REQUESTED');
-      expect(mockRefundsWorkflow.createFromRentalSettlement).not.toHaveBeenCalled();
+      expect(
+        mockRefundsWorkflow.createFromRentalSettlement,
+      ).not.toHaveBeenCalled();
     });
 
     it('Criteria 9: If any rental item is still in CLEANING / PENDING_SETTLEMENT, booking cannot complete', async () => {
@@ -776,7 +936,8 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
               itemType: BookingItemType.Product,
               rentalFulfillment: {
                 status: RentalFulfillmentStatus.Returned,
-                depositSettlementStatus: DepositSettlementStatus.PendingSettlement,
+                depositSettlementStatus:
+                  DepositSettlementStatus.PendingSettlement,
                 issueStatus: RentalIssueStatus.None,
               },
             },
@@ -826,7 +987,9 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
 
       const coordRes = await coordinatorService.coordinate(bookingId);
       expect(coordRes.status).toBe('PENDING');
-      expect(mockRefundsWorkflow.createFromRentalSettlement).not.toHaveBeenCalled();
+      expect(
+        mockRefundsWorkflow.createFromRentalSettlement,
+      ).not.toHaveBeenCalled();
     });
   });
 });

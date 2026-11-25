@@ -398,9 +398,9 @@ export const PhotoshootMainCard: React.FC<PhotoshootMainCardProps> = ({ photosho
               {rawStatus === 'CONFIRMED' && (photoshootData.remainingTimeText ? `Lịch chụp đã được xác nhận. ${photoshootData.remainingTimeText}.` : 'Lịch chụp đã được xác nhận. Hãy chuẩn bị sẵn sàng cho buổi chụp nhé!')}
               {rawStatus === 'IN_PROGRESS' && 'Buổi chụp ảnh đang diễn ra hoặc thợ đang trong quy trình hậu kỳ & chỉnh sửa ảnh.'}
               {rawStatus === 'AWAITING_REVIEW' && 'Nhiếp ảnh gia đã tải lên kho ảnh kết quả. Bạn có 48 giờ để kiểm tra và duyệt ảnh.'}
-              {rawStatus === 'COMPLETED' && 'Đơn chụp ảnh đã hoàn tất trọn vẹn. Cảm ơn bạn đã lựa chọn LUMÉ!'}
+              {rawStatus === 'COMPLETED' && 'Đơn chụp ảnh đã hoàn tất trọn vẹn. Cảm ơn bạn đã lựa chọn TàGo!'}
               {rawStatus === 'CANCELLED' && 'Đơn chụp ảnh này đã bị hủy.'}
-              {rawStatus === 'DISPUTED' && 'Đơn hàng đang trong quá trình khiếu nại / tranh chấp. Ban quản trị LUMÉ đang kiểm tra và xử lý thỏa đáng cho bạn.'}
+              {rawStatus === 'DISPUTED' && 'Đơn hàng đang trong quá trình khiếu nại / tranh chấp. Ban quản trị TàGo đang kiểm tra và xử lý thỏa đáng cho bạn.'}
               {rawStatus === 'REFUNDED' && 'Đơn hàng đã được hoàn tiền thành công theo kết quả giải quyết khiếu nại.'}
               {rawStatus === 'PARTIALLY_REFUNDED' && 'Đơn hàng đã được hoàn tiền một phần theo kết quả thỏa thuận giải quyết.'}
             </span>

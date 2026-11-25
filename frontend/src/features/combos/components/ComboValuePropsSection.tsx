@@ -29,7 +29,7 @@ export const ComboValuePropsSection: React.FC = () => {
     <section className="lume-combo-value-props-section">
       <div className="lume-combo-value-props-header">
         <span className="lume-combo-value-props-eyebrow">ĐẶC QUYỀN KHÁCH HÀNG</span>
-        <h2 className="lume-combo-value-props-title">Tại sao nên chọn Combo trọn gói tại LUMÉ?</h2>
+        <h2 className="lume-combo-value-props-title">Tại sao nên chọn Combo trọn gói tại TàGo?</h2>
         <p className="lume-combo-value-props-subtitle">
           Giải pháp trọn vẹn giúp bạn tự tin tỏa sáng trong tà áo di sản mà không phải lo lắng về việc tìm kiếm thợ ảnh hay phối đồ riêng biệt.
         </p>

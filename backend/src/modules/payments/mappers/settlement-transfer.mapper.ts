@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 @Injectable()
 export class SettlementTransferMapper {
   toProviderResponse(t: any): Record<string, any> {
-    const bookingObj = t.bookingId as any;
+    const bookingObj = t.bookingId;
     return {
       id: t.transactionReference || t._id?.toString(),
       bookingId: bookingObj?._id || '',
@@ -13,7 +13,9 @@ export class SettlementTransferMapper {
       account: t.destinationBankAccount?.accountNumber || '',
       accountHolder: t.destinationBankAccount?.accountHolder || '',
       status: t.status || 'PENDING',
-      date: t.createdAt ? new Date(t.createdAt).toLocaleDateString('vi-VN') : '',
+      date: t.createdAt
+        ? new Date(t.createdAt).toLocaleDateString('vi-VN')
+        : '',
       errorMessage: t.errorMessage || null,
     };
   }

@@ -10,8 +10,13 @@ import {
   IsOptional,
   IsNumber,
   IsNotEmpty,
+  Min,
+  Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+
+export const MIN_COMBO_PRICE = 50_000;
+export const MAX_COMBO_PRICE = 50_000_000;
 import {
   ComboPromotion,
   ComboPromotionDocument,
@@ -39,11 +44,15 @@ export class CreateComboPromotionDto {
   photographyPackageId: string;
 
   @IsNumber()
+  @Min(1, { message: 'Phần trăm giảm giá phải từ 1% đến 80%' })
+  @Max(80, { message: 'Phần trăm giảm giá phải từ 1% đến 80%' })
   @Type(() => Number)
   discountPercent: number;
 
   @IsNumber()
   @IsOptional()
+  @Min(MIN_COMBO_PRICE, { message: 'Giá combo tối thiểu là 50.000đ' })
+  @Max(MAX_COMBO_PRICE, { message: 'Giá combo tối đa là 50.000.000đ' })
   @Type(() => Number)
   comboPrice?: number;
 
@@ -99,11 +108,15 @@ export class UpdateComboPromotionDto {
 
   @IsNumber()
   @IsOptional()
+  @Min(1, { message: 'Phần trăm giảm giá phải từ 1% đến 80%' })
+  @Max(80, { message: 'Phần trăm giảm giá phải từ 1% đến 80%' })
   @Type(() => Number)
   discountPercent?: number;
 
   @IsNumber()
   @IsOptional()
+  @Min(MIN_COMBO_PRICE, { message: 'Giá combo tối thiểu là 50.000đ' })
+  @Max(MAX_COMBO_PRICE, { message: 'Giá combo tối đa là 50.000.000đ' })
   @Type(() => Number)
   comboPrice?: number;
 
@@ -179,11 +192,22 @@ export class ComboPromotionService {
       throw new NotFoundException('Không tìm thấy gói chụp ảnh');
     }
     if (pkg.providerId.toString() !== providerIdStr) {
-      throw new BadRequestException('Gói chụp ảnh không thuộc cửa hàng của bạn');
+      throw new BadRequestException(
+        'Gói chụp ảnh không thuộc cửa hàng của bạn',
+      );
     }
 
     if (dto.discountPercent < 1 || dto.discountPercent > 80) {
       throw new BadRequestException('Phần trăm giảm giá phải từ 1% đến 80%');
+    }
+    if (
+      dto.comboPrice !== undefined &&
+      dto.comboPrice !== null &&
+      (dto.comboPrice < MIN_COMBO_PRICE || dto.comboPrice > MAX_COMBO_PRICE)
+    ) {
+      throw new BadRequestException(
+        'Giá combo phải nằm trong khoảng từ 50.000đ đến 50.000.000đ',
+      );
     }
 
     const validFromDate = new Date(dto.validFrom);
@@ -243,13 +267,20 @@ export class ComboPromotionService {
     const limit = Math.max(1, Math.min(100, Number(query?.limit) || 8));
 
     // 1. Calculate All 5 KPI Metrics across the entire collection
-    const [pending, approved, rejected, changesRequested, totalAll] = await Promise.all([
-      this.comboModel.countDocuments({ status: ComboPromotionStatus.PendingReview }),
-      this.comboModel.countDocuments({ status: ComboPromotionStatus.Active }),
-      this.comboModel.countDocuments({ status: ComboPromotionStatus.Rejected }),
-      this.comboModel.countDocuments({ status: ComboPromotionStatus.ChangesRequested }),
-      this.comboModel.countDocuments(),
-    ]);
+    const [pending, approved, rejected, changesRequested, totalAll] =
+      await Promise.all([
+        this.comboModel.countDocuments({
+          status: ComboPromotionStatus.PendingReview,
+        }),
+        this.comboModel.countDocuments({ status: ComboPromotionStatus.Active }),
+        this.comboModel.countDocuments({
+          status: ComboPromotionStatus.Rejected,
+        }),
+        this.comboModel.countDocuments({
+          status: ComboPromotionStatus.ChangesRequested,
+        }),
+        this.comboModel.countDocuments(),
+      ]);
 
     // 2. Build Filter Criteria
     const filter: any = {};
@@ -265,10 +296,7 @@ export class ComboPromotionService {
     if (query?.search && query.search.trim()) {
       const searchRegex = createSafeRegex(query.search);
       if (searchRegex) {
-        filter.$or = [
-          { name: searchRegex },
-          { description: searchRegex },
-        ];
+        filter.$or = [{ name: searchRegex }, { description: searchRegex }];
       }
     }
 
@@ -294,8 +322,14 @@ export class ComboPromotionService {
       this.comboModel
         .find(filter)
         .populate('providerId', 'businessName address media contact')
-        .populate('productId', 'name images basePrice depositAmount sizes colors materials')
-        .populate('photographyPackageId', 'name images price durationHours editedPhotosCount deliveryDays location')
+        .populate(
+          'productId',
+          'name images basePrice depositAmount sizes colors materials',
+        )
+        .populate(
+          'photographyPackageId',
+          'name images price durationHours editedPhotosCount deliveryDays location',
+        )
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
@@ -314,7 +348,10 @@ export class ComboPromotionService {
       if (c.productId?.images && Array.isArray(c.productId.images)) {
         comboImages.push(...c.productId.images);
       }
-      if (c.photographyPackageId?.images && Array.isArray(c.photographyPackageId.images)) {
+      if (
+        c.photographyPackageId?.images &&
+        Array.isArray(c.photographyPackageId.images)
+      ) {
         comboImages.push(...c.photographyPackageId.images);
       }
 
@@ -323,25 +360,36 @@ export class ComboPromotionService {
       const origProductPrice = c.productId?.basePrice || 0;
       const origPackagePrice = c.photographyPackageId?.price || 0;
       const originalTotal = origProductPrice + origPackagePrice;
-      const finalPrice = c.comboPrice ?? Math.round(originalTotal * (1 - (c.discountPercent || 0) / 100));
+      const finalPrice =
+        c.comboPrice ??
+        Math.round(originalTotal * (1 - (c.discountPercent || 0) / 100));
 
       return {
         ...c,
         id: c._id.toString(),
         code: `CB${c._id.toString().slice(-6).toUpperCase()}`,
-        partnerCode: c.providerId?._id ? `#DT${c.providerId._id.toString().slice(-5).toUpperCase()}` : '#DT00001',
+        partnerCode: c.providerId?._id
+          ? `#DT${c.providerId._id.toString().slice(-5).toUpperCase()}`
+          : '#DT00001',
         images: uniqueImages,
         finalPrice,
         originalTotal,
-        location: c.location || c.photographyPackageId?.location || 'Đại Nội Huế, Sông Hương',
-        durationHours: c.durationHours || c.photographyPackageId?.durationHours || 3,
-        inclusions: c.inclusions && c.inclusions.length > 0 ? c.inclusions : [
-          `Áo dài (${c.aoDaiQuantity || 1} bộ)`,
-          `Chụp ảnh (${c.photographyPackageId?.editedPhotosCount ? c.photographyPackageId.editedPhotosCount + '+' : '100+'} ảnh)`,
-          'Makeup nhẹ nhàng',
-          'Chỉnh sửa ảnh chuyên nghiệp',
-          'Hỗ trợ tạo dáng & stylist',
-        ],
+        location:
+          c.location ||
+          c.photographyPackageId?.location ||
+          'Đại Nội Huế, Sông Hương',
+        durationHours:
+          c.durationHours || c.photographyPackageId?.durationHours || 3,
+        inclusions:
+          c.inclusions && c.inclusions.length > 0
+            ? c.inclusions
+            : [
+                `Áo dài (${c.aoDaiQuantity || 1} bộ)`,
+                `Chụp ảnh (${c.photographyPackageId?.editedPhotosCount ? c.photographyPackageId.editedPhotosCount + '+' : '100+'} ảnh)`,
+                'Makeup nhẹ nhàng',
+                'Chỉnh sửa ảnh chuyên nghiệp',
+                'Hỗ trợ tạo dáng & stylist',
+              ],
       };
     });
 
@@ -408,7 +456,9 @@ export class ComboPromotionService {
     return combo;
   }
 
-  async findByProvider(providerIdStr: string): Promise<ComboPromotionDocument[]> {
+  async findByProvider(
+    providerIdStr: string,
+  ): Promise<ComboPromotionDocument[]> {
     const providerId = new Types.ObjectId(providerIdStr);
     return this.comboModel
       .find({ providerId })
@@ -420,7 +470,11 @@ export class ComboPromotionService {
   async findActivePublic(): Promise<ComboPromotionDocument[]> {
     const now = new Date();
     // Bắt đầu từ 00:00 của ngày hôm nay để không bị ẩn quá sớm trong ngày
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
     return this.comboModel
       .find({
         status: ComboPromotionStatus.Active,
@@ -428,7 +482,10 @@ export class ComboPromotionService {
         validTo: { $gte: todayStart },
       })
       .populate('productId', 'name images basePrice slug depositAmount')
-      .populate('photographyPackageId', 'name images price durationHours slug editedPhotosCount maxPeople')
+      .populate(
+        'photographyPackageId',
+        'name images price durationHours slug editedPhotosCount maxPeople',
+      )
       .populate('providerId', 'businessName address rating')
       .sort({ discountPercent: -1, createdAt: -1 })
       .limit(12);
@@ -436,7 +493,11 @@ export class ComboPromotionService {
 
   async findActivePublicById(id: string): Promise<ComboPromotionDocument> {
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
     const combo = await this.comboModel
       .findOne({
         _id: id,
@@ -444,11 +505,19 @@ export class ComboPromotionService {
         validFrom: { $lte: now },
         validTo: { $gte: todayStart },
       })
-      .populate('productId', 'name images basePrice slug depositAmount sizes colors materials')
-      .populate('photographyPackageId', 'name images price durationHours slug editedPhotosCount deliveryDays maxPeople')
+      .populate(
+        'productId',
+        'name images basePrice slug depositAmount sizes colors materials',
+      )
+      .populate(
+        'photographyPackageId',
+        'name images price durationHours slug editedPhotosCount deliveryDays maxPeople',
+      )
       .populate('providerId', 'businessName address rating contact');
     if (!combo) {
-      throw new NotFoundException('Combo không khả dụng hoặc chưa được công khai');
+      throw new NotFoundException(
+        'Combo không khả dụng hoặc chưa được công khai',
+      );
     }
     return combo;
   }
@@ -456,8 +525,14 @@ export class ComboPromotionService {
   async findById(id: string): Promise<ComboPromotionDocument> {
     const combo = await this.comboModel
       .findById(id)
-      .populate('productId', 'name images basePrice slug depositAmount sizes colors materials')
-      .populate('photographyPackageId', 'name images price durationHours slug editedPhotosCount deliveryDays maxPeople')
+      .populate(
+        'productId',
+        'name images basePrice slug depositAmount sizes colors materials',
+      )
+      .populate(
+        'photographyPackageId',
+        'name images price durationHours slug editedPhotosCount deliveryDays maxPeople',
+      )
       .populate('providerId', 'businessName address rating contact');
     if (!combo) {
       throw new NotFoundException('Không tìm thấy combo');
@@ -487,16 +562,40 @@ export class ComboPromotionService {
       }
       updateData.discountPercent = dto.discountPercent;
     }
-    if (dto.comboPrice !== undefined) updateData.comboPrice = dto.comboPrice;
-    if (dto.validFrom !== undefined) updateData.validFrom = dto.validFrom ? new Date(dto.validFrom) : null;
-    if (dto.validTo !== undefined) updateData.validTo = dto.validTo ? new Date(dto.validTo) : null;
-    if (dto.shootDate !== undefined) updateData.shootDate = dto.shootDate ? new Date(dto.shootDate) : null;
-    if (dto.shootTimeSlot !== undefined) updateData.shootTimeSlot = dto.shootTimeSlot;
+    if (dto.comboPrice !== undefined) {
+      if (
+        dto.comboPrice !== null &&
+        (dto.comboPrice < MIN_COMBO_PRICE || dto.comboPrice > MAX_COMBO_PRICE)
+      ) {
+        throw new BadRequestException(
+          'Giá combo phải nằm trong khoảng từ 50.000đ đến 50.000.000đ',
+        );
+      }
+      updateData.comboPrice = dto.comboPrice;
+    }
+    if (dto.validFrom !== undefined)
+      updateData.validFrom = dto.validFrom ? new Date(dto.validFrom) : null;
+    if (dto.validTo !== undefined)
+      updateData.validTo = dto.validTo ? new Date(dto.validTo) : null;
+    if (dto.shootDate !== undefined)
+      updateData.shootDate = dto.shootDate ? new Date(dto.shootDate) : null;
+    if (dto.shootTimeSlot !== undefined)
+      updateData.shootTimeSlot = dto.shootTimeSlot;
     if (dto.maxUsage !== undefined) updateData.maxUsage = dto.maxUsage;
-    if (dto.aoDaiQuantity !== undefined) updateData.aoDaiQuantity = dto.aoDaiQuantity;
-    if (dto.shootPeopleCount !== undefined) updateData.shootPeopleCount = dto.shootPeopleCount;
-    if (dto.status !== undefined && [ComboPromotionStatus.Inactive, ComboPromotionStatus.PendingReview].includes(dto.status)) updateData.status = dto.status;
-    if (Object.keys(updateData).some((key) => key !== 'status')) updateData.status = ComboPromotionStatus.PendingReview;
+    if (dto.aoDaiQuantity !== undefined)
+      updateData.aoDaiQuantity = dto.aoDaiQuantity;
+    if (dto.shootPeopleCount !== undefined)
+      updateData.shootPeopleCount = dto.shootPeopleCount;
+    if (
+      dto.status !== undefined &&
+      [
+        ComboPromotionStatus.Inactive,
+        ComboPromotionStatus.PendingReview,
+      ].includes(dto.status)
+    )
+      updateData.status = dto.status;
+    if (Object.keys(updateData).some((key) => key !== 'status'))
+      updateData.status = ComboPromotionStatus.PendingReview;
     if (dto.image !== undefined) updateData.image = dto.image;
 
     const updated = await this.comboModel

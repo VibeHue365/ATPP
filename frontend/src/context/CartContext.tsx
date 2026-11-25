@@ -8,6 +8,7 @@ export interface CartItem {
   itemType: CartItemType;
   productId?: string | null;
   providerId?: string | null;
+  providerName?: string | null;
   productName?: string | null;
   productImage?: string | null;
   basePrice?: number;

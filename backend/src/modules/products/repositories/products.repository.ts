@@ -8,7 +8,10 @@ import {
   ProductModerationStatus,
   ProductStatus,
 } from '../schemas/product.schema';
-import { Provider, ProviderStatus } from '../../providers/schemas/provider.schema';
+import {
+  Provider,
+  ProviderStatus,
+} from '../../providers/schemas/provider.schema';
 import { QueryModerationProductsDto } from '../dto/product-moderation.dto';
 import { PhotographyPackage } from '../schemas/photography-package.schema';
 import { buildVietnameseRegexPattern } from '../../../common/utils/vietnamese.util';
@@ -28,7 +31,8 @@ export class ProductsRepository {
   constructor(
     @InjectModel(Product.name) private readonly productModel: Model<Product>,
     @InjectModel(Provider.name) private readonly providerModel: Model<Provider>,
-    @InjectModel(PhotographyPackage.name) private readonly packageModel: Model<PhotographyPackage>,
+    @InjectModel(PhotographyPackage.name)
+    private readonly packageModel: Model<PhotographyPackage>,
   ) {}
 
   /**
@@ -38,7 +42,10 @@ export class ProductsRepository {
    */
   private async getActiveProviderIds(): Promise<Types.ObjectId[]> {
     const now = Date.now();
-    if (this.activeProviderIdsCache && this.activeProviderIdsCache.expiresAt > now) {
+    if (
+      this.activeProviderIdsCache &&
+      this.activeProviderIdsCache.expiresAt > now
+    ) {
       return this.activeProviderIdsCache.value;
     }
 
@@ -82,11 +89,23 @@ export class ProductsRepository {
 
   async findActivePage(
     options: {
-      search?: string; minPrice?: number; maxPrice?: number; minRating?: number;
-      colors?: string[]; sizes?: string[]; materials?: string[]; categoryId?: string;
-      styleCategoryIds?: string[]; eventCategoryIds?: string[]; providerId?: string;
-      providerLocation?: string; productTypes?: string[]; ids?: string[];
-      startDate?: string; endDate?: string; rentalType?: string;
+      search?: string;
+      minPrice?: number;
+      maxPrice?: number;
+      minRating?: number;
+      colors?: string[];
+      sizes?: string[];
+      materials?: string[];
+      categoryId?: string;
+      styleCategoryIds?: string[];
+      eventCategoryIds?: string[];
+      providerId?: string;
+      providerLocation?: string;
+      productTypes?: string[];
+      ids?: string[];
+      startDate?: string;
+      endDate?: string;
+      rentalType?: string;
     },
     page: number,
     limit: number,
@@ -99,22 +118,35 @@ export class ProductsRepository {
       providerId: { $in: activeProviderIds },
     };
     // Visual search (VIB-93) looks products up by id; non-public ids simply drop out.
-    if (options.ids) query._id = { $in: options.ids.filter((id) => Types.ObjectId.isValid(id)).map((id) => new Types.ObjectId(id)) };
-    if (options.providerId && Types.ObjectId.isValid(options.providerId)) query.providerId = new Types.ObjectId(options.providerId);
-    if (options.categoryId && Types.ObjectId.isValid(options.categoryId)) query.categoryId = new Types.ObjectId(options.categoryId);
+    if (options.ids)
+      query._id = {
+        $in: options.ids
+          .filter((id) => Types.ObjectId.isValid(id))
+          .map((id) => new Types.ObjectId(id)),
+      };
+    if (options.providerId && Types.ObjectId.isValid(options.providerId))
+      query.providerId = new Types.ObjectId(options.providerId);
+    if (options.categoryId && Types.ObjectId.isValid(options.categoryId))
+      query.categoryId = new Types.ObjectId(options.categoryId);
     if (options.providerLocation?.trim()) {
-      const providerIds = await this.getProviderIdsByLocation(options.providerLocation);
+      const providerIds = await this.getProviderIdsByLocation(
+        options.providerLocation,
+      );
       query.providerId = { $in: providerIds };
     }
-    for (const [field, ids] of [['styleCategoryIds', options.styleCategoryIds], ['eventCategoryIds', options.eventCategoryIds]] as const) {
+    for (const [field, ids] of [
+      ['styleCategoryIds', options.styleCategoryIds],
+      ['eventCategoryIds', options.eventCategoryIds],
+    ] as const) {
       const validIds = (ids ?? []).filter((id) => Types.ObjectId.isValid(id));
-      if (validIds.length) query[field] = { $in: validIds.map((id) => new Types.ObjectId(id)) };
+      if (validIds.length)
+        query[field] = { $in: validIds.map((id) => new Types.ObjectId(id)) };
     }
     const typePatterns: Record<string, string> = {
       female: '(nu|nữ)',
-      'Nữ': '(nu|nữ)',
+      Nữ: '(nu|nữ)',
       male: 'nam',
-      'Nam': 'nam',
+      Nam: 'nam',
       couple: '(doi|đôi|cap|cặp)',
       'Cặp đôi': '(doi|đôi|cap|cặp)',
       ancient: '(co phuc|cổ phục|nhat binh|nhật bình|ao tac|áo tấc)',
@@ -122,7 +154,7 @@ export class ProductsRepository {
       yearbook: '(ky yeu|kỷ yếu|hoc sinh|học sinh|sinh vien|sinh viên)',
       'Kỷ yếu': '(ky yeu|kỷ yếu|hoc sinh|học sinh|sinh vien|sinh viên)',
       wedding: '(cuoi|cưới|hy|hỷ|dau|dâu|re|rể)',
-      'Cưới': '(cuoi|cưới|hy|hỷ|dau|dâu|re|rể)',
+      Cưới: '(cuoi|cưới|hy|hỷ|dau|dâu|re|rể)',
     };
     const selectedTypePatterns = (options.productTypes ?? [])
       .map((type) => typePatterns[type])
@@ -148,48 +180,114 @@ export class ProductsRepository {
     }
     if (options.minPrice !== undefined || options.maxPrice !== undefined) {
       query.basePrice = {};
-      if (options.minPrice !== undefined) query.basePrice.$gte = options.minPrice;
-      if (options.maxPrice !== undefined) query.basePrice.$lte = options.maxPrice;
+      if (options.minPrice !== undefined)
+        query.basePrice.$gte = options.minPrice;
+      if (options.maxPrice !== undefined)
+        query.basePrice.$lte = options.maxPrice;
     }
-    if (options.minRating !== undefined) query['rating.averageRating'] = { $gte: options.minRating };
-    if (options.colors?.length) query.colors = { $in: options.colors.map((value) => new RegExp(`^${escapeRegex(value)}$`, 'i')) };
-    if (options.sizes?.length) query.sizes = { $in: options.sizes.map((value) => new RegExp(`^${escapeRegex(value)}$`, 'i')) };
-    if (options.materials?.length) query.materials = { $in: options.materials.map((value) => new RegExp(`^${escapeRegex(value)}$`, 'i')) };
+    if (options.minRating !== undefined)
+      query['rating.averageRating'] = { $gte: options.minRating };
+    if (options.colors?.length)
+      query.colors = {
+        $in: options.colors.map(
+          (value) => new RegExp(`^${escapeRegex(value)}$`, 'i'),
+        ),
+      };
+    if (options.sizes?.length)
+      query.sizes = {
+        $in: options.sizes.map(
+          (value) => new RegExp(`^${escapeRegex(value)}$`, 'i'),
+        ),
+      };
+    if (options.materials?.length)
+      query.materials = {
+        $in: options.materials.map(
+          (value) => new RegExp(`^${escapeRegex(value)}$`, 'i'),
+        ),
+      };
 
     const safeLimit = Math.min(Math.max(limit, 1), 24);
     const safePage = Math.max(page, 1);
-    const order = sort === 'price_asc' ? { basePrice: 1, _id: 1 }
-      : sort === 'price_desc' ? { basePrice: -1, _id: -1 }
-      : sort === 'rating_desc' ? { 'rating.averageRating': -1, createdAt: -1 }
-      : { createdAt: -1 };
+    const order =
+      sort === 'price_asc'
+        ? { basePrice: 1, _id: 1 }
+        : sort === 'price_desc'
+          ? { basePrice: -1, _id: -1 }
+          : sort === 'rating_desc'
+            ? { 'rating.averageRating': -1, createdAt: -1 }
+            : { createdAt: -1 };
     const [items, total] = await Promise.all([
-      this.productModel.find(query)
-        .select('providerId categoryId styleCategoryIds eventCategoryIds name slug images basePrice depositAmount replacementValue sizes colors materials style occasions taggingRevision rating status customTags createdAt')
+      this.productModel
+        .find(query)
+        .select(
+          'providerId categoryId styleCategoryIds eventCategoryIds name slug images basePrice hourlyPrice depositAmount replacementValue sizes colors materials style occasions taggingRevision rating status customTags createdAt',
+        )
         .populate('categoryId', 'name slug')
-        .populate('providerId', 'businessName status address.city address.district media rating')
-        .sort(order as any).skip((safePage - 1) * safeLimit).limit(safeLimit).lean().exec(),
+        .populate(
+          'providerId',
+          'businessName status address.city address.district media rating',
+        )
+        .sort(order as any)
+        .skip((safePage - 1) * safeLimit)
+        .limit(safeLimit)
+        .lean()
+        .exec(),
       this.productModel.countDocuments(query).exec(),
     ]);
     return { items, total };
   }
 
-  async getPublicFilterFacets(): Promise<{ colors: string[]; sizes: string[]; materials: string[]; categoryCounts: Array<{ categoryId: string; count: number }> }> {
+  async getPublicFilterFacets(): Promise<{
+    colors: string[];
+    sizes: string[];
+    materials: string[];
+    categoryCounts: Array<{ categoryId: string; count: number }>;
+  }> {
     const activeProviderIds = await this.getActiveProviderIds();
-    const match = { status: ProductStatus.Active, moderationStatus: ProductModerationStatus.Approved, providerId: { $in: activeProviderIds } };
-    const [result] = await this.productModel.aggregate([
-      { $match: match },
-      { $facet: {
-        colors: [{ $unwind: '$colors' }, { $group: { _id: { $toUpper: '$colors' } } }, { $sort: { _id: 1 } }],
-        sizes: [{ $unwind: '$sizes' }, { $group: { _id: { $toUpper: '$sizes' } } }, { $sort: { _id: 1 } }],
-        materials: [{ $unwind: '$materials' }, { $group: { _id: { $toUpper: '$materials' } } }, { $sort: { _id: 1 } }],
-        categoryCounts: [{ $group: { _id: '$categoryId', count: { $sum: 1 } } }],
-      } },
-    ]).exec();
+    const match = {
+      status: ProductStatus.Active,
+      moderationStatus: ProductModerationStatus.Approved,
+      providerId: { $in: activeProviderIds },
+    };
+    const [result] = await this.productModel
+      .aggregate([
+        { $match: match },
+        {
+          $facet: {
+            colors: [
+              { $unwind: '$colors' },
+              { $group: { _id: { $toUpper: '$colors' } } },
+              { $sort: { _id: 1 } },
+            ],
+            sizes: [
+              { $unwind: '$sizes' },
+              { $group: { _id: { $toUpper: '$sizes' } } },
+              { $sort: { _id: 1 } },
+            ],
+            materials: [
+              { $unwind: '$materials' },
+              { $group: { _id: { $toUpper: '$materials' } } },
+              { $sort: { _id: 1 } },
+            ],
+            categoryCounts: [
+              { $group: { _id: '$categoryId', count: { $sum: 1 } } },
+            ],
+          },
+        },
+      ])
+      .exec();
     return {
       colors: (result?.colors ?? []).map((item: { _id: string }) => item._id),
       sizes: (result?.sizes ?? []).map((item: { _id: string }) => item._id),
-      materials: (result?.materials ?? []).map((item: { _id: string }) => item._id),
-      categoryCounts: (result?.categoryCounts ?? []).map((item: { _id: Types.ObjectId; count: number }) => ({ categoryId: String(item._id), count: item.count })),
+      materials: (result?.materials ?? []).map(
+        (item: { _id: string }) => item._id,
+      ),
+      categoryCounts: (result?.categoryCounts ?? []).map(
+        (item: { _id: Types.ObjectId; count: number }) => ({
+          categoryId: String(item._id),
+          count: item.count,
+        }),
+      ),
     };
   }
 
@@ -224,7 +322,9 @@ export class ProductsRepository {
       query.providerId = new Types.ObjectId(options.providerId);
     }
     if (options?.providerLocation?.trim()) {
-      const providerIds = await this.getProviderIdsByLocation(options.providerLocation);
+      const providerIds = await this.getProviderIdsByLocation(
+        options.providerLocation,
+      );
       query.providerId = { $in: providerIds };
     }
 
@@ -251,9 +351,9 @@ export class ProductsRepository {
 
     const typePatterns: Record<string, string> = {
       female: '(nu|nữ)',
-      'Nữ': '(nu|nữ)',
+      Nữ: '(nu|nữ)',
       male: 'nam',
-      'Nam': 'nam',
+      Nam: 'nam',
       couple: '(doi|đôi|cap|cặp)',
       'Cặp đôi': '(doi|đôi|cap|cặp)',
       ancient: '(co phuc|cổ phục|nhat binh|nhật bình|ao tac|áo tấc)',
@@ -261,7 +361,7 @@ export class ProductsRepository {
       yearbook: '(ky yeu|kỷ yếu|hoc sinh|học sinh|sinh vien|sinh viên)',
       'Kỷ yếu': '(ky yeu|kỷ yếu|hoc sinh|học sinh|sinh vien|sinh viên)',
       wedding: '(cuoi|cưới|hy|hỷ|dau|dâu|re|rể)',
-      'Cưới': '(cuoi|cưới|hy|hỷ|dau|dâu|re|rể)',
+      Cưới: '(cuoi|cưới|hy|hỷ|dau|dâu|re|rể)',
     };
     const selectedTypePatterns = (options?.productTypes ?? [])
       .map((type) => typePatterns[type])
@@ -314,20 +414,27 @@ export class ProductsRepository {
 
     if (options?.materials && options.materials.length > 0) {
       query.materials = {
-        $in: options.materials.map((m) => new RegExp(`^${escapeRegex(m)}$`, 'i')),
+        $in: options.materials.map(
+          (m) => new RegExp(`^${escapeRegex(m)}$`, 'i'),
+        ),
       };
     }
 
     let queryBuilder = this.productModel
       .find(query)
       .populate('categoryId', 'name slug')
-      .populate('providerId', 'businessName status address.city address.district media rating')
+      .populate(
+        'providerId',
+        'businessName status address.city address.district media rating',
+      )
       .sort({ createdAt: -1 });
 
     if (options?.limit) {
       // Internal recommendation ranking needs a wider candidate pool than one
       // public page. Public paginated endpoints still enforce their own 24-item cap.
-      queryBuilder = queryBuilder.limit(Math.min(Math.max(options.limit, 1), 200));
+      queryBuilder = queryBuilder.limit(
+        Math.min(Math.max(options.limit, 1), 200),
+      );
     }
 
     return queryBuilder.lean().exec();
@@ -405,19 +512,29 @@ export class ProductsRepository {
       }
     }
     if (sizes) {
-      const sizesArray = sizes.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+      const sizesArray = sizes
+        .split(',')
+        .map((s) => s.trim().toUpperCase())
+        .filter(Boolean);
       if (sizesArray.length > 0) {
         filter.sizes = { $in: sizesArray };
       }
     }
     if (colors) {
-      const colorsArray = colors.split(',').map((c) => c.trim().toUpperCase()).filter(Boolean);
+      const colorsArray = colors
+        .split(',')
+        .map((c) => c.trim().toUpperCase())
+        .filter(Boolean);
       if (colorsArray.length > 0) {
         filter.colors = { $in: colorsArray };
       }
     }
 
-    const { skip, limit: safeLimit } = clampPagination({ page, limit }, 20, 100);
+    const { skip, limit: safeLimit } = clampPagination(
+      { page, limit },
+      20,
+      100,
+    );
     const total = await this.productModel.countDocuments(filter);
 
     let query = this.productModel
@@ -459,7 +576,9 @@ export class ProductsRepository {
   ): Promise<ProductDocument[]> {
     return this.productModel
       .find({ moderationStatus: status })
-      .select('name description images basePrice depositAmount replacementValue status moderationStatus moderationReason updatedAt categoryId providerId taggingRevision')
+      .select(
+        'name description images basePrice hourlyPrice depositAmount replacementValue status moderationStatus moderationReason updatedAt categoryId providerId taggingRevision',
+      )
       .sort({ updatedAt: 1 })
       .populate('categoryId', 'name')
       .populate('providerId', 'businessName userId')
@@ -508,23 +627,48 @@ export class ProductsRepository {
       changesRequestedPhotography,
       totalPhotography,
     ] = await Promise.all([
-      this.productModel.countDocuments({ moderationStatus: ProductModerationStatus.PendingReview }).exec(),
-      this.productModel.countDocuments({ moderationStatus: ProductModerationStatus.Approved }).exec(),
-      this.productModel.countDocuments({ moderationStatus: ProductModerationStatus.Rejected }).exec(),
-      this.productModel.countDocuments({ moderationStatus: ProductModerationStatus.ChangesRequested }).exec(),
+      this.productModel
+        .countDocuments({
+          moderationStatus: ProductModerationStatus.PendingReview,
+        })
+        .exec(),
+      this.productModel
+        .countDocuments({ moderationStatus: ProductModerationStatus.Approved })
+        .exec(),
+      this.productModel
+        .countDocuments({ moderationStatus: ProductModerationStatus.Rejected })
+        .exec(),
+      this.productModel
+        .countDocuments({
+          moderationStatus: ProductModerationStatus.ChangesRequested,
+        })
+        .exec(),
       this.productModel.countDocuments().exec(),
 
-      this.packageModel.countDocuments({ moderationStatus: ProductModerationStatus.PendingReview }).exec(),
-      this.packageModel.countDocuments({ moderationStatus: ProductModerationStatus.Approved }).exec(),
-      this.packageModel.countDocuments({ moderationStatus: ProductModerationStatus.Rejected }).exec(),
-      this.packageModel.countDocuments({ moderationStatus: ProductModerationStatus.ChangesRequested }).exec(),
+      this.packageModel
+        .countDocuments({
+          moderationStatus: ProductModerationStatus.PendingReview,
+        })
+        .exec(),
+      this.packageModel
+        .countDocuments({ moderationStatus: ProductModerationStatus.Approved })
+        .exec(),
+      this.packageModel
+        .countDocuments({ moderationStatus: ProductModerationStatus.Rejected })
+        .exec(),
+      this.packageModel
+        .countDocuments({
+          moderationStatus: ProductModerationStatus.ChangesRequested,
+        })
+        .exec(),
       this.packageModel.countDocuments().exec(),
     ]);
 
     const totalPending = pendingAodai + pendingPhotography;
     const totalApproved = approvedAodai + approvedPhotography;
     const totalRejected = rejectedAodai + rejectedPhotography;
-    const totalChangesRequested = changesRequestedAodai + changesRequestedPhotography;
+    const totalChangesRequested =
+      changesRequestedAodai + changesRequestedPhotography;
     const grandTotal = totalAodai + totalPhotography;
 
     const filter: Record<string, any> = {};
@@ -533,13 +677,21 @@ export class ProductsRepository {
       filter.moderationStatus = query.status;
     }
 
-    if (query.categoryId && query.categoryId !== 'ALL' && query.categoryId !== 'Tất cả') {
+    if (
+      query.categoryId &&
+      query.categoryId !== 'ALL' &&
+      query.categoryId !== 'Tất cả'
+    ) {
       if (Types.ObjectId.isValid(query.categoryId)) {
         filter.categoryId = new Types.ObjectId(query.categoryId);
       }
     }
 
-    if (query.providerId && query.providerId !== 'ALL' && query.providerId !== 'Tất cả') {
+    if (
+      query.providerId &&
+      query.providerId !== 'ALL' &&
+      query.providerId !== 'Tất cả'
+    ) {
       if (Types.ObjectId.isValid(query.providerId)) {
         filter.providerId = new Types.ObjectId(query.providerId);
       }
@@ -584,8 +736,12 @@ export class ProductsRepository {
             .lean()
             .exec()
         : Promise.resolve([]),
-      includeAodai ? this.productModel.countDocuments(filter).exec() : Promise.resolve(0),
-      includePhoto ? this.packageModel.countDocuments(filter).exec() : Promise.resolve(0),
+      includeAodai
+        ? this.productModel.countDocuments(filter).exec()
+        : Promise.resolve(0),
+      includePhoto
+        ? this.packageModel.countDocuments(filter).exec()
+        : Promise.resolve(0),
     ]);
 
     const totalCount = aodaiCount + photoCount;
@@ -594,7 +750,9 @@ export class ProductsRepository {
       const idStr = p._id.toString();
       const code = `SP${idStr.slice(-7).toUpperCase()}`;
       const providerIdStr = p.providerId?._id?.toString() || '';
-      const partnerCode = providerIdStr ? `#DT${providerIdStr.slice(-5).toUpperCase()}` : '—';
+      const partnerCode = providerIdStr
+        ? `#DT${providerIdStr.slice(-5).toUpperCase()}`
+        : '—';
       return {
         ...p,
         id: idStr,
@@ -612,7 +770,9 @@ export class ProductsRepository {
       const idStr = pkg._id.toString();
       const code = `SP${idStr.slice(-7).toUpperCase()}`;
       const providerIdStr = pkg.providerId?._id?.toString() || '';
-      const partnerCode = providerIdStr ? `#DT${providerIdStr.slice(-5).toUpperCase()}` : '—';
+      const partnerCode = providerIdStr
+        ? `#DT${providerIdStr.slice(-5).toUpperCase()}`
+        : '—';
       return {
         ...pkg,
         id: idStr,
@@ -632,11 +792,13 @@ export class ProductsRepository {
       };
     });
 
-    const combinedItems = [...formattedAodai, ...formattedPhoto].sort((a, b) => {
-      const dateA = new Date(a.createdAt || 0).getTime();
-      const dateB = new Date(b.createdAt || 0).getTime();
-      return dateB - dateA;
-    });
+    const combinedItems = [...formattedAodai, ...formattedPhoto].sort(
+      (a, b) => {
+        const dateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+        const dateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+        return dateB - dateA;
+      },
+    );
 
     const paginatedItems = combinedItems.slice(skip, skip + limit);
 
@@ -676,7 +838,17 @@ export class ProductsRepository {
       ? { _id: id, moderationStatus: expectedStatus }
       : { _id: id };
     const prod = await this.productModel
-      .findOneAndUpdate(chartSnapshot ? { ...filter, sizeChartVersion: chartSnapshot.version, sizes: chartSnapshot.sizes } : filter, data, { new: true })
+      .findOneAndUpdate(
+        chartSnapshot
+          ? {
+              ...filter,
+              sizeChartVersion: chartSnapshot.version,
+              sizes: chartSnapshot.sizes,
+            }
+          : filter,
+        data,
+        { new: true },
+      )
       .populate('categoryId')
       .populate('providerId')
       .exec();

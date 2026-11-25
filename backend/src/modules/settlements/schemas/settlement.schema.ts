@@ -41,7 +41,13 @@ export interface SettlementPaymentSnapshot {
 
 @Schema({ collection: 'settlements', timestamps: true })
 export class Settlement {
-  @Prop({ required: true, unique: true, index: true, trim: true, uppercase: true })
+  @Prop({
+    required: true,
+    unique: true,
+    index: true,
+    trim: true,
+    uppercase: true,
+  })
   settlementCode: string;
 
   @Prop({ type: Types.ObjectId, ref: 'Booking', required: true })
@@ -82,6 +88,9 @@ export class Settlement {
 
   @Prop({ type: Number, default: 0, min: 0 })
   penaltyAmount: number;
+
+  @Prop({ type: Number, default: 0, min: 0 })
+  compensationAmount?: number;
 
   @Prop({ type: Number, required: true, min: 0 })
   payableAmount: number;

@@ -57,6 +57,9 @@ export class Payment {
   @Prop({ type: Types.ObjectId, ref: 'Booking', required: true, index: true })
   bookingId: Types.ObjectId;
 
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'Booking' }], default: [] })
+  relatedBookingIds?: Types.ObjectId[];
+
   @Prop({
     required: true,
     unique: true,

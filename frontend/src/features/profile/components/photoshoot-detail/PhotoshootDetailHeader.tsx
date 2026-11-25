@@ -53,7 +53,7 @@ export const PhotoshootDetailHeader: React.FC<PhotoshootDetailHeaderProps> = ({
             Chi tiết lịch chụp ảnh
           </h2>
           <span style={{ fontSize: '12px', color: '#8C827A' }}>
-            Mã đơn: <strong style={{ color: '#8E1B2E' }}>{bookingCode || 'PS-LUME'}</strong>
+            Mã đơn: <strong style={{ color: '#8E1B2E' }}>{bookingCode || 'PS-TAGO'}</strong>
           </span>
         </div>
       </div>

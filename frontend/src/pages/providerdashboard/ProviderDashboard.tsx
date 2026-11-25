@@ -39,6 +39,7 @@ import { createIncidentActions } from '../../features/provider-dashboard/orders/
 import { createOrderDataActions } from '../../features/provider-dashboard/orders/createOrderDataActions';
 import { IncidentReportModal } from '../../features/provider-dashboard/orders/IncidentReportModal';
 import { getOrderGroup } from '../../features/provider-dashboard/orders/orderHelpers';
+import { getBookingStatusGroup, normalizeBookingStatusCode } from '../../utils/bookingStatus';
 
 import { useProviderIncidentState } from '../../features/provider-dashboard/orders/useProviderIncidentState';
 import { useProviderOrderState } from '../../features/provider-dashboard/orders/useProviderOrderState';
@@ -79,6 +80,7 @@ const ServiceProfilePanel = React.lazy(() => import('../../features/provider-das
 const TrustPanel = React.lazy(() => import('../../features/provider-dashboard/trust/TrustPanel').then(m => ({ default: m.TrustPanel })));
 
 const PhotographyPackageManager = React.lazy(() => import('../../features/photography-packages/components/PhotographyPackageManager').then(m => ({ default: m.PhotographyPackageManager })));
+const StaffManagementPanel = React.lazy(() => import('../../features/provider-dashboard/staff/StaffManagementPanel').then(m => ({ default: m.StaffManagementPanel })));
 
 const DashboardTabLoader: React.FC = () => (
   <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '320px' }}>
@@ -227,7 +229,7 @@ export const ProviderDashboard: React.FC = () => {
     setCComment, searchCustId, setSearchCustId, trustScoreResult, setTrustScoreResult,
   } = useProviderTrustState();
 
-  const { payouts, setPayouts } = useProviderPayoutsState();
+  const { payouts, setPayouts, isLoadingPayouts, setIsLoadingPayouts } = useProviderPayoutsState();
 
   const {
     businessName, setBusinessName, phone, setPhone, addressLine, setAddressLine, city, setCity,
@@ -342,7 +344,8 @@ export const ProviderDashboard: React.FC = () => {
   });
 
   const { fetchPayouts } = createPayoutActions({
-    setPayouts
+    setPayouts,
+    setIsLoadingPayouts,
   });
 
   const { handleUpdateProfile } = createProfileActions({
@@ -375,6 +378,8 @@ export const ProviderDashboard: React.FC = () => {
     toast,
     workingHourRanges,
     scheduleCapability,
+    hasPhotographyCapability,
+    hasAodaiCapability,
     setEditingScheduleDay,
     fetchProviderData: (...args) => fetchProviderData(...args),
     blockedDate,
@@ -610,7 +615,7 @@ export const ProviderDashboard: React.FC = () => {
     loadEditInvSummary, openAddModal, openEditModal, handleDuplicateProduct, handleWizardCancel,
     handleImageChange, removeImage, handleVideoChange, removeVideo, updateVariantRow, removeVariantRow,
     addVariantRow, colorsNeedingImages, handleColorImageChange, removeColorImage, handleWizardFinish,
-    handleWizardBack, handleWizardNext, handlePrepareSizeChart,
+    handleWizardBack, handleWizardNext, handleWizardGoTo, handlePrepareSizeChart,
   } = createProductWizardActions({
     setEditingProduct,
     setProdName,
@@ -785,21 +790,33 @@ export const ProviderDashboard: React.FC = () => {
 
   const tabs = React.useMemo(() => [
     { label: 'Tất cả', count: roleFilteredOrders.length },
-    { label: 'Chờ xử lý', count: roleFilteredOrders.filter(o => getOrderGroup(o.status) === 'Chờ xử lý').length },
-    { label: 'Đang thực hiện', count: roleFilteredOrders.filter(o => getOrderGroup(o.status) === 'Đang thực hiện').length },
-    { label: 'Hoàn thành', count: roleFilteredOrders.filter(o => getOrderGroup(o.status) === 'Hoàn thành').length },
-    { label: 'Đã hủy', count: roleFilteredOrders.filter(o => getOrderGroup(o.status) === 'Đã hủy').length },
+    { label: 'Chờ xử lý', count: roleFilteredOrders.filter(o => getBookingStatusGroup(o.rawStatus || o.status) === 'PENDING').length },
+    { label: 'Đang thực hiện', count: roleFilteredOrders.filter(o => getBookingStatusGroup(o.rawStatus || o.status) === 'ACTIVE').length },
+    { label: 'Hoàn tất', count: roleFilteredOrders.filter(o => getBookingStatusGroup(o.rawStatus || o.status) === 'COMPLETED').length },
+    { label: 'Đã hủy', count: roleFilteredOrders.filter(o => getBookingStatusGroup(o.rawStatus || o.status) === 'CANCELLED').length },
+    { label: 'Tranh chấp / Hoàn tiền', count: roleFilteredOrders.filter(o => getBookingStatusGroup(o.rawStatus || o.status) === 'DISPUTED').length },
     { label: 'Yêu cầu đổi lịch', count: roleFilteredOrders.filter(o => o.items?.some((item: any) => item?.rescheduleRequest?.status === 'PENDING')).length },
   ], [roleFilteredOrders]);
 
   const filteredOrders = roleFilteredOrders.filter((order) => {
     let matchesStatus = false;
+    const group = getBookingStatusGroup(order.rawStatus || order.status);
     if (orderTab === 'Tất cả') {
       matchesStatus = true;
     } else if (orderTab === 'Yêu cầu đổi lịch') {
       matchesStatus = Boolean(order.items?.some((item: any) => item?.rescheduleRequest?.status === 'PENDING'));
+    } else if (orderTab === 'Chờ xử lý') {
+      matchesStatus = group === 'PENDING';
+    } else if (orderTab === 'Đang thực hiện') {
+      matchesStatus = group === 'ACTIVE';
+    } else if (orderTab === 'Hoàn thành' || orderTab === 'Hoàn tất') {
+      matchesStatus = group === 'COMPLETED';
+    } else if (orderTab === 'Đã hủy') {
+      matchesStatus = group === 'CANCELLED';
+    } else if (orderTab === 'Tranh chấp / Hoàn tiền') {
+      matchesStatus = group === 'DISPUTED';
     } else {
-      matchesStatus = getOrderGroup(order.status) === orderTab;
+      matchesStatus = getOrderGroup(order.rawStatus || order.status) === orderTab;
     }
     const matchesType = (!hasAodaiCapability || !hasPhotographyCapability) ? true : (bookingTypeFilter === 'Tất cả' || order.bookingType === bookingTypeFilter);
     return matchesStatus && matchesType;
@@ -826,7 +843,7 @@ export const ProviderDashboard: React.FC = () => {
             }
           }
         }
-        const isCompleted = o.rawStatus === 'COMPLETED' || o.status === 'HOÀN THÀNH';
+        const isCompleted = normalizeBookingStatusCode(o.rawStatus || o.status) === 'COMPLETED';
         return isCompleted && d && !isNaN(d.getTime()) && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
       })
       .reduce((sum, o) => sum + (o.totalAmount ?? 0), 0);
@@ -871,6 +888,7 @@ export const ProviderDashboard: React.FC = () => {
           <main style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
             <ChatPage
               embedded
+              mode="provider"
               excludeProviderId={provider?._id}
               onUnreadCountChange={setChatUnreadCount}
             />
@@ -894,6 +912,12 @@ export const ProviderDashboard: React.FC = () => {
 
         {hasPhotographyCapability && currentView === 'photography-packages' && (
           <PhotographyPackageManager enabled={hasPhotographyCapability} />
+        )}
+
+        {hasPhotographyCapability && currentView === 'staff' && (
+          <main style={{ flex: 1, padding: '28px 32px' }}>
+            <StaffManagementPanel toast={toast} />
+          </main>
         )}
 
         {hasPhotographyCapability && currentView === 'portfolio' && (
@@ -943,7 +967,7 @@ export const ProviderDashboard: React.FC = () => {
         )}
 
         {currentView === 'payouts' && (
-          <PayoutsPanel {...{ isLoadingProvider, payouts, setSelectedBookingId, setIsDetailModalOpen }} />
+          <PayoutsPanel {...{ isLoadingProvider, isLoadingPayouts, payouts, setSelectedBookingId, setIsDetailModalOpen }} />
         )}
 
         {/* ==================== ROLE MANAGEMENT VIEW ==================== */}
@@ -957,7 +981,7 @@ export const ProviderDashboard: React.FC = () => {
       <CampaignModal {...{ isCampaignModalOpen, setIsCampaignModalOpen, handleCreateCampaign, activeCampaign, handleDeactivateCampaign, campaignOccasion, setCampaignOccasion, campaignType, setCampaignType, campaignPercent, setCampaignPercent, campaignStart, setCampaignStart, campaignEnd, setCampaignEnd, submittingCampaign }} />
 
       {/* -------------------- MODALS: CREATE & EDIT PRODUCT -------------------- */}
-      <ProductWizardModal {...{ isModalOpen, handleWizardCancel, editingProduct, wizardStep, setWizardStep, prodName, setProdName, prodCategoryId, setProdCategoryId, categories, prodStatus, setProdStatus, prodBasePrice, setProdBasePrice, prodDepositAmount, setProdDepositAmount, prodReplacementValue, setProdReplacementValue, prodDescription, setProdDescription, handleImageChange, uploadingImages, prodImages, removeImage, handleVideoChange, uploadingVideos, prodVideos, removeVideo, setAddInvProductId, setIsAddInventoryOpen, editInvSummary, prodSizes, setProdSizes, prodColors, setProdColors, prodMaterials, setProdMaterials, prodCustomTags, setProdCustomTags, customTagInput, setCustomTagInput, variantBusy, setVariantEditRow, setVariantEditQty, handleRemoveVariant, variants, setVariants, updateVariantRow, removeVariantRow, addVariantRow, colorsNeedingImages, prodColorImages, uploadingColor, handleColorImageChange, removeColorImage, createdDraftId, setActiveTagCodes, handleWizardFinish, handleWizardBack, handleWizardNext, handlePrepareSizeChart, savingDraft, activeTagCodes }} />
+      <ProductWizardModal {...{ isModalOpen, handleWizardCancel, editingProduct, wizardStep, setWizardStep, prodName, setProdName, prodCategoryId, setProdCategoryId, categories, prodStatus, setProdStatus, prodBasePrice, setProdBasePrice, prodDepositAmount, setProdDepositAmount, prodReplacementValue, setProdReplacementValue, prodDescription, setProdDescription, handleImageChange, uploadingImages, prodImages, removeImage, handleVideoChange, uploadingVideos, prodVideos, removeVideo, setAddInvProductId, setIsAddInventoryOpen, editInvSummary, prodSizes, setProdSizes, prodColors, setProdColors, prodMaterials, setProdMaterials, prodCustomTags, setProdCustomTags, customTagInput, setCustomTagInput, variantBusy, setVariantEditRow, setVariantEditQty, handleRemoveVariant, variants, setVariants, updateVariantRow, removeVariantRow, addVariantRow, colorsNeedingImages, prodColorImages, uploadingColor, handleColorImageChange, removeColorImage, createdDraftId, setActiveTagCodes, handleWizardFinish, handleWizardBack, handleWizardNext, handleWizardGoTo, handlePrepareSizeChart, savingDraft, activeTagCodes }} />
       {/* Review reply modal popup */}
       {replyingReviewId && (
         <ReviewReplyModal {...{ handleReplyReview, setReplyingReviewId, replyText, setReplyText }} />

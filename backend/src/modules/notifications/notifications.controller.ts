@@ -27,7 +27,7 @@ export class NotificationsController {
   @Get()
   // Notification reads are polled by the header and dashboard; keep writes
   // protected while avoiding a global budget hit for harmless GET polling.
-  @SkipThrottle({ default: true })
+  @SkipThrottle()
   async getNotifications(
     @CurrentUser() user: AuthUser,
   ): Promise<Notification[]> {

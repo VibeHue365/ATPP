@@ -25,19 +25,22 @@ import { DiscountCampaignService } from './discount-campaign.service';
 import { CategoriesService } from '../../categories/services/categories.service';
 import { ServiceCategoryType } from '../../categories/schemas/category.schema';
 import { PhotographersService } from '../../photographers/services/photographers.service';
-import { ModerateProductDto, QueryModerationProductsDto } from '../dto/product-moderation.dto';
+import {
+  ModerateProductDto,
+  QueryModerationProductsDto,
+} from '../dto/product-moderation.dto';
 import { SmartTagPublicProjectionService } from '../../smart-tagging/services/smart-tag-public-projection.service';
 import { SmartTaggingService } from '../../smart-tagging/services/smart-tagging.service';
 import { SmartTagEntityType } from '../../smart-tagging/constants/smart-tag.constants';
 import { PublicMediaService } from '../../storage/services/public-media.service';
 import { normalizeColor } from '../utils/color.util';
-import { applyCampaignToRate, toPublicCampaign } from '../utils/campaign-pricing.util';
-import { DiscountCampaign } from '../schemas/discount-campaign.schema';
 import {
   PriceTargetType,
   PriceVersion,
 } from '../schemas/price-version.schema';
 import { buildRentalPriceSuggestion, RentalCondition } from './rental-price-suggestion';
+import { applyCampaignToRate, toPublicCampaign } from '../utils/campaign-pricing.util';
+import { DiscountCampaign } from '../schemas/discount-campaign.schema';
 
 @Injectable()
 export class ProductsService implements OnModuleInit {
@@ -52,7 +55,7 @@ export class ProductsService implements OnModuleInit {
     private readonly publicMedia: PublicMediaService,
     @InjectModel(PriceVersion.name)
     private readonly priceVersionModel: Model<PriceVersion>,
-  ) { }
+  ) {}
 
   async onModuleInit() {
     try {
@@ -102,9 +105,16 @@ export class ProductsService implements OnModuleInit {
    * Gắn chiến dịch giá của shop vào sản phẩm. Chiến dịch áp theo ngày thuê nên `discountedPrice`
    * chỉ là giá nếu thuê HÔM NAY; giá thật được tính lại khi khách chọn ngày.
    */
-  private attachCampaign(plain: any, campaign: DiscountCampaign | null | undefined): any {
+  private attachCampaign(
+    plain: any,
+    campaign: DiscountCampaign | null | undefined,
+  ): any {
     plain.activeCampaign = campaign ? toPublicCampaign(campaign) : null;
-    plain.discountedPrice = applyCampaignToRate(plain.basePrice, campaign, new Date());
+    plain.discountedPrice = applyCampaignToRate(
+      plain.basePrice,
+      campaign,
+      new Date(),
+    );
     return plain;
   }
 
@@ -138,7 +148,7 @@ export class ProductsService implements OnModuleInit {
       ...new Set(
         products.map((p) => {
           return typeof p.providerId === 'object' && p.providerId
-            ? (p.providerId as any)._id
+            ? p.providerId._id
             : p.providerId;
         }),
       ),
@@ -246,7 +256,7 @@ export class ProductsService implements OnModuleInit {
       ...new Set(
         result.items.map((product) =>
           typeof product.providerId === 'object' && product.providerId
-            ? (product.providerId as any)._id
+            ? product.providerId._id
             : product.providerId,
         ),
       ),
@@ -360,7 +370,9 @@ export class ProductsService implements OnModuleInit {
       .find({
         status: { $in: ['ACTIVE', 'Active', 'approved', 'APPROVED'] },
       })
-      .select('businessName capabilities contact address media rating policies comboDiscountPercent')
+      .select(
+        'businessName capabilities contact address media rating policies comboDiscountPercent',
+      )
       .lean()
       .exec();
 
@@ -371,7 +383,9 @@ export class ProductsService implements OnModuleInit {
         { $match: { status: 'ACTIVE', moderationStatus: 'APPROVED' } },
         { $group: { _id: '$providerId', productCount: { $sum: 1 } } },
       ]);
-      countMap = new Map(counts.map((c: any) => [c._id?.toString(), c.productCount]));
+      countMap = new Map(
+        counts.map((c: any) => [c._id?.toString(), c.productCount]),
+      );
     } catch {
       // Ignore aggregate error if product collection is empty
     }
@@ -510,8 +524,8 @@ export class ProductsService implements OnModuleInit {
 
     const ownerId =
       product.providerId &&
-        typeof product.providerId === 'object' &&
-        '_id' in product.providerId
+      typeof product.providerId === 'object' &&
+      '_id' in product.providerId
         ? (product.providerId as any)._id
         : product.providerId;
     if (ownerId.toString() !== user.provider.providerId.toString()) {
@@ -732,15 +746,12 @@ export class ProductsService implements OnModuleInit {
       );
     }
 
-    if (dto.depositAmount >= dto.basePrice) {
-      throw new BadRequestException('Giá cọc phải nhỏ hơn giá thuê');
-    }
-
-    if (dto.replacementValue !== undefined && dto.replacementValue !== null) {
-      if (!Number.isFinite(dto.replacementValue) || dto.replacementValue <= 0) {
-        throw new BadRequestException('Giá trị bồi hoàn trang phục phải là số dương lớn hơn 0');
-      }
-    }
+    this.validateProductPricing({
+      basePrice: dto.basePrice,
+      depositAmount: dto.depositAmount,
+      hourlyPrice: dto.hourlyPrice,
+      replacementValue: dto.replacementValue,
+    });
 
     await this.categoriesService.assertActiveProductCategory(dto.categoryId);
     await this.categoriesService.assertActiveCategories(
@@ -777,12 +788,12 @@ export class ProductsService implements OnModuleInit {
       : dto.colors || [];
     const productMaterials = variants
       ? Array.from(
-        new Set(
-          variants
-            .map((v) => (v.material ? v.material.trim() : ''))
-            .filter((m) => m.length > 0),
-        ),
-      )
+          new Set(
+            variants
+              .map((v) => (v.material ? v.material.trim() : ''))
+              .filter((m) => m.length > 0),
+          ),
+        )
       : dto.materials || [];
 
     const product = await this.productsRepository.create({
@@ -801,6 +812,7 @@ export class ProductsService implements OnModuleInit {
       colorImages: this.sanitizeColorImages(dto.colorImages, dto.images || []),
       videos: dto.videos || [],
       basePrice: dto.basePrice,
+      hourlyPrice: dto.hourlyPrice ?? undefined,
       depositAmount: dto.depositAmount,
       replacementValue:
         dto.replacementValue && dto.replacementValue > 0
@@ -857,10 +869,12 @@ export class ProductsService implements OnModuleInit {
       }
       if (itemsToInsert.length > 0) {
         await inventoryItemModel.insertMany(itemsToInsert);
-        await this.connection.model('Product').updateOne(
-          { _id: product._id },
-          { $set: { skuCounters: countersObj } },
-        );
+        await this.connection
+          .model('Product')
+          .updateOne(
+            { _id: product._id },
+            { $set: { skuCounters: countersObj } },
+          );
       }
     }
 
@@ -893,14 +907,24 @@ export class ProductsService implements OnModuleInit {
       dto.depositAmount !== undefined
         ? dto.depositAmount
         : product.depositAmount;
-    if (checkDeposit >= checkBasePrice) {
-      throw new BadRequestException('Giá cọc phải nhỏ hơn giá thuê');
-    }
+    const checkHourlyPrice =
+      dto.hourlyPrice !== undefined ? dto.hourlyPrice : product.hourlyPrice;
+    const checkReplacementValue =
+      dto.replacementValue !== undefined
+        ? dto.replacementValue
+        : (product as any).replacementValue;
+
+    this.validateProductPricing({
+      basePrice: checkBasePrice,
+      depositAmount: checkDeposit,
+      hourlyPrice: checkHourlyPrice,
+      replacementValue: checkReplacementValue,
+    });
 
     const productProviderId =
       product.providerId &&
-        typeof product.providerId === 'object' &&
-        '_id' in product.providerId
+      typeof product.providerId === 'object' &&
+      '_id' in product.providerId
         ? (product.providerId as any)._id
         : product.providerId;
 
@@ -961,17 +985,23 @@ export class ProductsService implements OnModuleInit {
         ) !== JSON.stringify(product.colorImages || [])) ||
       (dto.status !== undefined && dto.status !== product.status);
 
+    const hourlyPriceChanged =
+      dto.hourlyPrice !== undefined &&
+      (dto.hourlyPrice ?? null) !== (product.hourlyPrice ?? null);
+
     const priceChanged =
       (dto.basePrice !== undefined && dto.basePrice !== product.basePrice) ||
       (dto.depositAmount !== undefined &&
-        dto.depositAmount !== product.depositAmount);
+        dto.depositAmount !== product.depositAmount) ||
+      hourlyPriceChanged;
 
     // replacementValue là giá trị tài sản làm căn cứ bồi thường trong hợp đồng điện tử.
     // Nếu có sự thay đổi, sản phẩm bắt buộc phải qua phê duyệt của Ban Quản trị sàn.
     const replacementValueChanged =
       dto.replacementValue !== undefined &&
       dto.replacementValue !== (product as any).replacementValue;
-    const anyChanged = productChanged || priceChanged || replacementValueChanged;
+    const anyChanged =
+      productChanged || priceChanged || replacementValueChanged;
     // Nếu không có gì thực sự thay đổi thì thoát sớm
     if (!anyChanged) {
       return product;
@@ -1021,17 +1051,14 @@ export class ProductsService implements OnModuleInit {
     }
     if (dto.videos !== undefined) updateData.videos = dto.videos;
     if (dto.basePrice !== undefined) updateData.basePrice = dto.basePrice;
+    if (dto.hourlyPrice !== undefined) {
+      updateData.hourlyPrice = dto.hourlyPrice ?? undefined;
+    }
     if (dto.depositAmount !== undefined)
       updateData.depositAmount = dto.depositAmount;
     if (dto.replacementValue !== undefined) {
-      if (dto.replacementValue !== null) {
-        if (!Number.isFinite(dto.replacementValue) || dto.replacementValue <= 0) {
-          throw new BadRequestException('Giá trị bồi hoàn trang phục phải là số dương lớn hơn 0');
-        }
-        updateData.replacementValue = Math.round(dto.replacementValue);
-      } else {
-        updateData.replacementValue = null;
-      }
+      updateData.replacementValue =
+        dto.replacementValue !== null ? Math.round(dto.replacementValue) : null;
     }
     if (dto.sizes !== undefined) updateData.sizes = dto.sizes;
     if (dto.colors !== undefined) updateData.colors = dto.colors;
@@ -1052,6 +1079,7 @@ export class ProductsService implements OnModuleInit {
     updateData.moderationReason = null;
     updateData.moderatedAt = null;
     updateData.moderatedBy = null;
+    updateData.updatedAt = new Date();
 
     const updated = await this.productsRepository.update(
       new Types.ObjectId(productId),
@@ -1137,8 +1165,14 @@ export class ProductsService implements OnModuleInit {
       throw new BadRequestException('Unsupported moderation action');
     }
 
-    if (dto.action === ProductModerationStatus.Approved && product.sizeChartPolicyVersion === 1 && !isSizeChartReady(product.sizeChart, product.sizes)) {
-      throw new BadRequestException('Confirm a complete product size chart before publishing this product');
+    if (
+      dto.action === ProductModerationStatus.Approved &&
+      product.sizeChartPolicyVersion === 1 &&
+      !isSizeChartReady(product.sizeChart, product.sizes)
+    ) {
+      throw new BadRequestException(
+        'Confirm a complete product size chart before publishing this product',
+      );
     }
 
     const expectedStatus =
@@ -1146,7 +1180,9 @@ export class ProductsService implements OnModuleInit {
         ? ProductModerationStatus.Approved
         : ProductModerationStatus.PendingReview;
     if (product.moderationStatus !== expectedStatus) {
-      throw new ConflictException('Product moderation state was already changed');
+      throw new ConflictException(
+        'Product moderation state was already changed',
+      );
     }
 
     const updateData: any = {
@@ -1154,13 +1190,16 @@ export class ProductsService implements OnModuleInit {
         moderationStatus: dto.action,
         moderationReason:
           dto.action === ProductModerationStatus.Rejected ||
-            dto.action === ProductModerationStatus.ChangesRequested ||
-            dto.action === ProductModerationStatus.Hidden
+          dto.action === ProductModerationStatus.ChangesRequested ||
+          dto.action === ProductModerationStatus.Hidden
             ? dto.reason?.trim() || null
             : null,
         moderatedBy: new Types.ObjectId(adminId),
         moderatedAt: new Date(),
-        status: dto.action === ProductModerationStatus.Approved ? ProductStatus.Active : ProductStatus.Draft,
+        status:
+          dto.action === ProductModerationStatus.Approved
+            ? ProductStatus.Active
+            : ProductStatus.Draft,
       },
       $push: {
         moderationHistory: {
@@ -1174,7 +1213,8 @@ export class ProductsService implements OnModuleInit {
 
     if (
       dto.action === ProductModerationStatus.Approved &&
-      ((product.customTags?.length ?? 0) > 0 || (dto.approvedCustomTags?.length ?? 0) > 0)
+      ((product.customTags?.length ?? 0) > 0 ||
+        (dto.approvedCustomTags?.length ?? 0) > 0)
     ) {
       const approvedLabels = new Set(
         (dto.approvedCustomTags ?? [])
@@ -1192,21 +1232,34 @@ export class ProductsService implements OnModuleInit {
           'Approved custom tags must belong to this product',
         );
       }
-      updateData.$set.customTags = (product.customTags || []).map((tag: any) => ({
-        label: tag.label,
-        normalizedLabel: tag.normalizedLabel,
-        status: approvedLabels.has(tag.normalizedLabel)
-          ? ProductCustomTagStatus.Approved
-          : ProductCustomTagStatus.Rejected,
-        mappedTagCode: tag.mappedTagCode ?? null,
-      }));
+      updateData.$set.customTags = (product.customTags || []).map(
+        (tag: any) => ({
+          label: tag.label,
+          normalizedLabel: tag.normalizedLabel,
+          status: approvedLabels.has(tag.normalizedLabel)
+            ? ProductCustomTagStatus.Approved
+            : ProductCustomTagStatus.Rejected,
+          mappedTagCode: tag.mappedTagCode ?? null,
+        }),
+      );
     }
-    const updated = dto.action === ProductModerationStatus.Approved && product.sizeChartPolicyVersion === 1
-      ? await this.productsRepository.moderate(id, updateData, expectedStatus, {
-        version: product.sizeChartVersion, sizes: product.sizes,
-      })
-      : await this.productsRepository.moderate(id, updateData, expectedStatus);
-
+    const updated =
+      dto.action === ProductModerationStatus.Approved &&
+      product.sizeChartPolicyVersion === 1
+        ? await this.productsRepository.moderate(
+            id,
+            updateData,
+            expectedStatus,
+            {
+              version: product.sizeChartVersion,
+              sizes: product.sizes,
+            },
+          )
+        : await this.productsRepository.moderate(
+            id,
+            updateData,
+            expectedStatus,
+          );
 
     if (!updated) {
       throw new ConflictException(
@@ -1239,8 +1292,8 @@ export class ProductsService implements OnModuleInit {
 
     const productProviderId =
       product.providerId &&
-        typeof product.providerId === 'object' &&
-        '_id' in product.providerId
+      typeof product.providerId === 'object' &&
+      '_id' in product.providerId
         ? (product.providerId as any)._id
         : product.providerId;
 
@@ -1298,6 +1351,78 @@ export class ProductsService implements OnModuleInit {
     );
     this.clearPublicFacetsCache();
     return { message: 'Product deleted successfully' };
+  }
+
+  private validateProductPricing(params: {
+    basePrice: number;
+    depositAmount: number;
+    hourlyPrice?: number | null;
+    replacementValue?: number | null;
+  }): void {
+    const { basePrice, depositAmount, hourlyPrice, replacementValue } = params;
+
+    if (
+      !Number.isInteger(basePrice) ||
+      basePrice < 50000 ||
+      basePrice > 10000000 ||
+      basePrice % 1000 !== 0
+    ) {
+      throw new BadRequestException(
+        'Giá thuê ngày phải là bội số 1.000đ trong khoảng 50.000đ – 10.000.000đ',
+      );
+    }
+
+    if (depositAmount >= basePrice) {
+      throw new BadRequestException('Giá cọc phải nhỏ hơn giá thuê');
+    }
+
+    if (
+      !Number.isInteger(depositAmount) ||
+      depositAmount < 0 ||
+      depositAmount > 5000000 ||
+      depositAmount % 1000 !== 0 ||
+      (depositAmount > 0 && depositAmount < 20000)
+    ) {
+      throw new BadRequestException(
+        'Tiền đặt cọc phải là 0đ hoặc bội số 1.000đ trong khoảng 20.000đ – 5.000.000đ',
+      );
+    }
+
+    if (hourlyPrice !== undefined && hourlyPrice !== null) {
+      const maxHourly = Math.min(2500000, Math.round(basePrice * 0.25));
+      if (
+        !Number.isInteger(hourlyPrice) ||
+        hourlyPrice < 10000 ||
+        hourlyPrice > maxHourly ||
+        hourlyPrice % 1000 !== 0
+      ) {
+        throw new BadRequestException(
+          `Giá thuê theo giờ phải là bội số 1.000đ trong khoảng 10.000đ – ${maxHourly.toLocaleString('vi-VN')}đ (tối đa 25% giá ngày)`,
+        );
+      }
+    }
+
+    if (replacementValue !== undefined && replacementValue !== null) {
+      if (!Number.isFinite(replacementValue) || replacementValue <= 0) {
+        throw new BadRequestException(
+          'Giá trị bồi hoàn trang phục phải là số dương lớn hơn 0',
+        );
+      }
+      if (
+        !Number.isInteger(replacementValue) ||
+        replacementValue < 100000 ||
+        replacementValue > 50000000
+      ) {
+        throw new BadRequestException(
+          'Giá trị bồi hoàn trang phục phải là số nguyên từ 100.000đ đến 50.000.000đ',
+        );
+      }
+      if (replacementValue < basePrice || replacementValue < depositAmount) {
+        throw new BadRequestException(
+          'Giá trị bồi hoàn trang phục phải lớn hơn hoặc bằng giá thuê và tiền đặt cọc',
+        );
+      }
+    }
   }
 
   private async attachPublicBadges(products: any[]): Promise<any[]> {

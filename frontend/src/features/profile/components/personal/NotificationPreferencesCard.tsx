@@ -78,8 +78,8 @@ export const NotificationPreferencesCard: React.FC<NotificationPreferencesCardPr
         {/* Toggle 4 */}
         <div className="lume-toggle-item">
           <div className="lume-toggle-info">
-            <h4 className="lume-toggle-title">Bản tin từ LUMÉ</h4>
-            <p className="lume-toggle-desc">Nhận bản tin và xu hướng mới từ LUMÉ</p>
+            <h4 className="lume-toggle-title">Bản tin từ TàGo</h4>
+            <p className="lume-toggle-desc">Nhận bản tin và xu hướng mới từ TàGo</p>
           </div>
           <label className="lume-switch">
             <input
@@ -93,7 +93,7 @@ export const NotificationPreferencesCard: React.FC<NotificationPreferencesCardPr
       </div>
 
       <p style={{ margin: 0, fontSize: '11.5px', color: '#8C827A', fontStyle: 'italic' }}>
-        * Chúng tôi sẽ gửi thông báo qua Email và App của LUMÉ
+        * Chúng tôi sẽ gửi thông báo qua Email và App của TàGo
       </p>
 
       <button

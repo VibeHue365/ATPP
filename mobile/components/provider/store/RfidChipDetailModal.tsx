@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
+  KeyboardAvoidingView,
+  Platform,
   View,
   Text,
   StyleSheet,
@@ -13,9 +15,11 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { providerApi } from '@/apis/providerApi';
-import { TagoAlert } from '@/components/ui/TagoAlertModal';
+import { TagoConfirmOverlay } from '@/components/ui/TagoAlertModal';
 import { useToast } from '@/contexts/ToastContext';
-import { getMediaUrl } from '@/utils/media';
+import { getApiErrorMessage } from '@/utils/apiError';
+import { prepareImageUploadPart } from '@/utils/imageUpload';
+import { resolveRenderableMediaUrl } from '@/utils/media';
 import type { EnrichedInventoryProduct } from './InventoryProductMatrixCard';
 
 interface RfidChipDetailModalProps {
@@ -23,6 +27,7 @@ interface RfidChipDetailModalProps {
   product: EnrichedInventoryProduct | null;
   onClose: () => void;
   onUpdated: () => void;
+  onPressEditProduct?: (product: EnrichedInventoryProduct) => void;
 }
 
 const EXTRA_SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
@@ -32,6 +37,7 @@ export function RfidChipDetailModal({
   product,
   onClose,
   onUpdated,
+  onPressEditProduct,
 }: RfidChipDetailModalProps) {
   const { show } = useToast();
   const [chips, setChips] = useState<any[]>([]);
@@ -41,9 +47,12 @@ export function RfidChipDetailModal({
 
   // Edit Product / Price History / Delete state
   const [showEditForm, setShowEditForm] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletingProduct, setDeletingProduct] = useState(false);
   const [editName, setEditName] = useState('');
   const [editBasePrice, setEditBasePrice] = useState('');
   const [editDeposit, setEditDeposit] = useState('');
+  const [editReplacementValue, setEditReplacementValue] = useState('');
   const [editImages, setEditImages] = useState<string[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [savingProduct, setSavingProduct] = useState(false);
@@ -81,8 +90,14 @@ export function RfidChipDetailModal({
   useEffect(() => {
     if (visible && product) {
       setEditName(product.name || '');
-      setEditBasePrice(String(product.basePrice || 850000));
-      setEditDeposit(String(product.depositAmount || 300000));
+      setEditBasePrice(String(product.basePrice ?? 500000));
+      setEditDeposit(String(product.depositAmount ?? 200000));
+      setEditReplacementValue(
+        typeof product.rawProduct?.replacementValue === 'number' &&
+          product.rawProduct.replacementValue > 0
+          ? String(product.rawProduct.replacementValue)
+          : '',
+      );
       setEditImages(
         Array.isArray(product.rawProduct?.images)
           ? product.rawProduct.images
@@ -124,23 +139,20 @@ export function RfidChipDetailModal({
     setUploadingPhoto(true);
     try {
       const formData = new FormData();
-      result.assets.forEach((asset, idx) => {
-        formData.append(
-          'images',
-          (asset.file ?? {
-            uri: asset.uri,
-            name: asset.fileName ?? `edit_garment_${idx}.jpg`,
-            type: asset.mimeType ?? 'image/jpeg',
-          }) as unknown as Blob,
+      for (let idx = 0; idx < result.assets.length; idx += 1) {
+        const part = await prepareImageUploadPart(
+          result.assets[idx],
+          `edit_garment_${idx}.jpg`,
         );
-      });
+        formData.append('images', part);
+      }
       const res = await providerApi.uploadImages(formData);
       if (res?.urls?.length) {
         setEditImages((prev) => [...prev, ...res.urls]);
         show(`Đã tải thêm ${res.urls.length} ảnh mẫu áo!`, 'success');
       }
-    } catch {
-      show('Không thể tải ảnh lên, vui lòng thử lại', 'error');
+    } catch (e: any) {
+      show(getApiErrorMessage(e, 'Không thể tải ảnh lên, vui lòng thử lại'), 'error');
     } finally {
       setUploadingPhoto(false);
     }
@@ -151,19 +163,68 @@ export function RfidChipDetailModal({
       show('Vui lòng nhập tên mẫu áo', 'error');
       return;
     }
+    const parsedPrice = Number(editBasePrice.replace(/[^0-9]/g, ''));
+    const parsedDeposit = Number(editDeposit.replace(/[^0-9]/g, ''));
+    const cleanReplacementStr = editReplacementValue.replace(/[^0-9]/g, '');
+    const parsedReplacement = cleanReplacementStr
+      ? Math.round(Number(cleanReplacementStr))
+      : null;
+
+    if (
+      !Number.isInteger(parsedPrice) ||
+      parsedPrice < 50000 ||
+      parsedPrice > 10000000 ||
+      parsedPrice % 1000 !== 0
+    ) {
+      show('Giá thuê mỗi ngày phải từ 50.000đ – 10.000.000đ (bội số 1.000đ)', 'error');
+      return;
+    }
+    if (
+      !Number.isInteger(parsedDeposit) ||
+      parsedDeposit < 0 ||
+      parsedDeposit > 5000000 ||
+      parsedDeposit % 1000 !== 0 ||
+      (parsedDeposit > 0 && parsedDeposit < 20000) ||
+      parsedDeposit >= parsedPrice
+    ) {
+      show('Tiền cọc phải là 0đ hoặc 20.000đ – 5.000.000đ và nhỏ hơn giá thuê (bội số 1.000đ)', 'error');
+      return;
+    }
+    if (
+      editReplacementValue.trim() &&
+      (!parsedReplacement ||
+        parsedReplacement < 100000 ||
+        parsedReplacement > 50000000 ||
+        parsedReplacement < parsedPrice ||
+        parsedReplacement < parsedDeposit)
+    ) {
+      show('Giá trị bồi hoàn phải từ 100.000đ – 50.000.000đ và >= giá thuê & tiền cọc', 'error');
+      return;
+    }
+
     setSavingProduct(true);
     try {
-      await providerApi.updateProduct(product._id, {
+      const payload: Record<string, any> = {
         name: editName.trim(),
-        basePrice: Number(editBasePrice) || product.basePrice,
-        depositAmount: Number(editDeposit) || product.depositAmount,
+        basePrice: parsedPrice,
+        depositAmount: parsedDeposit,
         images: editImages.length > 0 ? editImages : undefined,
-      });
+      };
+      if (parsedReplacement !== null && parsedReplacement > 0) {
+        payload.replacementValue = parsedReplacement;
+      } else if (
+        typeof product.rawProduct?.replacementValue === 'number' &&
+        product.rawProduct.replacementValue > 0
+      ) {
+        payload.replacementValue = null;
+      }
+
+      await providerApi.updateProduct(product._id, payload);
       show('Đã cập nhật thông tin, hình ảnh & giá thuê mẫu áo!', 'success');
       setShowEditForm(false);
       onUpdated();
     } catch (e: any) {
-      show(e?.response?.data?.message || 'Lỗi khi cập nhật sản phẩm', 'error');
+      show(getApiErrorMessage(e, 'Lỗi khi cập nhật sản phẩm'), 'error');
     } finally {
       setSavingProduct(false);
     }
@@ -224,30 +285,26 @@ export function RfidChipDetailModal({
   };
 
   const handleDeleteProduct = () => {
-    TagoAlert.alert(
-      'Xóa mẫu cổ phục khỏi kho?',
-      `Bạn có chắc chắn muốn xóa mẫu "${product.name}" khỏi danh sách cho thuê?`,
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Xóa mẫu áo',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await providerApi.deleteProduct(product._id);
-              show('Đã xóa mẫu cổ phục thành công!', 'success');
-              onClose();
-              onUpdated();
-            } catch (e: any) {
-              show(
-                e?.response?.data?.message || 'Không thể xóa mẫu đang có đơn thuê',
-                'error',
-              );
-            }
-          },
-        },
-      ],
-    );
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDeleteProduct = async () => {
+    if (!product) return;
+    setDeletingProduct(true);
+    try {
+      await providerApi.deleteProduct(product._id);
+      setDeleteConfirmOpen(false);
+      show('Đã xóa mẫu cổ phục thành công!', 'success');
+      onClose();
+      onUpdated();
+    } catch (e: any) {
+      show(
+        e?.response?.data?.message || 'Không thể xóa mẫu đang có đơn thuê',
+        'error',
+      );
+    } finally {
+      setDeletingProduct(false);
+    }
   };
 
   const handleToggleChipStatus = async (chip: any) => {
@@ -319,7 +376,10 @@ export function RfidChipDetailModal({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         <Pressable style={styles.backdropFill} onPress={onClose} />
 
         <View style={styles.sheet}>
@@ -350,6 +410,7 @@ export function RfidChipDetailModal({
             style={styles.body}
             contentContainerStyle={styles.bodyContent}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
             {/* Section 0: Edit Product Info / Price / Photos / Delete */}
             <View style={styles.sectionBox}>
@@ -357,10 +418,23 @@ export function RfidChipDetailModal({
                 <Text style={styles.sectionLabel}>
                   THÔNG TIN & GIÁ THUÊ ({product.basePrice.toLocaleString('vi-VN')} đ/ngày)
                 </Text>
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <Pressable onPress={() => setShowEditForm(!showEditForm)}>
+                <View style={{ flexDirection: 'row', gap: 10, flexShrink: 0 }}>
+                  <Pressable
+                    onPress={() => {
+                      if (onPressEditProduct && product) {
+                        onClose();
+                        onPressEditProduct(product);
+                      } else {
+                        setShowEditForm(!showEditForm);
+                      }
+                    }}
+                  >
                     <Text style={{ fontSize: 12, fontFamily: 'Inter_700Bold', color: '#BA0049' }}>
-                      {showEditForm ? 'Đóng sửa' : 'Sửa mẫu / Ảnh'}
+                      {onPressEditProduct
+                        ? 'Sửa mẫu / Ảnh'
+                        : showEditForm
+                          ? 'Đóng sửa'
+                          : 'Sửa mẫu / Ảnh'}
                     </Text>
                   </Pressable>
                   <Pressable onPress={handleDeleteProduct}>
@@ -394,23 +468,32 @@ export function RfidChipDetailModal({
                       showsHorizontalScrollIndicator={false}
                       contentContainerStyle={{ gap: 8 }}
                     >
-                      {editImages.map((u, idx) => (
-                        <View key={`${u}-${idx}`} style={styles.photoThumbWrap}>
-                          <Image
-                            source={{ uri: getMediaUrl(u) }}
-                            style={styles.photoThumb}
-                            contentFit="cover"
-                          />
-                          <Pressable
-                            style={styles.photoRemoveBtn}
-                            onPress={() =>
-                              setEditImages((prev) => prev.filter((_, i) => i !== idx))
-                            }
-                          >
-                            <Ionicons name="close-circle" size={16} color="#EF4444" />
-                          </Pressable>
-                        </View>
-                      ))}
+                      {editImages.map((u, idx) => {
+                        const thumbUri = resolveRenderableMediaUrl(u);
+                        return (
+                          <View key={`${u}-${idx}`} style={styles.photoThumbWrap}>
+                            {thumbUri ? (
+                              <Image
+                                source={{ uri: thumbUri }}
+                                style={styles.photoThumb}
+                                contentFit="cover"
+                              />
+                            ) : (
+                              <View style={[styles.photoThumb, { backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' }]}>
+                                <Ionicons name="image-outline" size={20} color="#94A3B8" />
+                              </View>
+                            )}
+                            <Pressable
+                              style={styles.photoRemoveBtn}
+                              onPress={() =>
+                                setEditImages((prev) => prev.filter((_, i) => i !== idx))
+                              }
+                            >
+                              <Ionicons name="close-circle" size={16} color="#EF4444" />
+                            </Pressable>
+                          </View>
+                        );
+                      })}
                     </ScrollView>
                   </View>
 
@@ -439,6 +522,16 @@ export function RfidChipDetailModal({
                         keyboardType="numeric"
                       />
                     </View>
+                  </View>
+                  <View>
+                    <Text style={styles.formFieldLabel}>Giá trị bồi hoàn Hợp đồng V2 (đ)</Text>
+                    <TextInput
+                      style={[styles.formInput, { marginTop: 4 }]}
+                      value={editReplacementValue}
+                      onChangeText={setEditReplacementValue}
+                      keyboardType="numeric"
+                      placeholder="VD: 1500000 (bắt buộc để mở Hợp đồng V2)"
+                    />
                   </View>
                   <Pressable
                     style={styles.saveEditBtn}
@@ -702,7 +795,28 @@ export function RfidChipDetailModal({
             </Pressable>
           </View>
         </View>
-      </View>
+
+        <TagoConfirmOverlay
+          visible={deleteConfirmOpen}
+          title="Xóa mẫu cổ phục khỏi kho?"
+          message={`Bạn có chắc chắn muốn xóa mẫu "${product.name}" khỏi danh sách cho thuê?`}
+          loading={deletingProduct}
+          onClose={() => {
+            if (!deletingProduct) setDeleteConfirmOpen(false);
+          }}
+          buttons={[
+            {
+              text: 'Hủy',
+              style: 'cancel',
+            },
+            {
+              text: 'Xóa mẫu áo',
+              style: 'destructive',
+              onPress: () => void confirmDeleteProduct(),
+            },
+          ]}
+        />
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -798,8 +912,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 10,
   },
   sectionLabel: {
+    flex: 1,
+    flexShrink: 1,
     fontSize: 11,
     fontFamily: 'Inter_700Bold',
     color: '#BA0049',

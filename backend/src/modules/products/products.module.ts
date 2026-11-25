@@ -41,10 +41,16 @@ import { ProductsRepository } from './repositories/products.repository';
 import { InventoryController } from './controllers/inventory.controller';
 import { InventoryService } from './services/inventory.service';
 import { ProductAvailabilityService } from './services/product-availability.service';
-import { DiscountCampaign, DiscountCampaignSchema } from './schemas/discount-campaign.schema';
+import {
+  DiscountCampaign,
+  DiscountCampaignSchema,
+} from './schemas/discount-campaign.schema';
 import { DiscountCampaignService } from './services/discount-campaign.service';
 import { DiscountCampaignController } from './controllers/discount-campaign.controller';
-import { ComboPromotion, ComboPromotionSchema } from './schemas/combo-promotion.schema';
+import {
+  ComboPromotion,
+  ComboPromotionSchema,
+} from './schemas/combo-promotion.schema';
 import { ComboPromotionService } from './services/combo-promotion.service';
 import { ComboPromotionController } from './controllers/combo-promotion.controller';
 import { UsersModule } from '../users/users.module';
@@ -76,7 +82,15 @@ export const productModels = MongooseModule.forFeature([
 ]);
 
 @Module({
-  imports: [productModels, UsersModule, CategoriesModule, SmartTaggingModule, StorageModule, AuthModule, AnalyticsModule],
+  imports: [
+    productModels,
+    UsersModule,
+    CategoriesModule,
+    SmartTaggingModule,
+    StorageModule,
+    AuthModule,
+    AnalyticsModule,
+  ],
   controllers: [
     SizeChartController,
     PromotionsController,

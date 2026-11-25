@@ -5,9 +5,11 @@ import { PhotoshootMainCard } from './PhotoshootMainCard';
 import { PhotoshootInfoColumns } from './PhotoshootInfoColumns';
 import { PhotoshootDeliveredGallery } from './PhotoshootDeliveredGallery';
 import { PhotoshootBottomActionBar } from './PhotoshootBottomActionBar';
+import { AssignedStaffContactCard } from './AssignedStaffContactCard';
 import { httpClient } from '../../../../services/httpClient';
 import { useToast } from '../../../../components/feedback/Toast';
 import { getMediaUrl } from '../../../../shared/media/mediaUrl';
+import { getBookingStatusLabel } from '../../../../utils/bookingStatus';
 import Swal from 'sweetalert2';
 
 interface ProfilePhotoshootDetailPageProps {
@@ -41,15 +43,29 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
   const item = booking?.items?.[0] || {};
   const pkgObj = item.photographyPackageId && typeof item.photographyPackageId === 'object' ? item.photographyPackageId : null;
   const provider =
-    (booking?.providerIds && booking.providerIds[0] && typeof booking.providerIds[0] === 'object' ? booking.providerIds[0] : null) ||
     (item.providerId && typeof item.providerId === 'object' ? item.providerId : null) ||
+    (pkgObj?.providerId && typeof pkgObj.providerId === 'object' ? pkgObj.providerId : null) ||
+    (booking?.providerIds && booking.providerIds[0] && typeof booking.providerIds[0] === 'object' ? booking.providerIds[0] : null) ||
     {};
 
   const title = pkgObj?.name || item.packageSnapshot?.name || item.name || 'Gói Chụp Ảnh Nghệ Thuật';
   const image = pkgObj?.coverImage || pkgObj?.images?.[0] || item.coverImage || item.images?.[0] || item.image;
-  const code = booking?.bookingCode || (booking?._id ? 'PS-' + booking._id.slice(-4) : 'PS-LUME');
-  const photographerName = provider?.businessName || provider?.fullName || pkgObj?.photographerName || 'Nhiếp ảnh gia LUMÉ';
-  const photographerPhone = provider?.phone || provider?.businessPhone || '1900 9999';
+  const code = booking?.bookingCode || (booking?._id ? 'PS-' + booking._id.slice(-4) : 'PS-TAGO');
+  const activePhotoshootSchedule =
+    (Array.isArray(booking?.schedules)
+      ? booking.schedules.find(
+          (s: any) =>
+            s?.scheduleType === 'PHOTOSHOOT' &&
+            s?.status !== 'CANCELLED' &&
+            s?.status !== 'EXPIRED',
+        ) || booking.schedules.find((s: any) => s?.scheduleType === 'PHOTOSHOOT')
+      : null) || null;
+  const assignedStaff = activePhotoshootSchedule?.assignedStaffSnapshot || null;
+  const studioName = provider?.businessName || provider?.fullName || pkgObj?.photographerName || 'Studio đối tác';
+  const photographerName = assignedStaff?.name
+    ? `${assignedStaff.name} (${studioName})`
+    : studioName;
+  const photographerPhone = assignedStaff?.phone || provider?.phone || provider?.businessPhone || '1900 9999';
 
   // Schedule & Time
   const rawDate = item.shootDate || item.startDate || booking?.startDate;
@@ -99,20 +115,7 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
   const isPaid = booking?.status !== 'PENDING_PAYMENT' && booking?.status !== 'WAITING_PAYMENT';
 
   // Status mapping
-  const statusLabels: Record<string, string> = {
-    DEPOSIT_PAID: 'CHỜ DUYỆT',
-    CONFIRMED: 'SẮP CHỤP',
-    IN_PROGRESS: 'ĐANG CHỤP',
-    AWAITING_REVIEW: 'CHỜ DUYỆT ẢNH',
-    COMPLETED: 'HOÀN TẤT',
-    CANCELLED: 'ĐÃ HỦY',
-    PENDING_PAYMENT: 'CHỜ CỌC',
-    DISPUTED: 'TRANH CHẤP',
-    REFUNDED: 'ĐÃ HOÀN TIỀN',
-    PARTIALLY_REFUNDED: 'HOÀN TIỀN MỘT PHẦN'
-  };
-
-  const statusLabel = statusLabels[booking?.status] || booking?.status || 'ĐANG THỰC HIỆN';
+  const statusLabel = getBookingStatusLabel(booking?.status || 'CONFIRMED', { uppercase: true });
   const reschedulePending = item.rescheduleRequest?.status === 'PENDING';
 
   const handleOpenDispute = () => {
@@ -164,7 +167,7 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
         note: combinedNote,
         evidencePhotos: disputePhotos,
       });
-      toast.success('Gửi khiếu nại thành công! LUMÉ sẽ liên hệ và giải quyết thỏa đáng.');
+      toast.success('Gửi khiếu nại thành công! TàGo sẽ liên hệ và giải quyết thỏa đáng.');
       setIsDisputeModalOpen(false);
       setDisputeNotes('');
       setDisputePhotos([]);
@@ -196,10 +199,10 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
   // Support hotline
   const handleSupport = () => {
     Swal.fire({
-      title: 'Trung tâm Hỗ trợ Khách hàng LUMÉ',
+      title: 'Trung tâm Hỗ trợ Khách hàng TàGo',
       html: `
         <div style="text-align: left; font-size: 14px; color: #4A3F35; line-height: 1.6;">
-          <p>Đội ngũ LUMÉ & Studio sẵn sàng đồng hành cùng bạn:</p>
+          <p>Đội ngũ TàGo & Studio sẵn sàng đồng hành cùng bạn:</p>
           <div style="background: #FDF2F4; padding: 12px 16px; border-radius: 10px; border: 1px solid #F7D5DA; margin: 12px 0;">
             <p style="margin: 0; font-weight: 700; color: #8E1B2E; font-size: 16px;">📞 Hotline: 1900 9999</p>
             <p style="margin: 4px 0 0 0; color: #7D736B; font-size: 12px;">Hỗ trợ 24/7 toàn quốc</p>
@@ -360,6 +363,9 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
         }}
       />
 
+      {/* 2b. Assigned Photographer Staff & Direct Chat Card */}
+      <AssignedStaffContactCard booking={booking} studioName={studioName} />
+
       {/* 3. Info Columns */}
       <PhotoshootInfoColumns
         shootDate={shootDateStr}
@@ -495,7 +501,7 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
                   rows={4}
                   value={disputeNotes}
                   onChange={(e) => setDisputeNotes(e.target.value)}
-                  placeholder="Vui lòng nêu rõ vấn đề bạn gặp phải để LUMÉ và Studio hỗ trợ giải quyết nhanh chóng..."
+                  placeholder="Vui lòng nêu rõ vấn đề bạn gặp phải để TàGo và Studio hỗ trợ giải quyết nhanh chóng..."
                   style={{
                     width: '100%',
                     padding: '10px 12px',

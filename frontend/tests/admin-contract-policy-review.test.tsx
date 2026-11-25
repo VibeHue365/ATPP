@@ -126,8 +126,9 @@ describe('P1C — Admin Policy Review Panel Suite', () => {
 
     expect(screen.getByTestId('pending-count-badge').textContent).toContain('1 Đang chờ duyệt');
     expect(screen.getByText('v2')).toBeDefined();
-    expect(screen.getByText(/30,000đ\/h/)).toBeDefined();
-    expect(screen.getByText(/150,000đ\/ngày/)).toBeDefined();
+    // the panel formats with toLocaleString() without a locale: "30,000" (en) or "30.000" (vi) depending on the machine
+    expect(screen.getByText(/30[.,]000đ\/h/)).toBeDefined();
+    expect(screen.getByText(/150[.,]000đ\/ngày/)).toBeDefined();
   });
 
   it('2. Opens review detail modal and presents side-by-side comparison', async () => {

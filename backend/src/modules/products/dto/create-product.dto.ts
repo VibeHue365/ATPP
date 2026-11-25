@@ -9,6 +9,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   MinLength,
   Min,
@@ -93,17 +94,26 @@ export class CreateProductDto {
   @Type(() => ColorImagesDto)
   colorImages?: ColorImagesDto[];
 
-  @IsNumber()
-  @Min(0)
+  @IsInt({ message: 'Giá thuê ngày phải là số nguyên (VNĐ)' })
+  @Min(50000, { message: 'Giá thuê ngày tối thiểu là 50.000đ' })
+  @Max(10000000, { message: 'Giá thuê ngày tối đa là 10.000.000đ' })
   basePrice: number;
 
-  @IsNumber()
-  @Min(0)
+  @IsOptional()
+  @IsInt({ message: 'Giá thuê theo giờ phải là số nguyên (VNĐ)' })
+  @Min(10000, { message: 'Giá thuê theo giờ tối thiểu là 10.000đ' })
+  @Max(2500000, { message: 'Giá thuê theo giờ tối đa là 2.500.000đ' })
+  hourlyPrice?: number;
+
+  @IsInt({ message: 'Tiền đặt cọc phải là số nguyên (VNĐ)' })
+  @Min(0, { message: 'Tiền đặt cọc không được âm' })
+  @Max(5000000, { message: 'Tiền đặt cọc tối đa là 5.000.000đ' })
   depositAmount: number;
 
   @IsOptional()
-  @IsNumber()
-  @Min(1, { message: 'Giá trị bồi hoàn trang phục phải lớn hơn 0' })
+  @IsInt({ message: 'Giá trị bồi hoàn trang phục phải là số nguyên (VNĐ)' })
+  @Min(100000, { message: 'Giá trị bồi hoàn trang phục tối thiểu là 100.000đ' })
+  @Max(50000000, { message: 'Giá trị bồi hoàn trang phục tối đa là 50.000.000đ' })
   replacementValue?: number;
 
   @IsOptional()

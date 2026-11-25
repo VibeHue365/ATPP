@@ -6,7 +6,7 @@ interface Props {
 }
 
 const metricItems = [
-  { key: 'completionRate', countKey: 'completedBookings', label: 'Hoàn thành', color: '#059669' },
+  { key: 'completionRate', countKey: 'completedBookings', label: 'Hoàn tất', color: '#059669' },
   { key: 'cancellationRate', countKey: 'cancelledBookings', label: 'Đã hủy', color: '#DC2626' },
   { key: 'disputeRate', countKey: 'disputedBookings', label: 'Tranh chấp', color: '#D97706' },
 ] as const;
@@ -17,7 +17,7 @@ export function OverviewBookingConversion({ data, formatNumber }: Props) {
       <div className="lume-chart-card__header">
         <div className="lume-chart-card__title-group">
           <h3>Tỷ lệ trạng thái booking</h3>
-          <p>Phân bổ booking hoàn thành, hủy và tranh chấp.</p>
+          <p>Phân bổ đơn hoàn tất, hủy và tranh chấp.</p>
         </div>
         <strong className="lume-conversion-card__total">{formatNumber(data.totalBookings)} booking</strong>
       </div>

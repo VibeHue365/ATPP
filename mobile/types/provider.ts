@@ -5,11 +5,19 @@ export interface ProviderProfile {
   brandName?: string;
   providerCode?: string;
   avatarUrl?: string | null;
+  logoUrl?: string | null;
   coverUrl?: string | null;
   media?: {
-    logoUrl?: string;
-    coverUrl?: string;
+    logoUrl?: string | null;
+    coverUrl?: string | null;
     images?: string[];
+  };
+  policies?: {
+    cancellationPolicy?: string | null;
+    rentalPolicy?: string | null;
+  };
+  photographySettings?: {
+    serviceRadiusKm?: number | null;
   };
   address?: {
     addressLine?: string;
@@ -112,7 +120,8 @@ export interface ProviderOverviewResponse {
   generatedAt?: string;
   kpis: ProviderKpis;
   tasks: ProviderTask[];
-  todaySchedules: ProviderScheduleItem[];
+  upcomingSchedules?: ProviderScheduleItem[];
+  todaySchedules?: ProviderScheduleItem[];
   performance: ProviderPerformance;
   recentActivities?: ProviderRecentActivity[];
 }

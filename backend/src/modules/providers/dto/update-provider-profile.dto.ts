@@ -94,6 +94,8 @@ export class UpdateProviderProfileDto {
   @IsObject()
   photographySettings?: {
     serviceRadiusKm?: number | null;
+    maxConcurrentSessions?: number | null;
+    maxDailySessions?: number | null;
   };
 
   @IsNumber()

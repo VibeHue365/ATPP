@@ -50,7 +50,7 @@ export const ScheduleEmptyState: React.FC<ScheduleEmptyStateProps> = ({
         <p style={{ fontSize: '13px', color: '#8C827A', margin: 0, lineHeight: 1.5 }}>
           {hasFilters
             ? 'Hãy thử thay đổi từ khóa tìm kiếm hoặc bỏ chọn các bộ lọc trạng thái để xem đầy đủ lịch của bạn.'
-            : 'Hãy trải nghiệm dịch vụ thuê áo dài cao cấp hoặc đặt lịch chụp ảnh kỷ niệm tuyệt đẹp cùng LUMÉ ngay hôm nay.'}
+            : 'Hãy trải nghiệm dịch vụ thuê áo dài cao cấp hoặc đặt lịch chụp ảnh kỷ niệm tuyệt đẹp cùng TàGo ngay hôm nay.'}
         </p>
       </div>
 

@@ -80,7 +80,9 @@ export class ContractPreparationService {
       );
     }
     if (acceptance.policyFingerprint !== hashContract(snapshot.policies)) {
-      throw new UnprocessableEntityException('PROVIDER_POLICY_ACCEPTANCE_STALE');
+      throw new UnprocessableEntityException(
+        'PROVIDER_POLICY_ACCEPTANCE_STALE',
+      );
     }
 
     // Phase 2B: Tiered Contracts Risk Engine Integration
@@ -90,11 +92,14 @@ export class ContractPreparationService {
     const damageComp = (snapshot.policies as any)?.providerDamageCompensation;
     const resolvedComp = resolveDamageCompensationRules(damageComp);
 
-    const providerRentalItems = context.rentalItems.filter((it) => it.providerId.equals(providerObjectId));
+    const providerRentalItems = context.rentalItems.filter((it) =>
+      it.providerId.equals(providerObjectId),
+    );
     const tierItems = providerRentalItems.map((it) => {
       let rentalDays = 1;
       if (it.rentalFrom && it.rentalTo) {
-        const diffMs = new Date(it.rentalTo).getTime() - new Date(it.rentalFrom).getTime();
+        const diffMs =
+          new Date(it.rentalTo).getTime() - new Date(it.rentalFrom).getTime();
         rentalDays = Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24)));
       }
       const snapItem = snapshot.providerItems.find(
@@ -107,7 +112,8 @@ export class ContractPreparationService {
 
       return {
         productId: it.productId?.toString() || it._id.toString(),
-        productName: snapItem?.productName || (it as any).productName || 'Trang phục',
+        productName:
+          snapItem?.productName || (it as any).productName || 'Trang phục',
         rentalPrice: it.unitPrice,
         depositAmount: it.depositAmount,
         quantity: it.quantity,
@@ -118,10 +124,12 @@ export class ContractPreparationService {
 
     const isTieredEnabled =
       process.env.CONTRACTS_TIERED_ENABLED === 'true' ||
-      (process.env.NODE_ENV !== 'production' && process.env.CONTRACTS_TIERED_ENABLED !== 'false');
+      (process.env.NODE_ENV !== 'production' &&
+        process.env.CONTRACTS_TIERED_ENABLED !== 'false');
     const isRiskRulesApproved =
       process.env.PLATFORM_RISK_RULES_APPROVED === 'true' ||
-      (process.env.NODE_ENV !== 'production' && process.env.PLATFORM_RISK_RULES_APPROVED !== 'false');
+      (process.env.NODE_ENV !== 'production' &&
+        process.env.PLATFORM_RISK_RULES_APPROVED !== 'false');
 
     const tierResult = this.tierEvaluatorInstance.evaluate({
       providerId,
@@ -133,8 +141,10 @@ export class ContractPreparationService {
             orderThresholdAmount: providerConfig.orderThresholdAmount,
           }
         : null,
-      providerVoucherDiscount: (snapshot.pricing as any)?.shopVoucherDiscountAmount ?? 0,
-      allocatedPlatformDiscount: (snapshot.pricing as any)?.platformVoucherDiscountAmount ?? 0,
+      providerVoucherDiscount:
+        (snapshot.pricing as any)?.shopVoucherDiscountAmount ?? 0,
+      allocatedPlatformDiscount:
+        (snapshot.pricing as any)?.platformVoucherDiscountAmount ?? 0,
       guardrails: {
         isApproved: isRiskRulesApproved,
         rulesVersion: process.env.PLATFORM_RISK_RULES_VERSION || 'v1.0-draft',
@@ -464,7 +474,9 @@ export class ContractPreparationService {
       const resCol = db.collection('inventory_reservations');
       let activeReservations: any[] = [];
       if (typeof resCol.find === 'function') {
-        activeReservations = await resCol.find(reservationFilter, { session }).toArray();
+        activeReservations = await resCol
+          .find(reservationFilter, { session })
+          .toArray();
         if (activeReservations.length < item.quantity) {
           throw new UnprocessableEntityException(
             'RENTAL_HOLD_EXPIRED_OR_MISSING',
@@ -516,8 +528,12 @@ export class ContractPreparationService {
               if (d1.getTime() <= d2.getTime()) return true;
               const diffHours = (d1.getTime() - d2.getTime()) / (3600 * 1000);
               if (diffHours < 24) {
-                const vn1 = d1.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
-                const vn2 = d2.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+                const vn1 = d1.toLocaleDateString('en-CA', {
+                  timeZone: 'Asia/Ho_Chi_Minh',
+                });
+                const vn2 = d2.toLocaleDateString('en-CA', {
+                  timeZone: 'Asia/Ho_Chi_Minh',
+                });
                 if (vn1 <= vn2) return true;
                 const utc1 = d1.toISOString().slice(0, 10);
                 const utc2 = d2.toISOString().slice(0, 10);
@@ -539,8 +555,12 @@ export class ContractPreparationService {
               if (d1.getTime() >= d2.getTime()) return true;
               const diffHours = (d2.getTime() - d1.getTime()) / (3600 * 1000);
               if (diffHours < 24) {
-                const vn1 = d1.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
-                const vn2 = d2.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+                const vn1 = d1.toLocaleDateString('en-CA', {
+                  timeZone: 'Asia/Ho_Chi_Minh',
+                });
+                const vn2 = d2.toLocaleDateString('en-CA', {
+                  timeZone: 'Asia/Ho_Chi_Minh',
+                });
                 if (vn1 >= vn2) return true;
                 const utc1 = d1.toISOString().slice(0, 10);
                 const utc2 = d2.toISOString().slice(0, 10);
@@ -582,7 +602,11 @@ export class ContractPreparationService {
 
           // Invariant: InventoryItem must match the exact Product, Size, Color of the BookingItem
           for (const inv of inventoryItems) {
-            if (item.productId && inv.productId && !inv.productId.equals(item.productId)) {
+            if (
+              item.productId &&
+              inv.productId &&
+              !inv.productId.equals(item.productId)
+            ) {
               throw new UnprocessableEntityException(
                 'RENTAL_HOLD_PRODUCT_MISMATCH: Vật phẩm trong kho thuộc sản phẩm khác với đơn đặt.',
               );
@@ -590,7 +614,8 @@ export class ContractPreparationService {
             if (
               item.selectedSize &&
               inv.size &&
-              inv.size.trim().toUpperCase() !== item.selectedSize.trim().toUpperCase()
+              inv.size.trim().toUpperCase() !==
+                item.selectedSize.trim().toUpperCase()
             ) {
               throw new UnprocessableEntityException(
                 'RENTAL_HOLD_VARIANT_MISMATCH: Kích thước vật phẩm trong kho không khớp với kích thước khách đặt.',
@@ -599,7 +624,8 @@ export class ContractPreparationService {
             if (
               item.selectedColor &&
               inv.color &&
-              inv.color.trim().toUpperCase() !== item.selectedColor.trim().toUpperCase()
+              inv.color.trim().toUpperCase() !==
+                item.selectedColor.trim().toUpperCase()
             ) {
               throw new UnprocessableEntityException(
                 'RENTAL_HOLD_VARIANT_MISMATCH: Màu sắc vật phẩm trong kho không khớp với màu sắc khách đặt.',
@@ -623,8 +649,15 @@ export class ContractPreparationService {
         if (item.productId) {
           const productsCol = db.collection('products');
           if (typeof productsCol.findOne === 'function') {
-            const product = await productsCol.findOne({ _id: item.productId }, { session });
-            if (product && product.providerId && !product.providerId.equals(providerId)) {
+            const product = await productsCol.findOne(
+              { _id: item.productId },
+              { session },
+            );
+            if (
+              product &&
+              product.providerId &&
+              !product.providerId.equals(providerId)
+            ) {
               throw new UnprocessableEntityException(
                 'RENTAL_HOLD_PROVIDER_MISMATCH: Sản phẩm giữ kho không thuộc nhà cung cấp của đơn hàng.',
               );
@@ -632,7 +665,9 @@ export class ContractPreparationService {
           }
         }
       } else if (typeof resCol.countDocuments === 'function') {
-        const count = await resCol.countDocuments(reservationFilter, { session });
+        const count = await resCol.countDocuments(reservationFilter, {
+          session,
+        });
         if (count < item.quantity) {
           throw new UnprocessableEntityException(
             'RENTAL_HOLD_EXPIRED_OR_MISSING',

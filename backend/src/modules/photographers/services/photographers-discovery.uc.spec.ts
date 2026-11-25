@@ -41,7 +41,11 @@ function createService(photographers: Row[]) {
   return { service, providerModel };
 }
 
-afterEach(() => jest.restoreAllMocks());
+afterEach(() => {
+  jest.restoreAllMocks();
+  // The public photographer list is cached between calls; each test needs its own data.
+  PhotographersService.clearPublicCache();
+});
 
 describe('UC-23 Search Photographer (DaiBLL)', () => {
   it('UT-23 UTCID01 matches the keyword against name, city and concept without diacritics', async () => {
@@ -223,17 +227,13 @@ describe('UC-23 Search Photographer (DaiBLL)', () => {
     },
   );
 
-  // Known defect UT-DEF-23-02: user-facing error messages in the service are mis-encoded.
-  it.failing(
-    'UT-23 UTCID12 returns a readable Vietnamese message for a malformed id',
-    async () => {
-      const { service } = createService([]);
+  it('UT-23 UTCID12 returns a readable Vietnamese message for a malformed id', async () => {
+    const { service } = createService([]);
 
-      await expect(service.findOne('photographer-1')).rejects.toThrow(
-        'ID nhiếp ảnh gia không hợp lệ',
-      );
-    },
-  );
+    await expect(service.findOne('photographer-1')).rejects.toThrow(
+      'ID nhiếp ảnh gia không hợp lệ',
+    );
+  });
 });
 
 describe('UC-24 View Photography Concept (DaiBLL)', () => {
@@ -351,5 +351,45 @@ describe('UC-24 View Photography Concept (DaiBLL)', () => {
     const { service } = createService([]);
 
     await expect(service.findConcepts()).resolves.toEqual({ data: [] });
+  });
+});
+
+describe('Multi-photographer team & capacity discovery filters', () => {
+  it('filters studios by minPhotographers, requiredSlots, and groupSize together', async () => {
+    const { service } = createService([
+      photographer({
+        businessName: 'Solo Photographer',
+        activeStaffCount: 1,
+        effectiveCapacity: 1,
+        packages: [{ price: 1_000_000, maxPeople: 4 }],
+      }),
+      photographer({
+        businessName: 'Huế Team Studio',
+        activeStaffCount: 3,
+        effectiveCapacity: 2,
+        packages: [{ price: 1_500_000, maxPeople: 5 }],
+      }),
+      photographer({
+        businessName: 'Small Duo Studio',
+        activeStaffCount: 2,
+        effectiveCapacity: 2,
+        packages: [{ price: 1_200_000, maxPeople: 2 }],
+      }),
+    ]);
+
+    const multiRes = await service.findAll({ minPhotographers: 2 });
+    expect(multiRes.data.map((p: Row) => p.businessName)).toEqual([
+      'Huế Team Studio',
+      'Small Duo Studio',
+    ]);
+
+    const combinedRes = await service.findAll({
+      minPhotographers: 2,
+      requiredSlots: 2,
+      groupSize: '3-5',
+    });
+    expect(combinedRes.data.map((p: Row) => p.businessName)).toEqual([
+      'Huế Team Studio',
+    ]);
   });
 });

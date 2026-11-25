@@ -15,10 +15,11 @@ export class ModerateProductDto {
   @IsEnum(ProductModerationStatus)
   action: ProductModerationStatus;
 
-  @ValidateIf((dto: ModerateProductDto) =>
-    dto.action === ProductModerationStatus.Rejected ||
-    dto.action === ProductModerationStatus.Hidden ||
-    dto.action === ProductModerationStatus.ChangesRequested,
+  @ValidateIf(
+    (dto: ModerateProductDto) =>
+      dto.action === ProductModerationStatus.Rejected ||
+      dto.action === ProductModerationStatus.Hidden ||
+      dto.action === ProductModerationStatus.ChangesRequested,
   )
   @IsString()
   @IsNotEmpty()

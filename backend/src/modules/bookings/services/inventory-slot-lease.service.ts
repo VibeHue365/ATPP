@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, Logger, Optional } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  Optional,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model, Types } from 'mongoose';
 import {
@@ -40,7 +45,11 @@ export class InventorySlotLeaseService {
   isSlotConflictError(error: any): boolean {
     if (!error || error.code !== 11000) return false;
     const keyPattern = error.keyPattern || {};
-    if (keyPattern.inventoryItemId && keyPattern.dateStr && keyPattern.slotIndex) {
+    if (
+      keyPattern.inventoryItemId &&
+      keyPattern.dateStr &&
+      keyPattern.slotIndex
+    ) {
       return true;
     }
     const message = error.message || '';
@@ -64,8 +73,14 @@ export class InventorySlotLeaseService {
     const now = new Date();
     const status = input.status || SlotLeaseStatus.Temp;
     const allSlots = [
-      ...input.rentalSlots.map((s) => ({ ...s, purpose: SlotLeasePurpose.Rental })),
-      ...input.turnaroundSlots.map((s) => ({ ...s, purpose: SlotLeasePurpose.Turnaround })),
+      ...input.rentalSlots.map((s) => ({
+        ...s,
+        purpose: SlotLeasePurpose.Rental,
+      })),
+      ...input.turnaroundSlots.map((s) => ({
+        ...s,
+        purpose: SlotLeasePurpose.Turnaround,
+      })),
     ];
 
     if (allSlots.length === 0) return [];
@@ -106,7 +121,8 @@ export class InventorySlotLeaseService {
       slotIndex: slot.slotIndex,
       purpose: slot.purpose,
       status,
-      expiresAt: status === SlotLeaseStatus.Temp ? input.expiresAt || null : null,
+      expiresAt:
+        status === SlotLeaseStatus.Temp ? input.expiresAt || null : null,
     }));
 
     try {
@@ -132,7 +148,8 @@ export class InventorySlotLeaseService {
     bookingId: Types.ObjectId | string,
     session?: ClientSession,
   ): Promise<number> {
-    const id = typeof bookingId === 'string' ? new Types.ObjectId(bookingId) : bookingId;
+    const id =
+      typeof bookingId === 'string' ? new Types.ObjectId(bookingId) : bookingId;
     const res = await this.leaseModel
       .updateMany(
         { bookingId: id, status: SlotLeaseStatus.Temp },
@@ -159,10 +176,14 @@ export class InventorySlotLeaseService {
     reason: 'CANCELLED' | 'EXPIRED' | 'COMPLETED',
     session?: ClientSession,
   ): Promise<number> {
-    const id = typeof bookingId === 'string' ? new Types.ObjectId(bookingId) : bookingId;
+    const id =
+      typeof bookingId === 'string' ? new Types.ObjectId(bookingId) : bookingId;
     const res = await this.leaseModel
       .updateMany(
-        { bookingId: id, status: { $in: [SlotLeaseStatus.Temp, SlotLeaseStatus.Confirmed] } },
+        {
+          bookingId: id,
+          status: { $in: [SlotLeaseStatus.Temp, SlotLeaseStatus.Confirmed] },
+        },
         {
           $set: {
             status: SlotLeaseStatus.Released,
@@ -188,7 +209,10 @@ export class InventorySlotLeaseService {
     availableFrom: Date,
     session?: ClientSession,
   ): Promise<number> {
-    const bItemId = typeof bookingItemId === 'string' ? new Types.ObjectId(bookingItemId) : bookingItemId;
+    const bItemId =
+      typeof bookingItemId === 'string'
+        ? new Types.ObjectId(bookingItemId)
+        : bookingItemId;
     const activeTurnaroundLeases = await this.leaseModel
       .find({
         bookingItemId: bItemId,
@@ -201,7 +225,10 @@ export class InventorySlotLeaseService {
     const leasesToRelease: Types.ObjectId[] = [];
 
     for (const lease of activeTurnaroundLeases) {
-      const slotAlloc = this.timeEngine.getSlotAllocation(lease.dateStr, lease.slotIndex);
+      const slotAlloc = this.timeEngine.getSlotAllocation(
+        lease.dateStr,
+        lease.slotIndex,
+      );
       // Boundary condition: leaseStart >= availableFrom
       if (slotAlloc.start.getTime() >= availableFrom.getTime()) {
         leasesToRelease.push(lease._id);
@@ -234,7 +261,10 @@ export class InventorySlotLeaseService {
   /**
    * Expire hold leases whose expiresAt has passed.
    */
-  async expireHoldLeases(now: Date = new Date(), session?: ClientSession): Promise<number> {
+  async expireHoldLeases(
+    now: Date = new Date(),
+    session?: ClientSession,
+  ): Promise<number> {
     const res = await this.leaseModel
       .updateMany(
         { status: SlotLeaseStatus.Temp, expiresAt: { $lte: now } },
@@ -262,7 +292,10 @@ export class InventorySlotLeaseService {
     dateStr: string,
     slotIndex: number,
   ): Promise<boolean> {
-    const itemId = typeof inventoryItemId === 'string' ? new Types.ObjectId(inventoryItemId) : inventoryItemId;
+    const itemId =
+      typeof inventoryItemId === 'string'
+        ? new Types.ObjectId(inventoryItemId)
+        : inventoryItemId;
     const now = new Date();
     const existing = await this.leaseModel
       .findOne({

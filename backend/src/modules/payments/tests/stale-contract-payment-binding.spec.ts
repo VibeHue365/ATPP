@@ -54,7 +54,10 @@ import {
   V2PaymentFinalizationService,
   FinalizationReviewError,
 } from '../services/v2-payment-finalization.service';
-import { contractIntentKey, paymentMatchesBinding } from '../services/contract-payment-binding';
+import {
+  contractIntentKey,
+  paymentMatchesBinding,
+} from '../services/contract-payment-binding';
 import { hashContract } from '../../contracts/canonical-contract';
 
 const oid = () => new Types.ObjectId();
@@ -70,8 +73,14 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
 
   const template = { templateId: 'v1', version: 1, text: 'Template' };
   const snapshot_v1 = {
-    booking: { bookingCode: 'V2-BOOK-STALE-001', customerId, bookingType: 'AODAI_RENTAL' },
-    providerItems: [{ bookingItemId: oid(), productId: oid(), quantity: 1, unitPrice: 100 }],
+    booking: {
+      bookingCode: 'V2-BOOK-STALE-001',
+      customerId,
+      bookingType: 'AODAI_RENTAL',
+    },
+    providerItems: [
+      { bookingItemId: oid(), productId: oid(), quantity: 1, unitPrice: 100 },
+    ],
     pricing: { grandTotal: 100, depositTotal: 50, amountDueNow: 150 },
   };
   const contentHash_v1 = hashContract({ template, snapshot: snapshot_v1 });
@@ -165,7 +174,11 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
           updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
           create: jest.fn(),
           collection: {
-            indexes: jest.fn().mockResolvedValue([{ key: { contractIntentKey: 1 }, unique: true }]),
+            indexes: jest
+              .fn()
+              .mockResolvedValue([
+                { key: { contractIntentKey: 1 }, unique: true },
+              ]),
             createIndex: jest.fn().mockResolvedValue('contractIntentKey_1'),
           },
         },
@@ -194,7 +207,7 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
 
       paymentsService = new PaymentsService(
         mockPaymentsRepository,
-        mockBookingModel as any,
+        mockBookingModel,
         {} as any,
         {} as any,
         {} as any,
@@ -252,7 +265,9 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
         status: PaymentStatus.Success,
         needsManualReview: true,
       };
-      mockPaymentsRepository.model.findOneAndUpdate.mockResolvedValue(updatedPaymentInReview);
+      mockPaymentsRepository.model.findOneAndUpdate.mockResolvedValue(
+        updatedPaymentInReview,
+      );
 
       const result = await paymentsService.confirmPayment(paymentCode_v1, {
         source: 'SIMULATOR',
@@ -302,7 +317,12 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
               status: BookingStatus.PendingPayment,
               paymentExpiryClaim: { phase: 'FINALIZING', paymentId },
               bookingType: BookingType.Product,
-              pricingSummary: { subTotal: 100, grandTotal: 100, depositTotal: 50, discountAmount: 0 },
+              pricingSummary: {
+                subTotal: 100,
+                grandTotal: 100,
+                depositTotal: 50,
+                discountAmount: 0,
+              },
             }),
           }),
         }),
@@ -342,7 +362,9 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
         findById: jest.fn().mockReturnValue({
           session: jest.fn().mockReturnValue({
             // Contract in DB has moved to v2!
-            lean: jest.fn().mockResolvedValue({ currentVersionId: contractVersionId_v2 }),
+            lean: jest
+              .fn()
+              .mockResolvedValue({ currentVersionId: contractVersionId_v2 }),
           }),
         }),
       };
@@ -373,7 +395,9 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
       };
 
       const mockContractPolicy: any = {
-        getContext: jest.fn().mockResolvedValue({ rentalProviderIds: [providerId] }),
+        getContext: jest
+          .fn()
+          .mockResolvedValue({ rentalProviderIds: [providerId] }),
       };
       const mockTemplates: any = {
         getApproved: jest.fn().mockReturnValue(template),
@@ -451,7 +475,9 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
         status: PaymentStatus.Success,
         needsManualReview: false,
       };
-      mockPaymentsRepository.model.findOneAndUpdate.mockResolvedValue(confirmedPayment);
+      mockPaymentsRepository.model.findOneAndUpdate.mockResolvedValue(
+        confirmedPayment,
+      );
 
       const result = await paymentsService.confirmPayment(paymentCode_v2, {
         source: 'SIMULATOR',
@@ -477,7 +503,9 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
       );
 
       // 4. v2Finalizer is triggered to finalize the confirmed booking
-      expect(mockV2Finalizer.processPayment).toHaveBeenCalledWith(payment_v2._id);
+      expect(mockV2Finalizer.processPayment).toHaveBeenCalledWith(
+        payment_v2._id,
+      );
     });
 
     it('Scenario 4: createV2PaymentIntent supersedes pending payment v1 safely without throwing 409', async () => {
@@ -506,7 +534,9 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
       });
 
       // findPendingPaymentByBooking finds payment_v1 (stale binding)
-      mockPaymentsRepository.findPendingPaymentByBooking.mockResolvedValue(payment_v1);
+      mockPaymentsRepository.findPendingPaymentByBooking.mockResolvedValue(
+        payment_v1,
+      );
       // Query for existingBound (with contractIntentKey) returns null, while session query for pending finds payment_v1
       mockPaymentsRepository.model.findOne.mockImplementation((filter: any) => {
         if (filter?.contractIntentKey) {
@@ -525,7 +555,9 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
         contractBinding: binding_v2,
         contractIntentKey: contractIntentKey(binding_v2),
       };
-      mockPaymentsRepository.model.create.mockResolvedValue([payment_v2_created]);
+      mockPaymentsRepository.model.create.mockResolvedValue([
+        payment_v2_created,
+      ]);
 
       const result = await (paymentsService as any).createV2PaymentIntent(
         booking,
@@ -618,7 +650,8 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
     let mockContractPolicy: any;
     let mockSnapshots: any;
 
-    const mongoUri = 'mongodb://127.0.0.1:27028/?replicaSet=rsContractTest&directConnection=true';
+    const mongoUri =
+      'mongodb://127.0.0.1:27028/?replicaSet=rsContractTest&directConnection=true';
 
     beforeAll(async () => {
       scratchDbName = `contract_real_${oid().toHexString()}_test`;
@@ -635,11 +668,26 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
       bookingsCol = connection.model(Booking.name, BookingSchema);
       paymentsCol = connection.model(Payment.name, PaymentSchema);
       itemsCol = connection.model(BookingItem.name, BookingItemSchema);
-      reservationsCol = connection.model(InventoryReservation.name, InventoryReservationSchema);
-      recoveriesCol = connection.model(PaymentRecovery.name, PaymentRecoverySchema);
-      contractsCol = connection.model(DigitalContract.name, DigitalContractSchema);
-      versionsCol = connection.model(ContractVersion.name, ContractVersionSchema);
-      consentsCol = connection.model(ContractConsent.name, ContractConsentSchema);
+      reservationsCol = connection.model(
+        InventoryReservation.name,
+        InventoryReservationSchema,
+      );
+      recoveriesCol = connection.model(
+        PaymentRecovery.name,
+        PaymentRecoverySchema,
+      );
+      contractsCol = connection.model(
+        DigitalContract.name,
+        DigitalContractSchema,
+      );
+      versionsCol = connection.model(
+        ContractVersion.name,
+        ContractVersionSchema,
+      );
+      consentsCol = connection.model(
+        ContractConsent.name,
+        ContractConsentSchema,
+      );
 
       await paymentsCol.init();
       await bookingsCol.init();
@@ -662,7 +710,9 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
         confirmForBooking: jest.fn().mockResolvedValue({ confirmed: true }),
       };
       mockContractPolicy = {
-        getContext: jest.fn().mockResolvedValue({ rentalProviderIds: [providerId] }),
+        getContext: jest
+          .fn()
+          .mockResolvedValue({ rentalProviderIds: [providerId] }),
       };
       const mockPreparation: any = {
         assertSourcesUnchanged: jest.fn().mockResolvedValue(undefined),
@@ -678,7 +728,9 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
         true,
         bookingsCol,
         itemsCol,
-        { updateMany: jest.fn().mockResolvedValue({ modifiedCount: 1 }) } as any,
+        {
+          updateMany: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+        } as any,
         reservationsCol,
         paymentsCol,
         recoveriesCol,
@@ -754,7 +806,12 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
         status: BookingStatus.PendingPayment,
         contractFlowVersion: 2,
         holdExpiresAt,
-        pricingSummary: { subTotal: 100, grandTotal: 100, depositTotal: 50, discountAmount: 0 },
+        pricingSummary: {
+          subTotal: 100,
+          grandTotal: 100,
+          depositTotal: 50,
+          discountAmount: 0,
+        },
       });
 
       // 2. Seed Real BookingItem and InventoryReservation in MongoDB
@@ -786,15 +843,22 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
         providerId: realProviderId.toString(),
         bookingType: 'AODAI_RENTAL',
         bookingItemIds: [realItemId.toString()],
-        booking: { bookingCode: `BK_REAL_${realBookingId.toHexString().slice(-6)}` },
+        booking: {
+          bookingCode: `BK_REAL_${realBookingId.toHexString().slice(-6)}`,
+        },
         customer: { name: 'Customer Test' },
         provider: { name: 'Provider Test' },
-        providerItems: [{ bookingItemId: realItemId.toString(), unitPrice: 100, quantity: 1 }],
+        providerItems: [
+          { bookingItemId: realItemId.toString(), unitPrice: 100, quantity: 1 },
+        ],
         pricing: { grandTotal: 100, depositTotal: 50 },
         policies: { policyVersion: 1 },
         template: { templateId: 'v1', version: 1 },
       };
-      const realContentHash_v1 = hashContract({ template, snapshot: realSnapshot_v1 });
+      const realContentHash_v1 = hashContract({
+        template,
+        snapshot: realSnapshot_v1,
+      });
       const realBookingFingerprint_v1 = hashContract({
         booking: realSnapshot_v1.booking,
         providerItems: realSnapshot_v1.providerItems,
@@ -806,14 +870,19 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
         booking: { ...realSnapshot_v1.booking, updated: true },
         policies: { policyVersion: 2 },
       };
-      const realContentHash_v2 = hashContract({ template, snapshot: realSnapshot_v2 });
+      const realContentHash_v2 = hashContract({
+        template,
+        snapshot: realSnapshot_v2,
+      });
       const realBookingFingerprint_v2 = hashContract({
         booking: realSnapshot_v2.booking,
         providerItems: realSnapshot_v2.providerItems,
         pricing: realSnapshot_v2.pricing,
       });
 
-      mockContractPolicy.getContext.mockResolvedValue({ rentalProviderIds: [realProviderId] });
+      mockContractPolicy.getContext.mockResolvedValue({
+        rentalProviderIds: [realProviderId],
+      });
       mockSnapshots.build.mockResolvedValue(realSnapshot_v2);
 
       const realBinding_v1: ContractPaymentBinding = {
@@ -968,16 +1037,21 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
       const p1Reloaded = await paymentsCol.findById(p1._id);
       expect(p1Reloaded?.status).toBe(PaymentStatus.Cancelled);
       expect(p1Reloaded?.contractBinding).toBeDefined(); // History & binding preserved!
-      expect((p1Reloaded as any)?.supersededReason).toBe('CONTRACT_VERSION_UPGRADED');
+      expect((p1Reloaded as any)?.supersededReason).toBe(
+        'CONTRACT_VERSION_UPGRADED',
+      );
 
       // Verify in MongoDB: p2 is stored as Pending
       const p2Reloaded = await paymentsCol.findById(p2._id);
       expect(p2Reloaded?.status).toBe(PaymentStatus.Pending);
 
       // 7. Complete booking with p2 via Simulator
-      const confirmed_p2 = await paymentsService.confirmPayment(p2.paymentCode, {
-        source: 'SIMULATOR',
-      });
+      const confirmed_p2 = await paymentsService.confirmPayment(
+        p2.paymentCode,
+        {
+          source: 'SIMULATOR',
+        },
+      );
       expect(confirmed_p2.status).toBe(PaymentStatus.Success);
       expect(confirmed_p2.needsManualReview).toBeFalsy();
 
@@ -1011,7 +1085,12 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
         status: BookingStatus.PendingPayment,
         contractFlowVersion: 2,
         holdExpiresAt: new Date(Date.now() + 15 * 60 * 1000),
-        pricingSummary: { subTotal: 100, grandTotal: 100, depositTotal: 50, discountAmount: 0 },
+        pricingSummary: {
+          subTotal: 100,
+          grandTotal: 100,
+          depositTotal: 50,
+          discountAmount: 0,
+        },
       });
 
       const p1Doc = await paymentsCol.create({
@@ -1039,7 +1118,9 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
       expect(p1InDb?.needsManualReview).toBe(true);
 
       // 2. Recovery document created in MongoDB for manual review
-      const recoveryInDb = await recoveriesCol.findOne({ paymentId: p1Doc._id });
+      const recoveryInDb = await recoveriesCol.findOne({
+        paymentId: p1Doc._id,
+      });
       expect(recoveryInDb).toBeDefined();
       expect(recoveryInDb?.state).toBe(PaymentRecoveryState.ReviewRequired);
 
@@ -1067,7 +1148,12 @@ describe('Requirement 2 & 3: Stale Payment Supersede & Real MongoDB Integration'
         status: BookingStatus.PendingPayment,
         contractFlowVersion: 2,
         holdExpiresAt: new Date(Date.now() + 15 * 60 * 1000),
-        pricingSummary: { subTotal: 100, grandTotal: 100, depositTotal: 50, discountAmount: 0 },
+        pricingSummary: {
+          subTotal: 100,
+          grandTotal: 100,
+          depositTotal: 50,
+          discountAmount: 0,
+        },
       });
 
       const concurrentBinding: ContractPaymentBinding = {

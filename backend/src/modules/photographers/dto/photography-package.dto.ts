@@ -9,6 +9,7 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -17,6 +18,9 @@ import {
   PackageStatus,
   PhotographyPricingUnit,
 } from '../../products/schemas/photography-package.schema';
+
+export const MIN_PHOTOGRAPHY_PACKAGE_PRICE = 50_000;
+export const MAX_PHOTOGRAPHY_PACKAGE_PRICE = 50_000_000;
 
 export class CreatePhotographyPackageDto {
   @IsOptional()
@@ -51,7 +55,12 @@ export class CreatePhotographyPackageDto {
   description?: string | null;
 
   @IsNumber()
-  @Min(0)
+  @Min(MIN_PHOTOGRAPHY_PACKAGE_PRICE, {
+    message: 'Giá gói chụp tối thiểu là 50.000đ',
+  })
+  @Max(MAX_PHOTOGRAPHY_PACKAGE_PRICE, {
+    message: 'Giá gói chụp tối đa là 50.000.000đ',
+  })
   price: number;
 
   @IsNumber()
@@ -174,7 +183,12 @@ export class UpdatePhotographyPackageDto {
 
   @IsOptional()
   @IsNumber()
-  @Min(0)
+  @Min(MIN_PHOTOGRAPHY_PACKAGE_PRICE, {
+    message: 'Giá gói chụp tối thiểu là 50.000đ',
+  })
+  @Max(MAX_PHOTOGRAPHY_PACKAGE_PRICE, {
+    message: 'Giá gói chụp tối đa là 50.000.000đ',
+  })
   price?: number;
 
   @IsOptional()

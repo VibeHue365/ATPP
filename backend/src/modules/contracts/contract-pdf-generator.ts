@@ -63,7 +63,9 @@ function formatAddress(addr: unknown, fallback = ''): string {
     if (typeof a.fullAddress === 'string' && a.fullAddress.trim()) {
       return a.fullAddress.trim();
     }
-    const rawLine = ((a.addressLine || a.street || a.address || '') as string).trim();
+    const rawLine = (
+      (a.addressLine || a.street || a.address || '') as string
+    ).trim();
     const ward = ((a.ward || '') as string).trim();
     const district = ((a.district || '') as string).trim();
     const city = ((a.city || a.province || '') as string).trim();
@@ -84,7 +86,10 @@ function formatAddress(addr: unknown, fallback = ''): string {
   return fallback;
 }
 
-export function buildContractTermsLines(policies: any, items: any[] = []): string[] {
+export function buildContractTermsLines(
+  policies: any,
+  items: any[] = [],
+): string[] {
   const garmentCare = policies?.providerGarmentCare;
   const lateReturn = policies?.providerLateReturn;
   const damageComp = policies?.providerDamageCompensation;
@@ -92,13 +97,16 @@ export function buildContractTermsLines(policies: any, items: any[] = []): strin
   const customTerms = policies?.providerCustomTermsText;
 
   const firstItem = items && items[0] ? items[0] : {};
-  const totalReplacementVal = items && items.length > 0
-    ? items.reduce(
-        (sum: number, it: any) =>
-          sum + (Number(it.replacementValue || it.declaredValue) || 0) * (Number(it.quantity) || 1),
-        0,
-      )
-    : Number(firstItem.declaredValue || firstItem.replacementValue || 0);
+  const totalReplacementVal =
+    items && items.length > 0
+      ? items.reduce(
+          (sum: number, it: any) =>
+            sum +
+            (Number(it.replacementValue || it.declaredValue) || 0) *
+              (Number(it.quantity) || 1),
+          0,
+        )
+      : Number(firstItem.declaredValue || firstItem.replacementValue || 0);
 
   const lines: string[] = [
     'ĐIỀU 1: QUYỀN VÀ NGHĨA VỤ CỦA BÊN CHO THUÊ (BÊN A)',
@@ -110,8 +118,12 @@ export function buildContractTermsLines(policies: any, items: any[] = []): strin
 
   // ĐIỀU 2: BẢO QUẢN ÁO DÀI
   if (garmentCare) {
-    lines.push('ĐIỀU 2: NGHĨA VỤ CỦA BÊN THUÊ VÀ QUY ĐỊNH BẢO QUẢN ÁO DÀI (BÊN B)');
-    lines.push('- Thanh toán đúng và đủ toàn bộ giá trị hợp đồng gồm tiền thuê và tiền cọc theo phương thức thanh toán của Sàn trước khi nhận đồ.');
+    lines.push(
+      'ĐIỀU 2: NGHĨA VỤ CỦA BÊN THUÊ VÀ QUY ĐỊNH BẢO QUẢN ÁO DÀI (BÊN B)',
+    );
+    lines.push(
+      '- Thanh toán đúng và đủ toàn bộ giá trị hợp đồng gồm tiền thuê và tiền cọc theo phương thức thanh toán của Sàn trước khi nhận đồ.',
+    );
     const ironingText = garmentCare.allowIroning
       ? 'Được phép sử dụng bàn ủi hơi nước ở nhiệt độ an toàn.'
       : 'KHÔNG ĐƯỢC PHÉP tự ý là/ủi trang phục.';
@@ -122,96 +134,187 @@ export function buildContractTermsLines(policies: any, items: any[] = []): strin
     lines.push(`- Quy định giặt trang phục: ${washingText}`);
 
     const rawActions = Array.isArray(garmentCare.prohibitedActions)
-      ? garmentCare.prohibitedActions.map((act: string) => (act || '').trim()).filter(Boolean)
+      ? garmentCare.prohibitedActions
+          .map((act: string) => (act || '').trim())
+          .filter(Boolean)
       : [];
 
     if (rawActions.length > 0) {
       lines.push(`- Các hành vi bị nghiêm cấm: ${rawActions.join('; ')}.`);
     } else {
-      lines.push('- Các hành vi bị nghiêm cấm: Không tự ý cắt sửa phom dáng, làm rách hỏng hoặc vấy bẩn không thể phục hồi.');
+      lines.push(
+        '- Các hành vi bị nghiêm cấm: Không tự ý cắt sửa phom dáng, làm rách hỏng hoặc vấy bẩn không thể phục hồi.',
+      );
     }
     if (garmentCare.specialNotes) {
-      lines.push(`- Ghi chú chất liệu đặc thù từ Shop: ${garmentCare.specialNotes}`);
+      lines.push(
+        `- Ghi chú chất liệu đặc thù từ Shop: ${garmentCare.specialNotes}`,
+      );
     }
   } else {
     lines.push('ĐIỀU 2: QUYỀN VÀ NGHĨA VỤ CỦA BÊN THUÊ (BÊN B)');
-    lines.push('- Thanh toán đúng và đủ giá trị hợp đồng gồm tiền thuê và tiền cọc theo phương thức thanh toán của Sàn.');
-    lines.push('- Có trách nhiệm bảo quản trang phục cẩn thận; không tự ý cắt may, chỉnh sửa hoặc làm vấy bẩn hư hại sản phẩm.');
-    lines.push(`- Hoàn trả trang phục đúng thời hạn và địa điểm đã cam kết. ${policies?.providerRental || 'Thời gian thuê tối đa và quy định phạt quá hạn áp dụng theo chính sách niêm yết.'}`);
+    lines.push(
+      '- Thanh toán đúng và đủ giá trị hợp đồng gồm tiền thuê và tiền cọc theo phương thức thanh toán của Sàn.',
+    );
+    lines.push(
+      '- Có trách nhiệm bảo quản trang phục cẩn thận; không tự ý cắt may, chỉnh sửa hoặc làm vấy bẩn hư hại sản phẩm.',
+    );
+    lines.push(
+      `- Hoàn trả trang phục đúng thời hạn và địa điểm đã cam kết. ${policies?.providerRental || 'Thời gian thuê tối đa và quy định phạt quá hạn áp dụng theo chính sách niêm yết.'}`,
+    );
   }
   lines.push('');
 
-  // ĐIỀU 3: QUY ĐỊNH TRẢ TRỄ
-  if (lateReturn) {
-    lines.push('ĐIỀU 3: QUY ĐỊNH HOÀN TRẢ VÀ BIỂU PHÍ TRỄ HẠN');
-    lines.push('- Hoàn trả trang phục đúng thời hạn và địa điểm quy định tại Phần II của hợp đồng.');
-    lines.push(`- Thời gian ân hạn: ${lateReturn.gracePeriodHours} giờ kể từ mốc thời gian hoàn trả đã hẹn (trong khoảng thời gian này Bên B không bị tính phí phạt trễ).`);
-    lines.push(`- Biểu phí phạt trễ hạn: Áp dụng tương ứng theo hình thức thuê (${formatVnd(lateReturn.hourlyLateFee)}/giờ đối với thuê theo giờ, ${formatVnd(lateReturn.dailyLateFee)}/ngày đối với thuê theo ngày), không cộng dồn hai mức phí cùng lúc.`);
-    lines.push(`- Thời gian trễ tối đa cho phép: ${lateReturn.maxLateDaysAllowed ?? 3} ngày.`);
-    lines.push(`- Xử lý quá hạn tối đa: Trường hợp trễ quá ${lateReturn.maxLateDaysAllowed ?? 3} ngày mà Bên B chưa hoàn trả và không có thông báo/thỏa thuận gia hạn hợp lệ, vụ việc sẽ được chuyển sang quy trình xử lý vi phạm hợp đồng để thực hiện bồi thường theo Điều 4.`);
-  } else {
-    lines.push('ĐIỀU 3: THỜI HẠN VÀ QUY ĐỊNH HOÀN TRẢ');
-    lines.push(`- Hoàn trả trang phục đúng thời hạn và địa điểm quy định tại Phần II của hợp đồng. ${policies?.providerRental || 'Thời gian thuê tối đa và quy định phạt quá hạn áp dụng theo chính sách niêm yết.'}`);
+  // ĐIỀU 3: QUY ĐỊNH TRẢ TRỄ & BẢO VỆ LỊCH HẸN (ĐỒNG BỘ QUY TRÌNH QUÁ HẠN & DOMINO RECOVERY)
+  lines.push(
+    'ĐIỀU 3: QUY ĐỊNH HOÀN TRẢ, BIỂU PHÍ QUÁ HẠN VÀ BẢO VỆ LỊCH HẸN',
+  );
+  lines.push(
+    '- Thời hạn hoàn trả: Bên B có nghĩa vụ hoàn trả trang phục đúng thời hạn và địa điểm quy định tại Phần II của hợp đồng (không áp dụng thời gian ân hạn miễn phí nếu không có thỏa thuận gia hạn hợp lệ trước hạn trả).',
+  );
+  lines.push(
+    '- Biểu phí quá hạn trả trang phục: Kể từ thời điểm quá hạn, hệ thống áp dụng mức phí trễ hạn lũy tiến là +10% tiền đặt cọc cho mỗi 30 phút trễ (làm tròn lên theo từng chu kỳ 30 phút, tối thiểu 1.000 đ/30 phút), với mức trần tối đa bằng 50% tổng tiền đặt cọc của đơn hàng trong giai đoạn chờ hoàn trả.',
+  );
+  lines.push(
+    '- Các mốc cảnh báo và chế tài tài khoản: Hệ thống gửi thông báo nhắc nhở tại mốc 15 phút và 1 giờ quá hạn. Khi quá hạn từ 2 giờ (T+2h) trở lên, tài khoản Bên B bị tạm khóa quyền tạo đơn thuê mới trên nền tảng TàGo cho đến khi hoàn tất trả trang phục và đối soát xong nghĩa vụ quá hạn.',
+  );
+  lines.push(
+    '- Mốc quá hạn 24 giờ và xác nhận mất trang phục (LOST_ITEM): Trường hợp trễ quá 24 giờ mà Bên B chưa hoàn trả trang phục và Bên A đã liên hệ tối thiểu 03 (ba) lần bất thành, Bên A có quyền kích hoạt xác nhận Mất trang phục (LOST_ITEM) theo Điều 4.',
+  );
+  lines.push(
+    '- Bảo vệ lịch hẹn kế tiếp (Cơ chế Domino Recovery): Trường hợp lịch giao trang phục của Bên B bị ảnh hưởng do khách thuê ca trước trả trễ: (i) Bên A / Nền tảng được quyền tự động điều phối trang phục cùng mẫu và kích thước còn trống lịch trong kho để bàn giao đúng hẹn cho Bên B; hoặc (ii) nếu không còn trang phục cùng mẫu/size, hệ thống đề xuất tối đa 03 mẫu tương đương (trong biên độ giá 70%–130%) để Bên B lựa chọn trong vòng 60 phút. Nếu Bên B không đồng ý đổi mẫu hoặc hết 60 phút chưa có phương án thay thế, đơn hàng được hủy và hoàn trả 100% tiền thuê cùng tiền đặt cọc cho Bên B.',
+  );
+  if (!lateReturn && policies?.providerRental) {
+    lines.push(`- Ghi chú vận hành bổ sung từ Shop: ${policies.providerRental}`);
   }
   lines.push('');
 
   // ĐIỀU 4: TIỀN ĐẶT CỌC VÀ BỒI THƯỜNG
   if (damageComp) {
     lines.push('ĐIỀU 4: TIỀN ĐẶT CỌC VÀ BỒI THƯỜNG HƯ HỎNG, MẤT MÁT');
-    lines.push('- Tiền đặt cọc là khoản bảo đảm thực hiện hợp đồng được ghi nhận theo đơn hàng và được hoàn trả đầy đủ khi Bên B hoàn trả trang phục đúng hạn, nguyên vẹn.');
+    lines.push(
+      '- Tiền đặt cọc là khoản bảo đảm thực hiện hợp đồng được ghi nhận theo đơn hàng và được hoàn trả đầy đủ khi Bên B hoàn trả trang phục đúng hạn, nguyên vẹn.',
+    );
 
     const resolved = resolveDamageCompensationRules(damageComp);
 
-    const renderTierPdf = (tierLabel: string, tier: typeof resolved.minorDamage) => {
+    const renderTierPdf = (
+      tierLabel: string,
+      tier: typeof resolved.minorDamage,
+    ) => {
       if (tier.method === IncidentCompensationMethod.FIXED_FEE) {
-        const feeStr = tier.fixedFeeAmount !== null ? formatVnd(tier.fixedFeeAmount) : 'theo biểu phí đã duyệt';
-        const cond = tier.conditionsAndEvidence ? ` (Điều kiện: ${tier.conditionsAndEvidence})` : '';
+        const feeStr =
+          tier.fixedFeeAmount !== null
+            ? formatVnd(tier.fixedFeeAmount)
+            : 'theo biểu phí đã duyệt';
+        const cond = tier.conditionsAndEvidence
+          ? ` (Điều kiện: ${tier.conditionsAndEvidence})`
+          : '';
         lines.push(`- ${tierLabel}: ${feeStr}/lỗi${cond}.`);
-      } else if (tier.method === IncidentCompensationMethod.PERCENTAGE_ON_ASSET) {
+      } else if (
+        tier.method === IncidentCompensationMethod.PERCENTAGE_ON_ASSET
+      ) {
         const pct = tier.percentageOfAsset ?? 0;
-        const compAmt = totalReplacementVal > 0 ? totalReplacementVal * (pct / 100) : 0;
-        const calcStr = totalReplacementVal > 0
-          ? ` (${formatVnd(compAmt)} trên tổng giá trị bồi hoàn ${formatVnd(totalReplacementVal)})`
-          : ' do Shop niêm yết';
-        const cond = tier.conditionsAndEvidence ? ` (Điều kiện: ${tier.conditionsAndEvidence})` : '';
-        lines.push(`- ${tierLabel}: ${pct}% Giá trị bồi hoàn trang phục${calcStr}${cond}.`);
-      } else if (tier.method === IncidentCompensationMethod.ACTUAL_REPAIR_COST) {
-        const cond = tier.conditionsAndEvidence ? ` Căn cứ: ${tier.conditionsAndEvidence}` : '';
-        lines.push(`- ${tierLabel} (Chi phí thực tế): Bồi thường theo chi phí phục hồi/sửa chữa thực tế căn cứ hóa đơn, chứng từ hợp lệ từ đơn vị chuyên nghiệp.${cond}`);
+        const compAmt =
+          totalReplacementVal > 0 ? totalReplacementVal * (pct / 100) : 0;
+        const calcStr =
+          totalReplacementVal > 0
+            ? ` (${formatVnd(compAmt)} trên tổng giá trị bồi hoàn ${formatVnd(totalReplacementVal)})`
+            : ' do Shop niêm yết';
+        const cond = tier.conditionsAndEvidence
+          ? ` (Điều kiện: ${tier.conditionsAndEvidence})`
+          : '';
+        lines.push(
+          `- ${tierLabel}: ${pct}% Giá trị bồi hoàn trang phục${calcStr}${cond}.`,
+        );
+      } else if (
+        tier.method === IncidentCompensationMethod.ACTUAL_REPAIR_COST
+      ) {
+        const cond = tier.conditionsAndEvidence
+          ? ` Căn cứ: ${tier.conditionsAndEvidence}`
+          : '';
+        lines.push(
+          `- ${tierLabel} (Chi phí thực tế): Bồi thường theo chi phí phục hồi/sửa chữa thực tế căn cứ hóa đơn, chứng từ hợp lệ từ đơn vị chuyên nghiệp.${cond}`,
+        );
       } else {
-        const cond = tier.conditionsAndEvidence ? ` Căn cứ: ${tier.conditionsAndEvidence}` : '';
-        lines.push(`- ${tierLabel} (Thương lượng sự cố): Hai bên đối chiếu hiện trạng và thương lượng số tiền bồi thường dựa trên chứng cứ giao nhận.${cond}`);
+        const cond = tier.conditionsAndEvidence
+          ? ` Căn cứ: ${tier.conditionsAndEvidence}`
+          : '';
+        lines.push(
+          `- ${tierLabel} (Thương lượng sự cố): Hai bên đối chiếu hiện trạng và thương lượng số tiền bồi thường dựa trên chứng cứ giao nhận.${cond}`,
+        );
       }
     };
 
-    renderTierPdf('Phí xử lý hư hỏng nhẹ (vết bẩn tẩy được, bung chỉ nhẹ, cúc tuột)', resolved.minorDamage);
-    renderTierPdf('Bồi thường hư hỏng vừa (rách nhỏ dưới 5cm, hỏng phụ liệu cần may vá)', resolved.moderateDamage);
-    renderTierPdf('Bồi thường hư hỏng nặng (rách vải lớn, biến dạng phom dáng, cháy xém hoặc biến dạng chất liệu)', resolved.severeDamage);
-    renderTierPdf('Mất trang phục hoặc không thể phục hồi (không hoàn trả hoặc hư hỏng toàn bộ không thể tái sử dụng)', resolved.totalLoss);
+    renderTierPdf(
+      'Phí xử lý hư hỏng nhẹ (vết bẩn tẩy được, bung chỉ nhẹ, cúc tuột)',
+      resolved.minorDamage,
+    );
+    renderTierPdf(
+      'Bồi thường hư hỏng vừa (rách nhỏ dưới 5cm, hỏng phụ liệu cần may vá)',
+      resolved.moderateDamage,
+    );
+    renderTierPdf(
+      'Bồi thường hư hỏng nặng (rách vải lớn, biến dạng phom dáng, cháy xém hoặc biến dạng chất liệu)',
+      resolved.severeDamage,
+    );
+    renderTierPdf(
+      'Mất trang phục hoặc không thể phục hồi (không hoàn trả hoặc hư hỏng toàn bộ không thể tái sử dụng)',
+      resolved.totalLoss,
+    );
 
     if (resolved.incidentNotificationHours) {
-      lines.push(`- Thời hạn thông báo sự cố: Bên A có trách nhiệm kiểm tra và gửi thông báo sự cố kèm chứng cứ trong vòng ${resolved.incidentNotificationHours} giờ kể từ thời điểm nhận lại trang phục.`);
+      lines.push(
+        `- Thời hạn thông báo sự cố: Bên A có trách nhiệm kiểm tra và gửi thông báo sự cố kèm chứng cứ trong vòng ${resolved.incidentNotificationHours} giờ kể từ thời điểm nhận lại trang phục.`,
+      );
     }
 
-    lines.push('- Cơ sở bồi thường và xử lý tiền cọc: Tiền đặt cọc là khoản bảo đảm thực hiện hợp đồng. Khi phát sinh sự cố, việc xử lý bồi thường và đối trừ tiền cọc được thực hiện theo thỏa thuận thống nhất giữa hai bên trên cơ sở các mức bồi thường đã giao kết; trường hợp giá trị thiệt hại vượt quá tiền cọc, Bên B có trách nhiệm thanh toán bổ sung phần chênh lệch cho Bên A theo quy định thỏa thuận.');
+    lines.push(
+      '- Cơ sở bồi thường và xử lý tiền cọc: Tiền đặt cọc là khoản bảo đảm thực hiện hợp đồng. Khi Bên B hoàn trả trang phục quá hạn và Bên A xác nhận hoàn tất nhận lại đồ, các bên thống nhất đối trừ khoản phí phạt quá hạn (tối đa 50% tiền cọc theo biểu phí tại Điều 3) từ tiền đặt cọc để chuyển cho Bên A, phần cọc còn dư (nếu có) được hoàn trả về cho Bên B. Trường hợp phát sinh hư hỏng, việc xử lý bồi thường và đối trừ tiền cọc được thực hiện theo thỏa thuận thống nhất giữa hai bên trên cơ sở các mức bồi thường đã giao kết; trường hợp giá trị thiệt hại vượt quá tiền cọc, Bên B có trách nhiệm thanh toán bổ sung phần chênh lệch cho Bên A theo quy định thỏa thuận.',
+    );
+    lines.push(
+      '- Xử lý trường hợp mất trang phục (LOST_ITEM): Khi đơn hàng bị xác nhận mất trang phục sau quá hạn 24 giờ và tối thiểu 03 lần liên hệ bất thành, 100% tiền đặt cọc được chuyển cho Bên A để bù đắp thiệt hại trang phục; tài khoản Bên B bị khóa vĩnh viễn khỏi nền tảng TàGo và hồ sơ hợp đồng điện tử cùng thông tin định danh (CCCD) được sử dụng làm căn cứ giải quyết theo quy định pháp luật hiện hành.',
+    );
 
-    const rawDispute = (resolved.disputeResolutionTerms || damageComp.disputeResolutionNotes || '').trim();
-    lines.push(`- Hỗ trợ giải quyết tranh chấp: ${rawDispute || 'Khi có tranh chấp hoặc bất đồng về tình trạng trang phục, Nền tảng VibeHue đóng vai trò là kênh tiếp nhận phản ánh và hỗ trợ hai bên hòa giải trung gian dựa trên chứng cứ giao nhận, không tự ý phán quyết hay khấu trừ tiền.'}`);
+    const rawDispute = (
+      resolved.disputeResolutionTerms ||
+      damageComp.disputeResolutionNotes ||
+      ''
+    ).trim();
+    lines.push(
+      `- Hỗ trợ giải quyết tranh chấp: ${rawDispute || 'Khi có tranh chấp hoặc bất đồng về tình trạng trang phục, Nền tảng TàGo đóng vai trò là kênh tiếp nhận phản ánh và hỗ trợ hai bên hòa giải trung gian dựa trên chứng cứ giao nhận, không tự ý phán quyết hay khấu trừ tiền.'}`,
+    );
   } else {
     lines.push('ĐIỀU 4: TIỀN ĐẶT CỌC VÀ QUY ĐỊNH BỒI THƯỜNG');
-    lines.push('- Tiền đặt cọc là khoản bảo đảm thực hiện hợp đồng theo đơn đặt hàng.');
-    lines.push('- Khi hoàn trả trang phục đúng hạn, nguyên vẹn không hỏng hóc, Bên B sẽ được nhận lại toàn bộ tiền cọc.');
-    lines.push('- Trường hợp trang phục bị mất mát, hư hỏng hoặc trả muộn, Bên B đồng ý bồi thường theo chi phí phục hồi hoặc giá trị bồi hoàn niêm yết của trang phục.');
+    lines.push(
+      '- Tiền đặt cọc là khoản bảo đảm thực hiện hợp đồng theo đơn đặt hàng.',
+    );
+    lines.push(
+      '- Khi hoàn trả trang phục đúng hạn, nguyên vẹn không hỏng hóc, Bên B sẽ được nhận lại toàn bộ tiền cọc.',
+    );
+    lines.push(
+      '- Đối soát trả muộn & mất trang phục: Khi Bên B trả muộn và Bên A xác nhận nhận lại đồ, các bên thống nhất đối trừ phí quá hạn (+10% tiền cọc/30 phút, tối đa 50% cọc) từ tiền cọc để chuyển cho Bên A và hoàn phần dư cho Bên B. Trường hợp xác nhận mất trang phục (LOST_ITEM) sau quá hạn 24 giờ và tối thiểu 03 lần liên hệ bất thành, 100% tiền cọc được chuyển cho Bên A và tài khoản Bên B bị khóa vĩnh viễn.',
+    );
+    lines.push(
+      '- Trường hợp trang phục bị mất mát hoặc hư hỏng, Bên B đồng ý bồi thường theo chi phí phục hồi hoặc giá trị bồi hoàn niêm yết của trang phục.',
+    );
   }
   lines.push('');
 
   // ĐIỀU 5: HỦY THUÊ VÀ HOÀN TIỀN
   if (cancelPolicy) {
     lines.push('ĐIỀU 5: CHÍNH SÁCH HỦY ĐƠN VÀ HOÀN TIỀN');
-    lines.push('- Thời điểm xác định yêu cầu hủy: Tính theo thời điểm (timestamp) hệ thống ghi nhận Bên B gửi yêu cầu hủy đơn thành công so với mốc thời gian nhận đồ (rentalFrom) quy định tại Phần II.');
-    lines.push('- Biểu phí và tỷ lệ hoàn tiền thuê (các khoảng thời gian không chồng lấn):');
+    lines.push(
+      '- Thời điểm xác định yêu cầu hủy: Tính theo thời điểm (timestamp) hệ thống ghi nhận Bên B gửi yêu cầu hủy đơn thành công so với mốc thời gian nhận đồ (rentalFrom) quy định tại Phần II.',
+    );
+    lines.push(
+      '- Biểu phí và tỷ lệ hoàn tiền thuê (các khoảng thời gian không chồng lấn):',
+    );
 
-    if (Array.isArray(cancelPolicy.refundRules) && cancelPolicy.refundRules.length > 0) {
+    if (
+      Array.isArray(cancelPolicy.refundRules) &&
+      cancelPolicy.refundRules.length > 0
+    ) {
       const sortedRules = cancelPolicy.refundRules
         .slice()
         .sort((a: any, b: any) => b.daysBeforeRental - a.daysBeforeRental);
@@ -221,28 +324,40 @@ export function buildContractTermsLines(policies: any, items: any[] = []): strin
         if (idx === 0) {
           const h = rule.daysBeforeRental * 24;
           const hText = h > 0 ? ` (${h} giờ)` : '';
-          lines.push(`  + Hủy trước thời điểm bắt đầu thuê từ ${rule.daysBeforeRental} ngày${hText} trở lên: Hoàn trả ${rule.refundPercentage}% tiền thuê.`);
+          lines.push(
+            `  + Hủy trước thời điểm bắt đầu thuê từ ${rule.daysBeforeRental} ngày${hText} trở lên: Hoàn trả ${rule.refundPercentage}% tiền thuê.`,
+          );
         } else {
           const curH = rule.daysBeforeRental * 24;
           const prevH = prev.daysBeforeRental * 24;
           if (rule.daysBeforeRental === 0) {
-            lines.push(`  + Hủy trong vòng dưới ${prev.daysBeforeRental} ngày (dưới ${prevH} giờ) trước thời điểm bắt đầu thuê: Hoàn trả ${rule.refundPercentage}% tiền thuê${rule.refundPercentage === 0 ? ' (không hoàn lại tiền thuê)' : ''}.`);
+            lines.push(
+              `  + Hủy trong vòng dưới ${prev.daysBeforeRental} ngày (dưới ${prevH} giờ) trước thời điểm bắt đầu thuê: Hoàn trả ${rule.refundPercentage}% tiền thuê${rule.refundPercentage === 0 ? ' (không hoàn lại tiền thuê)' : ''}.`,
+            );
           } else {
-            lines.push(`  + Hủy trước thời điểm bắt đầu thuê từ ${rule.daysBeforeRental} ngày (${curH} giờ) đến dưới ${prev.daysBeforeRental} ngày (${prevH} giờ): Hoàn trả ${rule.refundPercentage}% tiền thuê.`);
+            lines.push(
+              `  + Hủy trước thời điểm bắt đầu thuê từ ${rule.daysBeforeRental} ngày (${curH} giờ) đến dưới ${prev.daysBeforeRental} ngày (${prevH} giờ): Hoàn trả ${rule.refundPercentage}% tiền thuê.`,
+            );
           }
         }
       }
     } else {
-      lines.push('  + Tiền thuê được hoàn trả theo quy định đã phê duyệt của Shop.');
+      lines.push(
+        '  + Tiền thuê được hoàn trả theo quy định đã phê duyệt của Shop.',
+      );
     }
     if (cancelPolicy.cancellationNotes) {
       lines.push(`- Lưu ý hủy đơn từ Shop: ${cancelPolicy.cancellationNotes}`);
     }
   } else {
     lines.push('ĐIỀU 5: CHÍNH SÁCH HỦY ĐƠN VÀ HOÀN TIỀN');
-    lines.push(`- Quy định hủy từ Bên Cho Thuê: ${policies?.providerCancellation || 'Áp dụng theo quy chế hoạt động của nền tảng VibeHue.'}`);
+    lines.push(
+      `- Quy định hủy từ Bên Cho Thuê: ${policies?.providerCancellation || 'Áp dụng theo quy chế hoạt động của nền tảng TàGo.'}`,
+    );
     if (policies?.cancellation?.value?.freeCancelBeforeHours) {
-      lines.push(`- Quy định bảo vệ từ Sàn VibeHue: Cho phép hủy miễn phí trước ${policies.cancellation.value.freeCancelBeforeHours} giờ so với thời điểm nhận đồ. Tiền cọc và tiền thuê sẽ được hoàn trả theo quy trình của sàn.`);
+      lines.push(
+        `- Quy định bảo vệ từ Sàn TàGo: Cho phép hủy miễn phí trước ${policies.cancellation.value.freeCancelBeforeHours} giờ so với thời điểm nhận đồ. Tiền cọc và tiền thuê sẽ được hoàn trả theo quy trình của sàn.`,
+      );
     }
   }
   lines.push('');
@@ -257,10 +372,18 @@ export function buildContractTermsLines(policies: any, items: any[] = []): strin
   }
 
   // HIỆU LỰC HỢP ĐỒNG
-  lines.push(`ĐIỀU ${nextArticleNum}: HIỆU LỰC HỢP ĐỒNG VÀ XÁC NHẬN GIAO KẾT ĐIỆN TỬ`);
-  lines.push('- Hợp đồng điện tử này được xác lập (formedAt) tại thời điểm Bên B hoàn tất xác nhận chấp thuận điện tử trên hệ thống VibeHue theo quy định của Luật Giao dịch điện tử.');
-  lines.push('- Điều kiện thực thi và hiệu lực cung cấp dịch vụ (effectiveAt) bắt đầu khi đơn hàng hoàn tất nghĩa vụ thanh toán (paidAt) và được hệ thống xác nhận hợp lệ theo Quy chế nền tảng.');
-  lines.push('- Bản ghi hợp đồng điện tử được tạo mã băm SHA-256 để bảo đảm tính toàn vẹn kỹ thuật, chống sửa đổi trái phép và phục vụ tra cứu, đối soát theo quy định.');
+  lines.push(
+    `ĐIỀU ${nextArticleNum}: HIỆU LỰC HỢP ĐỒNG VÀ XÁC NHẬN GIAO KẾT ĐIỆN TỬ`,
+  );
+  lines.push(
+    '- Hợp đồng điện tử này được xác lập (formedAt) tại thời điểm Bên B hoàn tất xác nhận chấp thuận điện tử trên hệ thống TàGo theo quy định của Luật Giao dịch điện tử.',
+  );
+  lines.push(
+    '- Điều kiện thực thi và hiệu lực cung cấp dịch vụ (effectiveAt) bắt đầu khi đơn hàng hoàn tất nghĩa vụ thanh toán (paidAt) và được hệ thống xác nhận hợp lệ theo Quy chế nền tảng.',
+  );
+  lines.push(
+    '- Bản ghi hợp đồng điện tử được tạo mã băm SHA-256 để bảo đảm tính toàn vẹn kỹ thuật, chống sửa đổi trái phép và phục vụ tra cứu, đối soát theo quy định.',
+  );
 
   return lines;
 }
@@ -368,7 +491,7 @@ class PdfLayoutEngine {
       this.currentY = 790;
     } else {
       // Running header on page 2+
-      const headerText = 'VIBEHUE — HỢP ĐỒNG THUÊ ÁO DÀI';
+      const headerText = 'TÀGO — HỢP ĐỒNG THUÊ ÁO DÀI';
       const codeText = `Mã: ${this.contractCode}`;
       page.drawText(headerText, {
         x: this.margin,
@@ -439,7 +562,7 @@ class PdfLayoutEngine {
 
       // Left footer
       page.drawText(
-        'Hợp đồng điện tử VibeHue — Nền tảng cho thuê trang phục truyền thống',
+        'Hợp đồng điện tử TàGo — Nền tảng cho thuê trang phục truyền thống',
         {
           x: this.margin,
           y: 28,
@@ -502,7 +625,7 @@ export class ContractPdfGenerator {
     // =========================================================================
     const isConsented = Boolean(input.consent?.customerConsentAt);
 
-    layout.currentPage.drawText('VIBEHUE', {
+    layout.currentPage.drawText('TÀGO', {
       x: layout.margin,
       y: layout.currentY,
       size: 11,
@@ -531,7 +654,7 @@ export class ContractPdfGenerator {
     layout.currentY -= 14;
 
     layout.currentPage.drawText(
-      'DỊCH VỤ THUÊ TRANG PHỤC VÀ PHỤ KIỆN TRUYỀN THỐNG TRÊN NỀN TẢNG VIBEHUE',
+      'DỊCH VỤ THUÊ TRANG PHỤC VÀ PHỤ KIỆN TRUYỀN THỐNG TRÊN NỀN TẢNG TÀGO',
       {
         x: layout.margin,
         y: layout.currentY,
@@ -664,7 +787,7 @@ export class ContractPdfGenerator {
 
     const provName = str(
       prov?.businessName || prov?.name,
-      'Cửa hàng đối tác VibeHue',
+      'Cửa hàng đối tác TàGo',
     );
     const provNameWrapped = wrapText(
       provName,
@@ -713,7 +836,7 @@ export class ContractPdfGenerator {
         prov?.phoneNumber ||
         (prov as any)?.contact?.email ||
         prov?.email,
-      'Liên hệ qua ứng dụng VibeHue',
+      'Liên hệ qua ứng dụng TàGo',
     );
     layout.currentPage.drawText(`Điện thoại: ${provPhone}`, {
       x: layout.margin + 10,
@@ -743,7 +866,10 @@ export class ContractPdfGenerator {
       color: COLOR_PRIMARY,
     });
 
-    const custName = str(cust?.fullName || cust?.name, 'Chưa cập nhật trên hệ thống');
+    const custName = str(
+      cust?.fullName || cust?.name,
+      'Chưa cập nhật trên hệ thống',
+    );
     layout.currentPage.drawText(custName, {
       x: boxBX + 10,
       y: boxAY + partyCardHeight - 27,
@@ -869,16 +995,22 @@ export class ContractPdfGenerator {
         0;
       const lineTotal = unitPrice * qty;
 
-      const rFrom = item.rentalFrom || (item as any).startDate || (item as any).shootDate;
+      const rFrom =
+        item.rentalFrom || (item as any).startDate || (item as any).shootDate;
       const rTo = item.rentalTo || (item as any).endDate || rFrom;
       if (!firstRentalFrom && rFrom) firstRentalFrom = rFrom;
       if (!firstRentalTo && rTo) firstRentalTo = rTo;
 
-      const repVal = Number((item as any).replacementValue || (item as any).declaredValue) || 0;
-      const repValStr = repVal > 0 ? `Giá trị bồi hoàn: ${formatVnd(repVal)}` : null;
+      const repVal =
+        Number((item as any).replacementValue || (item as any).declaredValue) ||
+        0;
+      const repValStr =
+        repVal > 0 ? `Giá trị bồi hoàn: ${formatVnd(repVal)}` : null;
 
       const nameLines = wrapText(fullDesc, regularFont, 8, colWidths[1] - 8);
-      const totalTextLines = repValStr ? nameLines.length + 1 : nameLines.length;
+      const totalTextLines = repValStr
+        ? nameLines.length + 1
+        : nameLines.length;
       const rowHeight = Math.max(22, totalTextLines * 11 + 8);
 
       if (layout.currentY - rowHeight < layout.bottomLimit) {
@@ -991,7 +1123,10 @@ export class ContractPdfGenerator {
       const fromD = new Date(firstRentalFrom as any).getTime();
       const toD = new Date(firstRentalTo as any).getTime();
       if (!isNaN(fromD) && !isNaN(toD) && toD >= fromD) {
-        rentalDays = Math.max(1, Math.ceil((toD - fromD) / (1000 * 60 * 60 * 24)));
+        rentalDays = Math.max(
+          1,
+          Math.ceil((toD - fromD) / (1000 * 60 * 60 * 24)),
+        );
       }
     }
     const daysLabel = rentalDays > 0 ? ` (${rentalDays} ngày)` : '';
@@ -1287,18 +1422,15 @@ export class ContractPdfGenerator {
 
     const provCardSubtitle = policyVersionNumber
       ? `Chính sách áp dụng: Phiên bản v${policyVersionNumber} đã được phê duyệt`
-      : 'Hình thức: Áp dụng điều kiện giao dịch chung đã cam kết với VibeHue';
+      : 'Hình thức: Áp dụng điều kiện giao dịch chung đã cam kết với TàGo';
 
-    layout.currentPage.drawText(
-      provCardSubtitle,
-      {
-        x: layout.margin + 10,
-        y: signY + signCardHeight - 40,
-        size: 7,
-        font: regularFont,
-        color: COLOR_TEXT_MUTED,
-      },
-    );
+    layout.currentPage.drawText(provCardSubtitle, {
+      x: layout.margin + 10,
+      y: signY + signCardHeight - 40,
+      size: 7,
+      font: regularFont,
+      color: COLOR_TEXT_MUTED,
+    });
 
     layout.currentPage.drawText('[ GHI NHẬN THEO QUY CHẾ NỀN TẢNG ]', {
       x: layout.margin + 10,
@@ -1343,9 +1475,10 @@ export class ContractPdfGenerator {
       color: COLOR_TEXT_MAIN,
     });
 
-    const consentTime = isConsented && input.consent?.customerConsentAt
-      ? formatDate(input.consent.customerConsentAt)
-      : 'Chưa ghi nhận (Bản xem trước)';
+    const consentTime =
+      isConsented && input.consent?.customerConsentAt
+        ? formatDate(input.consent.customerConsentAt)
+        : 'Chưa ghi nhận (Bản xem trước)';
     layout.currentPage.drawText(`Thời điểm: ${consentTime}`, {
       x: signBX + 10,
       y: signY + signCardHeight - 40,
@@ -1354,9 +1487,10 @@ export class ContractPdfGenerator {
       color: COLOR_TEXT_MUTED,
     });
 
-    const authMethod = isConsented && input.consent?.customerAuthMethod
-      ? input.consent.customerAuthMethod
-      : 'Chưa thực hiện';
+    const authMethod =
+      isConsented && input.consent?.customerAuthMethod
+        ? input.consent.customerAuthMethod
+        : 'Chưa thực hiện';
     layout.currentPage.drawText(`Xác thực: ${authMethod}`, {
       x: signBX + 10,
       y: signY + signCardHeight - 50,

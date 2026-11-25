@@ -56,9 +56,13 @@ export class ContractsController {
     @Body() body: UpdateProviderContractConfigDto,
     @Req() req: Request,
   ) {
-    const ipAddress = (req.headers['x-forwarded-for'] as string) || req.socket?.remoteAddress;
+    const ipAddress =
+      (req.headers['x-forwarded-for'] as string) || req.socket?.remoteAddress;
     const userAgent = req.headers['user-agent'];
-    return this.providerConfigService.updateConfig(user, body, { ipAddress, userAgent });
+    return this.providerConfigService.updateConfig(user, body, {
+      ipAddress,
+      userAgent,
+    });
   }
 
   @Get('provider/config/audit')
@@ -102,10 +106,7 @@ export class ContractsController {
   }
 
   @Get('admin/policies/:id')
-  adminPolicyDetail(
-    @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
-  ) {
+  adminPolicyDetail(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.providerPolicy.getPolicyDetailForAdmin(user, id);
   }
 
@@ -183,11 +184,17 @@ export class ContractsController {
     @Param('contractId') contractId: string,
     @Res() res: Response,
   ) {
-    const { stream, filename, sha256 } = await this.evidence.getPdfStream(user, contractId);
+    const { stream, filename, sha256 } = await this.evidence.getPdfStream(
+      user,
+      contractId,
+    );
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
     res.setHeader('X-Contract-SHA256', sha256);
-    res.setHeader('Access-Control-Expose-Headers', 'X-Contract-SHA256, Content-Disposition');
+    res.setHeader(
+      'Access-Control-Expose-Headers',
+      'X-Contract-SHA256, Content-Disposition',
+    );
     res.setHeader('Cache-Control', 'private, no-transform, max-age=3600');
     stream.pipe(res);
   }
@@ -199,11 +206,18 @@ export class ContractsController {
     @Param('versionId') versionId: string,
     @Res() res: Response,
   ) {
-    const { stream, filename, sha256 } = await this.evidence.getPdfStream(user, contractId, versionId);
+    const { stream, filename, sha256 } = await this.evidence.getPdfStream(
+      user,
+      contractId,
+      versionId,
+    );
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
     res.setHeader('X-Contract-SHA256', sha256);
-    res.setHeader('Access-Control-Expose-Headers', 'X-Contract-SHA256, Content-Disposition');
+    res.setHeader(
+      'Access-Control-Expose-Headers',
+      'X-Contract-SHA256, Content-Disposition',
+    );
     res.setHeader('Cache-Control', 'private, no-transform, max-age=3600');
     stream.pipe(res);
   }

@@ -92,12 +92,10 @@ function createService(
     {} as any,
     {} as any,
     {
-      getDisputePolicy: jest
-        .fn()
-        .mockResolvedValue({
-          requireEvidence: options.requireEvidence ?? true,
-          allowDisputeAfterCompletedHours: 72,
-        }),
+      getDisputePolicy: jest.fn().mockResolvedValue({
+        requireEvidence: options.requireEvidence ?? true,
+        allowDisputeAfterCompletedHours: 72,
+      }),
     } as any,
     {} as any,
   );
@@ -135,8 +133,8 @@ function dto(booking: Row | null, item: Row | null, overrides: Row = {}): any {
 
 afterEach(() => jest.restoreAllMocks());
 
-describe('UC-39 Incident Report (NgocL)', () => {
-  it('UT-39 UTCID03 returns not found for a missing booking', async () => {
+describe('UC-38 Incident Report (NgocL)', () => {
+  it('UT-38 UTCID03 returns not found for a missing booking', async () => {
     const { service } = createService({ booking: null });
 
     await expect(
@@ -144,7 +142,7 @@ describe('UC-39 Incident Report (NgocL)', () => {
     ).rejects.toThrow(new NotFoundException('Không tìm thấy đơn hàng'));
   });
 
-  it('UT-39 UTCID04 returns not found for a missing booking item', async () => {
+  it('UT-38 UTCID04 returns not found for a missing booking item', async () => {
     const { service, booking } = createService({ item: null });
 
     await expect(
@@ -154,7 +152,7 @@ describe('UC-39 Incident Report (NgocL)', () => {
     );
   });
 
-  it('UT-39 UTCID05 rejects an item that belongs to another booking', async () => {
+  it('UT-38 UTCID05 rejects an item that belongs to another booking', async () => {
     const foreignItem = {
       _id: new Types.ObjectId(),
       bookingId: new Types.ObjectId(),
@@ -169,7 +167,7 @@ describe('UC-39 Incident Report (NgocL)', () => {
     );
   });
 
-  it('UT-39 UTCID06 rejects a second incident for the same booking item', async () => {
+  it('UT-38 UTCID06 rejects a second incident for the same booking item', async () => {
     const { service, booking, item } = createService({
       existing: { _id: new Types.ObjectId() },
     });
@@ -181,7 +179,7 @@ describe('UC-39 Incident Report (NgocL)', () => {
     );
   });
 
-  it('UT-39 UTCID07 rejects compensation above the held rental deposit', async () => {
+  it('UT-38 UTCID07 rejects compensation above the held rental deposit', async () => {
     const { service, booking, item, incidentModel } = createService();
 
     await expect(
@@ -193,7 +191,7 @@ describe('UC-39 Incident Report (NgocL)', () => {
     expect(incidentModel.create).not.toHaveBeenCalled();
   });
 
-  it('UT-39 UTCID08 accepts compensation equal to the held rental deposit', async () => {
+  it('UT-38 UTCID08 accepts compensation equal to the held rental deposit', async () => {
     const { service, booking, item } = createService();
 
     await expect(
@@ -204,7 +202,7 @@ describe('UC-39 Incident Report (NgocL)', () => {
     ).resolves.toMatchObject({ requestedAmount: 300000 });
   });
 
-  it('UT-39 UTCID09 forbids reporting an item of another provider', async () => {
+  it('UT-38 UTCID09 forbids reporting an item of another provider', async () => {
     const { service, booking, item } = createService({
       provider: { _id: new Types.ObjectId(), businessName: 'Other' },
     });
@@ -218,7 +216,7 @@ describe('UC-39 Incident Report (NgocL)', () => {
     );
   });
 
-  it('UT-39 UTCID10 requires at least one evidence photo when the policy demands it', async () => {
+  it('UT-38 UTCID10 requires at least one evidence photo when the policy demands it', async () => {
     const { service, booking, item } = createService();
 
     await expect(
@@ -231,7 +229,7 @@ describe('UC-39 Incident Report (NgocL)', () => {
     );
   });
 
-  it('UT-39 UTCID11 does not allow an incident before the costume is picked up', async () => {
+  it('UT-38 UTCID11 does not allow an incident before the costume is picked up', async () => {
     const { service, booking, item } = createService();
     booking!.status = BookingStatus.Confirmed;
 
@@ -244,7 +242,7 @@ describe('UC-39 Incident Report (NgocL)', () => {
     );
   });
 
-  it('UT-39 UTCID12 closes the incident window 72 hours after completion', async () => {
+  it('UT-38 UTCID12 closes the incident window 72 hours after completion', async () => {
     const { service, booking, item } = createService();
     booking!.status = BookingStatus.Completed;
     booking!.statusTimeline = [
@@ -259,7 +257,7 @@ describe('UC-39 Incident Report (NgocL)', () => {
     ).rejects.toThrow(new BadRequestException('Đã quá thời hạn mở khiếu nại'));
   });
 
-  it('UT-39 UTCID13 records the incident, moves the costume to cleaning and asks the customer to respond', async () => {
+  it('UT-38 UTCID13 records the incident, moves the costume to cleaning and asks the customer to respond', async () => {
     const {
       service,
       booking,
@@ -293,7 +291,7 @@ describe('UC-39 Incident Report (NgocL)', () => {
     );
   });
 
-  it('UT-39 UTCID14 maps a concurrent duplicate insert to a conflict', async () => {
+  it('UT-38 UTCID14 maps a concurrent duplicate insert to a conflict', async () => {
     const { service, booking, item } = createService({
       createError: Object.assign(new Error('dup'), { code: 11000 }),
     });

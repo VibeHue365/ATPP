@@ -5,14 +5,32 @@ import { createHmac } from 'crypto';
 import sharp from 'sharp';
 import { Model, Types } from 'mongoose';
 import { PrivateStorageService } from '../../storage/services/private-storage.service';
-import { OcrAssessment, OcrExecutionStatus, OcrStatus, ProviderVerification } from '../schemas/provider-verification.schema';
-import { OcrAttemptOutcome, ProviderVerificationOcrAttempt } from '../schemas/provider-verification-ocr-attempt.schema';
+import {
+  OcrAssessment,
+  OcrExecutionStatus,
+  OcrStatus,
+  ProviderVerification,
+} from '../schemas/provider-verification.schema';
+import {
+  OcrAttemptOutcome,
+  ProviderVerificationOcrAttempt,
+} from '../schemas/provider-verification-ocr-attempt.schema';
 import { ProviderOcrJobData } from './provider-ocr-queue.service';
 
 @Injectable()
 export class ProviderDocumentOcrService {
-  constructor(@InjectModel(ProviderVerification.name) private readonly verificationModel: Model<ProviderVerification>, @InjectModel(ProviderVerificationOcrAttempt.name) private readonly attempts: Model<ProviderVerificationOcrAttempt>, private readonly storage: PrivateStorageService, private readonly config: ConfigService) {}
-  async process(job: ProviderOcrJobData, retryRemaining = false): Promise<void> {
+  constructor(
+    @InjectModel(ProviderVerification.name)
+    private readonly verificationModel: Model<ProviderVerification>,
+    @InjectModel(ProviderVerificationOcrAttempt.name)
+    private readonly attempts: Model<ProviderVerificationOcrAttempt>,
+    private readonly storage: PrivateStorageService,
+    private readonly config: ConfigService,
+  ) {}
+  async process(
+    job: ProviderOcrJobData,
+    retryRemaining = false,
+  ): Promise<void> {
     if (!Types.ObjectId.isValid(job.verificationId)) {
       throw new Error('Invalid provider verification identifier in OCR job');
     }
@@ -39,8 +57,12 @@ export class ProviderDocumentOcrService {
     );
 
     const verification = await this.verificationModel.findById(verificationId);
-    const document = verification?.documents.find((item) => item.documentType === job.documentType);
-    const version = document?.versions.find((item) => item.versionNo === job.versionNo && item.isCurrent);
+    const document = verification?.documents.find(
+      (item) => item.documentType === job.documentType,
+    );
+    const version = document?.versions.find(
+      (item) => item.versionNo === job.versionNo && item.isCurrent,
+    );
     if (
       !verification ||
       !version ||
@@ -52,7 +74,10 @@ export class ProviderDocumentOcrService {
 
     const heartbeat = setInterval(() => {
       const now = new Date();
-      void this.attempts.updateOne({ attemptId: job.attemptId, outcome: null }, { $set: { heartbeatAt: now } });
+      void this.attempts.updateOne(
+        { attemptId: job.attemptId, outcome: null },
+        { $set: { heartbeatAt: now } },
+      );
       void this.verificationModel.updateOne(
         { _id: verificationId },
         { $set: { 'documents.$[d].versions.$[v].ocr.heartbeatAt': now } },
@@ -83,9 +108,13 @@ export class ProviderDocumentOcrService {
         );
       }
 
-      const stream = await this.storage.readPrivateFile(version.bucket, version.storageKey);
+      const stream = await this.storage.readPrivateFile(
+        version.bucket,
+        version.storageKey,
+      );
       const chunks: Buffer[] = [];
-      for await (const chunk of stream) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      for await (const chunk of stream)
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
       const rawBuffer = Buffer.concat(chunks);
 
       const image = sharp(rawBuffer, { failOn: 'none' }).rotate();
@@ -94,10 +123,18 @@ export class ProviderDocumentOcrService {
       const contrast = stats.channels[0]?.stdev ?? 64;
       const blur = await this.blurScore(rawBuffer);
 
-      const minLuminance = Number(this.config.get<string>('OCR_MIN_LUMINANCE', '0.2'));
-      const maxLuminance = Number(this.config.get<string>('OCR_MAX_LUMINANCE', '0.98'));
-      const minContrast = Number(this.config.get<string>('OCR_MIN_CONTRAST', '18'));
-      const blurThreshold = Number(this.config.get<string>('OCR_BLUR_THRESHOLD', '15'));
+      const minLuminance = Number(
+        this.config.get<string>('OCR_MIN_LUMINANCE', '0.2'),
+      );
+      const maxLuminance = Number(
+        this.config.get<string>('OCR_MAX_LUMINANCE', '0.98'),
+      );
+      const minContrast = Number(
+        this.config.get<string>('OCR_MIN_CONTRAST', '18'),
+      );
+      const blurThreshold = Number(
+        this.config.get<string>('OCR_BLUR_THRESHOLD', '15'),
+      );
 
       const qualityWarnings: string[] = [];
       if (luminance < minLuminance) qualityWarnings.push('IMAGE_TOO_DARK');
@@ -123,7 +160,9 @@ export class ProviderDocumentOcrService {
       // Lookaround regex to avoid false matches with 10-11 digit phone numbers or timestamps
       const match12 = result.text.match(/(?<!\d)\d{12}(?!\d)/);
       const match9 = result.text.match(/(?<!\d)\d{9}(?!\d)/);
-      const matchPassport = result.text.match(/(?<![A-Z0-9])[A-Z]\d{7}(?![A-Z0-9])/i);
+      const matchPassport = result.text.match(
+        /(?<![A-Z0-9])[A-Z]\d{7}(?![A-Z0-9])/i,
+      );
 
       let detectedIdNumber: string | null = null;
       if (isPassport) {
@@ -152,32 +191,38 @@ export class ProviderDocumentOcrService {
       }
 
       // Owner name fuzzy match using Levenshtein distance across lines
-      const ownerName = (isIdentityFront || isPassport)
-        ? verification.businessProfile.ownerName?.trim() ?? null
-        : null;
+      const ownerName =
+        isIdentityFront || isPassport
+          ? (verification.businessProfile.ownerName?.trim() ?? null)
+          : null;
 
-      const linesText = result.lines && result.lines.length > 0
-        ? result.lines.map((l) => l.text)
-        : result.text.split('\n');
+      const linesText =
+        result.lines && result.lines.length > 0
+          ? result.lines.map((l) => l.text)
+          : result.text.split('\n');
 
       let nameSim = 1.0;
       if (ownerName) {
         nameSim = this.nameSimilarity(ownerName, linesText);
-        if (nameSim < 0.60) {
+        if (nameSim < 0.6) {
           warnings.push('OWNER_NAME_MISMATCH');
-        } else if (nameSim < 0.80) {
+        } else if (nameSim < 0.8) {
           warnings.push('OWNER_NAME_UNCERTAIN');
         }
       }
 
-      const confThreshold = Number(this.config.get<string>('OCR_CONFIDENCE_THRESHOLD', '0.65'));
+      const confThreshold = Number(
+        this.config.get<string>('OCR_CONFIDENCE_THRESHOLD', '0.65'),
+      );
       if (result.confidence < confThreshold) {
         warnings.push('OCR_LOW_CONFIDENCE');
       }
 
       // Three-tier decision model
-      const isCriticalDarkOrBlur = luminance < minLuminance || blur < blurThreshold;
-      const hasHeavyIssue = isCriticalDarkOrBlur || warnings.includes('OCR_TEXT_EMPTY');
+      const isCriticalDarkOrBlur =
+        luminance < minLuminance || blur < blurThreshold;
+      const hasHeavyIssue =
+        isCriticalDarkOrBlur || warnings.includes('OCR_TEXT_EMPTY');
       const hasSoftIssue =
         warnings.includes('OWNER_NAME_MISMATCH') ||
         warnings.includes('OWNER_NAME_UNCERTAIN') ||
@@ -196,17 +241,23 @@ export class ProviderDocumentOcrService {
         assessment = OcrAssessment.Passed;
       }
 
-      const legacy = assessment === OcrAssessment.Passed
-        ? OcrStatus.Passed
-        : assessment === OcrAssessment.ReuploadRequired
-          ? OcrStatus.Failed
-          : OcrStatus.NeedsManualReview;
+      const legacy =
+        assessment === OcrAssessment.Passed
+          ? OcrStatus.Passed
+          : assessment === OcrAssessment.ReuploadRequired
+            ? OcrStatus.Failed
+            : OcrStatus.NeedsManualReview;
 
-      const detectedFullName = (isIdentityFront || isPassport) ? this.extractFullName(linesText) : null;
-      const detectedDob = (isIdentityFront || isPassport) ? this.extractDob(result.text) : null;
-      const detectedAddress = isIdentityFront ? this.extractAddress(linesText) : null;
+      const detectedFullName =
+        isIdentityFront || isPassport ? this.extractFullName(linesText) : null;
+      const detectedDob =
+        isIdentityFront || isPassport ? this.extractDob(result.text) : null;
+      const detectedAddress = isIdentityFront
+        ? this.extractAddress(linesText)
+        : null;
 
-      const finalName = detectedFullName || (ownerName && nameSim >= 0.60 ? ownerName : null);
+      const finalName =
+        detectedFullName || (ownerName && nameSim >= 0.6 ? ownerName : null);
 
       const fields: Record<string, unknown> = {
         fullName: {
@@ -223,20 +274,53 @@ export class ProviderDocumentOcrService {
       };
 
       if (detectedDob) {
-        fields.dateOfBirth = { value: detectedDob, confidence: result.confidence };
+        fields.dateOfBirth = {
+          value: detectedDob,
+          confidence: result.confidence,
+        };
       }
       if (detectedAddress) {
-        fields.address = { value: detectedAddress, confidence: result.confidence };
+        fields.address = {
+          value: detectedAddress,
+          confidence: result.confidence,
+        };
       }
 
       // Only store identity fingerprint for front side to prevent false mismatches
-      const fingerprintValue = (isIdentityFront && detectedIdNumber) ? detectedIdNumber : undefined;
-      await this.finish(job, OcrExecutionStatus.Succeeded, assessment, legacy, result.confidence, fields, warnings, fingerprintValue);
+      const fingerprintValue =
+        isIdentityFront && detectedIdNumber ? detectedIdNumber : undefined;
+      await this.finish(
+        job,
+        OcrExecutionStatus.Succeeded,
+        assessment,
+        legacy,
+        result.confidence,
+        fields,
+        warnings,
+        fingerprintValue,
+      );
     } catch (error) {
       if (retryRemaining) {
-        await this.attempts.updateOne({ attemptId: job.attemptId }, { $set: { retryable: true, errorCode: 'OCR_ENGINE_UNAVAILABLE', heartbeatAt: new Date() } });
+        await this.attempts.updateOne(
+          { attemptId: job.attemptId },
+          {
+            $set: {
+              retryable: true,
+              errorCode: 'OCR_ENGINE_UNAVAILABLE',
+              heartbeatAt: new Date(),
+            },
+          },
+        );
       } else {
-        await this.finish(job, OcrExecutionStatus.Failed, OcrAssessment.ReuploadRequired, OcrStatus.Failed, 0, {}, ['OCR_ENGINE_UNAVAILABLE']);
+        await this.finish(
+          job,
+          OcrExecutionStatus.Failed,
+          OcrAssessment.ReuploadRequired,
+          OcrStatus.Failed,
+          0,
+          {},
+          ['OCR_ENGINE_UNAVAILABLE'],
+        );
       }
       throw error;
     } finally {
@@ -317,18 +401,25 @@ export class ProviderDocumentOcrService {
   private extractFullName(lines: string[]): string | null {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
-      if (/h[oọ]\s*v[aà]\s*t[eêéèẽẻẹ]|full\s*name|h[oọ]\s*t[eêéèẽẻẹ]/i.test(line)) {
+      if (
+        /h[oọ]\s*v[aà]\s*t[eêéèẽẻẹ]|full\s*name|h[oọ]\s*t[eêéèẽẻẹ]/i.test(line)
+      ) {
         const parts = line.split(/[:\/\-]/);
         const after = parts[parts.length - 1].trim();
-        const afterWords = after.split(/\s+/).filter((w) => /^[A-Z\u00C0-\u1EF9]{2,}$/u.test(w));
+        const afterWords = after
+          .split(/\s+/)
+          .filter((w) => /^[A-Z\u00C0-\u1EF9]{2,}$/u.test(w));
         if (afterWords.length >= 2) {
           return afterWords.join(' ');
         }
         for (let j = i + 1; j < Math.min(lines.length, i + 4); j++) {
           const aheadLine = lines[j].trim();
-          if (/ngay\s*sinh|date\s*of\s*birth|sinh\s*ngay/i.test(aheadLine)) break;
+          if (/ngay\s*sinh|date\s*of\s*birth|sinh\s*ngay/i.test(aheadLine))
+            break;
           const words = aheadLine.split(/\s+/);
-          const nameWords = words.filter((w) => /^[A-Z\u00C0-\u1EF9]{2,}$/u.test(w));
+          const nameWords = words.filter((w) =>
+            /^[A-Z\u00C0-\u1EF9]{2,}$/u.test(w),
+          );
           if (nameWords.length >= 2) {
             return nameWords.join(' ');
           }
@@ -340,17 +431,25 @@ export class ProviderDocumentOcrService {
 
   private extractDob(text: string): string | null {
     const dobMatch =
-      text.match(/(?:ngay sinh|date of birth|sinh ngay)[:\s]*(\d{2}[\/\.-]\d{2}[\/\.-]\d{4})/i) ||
-      text.match(/(\d{2}\/\d{2}\/\d{4})/);
+      text.match(
+        /(?:ngay sinh|date of birth|sinh ngay)[:\s]*(\d{2}[\/\.-]\d{2}[\/\.-]\d{4})/i,
+      ) || text.match(/(\d{2}\/\d{2}\/\d{4})/);
     return dobMatch ? dobMatch[1] : null;
   }
 
   private extractAddress(lines: string[]): string | null {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
-      if (/noi\s*thuong\s*tru|noi\s*cu\s*tru|thuong\s*tru|place\s*of\s*residence/i.test(line)) {
+      if (
+        /noi\s*thuong\s*tru|noi\s*cu\s*tru|thuong\s*tru|place\s*of\s*residence/i.test(
+          line,
+        )
+      ) {
         const afterLabel = line
-          .replace(/.*(?:place\s*of\s*residence|noi\s*thuong\s*tru|thuong\s*tru|noi\s*cu\s*tru)[:\s\/]*/i, '')
+          .replace(
+            /.*(?:place\s*of\s*residence|noi\s*thuong\s*tru|thuong\s*tru|noi\s*cu\s*tru)[:\s\/]*/i,
+            '',
+          )
           .trim();
         const addrParts: string[] = [];
         if (afterLabel.length >= 5) {
@@ -358,9 +457,14 @@ export class ProviderDocumentOcrService {
         }
         for (let j = i + 1; j < Math.min(lines.length, i + 4); j++) {
           let nextLine = lines[j].trim();
-          if (/co\s*gia\s*tri|date\s*of\s*expiry|ngay\s*het\s*han/i.test(nextLine)) {
+          if (
+            /co\s*gia\s*tri|date\s*of\s*expiry|ngay\s*het\s*han/i.test(nextLine)
+          ) {
             nextLine = nextLine
-              .replace(/.*(?:date\s*of\s*expiry|co\s*gia\s*tri\s*den)[:\s\d\/\.-]*/i, '')
+              .replace(
+                /.*(?:date\s*of\s*expiry|co\s*gia\s*tri\s*den)[:\s\d\/\.-]*/i,
+                '',
+              )
               .trim();
           }
           if (/^\d{2}[\/\.-]\d{2}[\/\.-]\d{4}$/.test(nextLine)) break;
@@ -384,11 +488,17 @@ export class ProviderDocumentOcrService {
     const url = this.config.get<string>('OCR_SERVICE_URL');
     if (!url) throw new Error('OCR_SERVICE_URL is required for OCR V2 worker');
     const form = new FormData();
-    form.append('file', new Blob([Uint8Array.from(buffer)], { type: 'image/png' }), 'document.png');
+    form.append(
+      'file',
+      new Blob([Uint8Array.from(buffer)], { type: 'image/png' }),
+      'document.png',
+    );
     const response = await fetch(`${url.replace(/\/$/, '')}/ocr`, {
       method: 'POST',
       body: form,
-      signal: AbortSignal.timeout(Number(this.config.get<string>('OCR_TIMEOUT_MS', '30000'))),
+      signal: AbortSignal.timeout(
+        Number(this.config.get<string>('OCR_TIMEOUT_MS', '30000')),
+      ),
     });
     if (!response.ok) throw new Error('OCR engine unavailable');
     const data = (await response.json()) as {
@@ -418,7 +528,9 @@ export class ProviderDocumentOcrService {
       'documents.$[d].versions.$[v].ocr.assessment': assessment,
       'documents.$[d].versions.$[v].ocr.completedAt': new Date(),
       'documents.$[d].versions.$[v].ocr.warningCodes': warnings,
-      'documents.$[d].versions.$[v].ocr.qualityIssues': warnings.filter((warning) => warning.startsWith('IMAGE_')),
+      'documents.$[d].versions.$[v].ocr.qualityIssues': warnings.filter(
+        (warning) => warning.startsWith('IMAGE_'),
+      ),
       'documents.$[d].versions.$[v].ocr.crossCheckComputedAt': new Date(),
       'documents.$[d].versions.$[v].ocrStatus': legacy,
       'documents.$[d].versions.$[v].ocrConfidence': confidence,
@@ -458,8 +570,15 @@ export class ProviderDocumentOcrService {
     );
   }
 
-  private async record(job: ProviderOcrJobData, outcome: OcrAttemptOutcome, retryable: boolean): Promise<void> {
-    await this.attempts.updateOne({ attemptId: job.attemptId }, { $set: { outcome, retryable, completedAt: new Date() } });
+  private async record(
+    job: ProviderOcrJobData,
+    outcome: OcrAttemptOutcome,
+    retryable: boolean,
+  ): Promise<void> {
+    await this.attempts.updateOne(
+      { attemptId: job.attemptId },
+      { $set: { outcome, retryable, completedAt: new Date() } },
+    );
   }
 
   private fingerprint(value: string): string {

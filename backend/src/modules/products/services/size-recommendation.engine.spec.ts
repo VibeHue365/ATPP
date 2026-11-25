@@ -107,7 +107,10 @@ describe('deterministic product-specific size recommendation', () => {
     expect(result.evaluations[0].reasons.join(' ')).toContain(
       'ngoài khoảng tham khảo',
     );
-    expect(result.evaluations[0].referenceOutliers).toEqual(['height', 'weight']);
+    expect(result.evaluations[0].referenceOutliers).toEqual([
+      'height',
+      'weight',
+    ]);
     expect(result.warnings.join(' ')).toContain('chiều cao hoặc cân nặng');
   });
   it('ranks conflicting body measurements for explanation without applying a size', () => {
@@ -249,8 +252,14 @@ describe('deterministic product-specific size recommendation', () => {
       },
     ];
     const result = run(chart, { ...measurements, height: 165, weight: 55 });
-    expect(result).toMatchObject({ status: 'PRELIMINARY', recommendedSize: null, missingMeasurements: [] });
-    expect(result.warnings.join(' ')).toContain('Bảng chỉ có chiều cao/cân nặng');
+    expect(result).toMatchObject({
+      status: 'PRELIMINARY',
+      recommendedSize: null,
+      missingMeasurements: [],
+    });
+    expect(result.warnings.join(' ')).toContain(
+      'Bảng chỉ có chiều cao/cân nặng',
+    );
   });
   it('does not guess a bigger size based on body-chart fit preference', () => {
     expect(
@@ -334,9 +343,21 @@ describe('garment measurements and explicitly declared allowance', () => {
   it('requires declared shoulder ease before using a garment shoulder range', () => {
     const chart = garment();
     chart.rows[0].shoulder = { min: 40, max: 42 };
-    expect(run(chart, { ...measurements, shoulder: 39, fitPreference: FitPreference.Regular }).status).toBe('UNAVAILABLE');
+    expect(
+      run(chart, {
+        ...measurements,
+        shoulder: 39,
+        fitPreference: FitPreference.Regular,
+      }).status,
+    ).toBe('UNAVAILABLE');
     chart.fitRules[0].shoulder = { min: 1, max: 3 };
-    expect(run(chart, { ...measurements, shoulder: 39, fitPreference: FitPreference.Regular }).status).toBe('MATCH');
+    expect(
+      run(chart, {
+        ...measurements,
+        shoulder: 39,
+        fitPreference: FitPreference.Regular,
+      }).status,
+    ).toBe('MATCH');
   });
   it('supports explicitly declared negative ease but never fabricates stretch capacity', () => {
     const chart = garment();

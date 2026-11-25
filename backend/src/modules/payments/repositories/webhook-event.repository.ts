@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { PaymentWebhookEvent, PaymentWebhookEventDocument } from '../schemas/payment-webhook-event.schema';
+import {
+  PaymentWebhookEvent,
+  PaymentWebhookEventDocument,
+} from '../schemas/payment-webhook-event.schema';
 
 export type WebhookEventClaim =
   | { state: 'claimed'; event: PaymentWebhookEventDocument }
@@ -73,7 +76,10 @@ export class WebhookEventRepository {
   async markProcessed(webhookId: string): Promise<void> {
     await this.webhookEventModel.updateOne(
       { webhookId },
-      { $set: { processed: true, processedAt: new Date(), error: null }, $unset: { processingStartedAt: 1 } },
+      {
+        $set: { processed: true, processedAt: new Date(), error: null },
+        $unset: { processingStartedAt: 1 },
+      },
     );
   }
 

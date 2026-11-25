@@ -3,6 +3,7 @@ import { AdminReloadButton } from './AdminReloadButton';
 import { httpClient } from '../../../services/httpClient';
 import { useToast } from '../../../components/feedback/Toast';
 import { API_BASE_URL } from '../../../config/env';
+import { getComboStatusMeta } from '../../../utils/bookingStatus';
 import './comboModerationFigma.css';
 
 import {
@@ -382,7 +383,7 @@ export const ComboModerationManagement: React.FC = () => {
     try {
       await httpClient.patch(`/combo-promotions/admin/${combo._id}/moderation`, {
         status: 'ACTIVE',
-        reason: 'Đạt chuẩn phê duyệt hệ thống LUMÉ',
+        reason: 'Đạt chuẩn phê duyệt hệ thống TàGo',
       });
       toast.success(`Đã phê duyệt thành công combo "${combo.name}"`);
       await loadCombos();
@@ -487,43 +488,20 @@ export const ComboModerationManagement: React.FC = () => {
 
   // Status Pill Renderer
   const renderStatusPill = (status: ComboStatus) => {
-    switch (status) {
-      case 'PENDING_REVIEW':
-        return (
-          <span className="lume-combo-status-pill pending">
-            <span className="lume-combo-status-dot" />
-            Chờ duyệt
-          </span>
-        );
-      case 'ACTIVE':
-        return (
-          <span className="lume-combo-status-pill approved">
-            <span className="lume-combo-status-dot" />
-            Đã duyệt
-          </span>
-        );
-      case 'REJECTED':
-        return (
-          <span className="lume-combo-status-pill rejected">
-            <span className="lume-combo-status-dot" />
-            Đã từ chối
-          </span>
-        );
-      case 'CHANGES_REQUESTED':
-        return (
-          <span className="lume-combo-status-pill revision">
-            <span className="lume-combo-status-dot" />
-            Cần bổ sung
-          </span>
-        );
-      default:
-        return (
-          <span className="lume-combo-status-pill pending">
-            <span className="lume-combo-status-dot" />
-            {status}
-          </span>
-        );
-    }
+    const pillClass =
+      status === 'ACTIVE'
+        ? 'approved'
+        : status === 'REJECTED'
+        ? 'rejected'
+        : status === 'CHANGES_REQUESTED'
+        ? 'revision'
+        : 'pending';
+    return (
+      <span className={`lume-combo-status-pill ${pillClass}`}>
+        <span className="lume-combo-status-dot" />
+        {getComboStatusMeta(status).label}
+      </span>
+    );
   };
 
   // Category display
@@ -1474,7 +1452,17 @@ export const ComboModerationManagement: React.FC = () => {
                             name: selectedCombo.providerId?.businessName || 'Áo Dài Cố Đô',
                             code: selectedCombo.partnerCode || '#DT00012',
                             phone: selectedCombo.providerId?.phone || '0905 123 456',
-                            address: selectedCombo.providerId?.address || '45 Lê Lợi, TP. Huế',
+                            address:
+                              typeof selectedCombo.providerId?.address === 'string'
+                                ? selectedCombo.providerId.address
+                                : [
+                                    (selectedCombo.providerId?.address as any)?.addressLine,
+                                    (selectedCombo.providerId?.address as any)?.ward,
+                                    (selectedCombo.providerId?.address as any)?.district,
+                                    (selectedCombo.providerId?.address as any)?.city,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(', ') || 'Đang cập nhật địa chỉ',
                             rating: selectedCombo.providerId?.rating || 4.9,
                           })
                         }
@@ -1628,7 +1616,7 @@ export const ComboModerationManagement: React.FC = () => {
                         <div style={{ fontSize: 12, color: '#64748b' }}>128 đánh giá thực tế</div>
                       </div>
                       <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.6, borderLeft: '1px solid #e2e8f0', paddingLeft: 18 }}>
-                        Đối tác đã đồng hành cùng LUMÉ hơn 2 năm, đạt tỷ lệ hoàn thành lịch hẹn 99.4%, không có bất kỳ tranh chấp chưa xử lý nào. Đánh giá chất lượng dịch vụ đạt chuẩn Premium.
+                        Đối tác đã đồng hành cùng TàGo hơn 2 năm, đạt tỷ lệ hoàn thành lịch hẹn 99.4%, không có bất kỳ tranh chấp chưa xử lý nào. Đánh giá chất lượng dịch vụ đạt chuẩn Premium.
                       </div>
                     </div>
                   </div>
@@ -1698,7 +1686,7 @@ export const ComboModerationManagement: React.FC = () => {
                   <HelpCircle size={22} />
                 </div>
                 <div>
-                  <h3 className="lume-modal-title">Quy chuẩn kiểm duyệt Combo dịch vụ LUMÉ</h3>
+                  <h3 className="lume-modal-title">Quy chuẩn kiểm duyệt Combo dịch vụ TàGo</h3>
                   <p className="lume-modal-subtitle">Tiêu chuẩn chất lượng áp dụng cho toàn bộ đối tác áo dài & nhiếp ảnh</p>
                 </div>
               </div>

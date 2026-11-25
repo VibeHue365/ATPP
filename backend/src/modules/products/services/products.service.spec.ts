@@ -81,34 +81,62 @@ describe('ProductsService moderation', () => {
   }
 
   it('blocks publication of new products without a confirmed chart, including incomplete confirmed data', async () => {
-    for (const sizeChart of [null, { status: 'DRAFT' }, { status: 'CONFIRMED', rows: [] }]) {
+    for (const sizeChart of [
+      null,
+      { status: 'DRAFT' },
+      { status: 'CONFIRMED', rows: [] },
+    ]) {
       const { service, productsRepository } = createService({
         findModerationItemById: jest.fn().mockResolvedValue({
-          _id: productId, sizes: ['M'], sizeChartPolicyVersion: 1, sizeChart,
+          _id: productId,
+          sizes: ['M'],
+          sizeChartPolicyVersion: 1,
+          sizeChart,
           moderationStatus: ProductModerationStatus.PendingReview,
         }),
       });
-      await expect(service.moderateProduct(userId, productId.toString(), { action: ProductModerationStatus.Approved })).rejects.toThrow(BadRequestException);
+      await expect(
+        service.moderateProduct(userId, productId.toString(), {
+          action: ProductModerationStatus.Approved,
+        }),
+      ).rejects.toThrow(BadRequestException);
       expect(productsRepository.moderate).not.toHaveBeenCalled();
     }
   });
 
   it('permits publication with a complete confirmed chart and guards the atomic write by chart version', async () => {
     const product = {
-      _id: productId, sizes: ['M'], sizeChartPolicyVersion: 1, sizeChartVersion: 2,
+      _id: productId,
+      sizes: ['M'],
+      sizeChartPolicyVersion: 1,
+      sizeChartVersion: 2,
       moderationStatus: ProductModerationStatus.PendingReview,
       sizeChart: {
-        version: 2, sourceRevision: 1, source: ChartSource.Manual, measurementType: MeasurementType.Body,
-        lengthUnit: 'CM', weightUnit: 'KG', status: 'CONFIRMED', fitRules: [],
-        requiredMeasurements: ['chest'], rows: [{ size: 'M', chest: { min: 86, max: 89 } }],
+        version: 2,
+        sourceRevision: 1,
+        source: ChartSource.Manual,
+        measurementType: MeasurementType.Body,
+        lengthUnit: 'CM',
+        weightUnit: 'KG',
+        status: 'CONFIRMED',
+        fitRules: [],
+        requiredMeasurements: ['chest'],
+        rows: [{ size: 'M', chest: { min: 86, max: 89 } }],
       },
     };
     const { service, productsRepository } = createService({
       findModerationItemById: jest.fn().mockResolvedValue(product),
       moderate: jest.fn().mockResolvedValue(product),
     });
-    await service.moderateProduct(userId, productId.toString(), { action: ProductModerationStatus.Approved });
-    expect(productsRepository.moderate).toHaveBeenCalledWith(productId, expect.any(Object), ProductModerationStatus.PendingReview, { version: 2, sizes: ['M'] });
+    await service.moderateProduct(userId, productId.toString(), {
+      action: ProductModerationStatus.Approved,
+    });
+    expect(productsRepository.moderate).toHaveBeenCalledWith(
+      productId,
+      expect.any(Object),
+      ProductModerationStatus.PendingReview,
+      { version: 2, sizes: ['M'] },
+    );
   });
 
   it('creates every provider product in pending review', async () => {
@@ -273,7 +301,9 @@ describe('ProductsService moderation', () => {
     };
     const { service, priceVersionModel } = createService({
       findById: jest.fn().mockResolvedValue(existing),
-      update: jest.fn().mockResolvedValue({ ...existing, depositAmount: 120000 }),
+      update: jest
+        .fn()
+        .mockResolvedValue({ ...existing, depositAmount: 120000 }),
     });
     priceVersionModel.findOne.mockReturnValue({
       sort: jest.fn().mockReturnValue({
@@ -373,7 +403,10 @@ describe('ProductsService moderation', () => {
         },
       ],
     };
-    const moderated = { ...existing, moderationStatus: ProductModerationStatus.Approved };
+    const moderated = {
+      ...existing,
+      moderationStatus: ProductModerationStatus.Approved,
+    };
     const { service, productsRepository } = createService({
       findModerationItemById: jest.fn().mockResolvedValue(existing),
       moderate: jest.fn().mockResolvedValue(moderated),
@@ -615,7 +648,9 @@ describe('ProductsService moderation', () => {
       };
       const { service, productsRepository } = createService({
         findById: jest.fn().mockResolvedValue(existing),
-        update: jest.fn().mockResolvedValue({ ...existing, name: 'Ao dai Hue moi' }),
+        update: jest
+          .fn()
+          .mockResolvedValue({ ...existing, name: 'Ao dai Hue moi' }),
       });
 
       await service.updateProduct(userId, productId.toString(), {
@@ -628,7 +663,7 @@ describe('ProductsService moderation', () => {
         expect.any(Object),
       );
       // Ensure replacementValue key was not included in updateData
-      const updateDataSent = (productsRepository.update as jest.Mock).mock.calls[0][1];
+      const updateDataSent = productsRepository.update.mock.calls[0][1];
       expect(updateDataSent).not.toHaveProperty('replacementValue');
     });
 
@@ -643,7 +678,9 @@ describe('ProductsService moderation', () => {
       };
       const { service, productsRepository } = createService({
         findById: jest.fn().mockResolvedValue(existing),
-        update: jest.fn().mockResolvedValue({ ...existing, replacementValue: 3500000 }),
+        update: jest
+          .fn()
+          .mockResolvedValue({ ...existing, replacementValue: 3500000 }),
       });
 
       await service.updateProduct(userId, productId.toString(), {
@@ -677,13 +714,17 @@ describe('ProductsService moderation', () => {
         service.updateProduct(userId, productId.toString(), {
           replacementValue: 0,
         }),
-      ).rejects.toThrow('Giá trị bồi hoàn trang phục phải là số dương lớn hơn 0');
+      ).rejects.toThrow(
+        'Giá trị bồi hoàn trang phục phải là số dương lớn hơn 0',
+      );
 
       await expect(
         service.updateProduct(userId, productId.toString(), {
           replacementValue: -50000,
         }),
-      ).rejects.toThrow('Giá trị bồi hoàn trang phục phải là số dương lớn hơn 0');
+      ).rejects.toThrow(
+        'Giá trị bồi hoàn trang phục phải là số dương lớn hơn 0',
+      );
     });
 
     it('allows clearing replacementValue with null and resets moderation to PendingReview', async () => {
@@ -697,7 +738,9 @@ describe('ProductsService moderation', () => {
       };
       const { service, productsRepository } = createService({
         findById: jest.fn().mockResolvedValue(existing),
-        update: jest.fn().mockResolvedValue({ ...existing, replacementValue: null }),
+        update: jest
+          .fn()
+          .mockResolvedValue({ ...existing, replacementValue: null }),
       });
 
       await service.updateProduct(userId, productId.toString(), {
@@ -715,4 +758,3 @@ describe('ProductsService moderation', () => {
     });
   });
 });
-

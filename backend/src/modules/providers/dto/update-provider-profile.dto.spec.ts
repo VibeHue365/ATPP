@@ -32,7 +32,9 @@ describe('UpdateProviderProfileDto - turnaroundSlots validation', () => {
     const rentalError = errors.find((e) => e.property === 'rentalSettings');
     expect(rentalError).toBeDefined();
     const childErrors = rentalError?.children || [];
-    const turnaroundError = childErrors.find((c) => c.property === 'turnaroundSlots');
+    const turnaroundError = childErrors.find(
+      (c) => c.property === 'turnaroundSlots',
+    );
     expect(turnaroundError).toBeDefined();
     expect(turnaroundError?.constraints?.min).toBeDefined();
   });
@@ -48,7 +50,9 @@ describe('UpdateProviderProfileDto - turnaroundSlots validation', () => {
     const rentalError = errors.find((e) => e.property === 'rentalSettings');
     expect(rentalError).toBeDefined();
     const childErrors = rentalError?.children || [];
-    const turnaroundError = childErrors.find((c) => c.property === 'turnaroundSlots');
+    const turnaroundError = childErrors.find(
+      (c) => c.property === 'turnaroundSlots',
+    );
     expect(turnaroundError).toBeDefined();
     expect(turnaroundError?.constraints?.max).toBeDefined();
   });
@@ -64,7 +68,9 @@ describe('UpdateProviderProfileDto - turnaroundSlots validation', () => {
     const rentalError = errors.find((e) => e.property === 'rentalSettings');
     expect(rentalError).toBeDefined();
     const childErrors = rentalError?.children || [];
-    const turnaroundError = childErrors.find((c) => c.property === 'turnaroundSlots');
+    const turnaroundError = childErrors.find(
+      (c) => c.property === 'turnaroundSlots',
+    );
     expect(turnaroundError).toBeDefined();
     expect(turnaroundError?.constraints?.isInt).toBeDefined();
   });

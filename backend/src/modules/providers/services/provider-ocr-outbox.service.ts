@@ -71,10 +71,7 @@ export class ProviderOcrOutboxService implements OnModuleInit {
             { status: OcrOutboxStatus.Pending },
             {
               status: OcrOutboxStatus.Failed,
-              $or: [
-                { nextAttemptAt: null },
-                { nextAttemptAt: { $lte: now } },
-              ],
+              $or: [{ nextAttemptAt: null }, { nextAttemptAt: { $lte: now } }],
             },
           ],
         })
@@ -94,7 +91,8 @@ export class ProviderOcrOutboxService implements OnModuleInit {
       { _id: event.verificationId },
       {
         $set: {
-          'documents.$[d].versions.$[v].ocr.executionStatus': OcrExecutionStatus.Processing,
+          'documents.$[d].versions.$[v].ocr.executionStatus':
+            OcrExecutionStatus.Processing,
           'documents.$[d].versions.$[v].ocr.startedAt': now,
           'documents.$[d].versions.$[v].ocr.heartbeatAt': now,
         },
@@ -152,7 +150,8 @@ export class ProviderOcrOutboxService implements OnModuleInit {
         { _id: event.verificationId },
         {
           $set: {
-            'documents.$[d].versions.$[v].ocr.executionStatus': OcrExecutionStatus.NotStarted,
+            'documents.$[d].versions.$[v].ocr.executionStatus':
+              OcrExecutionStatus.NotStarted,
             'documents.$[d].versions.$[v].ocr.startedAt': null,
             'documents.$[d].versions.$[v].ocr.heartbeatAt': null,
           },
@@ -178,10 +177,8 @@ export class ProviderOcrOutboxService implements OnModuleInit {
     now: Date,
   ): Promise<void> {
     const deliveryAttempts = event.deliveryAttempts + 1;
-    const exhausted = deliveryAttempts >= this.number(
-      'OCR_OUTBOX_MAX_DELIVERY_ATTEMPTS',
-      5,
-    );
+    const exhausted =
+      deliveryAttempts >= this.number('OCR_OUTBOX_MAX_DELIVERY_ATTEMPTS', 5);
 
     await this.outbox.updateOne(
       { _id: event._id },
@@ -210,8 +207,10 @@ export class ProviderOcrOutboxService implements OnModuleInit {
       { _id: event.verificationId },
       {
         $set: {
-          'documents.$[d].versions.$[v].ocr.executionStatus': OcrExecutionStatus.Failed,
-          'documents.$[d].versions.$[v].ocr.assessment': OcrAssessment.ManualReview,
+          'documents.$[d].versions.$[v].ocr.executionStatus':
+            OcrExecutionStatus.Failed,
+          'documents.$[d].versions.$[v].ocr.assessment':
+            OcrAssessment.ManualReview,
           'documents.$[d].versions.$[v].ocr.completedAt': now,
           'documents.$[d].versions.$[v].ocr.warningCodes': [
             'OCR_QUEUE_DELIVERY_FAILED',

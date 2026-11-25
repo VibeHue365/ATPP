@@ -1,4 +1,4 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { BookingsService } from '../services/bookings.service';
 import { ParseObjectIdPipe } from '../../../common/pipes/parse-object-id.pipe';
 
@@ -22,7 +22,10 @@ export class PublicBookingAvailabilityController {
   getProviderBusyDates(
     @Param('providerId', new ParseObjectIdPipe('ID nhà cung cấp không hợp lệ'))
     providerId: string,
+    @Query('staffId') staffId?: string,
   ) {
-    return this.bookingsService.getBusySchedulesForProvider(providerId);
+    return staffId
+      ? this.bookingsService.getBusySchedulesForProvider(providerId, staffId)
+      : this.bookingsService.getBusySchedulesForProvider(providerId);
   }
 }

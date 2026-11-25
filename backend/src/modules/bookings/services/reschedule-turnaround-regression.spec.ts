@@ -4,7 +4,10 @@ import { TimeSlotEngineService } from './time-slot-engine.service';
 import { ProductBusyCacheService } from './product-busy-cache.service';
 import { BookingStatus } from '../schemas/booking.schema';
 import { BookingItemType } from '../schemas/booking-item.schema';
-import { SlotLeasePurpose, SlotLeaseStatus } from '../schemas/inventory-slot-lease.schema';
+import {
+  SlotLeasePurpose,
+  SlotLeaseStatus,
+} from '../schemas/inventory-slot-lease.schema';
 import { ReservationStatus } from '../../products/schemas/inventory-reservation.schema';
 
 describe('Reschedule Turnaround & Reservation Boundaries Regression', () => {
@@ -104,15 +107,26 @@ describe('Reschedule Turnaround & Reservation Boundaries Regression', () => {
     const leaseColl = {
       findOne: jest.fn().mockImplementation((query: any) => {
         const match = inMemoryLeases.find((l) => {
-          if (query.inventoryItemId && l.inventoryItemId.toString() !== query.inventoryItemId.toString()) return false;
-          if (query.bookingItemId?.$ne && l.bookingItemId && l.bookingItemId.toString() === query.bookingItemId.$ne.toString()) return false;
+          if (
+            query.inventoryItemId &&
+            l.inventoryItemId.toString() !== query.inventoryItemId.toString()
+          )
+            return false;
+          if (
+            query.bookingItemId?.$ne &&
+            l.bookingItemId &&
+            l.bookingItemId.toString() === query.bookingItemId.$ne.toString()
+          )
+            return false;
           if (query.dateStr && l.dateStr !== query.dateStr) return false;
-          if (query.slotIndex !== undefined && l.slotIndex !== query.slotIndex) return false;
+          if (query.slotIndex !== undefined && l.slotIndex !== query.slotIndex)
+            return false;
           if (query.$or && Array.isArray(query.$or)) {
             const matchesOr = query.$or.some(
               (cond: any) =>
                 (!cond.dateStr || cond.dateStr === l.dateStr) &&
-                (cond.slotIndex === undefined || cond.slotIndex === l.slotIndex),
+                (cond.slotIndex === undefined ||
+                  cond.slotIndex === l.slotIndex),
             );
             if (!matchesOr) return false;
           }
@@ -127,11 +141,14 @@ describe('Reschedule Turnaround & Reservation Boundaries Regression', () => {
             const now = new Date();
             const res = inMemoryLeases.filter((l) => {
               if (query?.inventoryItemId?.$in) {
-                const ids = query.inventoryItemId.$in.map((id: any) => id.toString());
+                const ids = query.inventoryItemId.$in.map((id: any) =>
+                  id.toString(),
+                );
                 if (!ids.includes(l.inventoryItemId.toString())) return false;
               }
               if (l.status === 'CONFIRMED') return true;
-              if (l.status === 'TEMP' && l.expiresAt && l.expiresAt > now) return true;
+              if (l.status === 'TEMP' && l.expiresAt && l.expiresAt > now)
+                return true;
               return false;
             });
             return Promise.resolve(res);
@@ -142,8 +159,13 @@ describe('Reschedule Turnaround & Reservation Boundaries Regression', () => {
         let count = 0;
         for (const l of inMemoryLeases) {
           let match = true;
-          if (filter.bookingItemId && l.bookingItemId.toString() !== filter.bookingItemId.toString()) match = false;
-          if (filter.status?.$in && !filter.status.$in.includes(l.status)) match = false;
+          if (
+            filter.bookingItemId &&
+            l.bookingItemId.toString() !== filter.bookingItemId.toString()
+          )
+            match = false;
+          if (filter.status?.$in && !filter.status.$in.includes(l.status))
+            match = false;
           if (match) {
             Object.assign(l, update.$set);
             count++;
@@ -254,6 +276,7 @@ describe('Reschedule Turnaround & Reservation Boundaries Regression', () => {
     };
 
     const mockScheduleModel = {
+      create: jest.fn().mockResolvedValue([]), // schedules recreated by the approved reschedule (code of 24/11/2026)
       updateMany: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
     };
 
@@ -294,7 +317,9 @@ describe('Reschedule Turnaround & Reservation Boundaries Regression', () => {
     );
 
     // 2. Perform reschedule to 11:00-13:00 (slot 3)
-    const result = await bookingsService.rescheduleBooking(
+    // Since the code of 24/11/2026 the customer only sends a reschedule request (rescheduleBooking); the leases
+    // move when the provider approves it, so the approval step (applyApprovedReschedule) is called here.
+    const result = await (bookingsService as any).applyApprovedReschedule(
       bookingId.toString(),
       customerId.toString(),
       {
@@ -305,7 +330,7 @@ describe('Reschedule Turnaround & Reservation Boundaries Regression', () => {
       },
     );
 
-    expect(result.status).toBe('APPROVED');
+    expect(result.message).toBe('Đổi lịch thành công');
 
     // 3. Verification:
     // a. Reservation must end at 13:00 (contractual rental end), NOT 15:00
@@ -343,15 +368,25 @@ describe('Reschedule Turnaround & Reservation Boundaries Regression', () => {
     expect(slot4Lease.purpose).toBe(SlotLeasePurpose.Turnaround);
 
     // Old leases must be released with RESCHEDULED
-    const oldLeases = inMemoryLeases.filter((l) => [1, 2].includes(l.slotIndex));
-    expect(oldLeases.every((l) => l.status === SlotLeaseStatus.Released && l.releaseReason === 'RESCHEDULED')).toBe(true);
+    const oldLeases = inMemoryLeases.filter((l) =>
+      [1, 2].includes(l.slotIndex),
+    );
+    expect(
+      oldLeases.every(
+        (l) =>
+          l.status === SlotLeaseStatus.Released &&
+          l.releaseReason === 'RESCHEDULED',
+      ),
+    ).toBe(true);
 
     // d. Busy schedule query:
     // Slot 3 (11:00-13:00) is RENTAL
     // Slot 4 (13:00-15:00) is TURNAROUND
     // Slot 5 (15:00-17:00) MUST NOT be busy / NO ghost turnaround
     cacheService.invalidate(productId.toString());
-    const busy = await bookingsService.getBusySchedulesForProduct(productId.toString());
+    const busy = await bookingsService.getBusySchedulesForProduct(
+      productId.toString(),
+    );
     const xlRedSlots = busy.variantBookedSlots?.['XL_RED'] || [];
 
     const slot11_13 = xlRedSlots.find((s) => s.timeSlot === '11:00-13:00');

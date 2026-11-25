@@ -1,14 +1,17 @@
 """UC-C10: suggest an Ao Dai listing (attributes, name, description) from product photos.
 
-Everything runs on the local CLIP model of the visual search; no external API.
-An attribute is only reported when it is clearly detected, so the provider never
-gets a confident-looking guess. Which attributes are used, and their thresholds,
-come from the UC-C10 spike on the catalog photos (28 photos):
+The colours, the pattern, "nam" and the avant-garde style come from the local CLIP model
+of the visual search. An attribute is only reported when it is clearly detected, so the
+provider never gets a confident-looking guess. Thresholds come from the UC-C10 spike on
+the catalog photos (28 photos):
   colour  — 0.6 × CLIP (several prompts per colour) + 0.4 × garment colour histogram: 89% correct
   pattern — CLIP; right ~13/14 times once its share is ≥ 0.65
   male    — CLIP; women's photos scored ≥ 0.79 female, so "nam" needs ≥ 0.8
   avant-garde style — CLIP; only clear-cut streetwear designs reach 0.9
-Traditional vs modern style and the occasion were not reliable and are left to the provider.
+CLIP cannot tell traditional from modern ao dai, the fabric, the motif or the occasion.
+When Gemini is configured, gemini_attributes.py adds those (groups style/material/motif/
+occasion) and listing_from_attributes() builds a richer name such as
+"Áo dài cách tân lụa hoa sen"; without it the listing is built from CLIP alone.
 """
 import os
 from dataclasses import dataclass, field
@@ -101,14 +104,17 @@ SECOND_COLOR_SHARE = 0.3
 MAX_COLORS = 3
 LOGIT_SCALE = 100.0
 
+# These fixed phrases must not contain smart-tag keywords (style/occasion words such as
+# "trẻ trung", "Tết", "cưới hỏi", "sự kiện"), otherwise every product gets the same tags.
+# test_product_draft.py checks them against backend/scripts/data/smart-tag-taxonomy.default.json.
 PATTERN_PHRASES = {
     "PLAIN": "thiết kế trơn tối giản, thanh lịch",
     "EMBROIDERED": "điểm xuyết họa tiết thêu hoa tinh tế",
     "BROCADE": "chất liệu gấm dệt hoa văn nổi bật",
-    "PRINTED": "họa tiết in nổi bật, trẻ trung",
+    "PRINTED": "họa tiết in nổi bật, bắt mắt",
 }
 COLOR_MOODS = {
-    "RED": "Sắc đỏ rực rỡ, rất hợp những dịp vui như lễ Tết, cưới hỏi.",
+    "RED": "Sắc đỏ rực rỡ, ấm áp và nổi bật.",
     "PINK": "Gam hồng nhẹ nhàng, tôn nét dịu dàng, nữ tính.",
     "WHITE": "Màu trắng tinh khôi, trang nhã và dễ phối phụ kiện.",
     "GOLD": "Sắc vàng sang trọng, nổi bật khi lên ảnh.",
@@ -116,6 +122,16 @@ COLOR_MOODS = {
     "GREEN": "Sắc xanh tươi mới, gần gũi thiên nhiên.",
     "BLACK": "Màu đen sang trọng, tôn dáng và dễ phối phụ kiện.",
 }
+# Occasion keys are the smart-tag codes; the wording deliberately uses their keywords so
+# the smart-tag rules pick the occasion up from the description.
+OCCASION_PHRASES = {
+    "PHU_HOP_LE_CUOI": "lễ cưới",
+    "CHUP_ANH_KY_YEU": "chụp ảnh kỷ yếu",
+    "LE_HOI_TRUYEN_THONG": "lễ hội",
+    "BIEU_DIEN_SU_KIEN": "biểu diễn",
+}
+NO_OCCASION_SENTENCE = "Phù hợp dạo phố và chụp ảnh."
+PLAIN_MOTIF = "TRON"
 
 _prompt_cache: dict[str, np.ndarray] = {}
 
@@ -124,13 +140,23 @@ def describe_product(images: list[Image.Image]) -> ProductDraft:
     vectors = encode_images(images)
     if not looks_like_ao_dai(vectors[0]):
         return ProductDraft(status="NOT_AO_DAI")
-    attributes = detect_attributes(images, vectors)
+    return listing_from_attributes(detect_attributes(images, vectors))
+
+
+def listing_from_attributes(attributes: list[DetectedAttribute]) -> ProductDraft:
     return ProductDraft(
         attributes=attributes,
         name=build_name(attributes),
         description=build_description(attributes),
         colors=[a.key for a in attributes if a.group == "color"],
     )
+
+
+def merge_attributes(clip: list[DetectedAttribute], extra: list[DetectedAttribute]) -> list[DetectedAttribute]:
+    """Adds the Gemini attributes; its style (traditional/modern/avant-garde) replaces CLIP's."""
+    if any(a.group == "style" for a in extra):
+        clip = [a for a in clip if a.group != "style"]
+    return [*clip, *extra]
 
 
 def detect_attributes(images: list[Image.Image], vectors: np.ndarray) -> list[DetectedAttribute]:
@@ -183,18 +209,28 @@ def classify(query: np.ndarray, group: str) -> tuple[AttributeOption, float]:
 
 
 def build_name(attributes: list[DetectedAttribute]) -> str:
+    """"Áo dài [nam] [phong cách] [chất liệu] [họa tiết]", e.g. "Áo dài cách tân lụa hoa sen".
+    Without fabric or motif (CLIP only) the colour and pattern describe it: "Áo dài đỏ thêu hoa".
+    frontend .../collections/listingText.ts mirrors this; keep both in step."""
     found = _by_group(attributes)
     parts = ["Áo dài"]
     if "gender" in found:
         parts.append(found["gender"][0].label)
     if "style" in found:
         parts.append(found["style"][0].label)
-    cover_colors = [a for a in found.get("color", []) if a.on_cover]
-    if cover_colors:
-        parts.append(cover_colors[0].label)
-    pattern = found.get("pattern", [None])[0]
-    if pattern and pattern.key != "PLAIN":
-        parts.append(pattern.label)
+    material = _first(found, "material")
+    motif = _first(found, "motif")
+    if motif and motif.key == PLAIN_MOTIF:
+        motif = None
+    if material or motif:
+        parts += [a.label for a in (material, motif) if a]
+    else:
+        cover_colors = [a for a in found.get("color", []) if a.on_cover]
+        if cover_colors:
+            parts.append(cover_colors[0].label)
+        pattern = _first(found, "pattern")
+        if pattern and pattern.key != "PLAIN":
+            parts.append(pattern.label)
     return " ".join(parts) if len(parts) > 1 else ""
 
 
@@ -204,23 +240,37 @@ def build_description(attributes: list[DetectedAttribute]) -> str:
         return ""
     cover_colors = [a for a in found.get("color", []) if a.on_cover]
     variant_colors = [a.label for a in found.get("color", []) if not a.on_cover]
+    material = _first(found, "material")
+    motif = _first(found, "motif")
+    pattern = _first(found, "pattern")
+    details = []
+    if "style" in found:
+        details.append(f"phong cách {found['style'][0].label}")
+    if material:
+        details.append(f"chất liệu {material.label}")
+    if cover_colors:
+        details.append(f"màu {' phối '.join(a.label for a in cover_colors)}")
+    if motif:
+        details.append(PATTERN_PHRASES["PLAIN"] if motif.key == PLAIN_MOTIF else f"họa tiết {motif.label}")
+    elif pattern and not (material and pattern.key == "BROCADE"):
+        details.append(PATTERN_PHRASES[pattern.key])
     subject = "Mẫu áo dài"
     if "gender" in found:
         subject += f" {found['gender'][0].label}"
-    if "style" in found:
-        subject += f" phong cách {found['style'][0].label}"
-    if cover_colors:
-        subject += f" màu {' phối '.join(a.label for a in cover_colors)}"
-    pattern = found.get("pattern", [None])[0]
-    if pattern:
-        subject += f", {PATTERN_PHRASES[pattern.key]}"
+    if details:
+        subject += f" {', '.join(details)}"
     sentences = [subject + "."]
     if cover_colors:
         sentences.append(COLOR_MOODS[cover_colors[0].key])
     if variant_colors:
         sentences.append(f"Có thêm các màu: {', '.join(variant_colors)}.")
-    sentences.append("Thích hợp dạo phố, chụp ảnh ngoại cảnh hoặc tham dự sự kiện.")
+    occasions = [OCCASION_PHRASES[a.key] for a in found.get("occasion", []) if a.key in OCCASION_PHRASES]
+    sentences.append(f"Phù hợp {' và '.join(occasions)}." if occasions else NO_OCCASION_SENTENCE)
     return " ".join(sentences)
+
+
+def _first(found: dict[str, list[DetectedAttribute]], group: str) -> DetectedAttribute | None:
+    return found.get(group, [None])[0]
 
 
 def _by_group(attributes: list[DetectedAttribute]) -> dict[str, list[DetectedAttribute]]:

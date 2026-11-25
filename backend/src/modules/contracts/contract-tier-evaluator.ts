@@ -150,9 +150,12 @@ export class ContractTierEvaluator {
     }
 
     // 2. Calculate effective customer payment amount for this provider
-    const totalDiscounts = Math.max(0, providerVoucherDiscount) + Math.max(0, allocatedPlatformDiscount);
+    const totalDiscounts =
+      Math.max(0, providerVoucherDiscount) +
+      Math.max(0, allocatedPlatformDiscount);
     const netRental = Math.max(0, grossRental - totalDiscounts);
-    const effectiveOrderAmount = netRental + grossDeposit + Math.max(0, additionalFees);
+    const effectiveOrderAmount =
+      netRental + grossDeposit + Math.max(0, additionalFees);
 
     // 3. Asset Risk Checks
     if (hasAnyMissingAssetValue) {
@@ -251,7 +254,8 @@ export class ContractTierEvaluator {
 
     if (mode === ProviderContractMode.CUSTOM_ORDER_THRESHOLD) {
       const threshold =
-        typeof config?.orderThresholdAmount === 'number' && Number.isFinite(config.orderThresholdAmount)
+        typeof config?.orderThresholdAmount === 'number' &&
+        Number.isFinite(config.orderThresholdAmount)
           ? config.orderThresholdAmount
           : 0;
 

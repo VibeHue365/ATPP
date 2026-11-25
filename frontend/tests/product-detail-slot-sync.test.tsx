@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import ProductDetailPage from '../src/pages/rentals/ProductDetailPage';
@@ -103,7 +103,14 @@ const mockBusyData = {
 };
 
 describe('ProductDetailPage Real Integration Test - Slot Display & Synchronization', () => {
+  // The scenarios book 15/11/2026: freeze the clock (Date only) before that day so the calendar keeps it selectable.
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-10T03:00:00.000Z'));
     vi.clearAllMocks();
 
     mockUseProductAvailability.mockReturnValue({
@@ -158,7 +165,7 @@ describe('ProductDetailPage Real Integration Test - Slot Display & Synchronizati
     fireEvent.click(hourlyTab);
 
     // 3. Select Size XL
-    const xlBtn = screen.getByRole('button', { name: 'XL' });
+    const xlBtn = screen.getByRole('button', { name: 'Kích cỡ XL' });
     fireEvent.click(xlBtn);
 
     // 4. Select Day 15 on calendar
@@ -194,7 +201,7 @@ describe('ProductDetailPage Real Integration Test - Slot Display & Synchronizati
     });
 
     fireEvent.click(screen.getByRole('button', { name: /Thuê Theo Giờ/i }));
-    fireEvent.click(screen.getByRole('button', { name: 'XL' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Kích cỡ XL' }));
     fireEvent.click(screen.getByRole('button', { name: '15' }));
 
     // On XL: 07-09 is busy
@@ -203,7 +210,7 @@ describe('ProductDetailPage Real Integration Test - Slot Display & Synchronizati
     expect(slot07Btn.textContent).toContain('Đã bận');
 
     // Switch to Size S
-    const sBtn = screen.getByRole('button', { name: 'S' });
+    const sBtn = screen.getByRole('button', { name: 'Kích cỡ S' });
     fireEvent.click(sBtn);
 
     // On S: 07-09 is immediately free ("Trống" or auto-selected)
@@ -225,7 +232,7 @@ describe('ProductDetailPage Real Integration Test - Slot Display & Synchronizati
     });
 
     fireEvent.click(screen.getByRole('button', { name: /Thuê Theo Giờ/i }));
-    fireEvent.click(screen.getByRole('button', { name: 'XL' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Kích cỡ XL' }));
     fireEvent.click(screen.getByRole('button', { name: '15' }));
 
     // Slot 11:00-13:00 is auto-selected as the first available slot
@@ -279,7 +286,7 @@ describe('ProductDetailPage Real Integration Test - Slot Display & Synchronizati
     expect(dailyTab).toBeDefined();
 
     // Select Size XL
-    const xlBtn = screen.getByRole('button', { name: 'XL' });
+    const xlBtn = screen.getByRole('button', { name: 'Kích cỡ XL' });
     fireEvent.click(xlBtn);
 
     // On XL_RED, 2026-11-15 has hourly bookings: day 15 MUST be disabled on the DAILY calendar!
@@ -287,7 +294,7 @@ describe('ProductDetailPage Real Integration Test - Slot Display & Synchronizati
     expect(day15Btn.disabled).toBe(true);
 
     // Switch to Size S (which has no bookings on day 15)
-    const sBtn = screen.getByRole('button', { name: 'S' });
+    const sBtn = screen.getByRole('button', { name: 'Kích cỡ S' });
     fireEvent.click(sBtn);
 
     // For Size S, day 15 should now be enabled on the calendar
@@ -336,7 +343,7 @@ describe('ProductDetailPage Real Integration Test - Slot Display & Synchronizati
     fireEvent.click(hourlyTab);
 
     // Select Size XL
-    const xlBtn = screen.getByRole('button', { name: 'XL' });
+    const xlBtn = screen.getByRole('button', { name: 'Kích cỡ XL' });
     fireEvent.click(xlBtn);
 
     // Select Date 15

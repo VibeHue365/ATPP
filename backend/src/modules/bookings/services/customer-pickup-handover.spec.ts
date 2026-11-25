@@ -1,8 +1,16 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Types } from 'mongoose';
 import { BookingStatus } from '../schemas/booking.schema';
 import { BookingItemType } from '../schemas/booking-item.schema';
-import { RentalFulfillmentStatus, RentalInventoryStatus, RentalIssueStatus } from '../schemas/rental-fulfillment.types';
+import {
+  RentalFulfillmentStatus,
+  RentalInventoryStatus,
+  RentalIssueStatus,
+} from '../schemas/rental-fulfillment.types';
 
 describe('BookingsService - Customer Pickup & Handover Contract Verification', () => {
   let service: any;
@@ -98,11 +106,16 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
 
     // Bind real implementation methods from BookingsService prototype
     const { BookingsService } = require('./bookings.service');
-    service.allowEarlyRentalPickup = BookingsService.prototype.allowEarlyRentalPickup.bind(service);
-    service.getBookingStakeholderUserIds = BookingsService.prototype.getBookingStakeholderUserIds.bind(service);
-    service.customerConfirmPickup = BookingsService.prototype.customerConfirmPickup.bind(service);
-    service.customerReportDamage = BookingsService.prototype.customerReportDamage.bind(service);
-    service.customerRejectHandover = BookingsService.prototype.customerRejectHandover.bind(service);
+    service.allowEarlyRentalPickup =
+      BookingsService.prototype.allowEarlyRentalPickup.bind(service);
+    service.getBookingStakeholderUserIds =
+      BookingsService.prototype.getBookingStakeholderUserIds.bind(service);
+    service.customerConfirmPickup =
+      BookingsService.prototype.customerConfirmPickup.bind(service);
+    service.customerReportDamage =
+      BookingsService.prototype.customerReportDamage.bind(service);
+    service.customerRejectHandover =
+      BookingsService.prototype.customerRejectHandover.bind(service);
   });
 
   const createMockBooking = (status: BookingStatus) => ({
@@ -120,7 +133,7 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
     it('throws NotFoundException if booking not found', async () => {
       mockBookingModel.findById.mockResolvedValue(null);
       await expect(
-        service.customerConfirmPickup(bookingId, customerId)
+        service.customerConfirmPickup(bookingId, customerId),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -129,7 +142,7 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
       mockBookingModel.findById.mockResolvedValue(mockBooking);
 
       await expect(
-        service.customerConfirmPickup(bookingId, otherCustomerId)
+        service.customerConfirmPickup(bookingId, otherCustomerId),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -138,7 +151,7 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
       mockBookingModel.findById.mockResolvedValue(mockBooking);
 
       await expect(
-        service.customerConfirmPickup(bookingId, customerId)
+        service.customerConfirmPickup(bookingId, customerId),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -166,7 +179,7 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
       ]);
 
       await expect(
-        service.customerConfirmPickup(bookingId, customerId)
+        service.customerConfirmPickup(bookingId, customerId),
       ).rejects.toThrow('Chưa đến khung giờ nhận đồ');
     });
 
@@ -174,7 +187,11 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
       const mockBooking = createMockBooking(BookingStatus.PickupPending);
       mockBookingModel.findById.mockResolvedValue(mockBooking);
 
-      const result = await service.customerConfirmPickup(bookingId, customerId, ['https://img.com/p1.jpg']);
+      const result = await service.customerConfirmPickup(
+        bookingId,
+        customerId,
+        ['https://img.com/p1.jpg'],
+      );
 
       expect(result.success).toBe(true);
       expect(mockBooking.status).toBe(BookingStatus.PickedUp);
@@ -190,7 +207,7 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
             'rentalFulfillment.status': RentalFulfillmentStatus.PickedUp,
           }),
         }),
-        expect.anything()
+        expect.anything(),
       );
       expect(mockNotificationsService.emitBookingUpdate).toHaveBeenCalled();
     });
@@ -199,7 +216,12 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
   describe('customerReportDamage', () => {
     it('throws BadRequestException if no evidence photos provided', async () => {
       await expect(
-        service.customerReportDamage(bookingId, customerId, 'Ao bi rach nhe', [])
+        service.customerReportDamage(
+          bookingId,
+          customerId,
+          'Ao bi rach nhe',
+          [],
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -208,7 +230,9 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
       mockBookingModel.findById.mockResolvedValue(mockBooking);
 
       await expect(
-        service.customerReportDamage(bookingId, otherCustomerId, 'Vết ố vàng', ['https://img.com/p1.jpg'])
+        service.customerReportDamage(bookingId, otherCustomerId, 'Vết ố vàng', [
+          'https://img.com/p1.jpg',
+        ]),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -217,7 +241,9 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
       mockBookingModel.findById.mockResolvedValue(mockBooking);
 
       await expect(
-        service.customerReportDamage(bookingId, customerId, 'Vết ố vàng', ['https://img.com/p1.jpg'])
+        service.customerReportDamage(bookingId, customerId, 'Vết ố vàng', [
+          'https://img.com/p1.jpg',
+        ]),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -229,14 +255,18 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
         bookingId,
         customerId,
         'Cúc áo thứ 2 bị lỏng, gấu áo có vết ố nhẹ',
-        ['https://img.com/damage1.jpg']
+        ['https://img.com/damage1.jpg'],
       );
 
       expect(result.success).toBe(true);
       expect(mockBooking.status).toBe(BookingStatus.PickedUp);
       expect(mockBooking.pickupDamageReport).toBeDefined();
-      expect(mockBooking.pickupDamageReport.description).toBe('Cúc áo thứ 2 bị lỏng, gấu áo có vết ố nhẹ');
-      expect(mockBooking.pickupDamageReport.evidencePhotos).toEqual(['https://img.com/damage1.jpg']);
+      expect(mockBooking.pickupDamageReport.description).toBe(
+        'Cúc áo thứ 2 bị lỏng, gấu áo có vết ố nhẹ',
+      );
+      expect(mockBooking.pickupDamageReport.evidencePhotos).toEqual([
+        'https://img.com/damage1.jpg',
+      ]);
       expect(mockBooking.save).toHaveBeenCalled();
       expect(mockNotificationsService.createNotification).toHaveBeenCalled();
     });
@@ -245,7 +275,12 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
   describe('customerRejectHandover', () => {
     it('throws BadRequestException if no evidence photos provided', async () => {
       await expect(
-        service.customerRejectHandover(bookingId, customerId, 'Sai size khong vua', [])
+        service.customerRejectHandover(
+          bookingId,
+          customerId,
+          'Sai size khong vua',
+          [],
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -254,7 +289,9 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
       mockBookingModel.findById.mockResolvedValue(mockBooking);
 
       await expect(
-        service.customerRejectHandover(bookingId, otherCustomerId, 'Sai mau', ['https://img.com/p1.jpg'])
+        service.customerRejectHandover(bookingId, otherCustomerId, 'Sai mau', [
+          'https://img.com/p1.jpg',
+        ]),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -266,7 +303,7 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
         bookingId,
         customerId,
         'Ao bi rach ta truoc rat nang khong the mac duoc',
-        ['https://img.com/tear.jpg']
+        ['https://img.com/tear.jpg'],
       );
 
       expect(result.success).toBe(true);
@@ -285,13 +322,16 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
         expect.objectContaining({
           $set: expect.objectContaining({
             'rentalFulfillment.status': RentalFulfillmentStatus.Cancelled,
-            'rentalFulfillment.inventoryStatus': RentalInventoryStatus.Maintenance,
+            'rentalFulfillment.inventoryStatus':
+              RentalInventoryStatus.Maintenance,
             'rentalFulfillment.issueStatus': RentalIssueStatus.Reported,
           }),
         }),
         expect.anything(),
       );
-      expect(mockSettlementsService.holdSettlementsForBooking).toHaveBeenCalledWith(
+      expect(
+        mockSettlementsService.holdSettlementsForBooking,
+      ).toHaveBeenCalledWith(
         mockBooking._id.toString(),
         expect.stringContaining('Customer reject handover'),
         customerId,
@@ -302,11 +342,13 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
         expect.objectContaining({
           $setOnInsert: expect.objectContaining({
             status: 'OPEN',
-            reason: expect.stringContaining('Khách hàng từ chối nhận đồ do lỗi nặng'),
+            reason: expect.stringContaining(
+              'Khách hàng từ chối nhận đồ do lỗi nặng',
+            ),
             evidencePhotos: ['https://img.com/tear.jpg'],
           }),
         }),
-        expect.objectContaining({ upsert: true, returnDocument: 'after' })
+        expect.objectContaining({ upsert: true, returnDocument: 'after' }),
       );
     });
 
@@ -336,7 +378,7 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
         bookingId,
         customerId,
         'Ao bi son rach',
-        ['https://img.com/torn.jpg']
+        ['https://img.com/torn.jpg'],
       );
 
       expect(result.success).toBe(true);
@@ -366,11 +408,11 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
       mockBookingModel.findById.mockResolvedValue(mockBooking);
 
       mockInventoryItemModel.updateMany.mockRejectedValueOnce(
-        new Error('DB Connection Dropped during inventory update')
+        new Error('DB Connection Dropped during inventory update'),
       );
 
       await expect(
-        service.customerConfirmPickup(bookingId, customerId)
+        service.customerConfirmPickup(bookingId, customerId),
       ).rejects.toThrow('DB Connection Dropped during inventory update');
 
       expect(mockSession.startTransaction).toHaveBeenCalled();
@@ -392,11 +434,13 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
       mockBookingModel.findById.mockResolvedValue(mockBooking);
 
       mockDisputeModel.findOneAndUpdate.mockRejectedValueOnce(
-        new Error('Duplicate dispute key error')
+        new Error('Duplicate dispute key error'),
       );
 
       await expect(
-        service.customerRejectHandover(bookingId, customerId, 'Loi nut ao', ['https://img.com/p.jpg'])
+        service.customerRejectHandover(bookingId, customerId, 'Loi nut ao', [
+          'https://img.com/p.jpg',
+        ]),
       ).rejects.toThrow();
 
       expect(mockSession.startTransaction).toHaveBeenCalled();

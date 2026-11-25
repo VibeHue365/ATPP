@@ -16,7 +16,10 @@ export enum SecurityEventType {
   AccountUnlocked = 'ACCOUNT_UNLOCKED',
 }
 
-@Schema({ collection: 'security_events', timestamps: { createdAt: true, updatedAt: false } })
+@Schema({
+  collection: 'security_events',
+  timestamps: { createdAt: true, updatedAt: false },
+})
 export class SecurityEvent {
   @Prop({ enum: SecurityEventType, required: true, index: true })
   type: SecurityEventType;
@@ -24,7 +27,13 @@ export class SecurityEvent {
   @Prop({ type: Types.ObjectId, ref: 'User', default: null, index: true })
   userId?: Types.ObjectId | null;
 
-  @Prop({ type: String, default: null, trim: true, lowercase: true, index: true })
+  @Prop({
+    type: String,
+    default: null,
+    trim: true,
+    lowercase: true,
+    index: true,
+  })
   email?: string | null;
 
   @Prop({ type: Object, default: null })
@@ -39,8 +48,7 @@ export class SecurityEvent {
   createdAt?: Date;
 }
 
-export const SecurityEventSchema =
-  SchemaFactory.createForClass(SecurityEvent);
+export const SecurityEventSchema = SchemaFactory.createForClass(SecurityEvent);
 SecurityEventSchema.index({ createdAt: -1 });
 SecurityEventSchema.index({ type: 1, createdAt: -1 });
 SecurityEventSchema.index({ userId: 1, createdAt: -1 });

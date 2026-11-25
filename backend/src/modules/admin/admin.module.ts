@@ -10,7 +10,10 @@ import {
 } from '../providers/schemas/provider-verification.schema';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { Product, ProductSchema } from '../products/schemas/product.schema';
-import { BookingItem, BookingItemSchema } from '../bookings/schemas/booking-item.schema';
+import {
+  BookingItem,
+  BookingItemSchema,
+} from '../bookings/schemas/booking-item.schema';
 
 @Module({
   imports: [
@@ -27,4 +30,3 @@ import { BookingItem, BookingItemSchema } from '../bookings/schemas/booking-item
   controllers: [AdminController],
 })
 export class AdminModule {}
-

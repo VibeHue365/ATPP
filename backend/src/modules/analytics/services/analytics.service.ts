@@ -7,8 +7,10 @@ import { ProductViewLog } from '../schemas/product-view-log.schema';
 @Injectable()
 export class AnalyticsService {
   constructor(
-    @InjectModel(SearchLog.name) private readonly searchLogModel: Model<SearchLog>,
-    @InjectModel(ProductViewLog.name) private readonly productViewLogModel: Model<ProductViewLog>,
+    @InjectModel(SearchLog.name)
+    private readonly searchLogModel: Model<SearchLog>,
+    @InjectModel(ProductViewLog.name)
+    private readonly productViewLogModel: Model<ProductViewLog>,
   ) {}
 
   /** Ghi nhận từ khóa tìm kiếm (upsert: +1 mỗi lần gọi) */
@@ -32,7 +34,9 @@ export class AnalyticsService {
   }
 
   /** Lấy top N từ khóa tìm kiếm phổ biến */
-  async getTopSearches(limit = 10): Promise<{ keyword: string; count: number }[]> {
+  async getTopSearches(
+    limit = 10,
+  ): Promise<{ keyword: string; count: number }[]> {
     const results = await this.searchLogModel
       .find()
       .sort({ count: -1 })
@@ -43,7 +47,9 @@ export class AnalyticsService {
   }
 
   /** Lấy viewCount của từng sản phẩm theo danh sách productId */
-  async getViewCountMap(productIds: Types.ObjectId[]): Promise<Map<string, number>> {
+  async getViewCountMap(
+    productIds: Types.ObjectId[],
+  ): Promise<Map<string, number>> {
     const logs = await this.productViewLogModel
       .find({ productId: { $in: productIds } })
       .select('productId viewCount')

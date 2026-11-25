@@ -15,6 +15,7 @@ import {
   type AdminVerificationDetail,
 } from '../types';
 import { VerificationDocumentPreview } from './VerificationDocumentPreview';
+import { getVerificationStatusMeta } from '../../../utils/bookingStatus';
 import './verificationWorkspace.css';
 
 import type { AdminVerificationStatus } from '../types';
@@ -24,15 +25,8 @@ const reviewPayload = (reason: string): AdminReviewDecisionPayload => ({ reason,
 const statusClass = (status: string) =>
   `admin-verification-status admin-verification-status--${status.toLowerCase()}`;
 
-const verificationStatusLabels: Record<AdminVerificationStatus, string> = {
-  DRAFT: 'Bản nháp',
-  SUBMITTED: 'Mới gửi',
-  UNDER_REVIEW: 'Đang đánh giá',
-  NEEDS_CHANGES: 'Cần bổ sung',
-  APPROVED: 'Đã phê duyệt',
-  REJECTED: 'Đã từ chối',
-  CANCELLED: 'Đã hủy',
-};
+const verificationStatusLabel = (status: AdminVerificationStatus | string) =>
+  getVerificationStatusMeta(status).label;
 
 const ocrStatusLabels: Record<string, string> = {
   NOT_STARTED: 'Chưa chạy OCR',
@@ -83,11 +77,11 @@ const ocrNextActionLabel = (action?: string | null) => {
 
 const verificationFilters: Array<{ value: 'ALL' | AdminVerificationStatus; label: string }> = [
   { value: 'ALL', label: 'Tất cả trạng thái' },
-  { value: 'SUBMITTED', label: 'Mới gửi' },
-  { value: 'UNDER_REVIEW', label: 'Đang đánh giá' },
-  { value: 'NEEDS_CHANGES', label: 'Cần bổ sung' },
-  { value: 'APPROVED', label: 'Đã phê duyệt' },
-  { value: 'REJECTED', label: 'Đã từ chối' },
+  { value: 'SUBMITTED', label: verificationStatusLabel('SUBMITTED') },
+  { value: 'UNDER_REVIEW', label: verificationStatusLabel('UNDER_REVIEW') },
+  { value: 'NEEDS_CHANGES', label: verificationStatusLabel('NEEDS_CHANGES') },
+  { value: 'APPROVED', label: verificationStatusLabel('APPROVED') },
+  { value: 'REJECTED', label: verificationStatusLabel('REJECTED') },
 ];
 
 type VerificationAction = (id: string) => Promise<AdminVerificationActionResult>;
@@ -288,7 +282,7 @@ function VerificationDetail({
         <div>
           <div className='admin-verification-detail__title'>
             <h2>{detail.businessProfile.businessName || 'Hồ sơ đối tác'}</h2>
-            <span className={statusClass(detail.status)}>{verificationStatusLabels[detail.status]}</span>
+            <span className={statusClass(detail.status)}>{verificationStatusLabel(detail.status)}</span>
           </div>
           <p>{detail.businessProfile.ownerName || 'Chưa có chủ sở hữu'}</p>
         </div>
@@ -436,7 +430,7 @@ export function VerificationWorkspace() {
                   {(item.requestedCapabilities ?? []).map((capability) => <i key={capability}>{capability === 'PHOTOGRAPHY' ? 'CHỤP ẢNH' : capability === 'AODAI_RENTAL' ? 'CHO THUÊ' : capability}</i>)}
                 </span>
                 <span className="admin-verification-list__date">{item.createdAt ? new Date(item.createdAt).toLocaleDateString('vi-VN') : '—'}</span>
-                <span className={statusClass(item.status)}>{verificationStatusLabels[item.status]}</span>
+                <span className={statusClass(item.status)}>{verificationStatusLabel(item.status)}</span>
               </button>
             );
           })}

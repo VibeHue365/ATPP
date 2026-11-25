@@ -6,9 +6,18 @@ import { adminDirectoryApi } from '../api/adminDirectoryApi';
 import { useDirectory } from '../hooks/useDirectory';
 import type { Booking, Customer, DirectoryItem, DirectoryKind, Provider } from '../types';
 import { AdminReloadButton } from '../../../pages/admin/components/AdminReloadButton';
+import {
+  BOOKING_GROUP_LABELS,
+  getBookingStatusGroup,
+  getBookingStatusLabel,
+  getProviderStatusMeta,
+  getUserStatusMeta,
+  normalizeBookingStatusCode,
+  type BookingGroupKey,
+} from '../../../utils/bookingStatus';
 import './directoryPanel.css';
 
-type StatusFilter = 'ALL' | 'ACTIVE' | 'BANNED' | 'SUSPENDED' | 'PENDING' | 'PICKED_UP' | 'RETURNED' | 'COMPLETED' | 'CANCELLED';
+type StatusFilter = 'ALL' | 'ACTIVE' | 'BANNED' | 'SUSPENDED' | 'PENDING' | 'COMPLETED' | 'DISPUTED' | 'CANCELLED';
 
 const searchPlaceholders: Record<DirectoryKind, string> = {
   customers: 'Tìm theo tên, email hoặc số điện thoại…',
@@ -19,20 +28,17 @@ const searchPlaceholders: Record<DirectoryKind, string> = {
 const filters: Record<DirectoryKind, StatusFilter[]> = {
   customers: ['ALL', 'ACTIVE', 'BANNED'],
   providers: ['ALL', 'ACTIVE', 'SUSPENDED'],
-  bookings: ['ALL', 'PENDING', 'PICKED_UP', 'RETURNED', 'COMPLETED', 'CANCELLED'],
+  bookings: ['ALL', 'PENDING', 'ACTIVE', 'COMPLETED', 'DISPUTED', 'CANCELLED'],
 };
 
-const statusLabels: Record<string, string> = {
-  ALL: 'Tất cả',
-  ACTIVE: 'Hoạt động',
-  BANNED: 'Đã khóa',
-  SUSPENDED: 'Tạm đình chỉ',
-  PENDING: 'Chờ xử lý',
-  PICKED_UP: 'Đã nhận',
-  RETURNED: 'Đã trả',
-  COMPLETED: 'Hoàn thành',
-  CANCELLED: 'Đã hủy',
-  UNKNOWN: 'Không rõ',
+const getFilterLabel = (kind: DirectoryKind, filter: StatusFilter): string => {
+  if (filter === 'ALL') return 'Tất cả';
+  if (kind === 'bookings' && filter in BOOKING_GROUP_LABELS) {
+    return BOOKING_GROUP_LABELS[filter as BookingGroupKey];
+  }
+  if (kind === 'providers') return getProviderStatusMeta(filter).label;
+  if (kind === 'customers') return getUserStatusMeta(filter).label;
+  return filter;
 };
 
 const formatCurrency = (amount: number) => `${amount.toLocaleString('vi-VN')}đ`;
@@ -56,10 +62,16 @@ export function DirectoryPanel({ kind }: { kind: DirectoryKind }) {
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
 
   const items = useMemo(() => (
-    data?.items.filter((item) =>
-      matchesQuery(item, query) && (statusFilter === 'ALL' || getStatus(item) === statusFilter),
-    ) ?? []
-  ), [data, query, statusFilter]);
+    data?.items.filter((item) => {
+      if (!matchesQuery(item, query)) return false;
+      if (statusFilter === 'ALL') return true;
+      const itemStatus = getStatus(item);
+      if (kind === 'bookings') {
+        return getBookingStatusGroup(itemStatus) === statusFilter;
+      }
+      return itemStatus.toUpperCase() === statusFilter;
+    }) ?? []
+  ), [data, kind, query, statusFilter]);
 
   const runAction = async (id: string, operation: () => Promise<void>) => {
     setPendingId(id);
@@ -139,7 +151,7 @@ export function DirectoryPanel({ kind }: { kind: DirectoryKind }) {
               className={statusFilter === filter ? 'is-active' : ''}
               onClick={() => setStatusFilter(filter)}
             >
-              {statusLabels[filter]}
+              {getFilterLabel(kind, filter)}
             </button>
           ))}
         </div>
@@ -193,7 +205,7 @@ function CustomerRow({ item, pending, onChangeStatus, onView }: { item: Customer
   return <tr className='admin-directory__clickable-row' onClick={(event) => { if (!(event.target as HTMLElement).closest('button')) onView(item); }}>
     <td><div className="admin-directory__identity"><img src={item.avatar || '/avatar_hanna.webp'} alt="" /><div><strong>{item.fullName}</strong><small>ID: {item.id}</small></div></div></td>
     <td>{item.email}</td><td>{item.phone || 'Chưa cung cấp'}</td><td>{item.date || '—'}</td><td className="admin-directory__center">{item.bookings ?? 0}</td>
-    <td className="admin-directory__center"><StatusBadge value={item.status} /></td>
+    <td className="admin-directory__center"><StatusBadge value={item.status} kind="customers" /></td>
     <td className="admin-directory__center"><button className={`admin-directory__icon-button ${isBanned ? 'is-positive' : 'is-danger'}`} type="button" disabled={pending} title={isBanned ? 'Mở khóa khách hàng' : 'Khóa khách hàng'} onClick={() => void onChangeStatus(item)}>{isBanned ? <CheckCircle2 size={15} /> : <Ban size={15} />}</button></td>
   </tr>;
 }
@@ -216,18 +228,31 @@ function ProviderRow({ item, pending, onChangeStatus, onView }: { item: Provider
     <td><strong className="admin-directory__business">{item.businessName}</strong><small>{item.phone || '—'} • {item.email || '—'}</small></td><td>{item.ownerName}</td>
     <td><div className="admin-directory__chips">{capabilities.map((capability) => <span key={capability}>{capability === 'PHOTOGRAPHY' ? 'CHỤP ẢNH' : capability === 'RENTAL' || capability === 'AODAI_RENTAL' ? 'CHO THUÊ' : capability}</span>)}{!capabilities.length && '—'}</div></td>
     <td className="admin-directory__center admin-directory__rating">★ {item.rating ?? 0}</td><td className="admin-directory__center">{item.totalProducts ?? 0}</td><td className="admin-directory__amount">{formatCurrency(item.totalEarnings ?? 0)}</td>
-    <td className="admin-directory__center"><StatusBadge value={status} /></td>
+    <td className="admin-directory__center"><StatusBadge value={status} kind="providers" /></td>
     <td className="admin-directory__center"><button className={`admin-directory__icon-button ${isSuspended ? 'is-positive' : 'is-danger'}`} type="button" disabled={pending} title={isSuspended ? 'Mở lại đối tác' : 'Tạm ngưng đối tác'} onClick={() => void onChangeStatus(item)}>{isSuspended ? <CheckCircle2 size={15} /> : <LockKeyhole size={15} />}</button></td>
   </tr>;
 }
 
 function BookingRow({ item, onView }: { item: Booking; onView: (bookingId: string) => void }) {
   const bookingId = item.bookingId || item.id;
-  return <tr className='admin-directory__clickable-row' onClick={() => onView(bookingId)}><td><strong>{item.id}</strong></td><td>{item.customerName}</td><td>{item.providerName}</td><td>{item.items || '—'}</td><td>{item.rentalDate || '—'}<small>Trả: {item.returnDate || '—'}</small></td><td className='admin-directory__amount'>{formatCurrency(item.price ?? 0)}<small>Đặt cọc: {formatCurrency(item.deposit ?? 0)}</small></td><td className='admin-directory__center'><StatusBadge value={item.status || 'UNKNOWN'} /></td></tr>;
+  return <tr className='admin-directory__clickable-row' onClick={() => onView(bookingId)}><td><strong>{item.id}</strong></td><td>{item.customerName}</td><td>{item.providerName}</td><td>{item.items || '—'}</td><td>{item.rentalDate || '—'}<small>Trả: {item.returnDate || '—'}</small></td><td className='admin-directory__amount'>{formatCurrency(item.price ?? 0)}<small>Đặt cọc: {formatCurrency(item.deposit ?? 0)}</small></td><td className='admin-directory__center'><StatusBadge value={item.status || 'UNKNOWN'} kind="bookings" /></td></tr>;
 }
 
-function StatusBadge({ value }: { value: string }) {
-  return <span className={`admin-directory__status admin-directory__status--${value.toLowerCase()}`}>{statusLabels[value] || value}</span>;
+function StatusBadge({ value, kind }: { value: string; kind?: DirectoryKind }) {
+  const upper = (value || 'UNKNOWN').toUpperCase();
+  const label =
+    kind === 'bookings'
+      ? getBookingStatusLabel(upper)
+      : kind === 'providers'
+      ? getProviderStatusMeta(upper).label
+      : kind === 'customers'
+      ? getUserStatusMeta(upper).label
+      : normalizeBookingStatusCode(upper)
+      ? getBookingStatusLabel(upper)
+      : upper === 'PENDING_APPROVAL' || upper === 'SUSPENDED' || upper === 'REJECTED'
+      ? getProviderStatusMeta(upper).label
+      : getUserStatusMeta(upper).label;
+  return <span className={`admin-directory__status admin-directory__status--${value.toLowerCase()}`}>{label}</span>;
 }
 
 function DirectoryDetailDrawer({

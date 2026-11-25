@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import { type Href, router, useLocalSearchParams } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -14,14 +14,19 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Linking from 'expo-linking';
-import * as WebBrowser from 'expo-web-browser';
 import { authApi } from '@/apis/authApi';
 import { FontFamily } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiErrorMessage } from '@/utils/apiError';
-import { safeReturnTo } from '@/utils/navigation';
-import { getGoogleSigninModule } from '@/services/googleAuth';
+import {
+  clearPendingOAuthReturnTo,
+  resolvePostAuthDestination,
+  savePendingOAuthReturnTo,
+} from '@/utils/navigation';
+import {
+  presentGoogleAuthError,
+  signInWithGoogleUnified,
+} from '@/services/googleAuth';
 
 function evaluatePasswordStrength(pwd: string): {
   level: 0 | 1 | 2 | 3 | 4;
@@ -47,6 +52,14 @@ function evaluatePasswordStrength(pwd: string): {
 export default function RegisterScreen() {
   const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const { loginWithGoogle, loginWithOAuthCode } = useAuth();
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const [form, setForm] = useState({
     fullName: '',
@@ -120,44 +133,27 @@ export default function RegisterScreen() {
   const handleGoogleRegister = async () => {
     setGoogleLoading(true);
     setError('');
-
-    const googleModule = getGoogleSigninModule();
-    if (googleModule) {
-      try {
-        const { GoogleSignin } = googleModule;
-        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-        const signInResult = await GoogleSignin.signIn();
-        const idToken = signInResult.data?.idToken;
-        if (!idToken) throw new Error('Không nhận được mã xác thực từ Google.');
-        const loggedInUser = await loginWithGoogle(idToken);
-        const destination = safeReturnTo(returnTo);
-        if (loggedInUser.hasCompletedOnboarding === false) {
-          router.replace({
-            pathname: '/preferences',
-            params: { onboarding: '1', returnTo: String(destination) },
-          } as unknown as Href);
-          return;
-        }
-        router.replace(destination);
-      } catch (cause: any) {
-        if (cause?.code === 'SIGN_IN_CANCELLED' || cause?.code === 12501) return;
-        setError(getApiErrorMessage(cause, 'Đăng ký bằng Google không thành công.'));
-      } finally {
-        setGoogleLoading(false);
-      }
-      return;
-    }
-
     try {
-      let apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
-      if (Platform.OS === 'android' && (apiUrl.includes('10.0.2.2') || apiUrl.includes('127.0.0.1'))) {
-        apiUrl = 'http://localhost:3000';
+      await savePendingOAuthReturnTo(returnTo);
+      const outcome = await signInWithGoogleUnified({
+        loginWithGoogle,
+        loginWithOAuthCode,
+      });
+      if (outcome.status !== 'success') {
+        if (outcome.status === 'cancelled') {
+          await clearPendingOAuthReturnTo();
+        }
+        return;
       }
-      const redirectUri = Linking.createURL('/oauth/callback');
-      const authUrl = `${apiUrl}/auth/google?redirect_uri=${encodeURIComponent(redirectUri)}`;
-      await Linking.openURL(authUrl);
-    } catch (cause) {
-      setError(getApiErrorMessage(cause, 'Không thể mở trình duyệt đăng ký Google.'));
+
+      void clearPendingOAuthReturnTo();
+      if (!mountedRef.current) return;
+      router.replace(resolvePostAuthDestination(outcome.user, returnTo));
+    } catch (cause: unknown) {
+      await clearPendingOAuthReturnTo();
+      setError(
+        presentGoogleAuthError(cause, 'Đăng ký bằng Google không thành công.'),
+      );
     } finally {
       setGoogleLoading(false);
     }
@@ -492,7 +488,7 @@ export default function RegisterScreen() {
                 </Text>
               </View>
               <Text style={styles.footerDot}>•</Text>
-              <Text style={styles.footerText}>26 Lê Lợi, TP. Huế</Text>
+              <Text style={styles.footerText}>TP. Huế, Việt Nam</Text>
             </View>
             <View style={styles.footerInlineItem}>
               <MaterialCommunityIcons name="lock-outline" size={13} color="#8F6F73" />

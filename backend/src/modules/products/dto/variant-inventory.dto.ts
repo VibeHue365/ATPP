@@ -1,4 +1,12 @@
-import { IsInt, IsMongoId, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsInt,
+  IsMongoId,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 
 /** Khoá xác định một biến thể tồn kho: sản phẩm + size + màu + chất liệu. */
 export class VariantKeyDto {

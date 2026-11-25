@@ -33,6 +33,7 @@ import { GeocodingModule } from './modules/geocoding/geocoding.module';
 import { LandingCmsModule } from './modules/landing-cms/landing-cms.module';
 import { BannersModule } from './modules/banners/banners.module';
 import { RedisModule } from './common/redis/redis.module';
+import { HeritageWeatherModule } from './modules/heritage-weather/heritage-weather.module';
 
 @Module({
   imports: [
@@ -49,7 +50,7 @@ import { RedisModule } from './common/redis/redis.module';
         {
           name: 'auth',
           ttl: 60000,
-          limit: config.get<number>('THROTTLE_AUTH_LIMIT', 10),
+          limit: config.get<number>('THROTTLE_AUTH_LIMIT', 120),
         },
       ],
     }),
@@ -88,9 +89,10 @@ import { RedisModule } from './common/redis/redis.module';
     GeocodingModule,
     LandingCmsModule,
     BannersModule,
+    HeritageWeatherModule,
   ],
   controllers: [AppController, ApiDocsController],
-    providers: [
+  providers: [
     AppService,
     {
       provide: APP_GUARD,

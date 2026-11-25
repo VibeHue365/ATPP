@@ -192,7 +192,9 @@ export class ReviewsController {
   private checkAdmin(user: AuthUser) {
     const roles = user.roles || [];
     if (!roles.includes('ADMIN') && !roles.includes('admin')) {
-      throw new ForbiddenException('Bạn không có quyền truy cập chức năng Admin');
+      throw new ForbiddenException(
+        'Bạn không có quyền truy cập chức năng Admin',
+      );
     }
   }
 
@@ -242,10 +244,6 @@ export class ReviewsController {
     @Body() dto: HandleReportDto,
   ) {
     this.checkAdmin(user);
-    return this.reviewsService.handleReportedReview(
-      id,
-      dto.action,
-      dto.reason,
-    );
+    return this.reviewsService.handleReportedReview(id, dto.action, dto.reason);
   }
 }

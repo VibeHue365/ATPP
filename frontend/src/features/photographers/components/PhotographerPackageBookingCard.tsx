@@ -11,9 +11,11 @@ import {
   ShieldCheck,
   Star,
   Ticket,
+  Users,
   X,
 } from 'lucide-react';
 import type { LocationSelection, PhotographerDetails, PhotographerPackage, PhotographyQuote } from '../types/photographer.types';
+import type { PublicProviderStaffMember } from '../../provider-dashboard/staff/staffApi';
 import type { PhotographyCalendarDay, PhotographyTimeSlot } from './PhotographyScheduleSelector';
 import { PhotographyLocationPicker } from './PhotographyLocationPicker';
 import type { ApplicableVoucherItem } from '../../../pages/cart/components/VoucherPickerModal';
@@ -54,6 +56,10 @@ interface PhotographerPackageBookingCardProps {
   applicableVouchersCount?: number;
   onOpenVoucherPicker?: () => void;
   onRemoveVoucher?: () => void;
+  studioStaff?: PublicProviderStaffMember[];
+  effectiveCapacity?: number;
+  preferredStaffId?: string;
+  onSelectPreferredStaff?: (staffId: string) => void;
 }
 
 const formatPrice = (amount: number) => `${amount.toLocaleString('vi-VN')}đ`;
@@ -108,6 +114,10 @@ export const PhotographerPackageBookingCard: React.FC<PhotographerPackageBooking
   applicableVouchersCount,
   onOpenVoucherPicker,
   onRemoveVoucher,
+  studioStaff = [],
+  effectiveCapacity = 1,
+  preferredStaffId = '',
+  onSelectPreferredStaff,
 }) => {
   const [openPanel, setOpenPanel] = useState<'schedule' | 'location' | null>(null);
   const [draftDate, setDraftDate] = useState(selectedDate);
@@ -210,6 +220,37 @@ export const PhotographerPackageBookingCard: React.FC<PhotographerPackageBooking
         <small>{selectedPackage ? `${formatDuration(selectedPackage.includedDurationMinutes ?? Math.round(selectedPackage.durationHours * 60))} · ${selectedPackage.editedPhotosCount || 0} ảnh chỉnh sửa` : 'Chọn gói để bắt đầu'}</small>
         <div className="ppd-booking-rating"><Star size={14} fill="currentColor" /> {photographer.rating.averageRating.toFixed(1)} <span>({photographer.rating.totalReviews} đánh giá)</span></div>
       </div>
+
+      {studioStaff.length > 0 && onSelectPreferredStaff && (
+        <section className="ppd-booking-section ppd-booking-section--compact">
+          <div className="ppd-booking-section__heading">
+            <span>CHỌN THỢ CHỤP (TUỲ CHỌN)</span>
+            <Users size={15} />
+          </div>
+          <label className="ppd-booking-field" style={{ margin: 0 }}>
+            <select
+              aria-label="Chọn thợ chụp phụ trách"
+              value={preferredStaffId}
+              onChange={(event) => onSelectPreferredStaff(event.target.value)}
+            >
+              <option value="">
+                Studio tự sắp xếp thợ rảnh phù hợp ({studioStaff.length} thợ · nhận {effectiveCapacity} ca/lúc)
+              </option>
+              {studioStaff.map((st) => (
+                <option key={st._id} value={st._id}>
+                  {st.name}
+                  {st.specialty ? ` (${st.specialty})` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          {quote?.valid && quote.sessions?.[0]?.remainingStaffCount != null && (
+            <p className="ppd-inline-note" style={{ color: '#047857', fontWeight: 600 }}>
+              Còn {quote.sessions[0].remainingStaffCount} thợ trống trong khung giờ đã chọn
+            </p>
+          )}
+        </section>
+      )}
 
       <section className="ppd-booking-section ppd-booking-section--compact">
         <div className="ppd-booking-section__heading"><span>LỊCH CHỤP</span><CalendarDays size={16} /></div>

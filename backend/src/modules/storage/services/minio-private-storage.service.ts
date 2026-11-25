@@ -46,10 +46,7 @@ export class MinioPrivateStorageService extends PrivateStorageService {
     };
   }
 
-  async readPrivateFile(
-    bucket: string,
-    storageKey: string,
-  ): Promise<Readable> {
+  async readPrivateFile(bucket: string, storageKey: string): Promise<Readable> {
     await this.ensureBucket(bucket);
     return this.client.getObject(bucket, storageKey);
   }

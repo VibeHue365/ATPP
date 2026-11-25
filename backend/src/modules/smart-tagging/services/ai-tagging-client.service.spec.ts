@@ -55,9 +55,9 @@ describe('AiTaggingClientService', () => {
       }),
     } as Response);
 
-    const result = await createService({ SMART_TAG_AI_ENABLED: 'true' }).suggest(
-      input,
-    );
+    const result = await createService({
+      SMART_TAG_AI_ENABLED: 'true',
+    }).suggest(input);
 
     expect(result.status).toBe(SmartTagSourceStatus.Success);
     expect(result.suggestions).toEqual([
@@ -73,11 +73,13 @@ describe('AiTaggingClientService', () => {
   });
 
   it('falls back cleanly when the AI service cannot be reached', async () => {
-    jest.spyOn(global, 'fetch').mockRejectedValue(new Error('connection refused'));
+    jest
+      .spyOn(global, 'fetch')
+      .mockRejectedValue(new Error('connection refused'));
 
-    const result = await createService({ SMART_TAG_AI_ENABLED: 'true' }).suggest(
-      input,
-    );
+    const result = await createService({
+      SMART_TAG_AI_ENABLED: 'true',
+    }).suggest(input);
 
     expect(result).toEqual({
       status: SmartTagSourceStatus.Unavailable,

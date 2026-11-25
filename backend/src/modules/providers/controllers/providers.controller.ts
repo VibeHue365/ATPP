@@ -16,13 +16,21 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../../common/guards/roles.guard';
+import { Roles } from '../../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { ProvidersService } from '../services/providers.service';
 import { ProviderOverviewService } from '../services/provider-overview.service';
 import { ProviderOverviewQueryDto } from '../dto/provider-overview-query.dto';
-import { CreatePortfolioItemDto, UpdatePortfolioItemDto } from '../dto/portfolio-item.dto';
-import { UpdateProviderProfileDto, AddPortfolioImageDto } from '../dto/update-provider-profile.dto';
+import {
+  CreatePortfolioItemDto,
+  UpdatePortfolioItemDto,
+} from '../dto/portfolio-item.dto';
+import {
+  UpdateProviderProfileDto,
+  AddPortfolioImageDto,
+} from '../dto/update-provider-profile.dto';
 import { PublicMediaService } from '../../storage/services/public-media.service';
 import { SkipThrottle } from '@nestjs/throttler';
 import {
@@ -32,13 +40,14 @@ import {
 } from '../dto/provider-schedule.dto';
 
 @Controller('providers')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('PROVIDER', 'ADMIN')
 export class ProvidersController {
   constructor(
     private readonly providersService: ProvidersService,
     private readonly providerOverviewService: ProviderOverviewService,
     private readonly publicMedia: PublicMediaService,
-  ) { }
+  ) {}
 
   @Post('me/cover-image')
   @UseInterceptors(
@@ -51,14 +60,20 @@ export class ProvidersController {
     @CurrentUser() user: AuthUser,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    if (!file) throw new BadRequestException('Vui lòng chọn file ảnh để tải lên');
+    if (!file)
+      throw new BadRequestException('Vui lòng chọn file ảnh để tải lên');
     const { fileTypeFromBuffer } = await import('file-type');
     const detectedType = await fileTypeFromBuffer(file.buffer);
     const validMimes = ['image/jpeg', 'image/png', 'image/webp'];
     if (!detectedType || !validMimes.includes(detectedType.mime)) {
-      throw new UnsupportedMediaTypeException('Chỉ chấp nhận file ảnh JPEG, PNG, WEBP hợp lệ');
+      throw new UnsupportedMediaTypeException(
+        'Chỉ chấp nhận file ảnh JPEG, PNG, WEBP hợp lệ',
+      );
     }
-    const uploaded = await this.publicMedia.uploadImage('providers/cover', file);
+    const uploaded = await this.publicMedia.uploadImage(
+      'providers/cover',
+      file,
+    );
     return { url: uploaded.url, key: uploaded.key };
   }
 
@@ -72,7 +87,7 @@ export class ProvidersController {
   }
 
   @Get('me/overview')
-  @SkipThrottle({ default: true })
+  @SkipThrottle()
   async getOverview(
     @CurrentUser() user: AuthUser,
     @Query() query: ProviderOverviewQueryDto,
@@ -115,8 +130,15 @@ export class ProvidersController {
     @Query('month') month?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('staffId') staffId?: string,
   ) {
-    return this.providersService.getPhotographerCalendar(user.sub, month, from, to);
+    return this.providersService.getPhotographerCalendar(
+      user.sub,
+      month,
+      from,
+      to,
+      staffId,
+    );
   }
 
   @Patch('me')
@@ -149,17 +171,27 @@ export class ProvidersController {
   }
 
   @Post('me/portfolio-items')
-  async createPortfolioItem(@CurrentUser() user: AuthUser, @Body() dto: CreatePortfolioItemDto) {
+  async createPortfolioItem(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreatePortfolioItemDto,
+  ) {
     return this.providersService.createPortfolioItem(user.sub, dto);
   }
 
   @Patch('me/portfolio-items/:id')
-  async updatePortfolioItem(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdatePortfolioItemDto) {
+  async updatePortfolioItem(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: UpdatePortfolioItemDto,
+  ) {
     return this.providersService.updatePortfolioItem(user.sub, id, dto);
   }
 
   @Delete('me/portfolio-items/:id')
-  async deletePortfolioItem(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+  async deletePortfolioItem(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
     await this.providersService.removePortfolioItem(user.sub, id);
     return { message: 'Portfolio item deleted' };
   }

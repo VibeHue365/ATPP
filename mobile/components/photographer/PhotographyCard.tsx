@@ -1,13 +1,14 @@
 import React from 'react';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { type Href, router } from 'expo-router';
+import { type Href, router, usePathname } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors, FontFamily, Radius, Shadow } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import type { Photographer } from '@/types/photographer';
 import { getMediaUrl } from '@/utils/media';
+import { buildLoginHref } from '@/utils/navigation';
 
 const formatVND = (value: number) => `${Math.round(value || 0).toLocaleString('vi-VN')}đ`;
 
@@ -21,6 +22,7 @@ export function PhotographyCard({
   const pack = photographer.defaultPackage ?? photographer.packages?.[0];
   const { isAuthenticated, isFavorite, toggleFavorite } = useAuth();
   const { show } = useToast();
+  const pathname = usePathname();
   const liked = isFavorite('PROVIDER', photographer._id);
 
   const go = () =>
@@ -31,7 +33,7 @@ export function PhotographyCard({
   const favorite = async (event: { stopPropagation: () => void }) => {
     event.stopPropagation();
     if (!isAuthenticated) {
-      router.push('/(auth)/login' as Href);
+      router.push(buildLoginHref(pathname));
       return;
     }
     try {
@@ -234,6 +236,19 @@ export function PhotographyCard({
             <Ionicons name="sparkles" size={11} color="#D97706" />
             <Text style={styles.perkWarmText}>Tặng toàn bộ ảnh gốc</Text>
           </View>
+
+          {((photographer.activeStaffCount ?? 0) > 1 ||
+            (photographer.effectiveCapacity ?? 1) > 1) && (
+            <View style={styles.perkPillHighlight}>
+              <Ionicons name="camera-outline" size={12} color="#BA0049" />
+              <Text style={styles.perkHighlightText}>
+                Đội ngũ {photographer.activeStaffCount ?? photographer.effectiveCapacity} thợ
+                {(photographer.effectiveCapacity ?? 1) > 1
+                  ? ` · ${photographer.effectiveCapacity} ca/giờ`
+                  : ''}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Pricing & CTA */}

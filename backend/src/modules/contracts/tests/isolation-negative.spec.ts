@@ -3,7 +3,8 @@ import { installNetworkGuard } from './fixtures/synthetic-contract.fixture';
 import { ContractPreparationService } from '../contract-preparation.service';
 import { ContractCheckoutGuard } from '../contract-checkout-guard.service';
 import { V2PaymentFinalizationService } from '../../payments/services/v2-payment-finalization.service';
-import { ServiceUnavailableException, FinalizationReviewError } from '@nestjs/common';
+import { ServiceUnavailableException } from '@nestjs/common';
+import { FinalizationReviewError } from '../../payments/services/v2-payment-finalization.service';
 import { Types } from 'mongoose';
 
 describe('P0 Environment Isolation Negative Tests', () => {
@@ -19,8 +20,9 @@ describe('P0 Environment Isolation Negative Tests', () => {
         'mongodb+srv://sentinel_user:fake_password@cluster0.fake.mongodb.net/vibehue_db?replicaSet=rsContractTest';
       process.env.CONTRACT_TEST_DB_NAME = 'vibehue_db';
 
+      // the shared DB safety guard (mongo-test-safety-guard) rejects a remote URI before the contract checks
       expect(() => contractTestTarget()).toThrow(
-        /Contract tests require the isolated local replica set on port 27028/,
+        /Remote connection scheme mongodb\+srv is strictly prohibited/,
       );
     });
 
@@ -49,8 +51,9 @@ describe('P0 Environment Isolation Negative Tests', () => {
         'mongodb://127.0.0.1:27028/vibehue_db?replicaSet=rsContractTest';
       process.env.CONTRACT_TEST_DB_NAME = 'vibehue_db';
 
+      // the shared DB safety guard (mongo-test-safety-guard) rejects a non-test database name first
       expect(() => contractTestTarget()).toThrow(
-        /explicit contract \*_test database/,
+        /Unsafe database name "vibehue_db"/,
       );
     });
 
@@ -156,7 +159,9 @@ describe('P0 Environment Isolation Negative Tests', () => {
         null as never,
       );
 
-      expect(await finalization.processPayment(new Types.ObjectId())).toBe(false);
+      expect(await finalization.processPayment(new Types.ObjectId())).toBe(
+        false,
+      );
       expect(await finalization.processDue()).toBe(0);
       await expect(
         finalization.finalize(new Types.ObjectId(), 'token'),

@@ -1,4 +1,8 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 export class PayOSRefundRejectedError extends Error {
@@ -40,11 +44,14 @@ export class PayOSRefundService {
     const nodeEnv = this.configService.get<string>('NODE_ENV', 'development');
     const isMock =
       this.configService.get<string>('PAYOS_REFUND_MOCK') === 'true' ||
-      ((!this.payOSClientId || this.payOSClientId.includes('your_')) && nodeEnv !== 'production');
+      ((!this.payOSClientId || this.payOSClientId.includes('your_')) &&
+        nodeEnv !== 'production');
 
     if (isMock) {
       if (nodeEnv === 'production') {
-        throw new Error('Không được bật PAYOS_REFUND_MOCK ở môi trường production');
+        throw new Error(
+          'Không được bật PAYOS_REFUND_MOCK ở môi trường production',
+        );
       }
       this.logger.warn(
         `PAYOS_REFUND_MOCK is enabled in ${nodeEnv}. Returning mock refund response.`,

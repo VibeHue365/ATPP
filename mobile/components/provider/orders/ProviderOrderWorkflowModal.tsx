@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
+  KeyboardAvoidingView,
+  Platform,
   View,
   Text,
   StyleSheet,
@@ -11,11 +13,13 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { providerApi } from '@/apis/providerApi';
+import { useNotifications } from '@/contexts/NotificationContext';
 import { useToast } from '@/contexts/ToastContext';
 import { FontFamily } from '@/constants/theme';
 import { getMediaUrl } from '@/utils/media';
+import { getItemSkuOrCode, getRentalItems, hasPickupEvidence } from '@/utils/rentalState';
 
 export type ProviderWorkflowMode =
   | 'HANDOVER'
@@ -24,10 +28,16 @@ export type ProviderWorkflowMode =
   | 'CANCEL_ORDER'
   | null;
 
+interface UploadedPhotoEntry {
+  value: string;
+  previewUri: string;
+}
+
 interface ProviderOrderWorkflowModalProps {
   visible: boolean;
   mode: ProviderWorkflowMode;
   order: any | null;
+  targetItemId?: string | null;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -36,19 +46,21 @@ export function ProviderOrderWorkflowModal({
   visible,
   mode,
   order,
+  targetItemId,
   onClose,
   onSuccess,
 }: ProviderOrderWorkflowModalProps) {
   const { show } = useToast();
+  const { bumpBookingSync } = useNotifications();
 
   const [submitting, setSubmitting] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
-  // Handover / Deliver Photos state
-  const [uploadedUrls, setUploadedUrls] = useState<string[]>([]);
+  // Handover / Deliver Photos / Incident uploaded media
+  const [uploadedPhotos, setUploadedPhotos] = useState<UploadedPhotoEntry[]>([]);
   const [driveUrl, setDriveUrl] = useState('');
 
-  // Cancel / Incident state
+  // Cancel / Incident / Handover note state
   const [reasonText, setReasonText] = useState('');
   const [incidentType, setIncidentType] = useState<'CLEANING' | 'MAINTENANCE'>('CLEANING');
   const [requestedAmount, setRequestedAmount] = useState('150000');
@@ -56,22 +68,53 @@ export function ProviderOrderWorkflowModal({
 
   useEffect(() => {
     if (visible && order) {
-      setUploadedUrls([]);
+      setUploadedPhotos([]);
       setDriveUrl(order.deliveryDriveUrl || '');
       setReasonText('');
       setIncidentType('CLEANING');
-      const firstItem = order.items?.[0];
-      setSelectedItemId(firstItem?._id || firstItem?.id || '');
+      const rentalItems = getRentalItems(order, true);
+      const preferredItem =
+        (targetItemId ? rentalItems.find((it) => it._id === targetItemId) : null) ||
+        (mode === 'HANDOVER'
+          ? rentalItems.find(
+              (it) =>
+                it.rentalFulfillment?.status === 'READY_FOR_PICKUP' &&
+                !hasPickupEvidence(it, order),
+            )
+          : mode === 'REPORT_INCIDENT'
+            ? rentalItems.find((it) => it.rentalFulfillment?.status === 'RETURNED')
+            : null) ||
+        rentalItems[0] ||
+        order.items?.[0];
+
+      setSelectedItemId(preferredItem?._id || (preferredItem as any)?.id || '');
       const dep =
         order.pricingSummary?.depositTotal ||
         order.depositAmount ||
-        firstItem?.depositAmount ||
+        preferredItem?.depositAmount ||
         300000;
       setRequestedAmount(String(Math.min(150000, dep || 150000)));
     }
-  }, [visible, order, mode]);
+  }, [visible, order, mode, targetItemId]);
 
   if (!order || !mode) return null;
+
+  const rentalItems = getRentalItems(order, true);
+  const selectableItems =
+    mode === 'HANDOVER'
+      ? rentalItems.filter(
+          (it) =>
+            it.rentalFulfillment?.status === 'READY_FOR_PICKUP' &&
+            !hasPickupEvidence(it, order),
+        )
+      : mode === 'REPORT_INCIDENT'
+        ? rentalItems.filter((it) =>
+            ['PICKED_UP', 'CUSTOMER_RETURN_REQUESTED', 'RETURNED'].includes(
+              String(it.rentalFulfillment?.status || ''),
+            ),
+          )
+        : [];
+  const itemOptions = selectableItems.length > 0 ? selectableItems : rentalItems;
 
   const orderCode =
     order.bookingCode ||
@@ -79,17 +122,56 @@ export function ProviderOrderWorkflowModal({
   const maxDeposit =
     order.pricingSummary?.depositTotal ||
     order.depositAmount ||
-    order.items?.[0]?.depositAmount ||
-    order.totalAmount ||
-    500000;
+    rentalItems.reduce((sum, it) => sum + (it.depositAmount ?? 0) * (it.quantity ?? 1), 0) ||
+    200000;
 
   const uploadSelectedAssets = async (assets: ImagePicker.ImagePickerAsset[]) => {
     if (!assets?.length) return;
     setUploadingPhoto(true);
     try {
-      if (mode === 'REPORT_INCIDENT') {
+      if (mode === 'HANDOVER') {
+        if (!selectedItemId) {
+          show('Không tìm thấy áo dài cần bàn giao', 'error');
+          return;
+        }
+        const remainingSlots = Math.max(0, 5 - uploadedPhotos.length);
+        const targetAssets = assets.slice(0, remainingSlots);
+        if (!targetAssets.length) {
+          show('Tối đa 5 ảnh bàn giao cho mỗi áo dài', 'error');
+          return;
+        }
         const formData = new FormData();
-        assets.forEach((asset, i) => {
+        targetAssets.forEach((asset, i) => {
+          formData.append(
+            'images',
+            (asset.file ?? {
+              uri: asset.uri,
+              name: asset.fileName ?? `handover_${i}.jpg`,
+              type: asset.mimeType ?? 'image/jpeg',
+            }) as unknown as Blob,
+          );
+        });
+        const res = await providerApi.uploadRentalEvidence(
+          order._id,
+          selectedItemId,
+          formData,
+        );
+        const files = Array.isArray(res?.files) ? res.files : [];
+        if (files.length > 0) {
+          setUploadedPhotos((prev) =>
+            [
+              ...prev,
+              ...files.map((f, idx) => ({
+                value: f.fileId,
+                previewUri: targetAssets[idx]?.uri || targetAssets[0].uri,
+              })),
+            ].slice(0, 5),
+          );
+          show(`Đã tải lên ${files.length} ảnh bàn giao hiện trạng`, 'success');
+        }
+      } else if (mode === 'REPORT_INCIDENT') {
+        const formData = new FormData();
+        assets.slice(0, 5).forEach((asset, i) => {
           formData.append(
             'images',
             (asset.file ?? {
@@ -101,11 +183,17 @@ export function ProviderOrderWorkflowModal({
         });
         const res = await providerApi.uploadIncidentEvidence(formData);
         if (res?.urls?.length) {
-          setUploadedUrls((prev) => [...prev, ...(res.urls || [])]);
-          show(`Đã tải lên ${res.urls.length} ảnh bằng chứng`, 'success');
+          setUploadedPhotos((prev) => [
+            ...prev,
+            ...(res.urls || []).map((u, idx) => ({
+              value: u,
+              previewUri: assets[idx]?.uri || getMediaUrl(u) || u,
+            })),
+          ]);
+          show(`Đã tải lên ${res.urls.length} ảnh bằng chứng sự cố`, 'success');
         }
       } else {
-        const newUrls: string[] = [];
+        const nextEntries: UploadedPhotoEntry[] = [];
         for (let i = 0; i < assets.length; i++) {
           const asset = assets[i];
           const formData = new FormData();
@@ -113,20 +201,26 @@ export function ProviderOrderWorkflowModal({
             'file',
             (asset.file ?? {
               uri: asset.uri,
-              name: asset.fileName ?? `handover_${i}.jpg`,
+              name: asset.fileName ?? `deliver_${i}.jpg`,
               type: asset.mimeType ?? 'image/jpeg',
             }) as unknown as Blob,
           );
           const res = await providerApi.uploadReference(formData);
-          if (res?.url) newUrls.push(res.url);
+          if (res?.url) {
+            nextEntries.push({
+              value: res.url,
+              previewUri: getMediaUrl(res.url) || asset.uri,
+            });
+          }
         }
-        if (newUrls.length > 0) {
-          setUploadedUrls((prev) => [...prev, ...newUrls]);
-          show(`Đã tải lên ${newUrls.length} ảnh thành công`, 'success');
+        if (nextEntries.length > 0) {
+          setUploadedPhotos((prev) => [...prev, ...nextEntries]);
+          show(`Đã tải lên ${nextEntries.length} ảnh thành công`, 'success');
         }
       }
-    } catch {
-      show('Tải ảnh thất bại, vui lòng thử lại', 'error');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || 'Tải ảnh thất bại, vui lòng thử lại';
+      show(Array.isArray(msg) ? msg[0] : msg, 'error');
     } finally {
       setUploadingPhoto(false);
     }
@@ -143,6 +237,7 @@ export function ProviderOrderWorkflowModal({
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
+      selectionLimit: 5,
       quality: 0.8,
     });
 
@@ -165,41 +260,36 @@ export function ProviderOrderWorkflowModal({
     await uploadSelectedAssets(result.assets);
   };
 
-  // Fallback quick-attach product image when testing on emulator without gallery photos
-  const handleAttachProductReferencePhoto = () => {
-    const firstItem = order.items?.[0];
-    const fallbackUrl =
-      firstItem?.productId?.images?.[0] ||
-      firstItem?.images?.[0] ||
-      firstItem?.imageUrl ||
-      '/uploads/products/handover-default.jpg';
-    if (!uploadedUrls.includes(fallbackUrl)) {
-      setUploadedUrls((prev) => [...prev, fallbackUrl]);
-      show('Đã đính kèm ảnh đối chiếu tình trạng trang phục', 'success');
-    }
-  };
-
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
       if (mode === 'HANDOVER') {
-        if (uploadedUrls.length === 0) {
+        if (!selectedItemId) {
+          show('Không tìm thấy sản phẩm thuê để gửi ảnh bàn giao', 'error');
+          setSubmitting(false);
+          return;
+        }
+        if (uploadedPhotos.length === 0) {
           show('Vui lòng tải lên ít nhất 1 ảnh chụp tình trạng áo lúc bàn giao!', 'error');
           setSubmitting(false);
           return;
         }
-        await providerApi.updateBookingStatus(order._id, 'PICKUP_PENDING', {
-          handoverPhotos: uploadedUrls,
-          note: 'Đã chuẩn bị & chụp ảnh tình trạng trang phục bàn giao',
+        await providerApi.markPickedUp(order._id, selectedItemId, {
+          fileIds: uploadedPhotos.map((p) => p.value),
+          conditionNote: reasonText.trim() || undefined,
+          note:
+            reasonText.trim() ||
+            'Shop đã chụp ảnh hiện trạng bàn giao, chờ khách kiểm tra và xác nhận nhận áo.',
         });
+        bumpBookingSync(order._id);
         show(
-          `Đã gửi ảnh bàn giao đơn ${orderCode}! Đang chờ khách xác nhận nhận đồ.`,
+          `Đã gửi ảnh bàn giao đơn ${orderCode}! Chờ khách hàng xác nhận nhận đồ.`,
           'success',
         );
         onSuccess();
       } else if (mode === 'DELIVER_PHOTOS') {
         const cleanDrive = driveUrl.trim();
-        if (!cleanDrive && uploadedUrls.length === 0) {
+        if (!cleanDrive && uploadedPhotos.length === 0) {
           show('Vui lòng nhập Link Google Drive hoặc tải lên ảnh kết quả!', 'error');
           setSubmitting(false);
           return;
@@ -211,8 +301,10 @@ export function ProviderOrderWorkflowModal({
         }
         await providerApi.updateBookingStatus(order._id, 'AWAITING_REVIEW', {
           deliveryDriveUrl: cleanDrive || undefined,
-          deliveredPhotos: uploadedUrls.length > 0 ? uploadedUrls : undefined,
+          deliveredPhotos:
+            uploadedPhotos.length > 0 ? uploadedPhotos.map((p) => p.value) : undefined,
         });
+        bumpBookingSync(order._id);
         show('Đã bàn giao sản phẩm ảnh cho khách hàng thành công!', 'success');
         onSuccess();
       } else if (mode === 'CANCEL_ORDER') {
@@ -224,6 +316,7 @@ export function ProviderOrderWorkflowModal({
         await providerApi.cancelBooking(order._id, {
           reason: reasonText.trim(),
         });
+        bumpBookingSync(order._id);
         show('Đã hủy đơn hàng và gửi thông báo lý do cho khách.', 'success');
         onSuccess();
       } else if (mode === 'REPORT_INCIDENT') {
@@ -237,7 +330,7 @@ export function ProviderOrderWorkflowModal({
           setSubmitting(false);
           return;
         }
-        if (uploadedUrls.length === 0) {
+        if (uploadedPhotos.length === 0) {
           show('Bắt buộc phải có ít nhất 1 hình ảnh bằng chứng sự cố!', 'error');
           setSubmitting(false);
           return;
@@ -256,10 +349,11 @@ export function ProviderOrderWorkflowModal({
           bookingId: order._id,
           bookingItemId: selectedItemId,
           description: reasonText.trim(),
-          evidencePhotos: uploadedUrls,
+          evidencePhotos: uploadedPhotos.map((p) => p.value),
           requestedAmount: amt,
           actionType: incidentType,
         });
+        bumpBookingSync(order._id);
         show(
           'Đã gửi báo cáo sự cố thành công! Đơn chuyển sang chờ khách xác nhận đền bù.',
           'success',
@@ -284,7 +378,10 @@ export function ProviderOrderWorkflowModal({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
         <View style={styles.sheet}>
@@ -311,6 +408,7 @@ export function ProviderOrderWorkflowModal({
 
           <ScrollView
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.body}
           >
             {/* MODE 1: HANDOVER */}
@@ -319,10 +417,43 @@ export function ProviderOrderWorkflowModal({
                 <View style={styles.infoBanner}>
                   <Ionicons name="shield-checkmark" size={18} color="#BA0049" />
                   <Text style={styles.infoBannerText}>
-                    Theo quy định đối soát Escrow trên Web & App, chủ tiệm cần đính kèm ít nhất 1 ảnh chụp tình trạng cổ phục lúc giao hàng để chuyển sang trạng thái{' '}
-                    <Text style={{ fontFamily: FontFamily.bodyBold }}>Chờ khách nhận đồ</Text>.
+                    Chủ tiệm tải tối đa 5 ảnh hiện trạng cổ phục lúc giao (lưu trữ bảo mật) để khách kiểm tra và xác nhận đã nhận đồ.
                   </Text>
                 </View>
+
+                {itemOptions.length > 1 && (
+                  <View style={styles.itemSelectRow}>
+                    <Text style={styles.fieldLabel}>Chọn áo dài cần bàn giao</Text>
+                    {itemOptions.map((it: any) => {
+                      const active = selectedItemId === it._id;
+                      return (
+                        <Pressable
+                          key={it._id}
+                          onPress={() => {
+                            if (selectedItemId !== it._id) {
+                              setSelectedItemId(it._id);
+                              setUploadedPhotos([]);
+                            }
+                          }}
+                          style={[
+                            styles.itemSelectPill,
+                            active && styles.itemSelectPillActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.itemSelectPillText,
+                              active && { color: '#BA0049', fontFamily: FontFamily.bodyBold },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {it.name || it.productId?.name || 'Áo dài'} ({getItemSkuOrCode(it) || 'Món'})
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                )}
 
                 <View style={styles.uploadBox}>
                   <Pressable
@@ -334,39 +465,37 @@ export function ProviderOrderWorkflowModal({
                       <ActivityIndicator size="small" color="#BA0049" />
                     ) : (
                       <>
-                        <Ionicons name="camera-outline" size={28} color="#BA0049" />
+                        <Ionicons name="images-outline" size={28} color="#BA0049" />
                         <Text style={styles.uploadTitle}>
-                          Chụp / Tải lên ảnh bàn giao trang phục
+                          Chọn ảnh hiện trạng từ thư viện
                         </Text>
                         <Text style={styles.uploadSub}>
-                          Chụp rõ cổ áo, tà áo và phụ kiện đi kèm
+                          Chụp rõ cổ áo, tà áo và phụ kiện đi kèm (JPG/PNG/WEBP)
                         </Text>
                       </>
                     )}
                   </Pressable>
 
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <Pressable
-                      style={[styles.quickRefBtn, { flex: 1, backgroundColor: '#FFF0F3' }]}
-                      onPress={() => void handleTakeCameraPhoto()}
-                      disabled={uploadingPhoto}
-                    >
-                      <Ionicons name="camera" size={16} color="#BA0049" />
-                      <Text style={[styles.quickRefBtnText, { color: '#BA0049' }]}>
-                        Chụp bằng Camera
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      style={[styles.quickRefBtn, { flex: 1 }]}
-                      onPress={handleAttachProductReferencePhoto}
-                    >
-                      <MaterialIcons name="add-photo-alternate" size={16} color="#5F5E5E" />
-                      <Text style={styles.quickRefBtnText}>
-                        Ảnh mẫu đối chiếu
-                      </Text>
-                    </Pressable>
-                  </View>
+                  <Pressable
+                    style={[styles.quickRefBtn, { backgroundColor: '#FFF0F3' }]}
+                    onPress={() => void handleTakeCameraPhoto()}
+                    disabled={uploadingPhoto}
+                  >
+                    <Ionicons name="camera" size={16} color="#BA0049" />
+                    <Text style={[styles.quickRefBtnText, { color: '#BA0049' }]}>
+                      Chụp ảnh trực tiếp bằng Camera
+                    </Text>
+                  </Pressable>
                 </View>
+
+                <Text style={styles.fieldLabel}>Ghi chú hiện trạng bàn giao (tùy chọn)</Text>
+                <TextInput
+                  style={[styles.input, { minHeight: 68, textAlignVertical: 'top', paddingTop: 10 }]}
+                  multiline
+                  value={reasonText}
+                  onChangeText={setReasonText}
+                  placeholder="VD: Áo mới ủi phẳng, đủ khăn đóng đi kèm..."
+                />
               </>
             )}
 
@@ -412,6 +541,35 @@ export function ProviderOrderWorkflowModal({
             {/* MODE 3: REPORT_INCIDENT */}
             {mode === 'REPORT_INCIDENT' && (
               <>
+                {itemOptions.length > 1 && (
+                  <View style={styles.itemSelectRow}>
+                    <Text style={styles.fieldLabel}>Chọn áo dài phát sinh sự cố</Text>
+                    {itemOptions.map((it: any) => {
+                      const active = selectedItemId === it._id;
+                      return (
+                        <Pressable
+                          key={it._id}
+                          onPress={() => setSelectedItemId(it._id)}
+                          style={[
+                            styles.itemSelectPill,
+                            active && styles.itemSelectPillActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.itemSelectPillText,
+                              active && { color: '#BA0049', fontFamily: FontFamily.bodyBold },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {it.name || it.productId?.name || 'Áo dài'} ({getItemSkuOrCode(it) || 'Món'})
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                )}
+
                 <Text style={styles.fieldLabel}>Hình thức xử lý sự cố</Text>
                 <View style={styles.typeToggleRow}>
                   <Pressable
@@ -479,18 +637,19 @@ export function ProviderOrderWorkflowModal({
                     <ActivityIndicator size="small" color="#BA0049" />
                   ) : (
                     <>
-                      <Ionicons name="camera-outline" size={26} color="#BA0049" />
-                      <Text style={styles.uploadTitle}>Tải ảnh bằng chứng hư hỏng</Text>
+                      <Ionicons name="images-outline" size={26} color="#BA0049" />
+                      <Text style={styles.uploadTitle}>Chọn ảnh bằng chứng hư hỏng</Text>
                     </>
                   )}
                 </Pressable>
                 <Pressable
-                  style={styles.quickRefBtn}
-                  onPress={handleAttachProductReferencePhoto}
+                  style={[styles.quickRefBtn, { backgroundColor: '#FFF0F3' }]}
+                  onPress={() => void handleTakeCameraPhoto()}
+                  disabled={uploadingPhoto}
                 >
-                  <MaterialIcons name="add-photo-alternate" size={16} color="#5F5E5E" />
-                  <Text style={styles.quickRefBtnText}>
-                    Đính kèm ảnh minh họa nhanh (Dành cho máy ảo)
+                  <Ionicons name="camera" size={16} color="#BA0049" />
+                  <Text style={[styles.quickRefBtnText, { color: '#BA0049' }]}>
+                    Chụp bằng chứng bằng Camera
                   </Text>
                 </Pressable>
               </>
@@ -518,27 +677,27 @@ export function ProviderOrderWorkflowModal({
             )}
 
             {/* Preview Uploaded Photos */}
-            {uploadedUrls.length > 0 && (
+            {uploadedPhotos.length > 0 && (
               <View style={styles.previewSection}>
                 <Text style={styles.previewLabel}>
-                  Đã đính kèm ({uploadedUrls.length} ảnh):
+                  Đã đính kèm ({uploadedPhotos.length} ảnh):
                 </Text>
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.previewRow}
                 >
-                  {uploadedUrls.map((u, idx) => (
-                    <View key={`${u}-${idx}`} style={styles.previewThumbWrap}>
+                  {uploadedPhotos.map((entry, idx) => (
+                    <View key={`${entry.value}-${idx}`} style={styles.previewThumbWrap}>
                       <Image
-                        source={{ uri: getMediaUrl(u) }}
+                        source={{ uri: entry.previewUri }}
                         style={styles.previewThumb}
                         contentFit="cover"
                       />
                       <Pressable
                         style={styles.removeThumbBtn}
                         onPress={() =>
-                          setUploadedUrls((prev) => prev.filter((_, i) => i !== idx))
+                          setUploadedPhotos((prev) => prev.filter((_, i) => i !== idx))
                         }
                       >
                         <Ionicons name="close-circle" size={18} color="#DC2626" />
@@ -580,7 +739,7 @@ export function ProviderOrderWorkflowModal({
             </Pressable>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -816,5 +975,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: FontFamily.bodyBold,
     color: '#FFFFFF',
+  },
+  itemSelectRow: {
+    gap: 6,
+  },
+  itemSelectPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#EFECEB',
+    backgroundColor: '#FBF9F9',
+  },
+  itemSelectPillActive: {
+    backgroundColor: '#FFF0F3',
+    borderColor: '#BA0049',
+  },
+  itemSelectPillText: {
+    fontSize: 12,
+    fontFamily: FontFamily.bodyMedium,
+    color: '#5F5E5E',
   },
 });

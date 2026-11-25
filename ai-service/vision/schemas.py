@@ -17,7 +17,8 @@ class ProductDraftRequest(BaseModel):
 
 
 class DraftAttribute(BaseModel):
-    group: Literal["color", "pattern", "gender", "style"]
+    # material/motif/occasion only come from Gemini (vision/gemini_attributes.py).
+    group: Literal["color", "pattern", "gender", "style", "material", "motif", "occasion"]
     key: str
     label: str
     confidence: float = Field(ge=0, le=1)
@@ -26,6 +27,8 @@ class DraftAttribute(BaseModel):
 
 class ProductDraftResponse(BaseModel):
     status: Literal["SUCCESS", "NOT_AO_DAI", "UNAVAILABLE"]
+    # GEMINI: style/fabric/motif/occasion were read too; CLIP_ONLY: colours and pattern only.
+    source: Literal["GEMINI", "CLIP_ONLY"] = "CLIP_ONLY"
     attributes: list[DraftAttribute] = Field(default_factory=list)
     name: str = ""
     description: str = ""

@@ -458,15 +458,42 @@ describe('AdminStatsService (VS-103, VS-104, VS-105)', () => {
 
   describe('VS-110: Low-rating Photographer Performance Alert Report', () => {
     it('returns photographers below 3.5 with their negative reviews', async () => {
-      providerModel.aggregate.mockResolvedValue([{ _id: new Types.ObjectId(), businessName: 'Hue Studio', city: 'Hue', averageRating: 3.2, totalReviews: 5, negativeReviews: [{ reviewId: new Types.ObjectId(), rating: 2, comment: 'Ảnh trả chậm' }] }]);
+      providerModel.aggregate.mockResolvedValue([
+        {
+          _id: new Types.ObjectId(),
+          businessName: 'Hue Studio',
+          city: 'Hue',
+          averageRating: 3.2,
+          totalReviews: 5,
+          negativeReviews: [
+            {
+              reviewId: new Types.ObjectId(),
+              rating: 2,
+              comment: 'Ảnh trả chậm',
+            },
+          ],
+        },
+      ]);
       const result = await service.getLowRatingPhotographers();
       expect(result.total).toBe(1);
-      expect(result.data[0]).toMatchObject({ businessName: 'Hue Studio', averageRating: 3.2 });
-      expect(result.data[0].negativeReviews[0]).toMatchObject({ rating: 2, comment: 'Ảnh trả chậm' });
-      expect(providerModel.aggregate).toHaveBeenCalledWith(expect.arrayContaining([
-        expect.objectContaining({ $match: expect.objectContaining({ capabilities: 'PHOTOGRAPHY' }) }),
-        expect.objectContaining({ $lookup: expect.objectContaining({ from: 'reviews' }) }),
-      ]));
+      expect(result.data[0]).toMatchObject({
+        businessName: 'Hue Studio',
+        averageRating: 3.2,
+      });
+      expect(result.data[0].negativeReviews[0]).toMatchObject({
+        rating: 2,
+        comment: 'Ảnh trả chậm',
+      });
+      expect(providerModel.aggregate).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            $match: expect.objectContaining({ capabilities: 'PHOTOGRAPHY' }),
+          }),
+          expect.objectContaining({
+            $lookup: expect.objectContaining({ from: 'reviews' }),
+          }),
+        ]),
+      );
     });
   });
 
@@ -503,6 +530,59 @@ describe('AdminStatsService (VS-103, VS-104, VS-105)', () => {
 
       expect(file.subarray(0, 2).toString()).toBe('PK');
       expect(file.length).toBeGreaterThan(100);
+    });
+  });
+
+  describe('Overview Chart Periods & GMV Purpose Filter', () => {
+    it('supports day (12 two-hour slots) and week (7 days) and filters GMV by PaymentPurpose', async () => {
+      paymentModel.aggregate.mockResolvedValue([{ _id: '08', totalAmount: 350000 }]);
+      bookingModel.aggregate.mockResolvedValue([{ _id: '09', count: 2 }]);
+
+      const dayPoints = await (service as any).getOverviewChartPoints('day');
+      expect(dayPoints).toHaveLength(12);
+      expect(dayPoints[4]).toMatchObject({
+        day: '08h',
+        bookings: 2,
+        gmv: 350000,
+        gmvMillions: 0.35,
+      });
+
+      const matchStage = paymentModel.aggregate.mock.calls[0][0][0].$match;
+      expect(matchStage.purpose.$in).toEqual(
+        expect.arrayContaining([
+          'DEPOSIT_PAYMENT',
+          'REMAINING_PAYMENT',
+          'FULL_PAYMENT',
+        ]),
+      );
+
+      paymentModel.aggregate.mockResolvedValue([]);
+      bookingModel.aggregate.mockResolvedValue([]);
+      const weekPoints = await (service as any).getOverviewChartPoints('week');
+      expect(weekPoints).toHaveLength(7);
+      expect(weekPoints[0].fullLabel).toMatch(/^Ngày \d{2}\/\d{2}\/\d{4}$/);
+    });
+
+    it('computes period-over-period growth against previous full period totals', async () => {
+      bookingModel.countDocuments.mockResolvedValue(4);
+      paymentModel.aggregate.mockResolvedValue([{ _id: null, total: 2_000_000 }]);
+
+      const growth = await (service as any).getOverviewPeriodComparison(
+        'day',
+        6,
+        3_000_000,
+      );
+      expect(growth).toEqual({
+        bookingGrowthPct: 50,
+        gmvGrowthPct: 50,
+      });
+
+      const bookingRange = bookingModel.countDocuments.mock.calls[0][0].createdAt;
+      expect(bookingRange.$gte).toBeInstanceOf(Date);
+      expect(bookingRange.$lte).toBeInstanceOf(Date);
+      expect(bookingRange.$lte.getTime() - bookingRange.$gte.getTime()).toBe(
+        24 * 60 * 60 * 1000 - 1,
+      );
     });
   });
 });

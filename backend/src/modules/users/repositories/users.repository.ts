@@ -70,7 +70,9 @@ export class UsersRepository {
     });
   }
 
-  findUserByEmailWithPassword(emailNormalized: string): Promise<UserDocument | null> {
+  findUserByEmailWithPassword(
+    emailNormalized: string,
+  ): Promise<UserDocument | null> {
     return this.userModel
       .findOne({
         'auth.emailNormalized': emailNormalized,
@@ -91,7 +93,9 @@ export class UsersRepository {
     return this.userModel.findOne({ _id: userId, deletedAt: null });
   }
 
-  findUserByIdWithPassword(userId: Types.ObjectId): Promise<UserDocument | null> {
+  findUserByIdWithPassword(
+    userId: Types.ObjectId,
+  ): Promise<UserDocument | null> {
     return this.userModel
       .findOne({ _id: userId, deletedAt: null })
       .select('+auth.passwordHash');
@@ -145,7 +149,10 @@ export class UsersRepository {
       this.userModel.countDocuments({ deletedAt: null }),
       this.userModel.countDocuments({ roles: 'CUSTOMER', deletedAt: null }),
       this.userModel.countDocuments({ roles: 'PROVIDER', deletedAt: null }),
-      this.userModel.countDocuments({ roles: { $in: ['ADMIN', 'SUPPORT'] }, deletedAt: null }),
+      this.userModel.countDocuments({
+        roles: { $in: ['ADMIN', 'SUPPORT'] },
+        deletedAt: null,
+      }),
     ]);
 
     return { totalUsers, customers, providers, admins };
@@ -249,16 +256,24 @@ export class UsersRepository {
   async findActiveRoleCodes(roleCodes: string[]): Promise<string[]> {
     const roles = await this.connection
       .collection<{ code: string }>('roles')
-      .find({ code: { $in: roleCodes }, status: 'ACTIVE' }, { projection: { code: 1 } })
+      .find(
+        { code: { $in: roleCodes }, status: 'ACTIVE' },
+        { projection: { code: 1 } },
+      )
       .toArray();
     return roles.map((role) => role.code);
   }
 
-  async revokeActiveSessions(userId: Types.ObjectId, reason: string): Promise<number> {
-    const result = await this.connection.collection('refresh_tokens').updateMany(
-      { userId, revokedAt: null },
-      { $set: { revokedAt: new Date(), revokedReason: reason } },
-    );
+  async revokeActiveSessions(
+    userId: Types.ObjectId,
+    reason: string,
+  ): Promise<number> {
+    const result = await this.connection
+      .collection('refresh_tokens')
+      .updateMany(
+        { userId, revokedAt: null },
+        { $set: { revokedAt: new Date(), revokedReason: reason } },
+      );
     return result.modifiedCount;
   }
 
@@ -283,7 +298,9 @@ export class UsersRepository {
       .toArray();
   }
 
-  async restoreExpiredSuspension(userId: Types.ObjectId): Promise<UserDocument | null> {
+  async restoreExpiredSuspension(
+    userId: Types.ObjectId,
+  ): Promise<UserDocument | null> {
     return this.userModel.findOneAndUpdate(
       {
         _id: userId,
@@ -428,18 +445,29 @@ export class UsersRepository {
         updateQuery['preferences.favoriteColors'] = prefs.favoriteColors;
       }
       if (prefs.preferredMaterials !== undefined) {
-        updateQuery['preferences.preferredMaterials'] = prefs.preferredMaterials;
+        updateQuery['preferences.preferredMaterials'] =
+          prefs.preferredMaterials;
       }
       if (prefs.preferredAoDaiStyles !== undefined) {
-        updateQuery['preferences.preferredAoDaiStyles'] = prefs.preferredAoDaiStyles;
+        updateQuery['preferences.preferredAoDaiStyles'] =
+          prefs.preferredAoDaiStyles;
       }
       if (prefs.preferredPhotographyStyles !== undefined) {
-        updateQuery['preferences.preferredPhotographyStyles'] = prefs.preferredPhotographyStyles;
+        updateQuery['preferences.preferredPhotographyStyles'] =
+          prefs.preferredPhotographyStyles;
       }
       if (prefs.sizeInfo) {
         const size = prefs.sizeInfo;
-          for (const field of ['chest', 'waist', 'hip', 'shoulder', 'bicep', 'fitPreference'] as const) {
-          if (size[field] !== undefined) updateQuery[`preferences.sizeInfo.${field}`] = size[field];
+        for (const field of [
+          'chest',
+          'waist',
+          'hip',
+          'shoulder',
+          'bicep',
+          'fitPreference',
+        ] as const) {
+          if (size[field] !== undefined)
+            updateQuery[`preferences.sizeInfo.${field}`] = size[field];
         }
         if (size.height !== undefined) {
           updateQuery['preferences.sizeInfo.height'] = size.height;
@@ -448,7 +476,8 @@ export class UsersRepository {
           updateQuery['preferences.sizeInfo.weight'] = size.weight;
         }
         if (size.preferredSize !== undefined) {
-          updateQuery['preferences.sizeInfo.preferredSize'] = size.preferredSize;
+          updateQuery['preferences.sizeInfo.preferredSize'] =
+            size.preferredSize;
         }
         if (size.bodyShape !== undefined) {
           updateQuery['preferences.sizeInfo.bodyShape'] = size.bodyShape;
@@ -464,10 +493,12 @@ export class UsersRepository {
         }
       }
       if (prefs.preferredLocations !== undefined) {
-        updateQuery['preferences.preferredLocations'] = prefs.preferredLocations;
+        updateQuery['preferences.preferredLocations'] =
+          prefs.preferredLocations;
       }
       if (prefs.preferredOccasions !== undefined) {
-        updateQuery['preferences.preferredOccasions'] = prefs.preferredOccasions;
+        updateQuery['preferences.preferredOccasions'] =
+          prefs.preferredOccasions;
       }
       if (prefs.note !== undefined) {
         updateQuery['preferences.note'] = prefs.note;
@@ -475,10 +506,7 @@ export class UsersRepository {
     }
 
     if (Object.keys(updateQuery).length > 0) {
-      await this.userModel.updateOne(
-        { _id: userId },
-        { $set: updateQuery },
-      );
+      await this.userModel.updateOne({ _id: userId }, { $set: updateQuery });
     }
   }
 
@@ -511,13 +539,15 @@ export class UsersRepository {
 
     const favorites = user.favorites || [];
     const index = favorites.findIndex(
-      (fav) => fav.targetId.toString() === targetId.toString() && fav.targetType === targetType
+      (fav) =>
+        fav.targetId.toString() === targetId.toString() &&
+        fav.targetType === targetType,
     );
 
     if (index > -1) {
       await this.userModel.updateOne(
         { _id: userId },
-        { $pull: { favorites: { targetId, targetType } } }
+        { $pull: { favorites: { targetId, targetType } } },
       );
     } else {
       await this.userModel.updateOne(
@@ -530,7 +560,7 @@ export class UsersRepository {
               addedAt: new Date(),
             },
           },
-        }
+        },
       );
     }
   }

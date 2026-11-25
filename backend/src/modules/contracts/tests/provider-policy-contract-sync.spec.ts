@@ -1,4 +1,7 @@
-import { buildContractTermsLines, ContractPdfGenerator } from '../contract-pdf-generator';
+import {
+  buildContractTermsLines,
+  ContractPdfGenerator,
+} from '../contract-pdf-generator';
 import { validateContractConsistency } from '../contract-consistency-validator';
 import { hashContract } from '../canonical-contract';
 import { ContractSnapshotService } from '../contract-snapshot.service';
@@ -27,7 +30,8 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
       minorDamageFee: 50000,
       moderateDamagePercent: 20,
       severeDamageOrLossPercent: 100,
-      disputeResolutionNotes: 'Sàn VibeHue làm trọng tài hòa giải và bảo lưu tiền cọc.',
+      disputeResolutionNotes:
+        'Sàn VibeHue làm trọng tài hòa giải và bảo lưu tiền cọc.',
     },
     providerCancellationPolicy: {
       refundRules: [
@@ -35,9 +39,11 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
         { daysBeforeRental: 1, refundPercentage: 50 },
         { daysBeforeRental: 0, refundPercentage: 0 },
       ],
-      cancellationNotes: 'Tiền cọc luôn hoàn 100% nếu hủy trước khi nhận đồ. Phí hủy chỉ tính trên tiền thuê.',
+      cancellationNotes:
+        'Tiền cọc luôn hoàn 100% nếu hủy trước khi nhận đồ. Phí hủy chỉ tính trên tiền thuê.',
     },
-    providerCustomTermsText: 'Khách hàng vui lòng đồng kiểm trang phục kỹ lưỡng khi nhận hàng.',
+    providerCustomTermsText:
+      'Khách hàng vui lòng đồng kiểm trang phục kỹ lưỡng khi nhận hàng.',
   };
 
   const sampleSnapshot: any = {
@@ -92,55 +98,92 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
   };
 
   it('1. buildContractTermsLines generates all 4 approved policy groups with authoritative terms', () => {
-    const lines = buildContractTermsLines(sampleStructuredPolicies, sampleSnapshot.providerItems);
+    const lines = buildContractTermsLines(
+      sampleStructuredPolicies,
+      sampleSnapshot.providerItems,
+    );
     const fullText = lines.join('\n');
 
     // Group A: Garment Care
-    expect(fullText).toContain('ĐIỀU 2: NGHĨA VỤ CỦA BÊN THUÊ VÀ QUY ĐỊNH BẢO QUẢN ÁO DÀI (BÊN B)');
-    expect(fullText).toContain('Được phép sử dụng bàn ủi hơi nước ở nhiệt độ an toàn.');
-    expect(fullText).toContain('Quy định giặt trang phục: Bên B KHÔNG tự ý giặt; Bên A chịu trách nhiệm giặt hấp, xử lý chuyên dụng sau khi nhận lại.');
-    expect(fullText).toContain('Xịt nước hoa trực tiếp lên tơ tằm; Dùng kim băng kim loại làm tưa lụa; Tự ý cắt chỉ hoặc sửa chữa phom dáng.');
-    expect(fullText).toContain('Bảo quản nơi khô ráo, tránh ánh nắng trực tiếp.');
+    expect(fullText).toContain(
+      'ĐIỀU 2: NGHĨA VỤ CỦA BÊN THUÊ VÀ QUY ĐỊNH BẢO QUẢN ÁO DÀI (BÊN B)',
+    );
+    expect(fullText).toContain(
+      'Được phép sử dụng bàn ủi hơi nước ở nhiệt độ an toàn.',
+    );
+    expect(fullText).toContain(
+      'Quy định giặt trang phục: Bên B KHÔNG tự ý giặt; Bên A chịu trách nhiệm giặt hấp, xử lý chuyên dụng sau khi nhận lại.',
+    );
+    expect(fullText).toContain(
+      'Xịt nước hoa trực tiếp lên tơ tằm; Dùng kim băng kim loại làm tưa lụa; Tự ý cắt chỉ hoặc sửa chữa phom dáng.',
+    );
+    expect(fullText).toContain(
+      'Bảo quản nơi khô ráo, tránh ánh nắng trực tiếp.',
+    );
 
-    // Group B: Late Return (Reference to Part II, faithful to approved numbers)
-    expect(fullText).toContain('ĐIỀU 3: QUY ĐỊNH HOÀN TRẢ VÀ BIỂU PHÍ TRỄ HẠN');
+    // Group B: Late Return & Domino Recovery (Synchronized with overdue/domino rules)
+    expect(fullText).toContain(
+      'ĐIỀU 3: QUY ĐỊNH HOÀN TRẢ, BIỂU PHÍ QUÁ HẠN VÀ BẢO VỆ LỊCH HẸN',
+    );
     expect(fullText).toContain('Phần II');
-    expect(fullText).toContain('Thời gian ân hạn: 2 giờ');
-    expect(fullText).toContain('Biểu phí phạt trễ hạn: Áp dụng tương ứng theo hình thức thuê');
-    expect(fullText).toMatch(/20\.000\s*đ\/giờ/);
-    expect(fullText).toMatch(/100\.000\s*đ\/ngày/);
-    expect(fullText).toContain('Thời gian trễ tối đa cho phép: 3 ngày.');
-    expect(fullText).toContain('chuyển sang quy trình xử lý vi phạm hợp đồng');
+    expect(fullText).toContain('không áp dụng thời gian ân hạn miễn phí');
+    expect(fullText).toContain('+10% tiền đặt cọc cho mỗi 30 phút trễ');
+    expect(fullText).toContain('mức trần tối đa bằng 50% tổng tiền đặt cọc');
+    expect(fullText).toContain('tạm khóa quyền tạo đơn thuê mới');
+    expect(fullText).toContain('LOST_ITEM');
+    expect(fullText).toContain('Domino Recovery');
     expect(fullText).not.toContain('tự động coi là mất');
 
     // Group C: Damage Compensation (Clear basis, concrete calculations, NO technical placeholders)
-    expect(fullText).toContain('ĐIỀU 4: TIỀN ĐẶT CỌC VÀ BỒI THƯỜNG HƯ HỎNG, MẤT MÁT');
+    expect(fullText).toContain(
+      'ĐIỀU 4: TIỀN ĐẶT CỌC VÀ BỒI THƯỜNG HƯ HỎNG, MẤT MÁT',
+    );
     expect(fullText).toMatch(/Phí xử lý hư hỏng nhẹ.*50\.000\s*đ\/lỗi/);
-    expect(fullText).toContain('20% Giá trị bồi hoàn trang phục (400.000 đ trên tổng giá trị bồi hoàn 2.000.000 đ)');
-    expect(fullText).toContain('100% Giá trị bồi hoàn trang phục (2.000.000 đ trên tổng giá trị bồi hoàn 2.000.000 đ)');
+    expect(fullText).toContain(
+      '20% Giá trị bồi hoàn trang phục (400.000 đ trên tổng giá trị bồi hoàn 2.000.000 đ)',
+    );
+    expect(fullText).toContain(
+      '100% Giá trị bồi hoàn trang phục (2.000.000 đ trên tổng giá trị bồi hoàn 2.000.000 đ)',
+    );
     expect(fullText).not.toContain('BUSINESS_APPROVAL_REQUIRED');
     expect(fullText).not.toContain('trọng tài thương mại');
     expect(fullText).not.toContain('cơ quan trọng tài');
 
     // Group D: Cancellation Policy & Refund (Non-overlapping tiers, faithful to approved notes)
     expect(fullText).toContain('ĐIỀU 5: CHÍNH SÁCH HỦY ĐƠN VÀ HOÀN TIỀN');
-    expect(fullText).toContain('Hủy trước thời điểm bắt đầu thuê từ 3 ngày (72 giờ) trở lên: Hoàn trả 100% tiền thuê.');
-    expect(fullText).toContain('Hủy trước thời điểm bắt đầu thuê từ 1 ngày (24 giờ) đến dưới 3 ngày (72 giờ): Hoàn trả 50% tiền thuê.');
-    expect(fullText).toContain('Hủy trong vòng dưới 1 ngày (dưới 24 giờ) trước thời điểm bắt đầu thuê: Hoàn trả 0% tiền thuê');
-    expect(fullText).toContain('Lưu ý hủy đơn từ Shop: Tiền cọc luôn hoàn 100% nếu hủy trước khi nhận đồ.');
-    expect(fullText).toContain('Thời điểm xác định yêu cầu hủy: Tính theo thời điểm (timestamp) hệ thống');
+    expect(fullText).toContain(
+      'Hủy trước thời điểm bắt đầu thuê từ 3 ngày (72 giờ) trở lên: Hoàn trả 100% tiền thuê.',
+    );
+    expect(fullText).toContain(
+      'Hủy trước thời điểm bắt đầu thuê từ 1 ngày (24 giờ) đến dưới 3 ngày (72 giờ): Hoàn trả 50% tiền thuê.',
+    );
+    expect(fullText).toContain(
+      'Hủy trong vòng dưới 1 ngày (dưới 24 giờ) trước thời điểm bắt đầu thuê: Hoàn trả 0% tiền thuê',
+    );
+    expect(fullText).toContain(
+      'Lưu ý hủy đơn từ Shop: Tiền cọc luôn hoàn 100% nếu hủy trước khi nhận đồ.',
+    );
+    expect(fullText).toContain(
+      'Thời điểm xác định yêu cầu hủy: Tính theo thời điểm (timestamp) hệ thống',
+    );
 
     // Custom terms & execution
     expect(fullText).toContain('ĐIỀU 6: ĐIỀU KHOẢN BỔ SUNG CỦA BÊN CHO THUÊ');
-    expect(fullText).toContain('Khách hàng vui lòng đồng kiểm trang phục kỹ lưỡng khi nhận hàng.');
-    expect(fullText).toContain('ĐIỀU 7: HIỆU LỰC HỢP ĐỒNG VÀ XÁC NHẬN GIAO KẾT ĐIỆN TỬ');
+    expect(fullText).toContain(
+      'Khách hàng vui lòng đồng kiểm trang phục kỹ lưỡng khi nhận hàng.',
+    );
+    expect(fullText).toContain(
+      'ĐIỀU 7: HIỆU LỰC HỢP ĐỒNG VÀ XÁC NHẬN GIAO KẾT ĐIỆN TỬ',
+    );
     expect(fullText).toContain('formedAt');
     expect(fullText).toContain('effectiveAt');
     expect(fullText).toContain('paidAt');
     expect(fullText).toContain('toàn vẹn kỹ thuật');
 
     // Invariant: Unapproved platform 72-hour fallback rule MUST NOT be present
-    expect(fullText).not.toContain('Quy định bảo vệ từ Sàn VibeHue: Cho phép hủy miễn phí trước 72 giờ');
+    expect(fullText).not.toContain(
+      'Quy định bảo vệ từ Sàn TàGo: Cho phép hủy miễn phí trước 72 giờ',
+    );
   });
 
   it('2. Legacy fallback returns standard legacy lines without crashing', () => {
@@ -170,7 +213,10 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
       contractCode: 'VH-HD-2026-0001',
       versionNumber: 1,
       versionId: '64b0f0000000000000000011',
-      contentHash: hashContract({ template: sampleSnapshot.template, snapshot: sampleSnapshot }),
+      contentHash: hashContract({
+        template: sampleSnapshot.template,
+        snapshot: sampleSnapshot,
+      }),
       bookingFingerprint: hashContract({
         booking: sampleSnapshot.booking,
         providerItems: sampleSnapshot.providerItems,
@@ -226,8 +272,10 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
               status: 'APPROVED',
               garmentCare: sampleStructuredPolicies.providerGarmentCare,
               lateReturn: sampleStructuredPolicies.providerLateReturn,
-              damageCompensation: sampleStructuredPolicies.providerDamageCompensation,
-              cancellationPolicy: sampleStructuredPolicies.providerCancellationPolicy,
+              damageCompensation:
+                sampleStructuredPolicies.providerDamageCompensation,
+              cancellationPolicy:
+                sampleStructuredPolicies.providerCancellationPolicy,
             };
           }
           return null;
@@ -237,7 +285,9 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
     const mockConn = { db: mockDb } as any;
     const mockResolver = {
       clearCache: jest.fn(),
-      getActivePolicyByCode: jest.fn().mockResolvedValue({ code: 'P', version: 1, value: {} }),
+      getActivePolicyByCode: jest
+        .fn()
+        .mockResolvedValue({ code: 'P', version: 1, value: {} }),
     } as any;
 
     const snapshotService = new ContractSnapshotService(mockConn, mockResolver);
@@ -285,8 +335,10 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
     const mockDb = {
       collection: jest.fn((name: string) => ({
         findOne: jest.fn(async () => {
-          if (name === 'users') return { _id: custId, profile: { fullName: 'Khách Hàng' } };
-          if (name === 'providers') return { _id: provId, businessName: 'Studio Huế', policies: {} };
+          if (name === 'users')
+            return { _id: custId, profile: { fullName: 'Khách Hàng' } };
+          if (name === 'providers')
+            return { _id: provId, businessName: 'Studio Huế', policies: {} };
           if (name === 'products') {
             return {
               _id: prodId,
@@ -303,8 +355,10 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
               status: 'APPROVED',
               garmentCare: sampleStructuredPolicies.providerGarmentCare,
               lateReturn: sampleStructuredPolicies.providerLateReturn,
-              damageCompensation: sampleStructuredPolicies.providerDamageCompensation,
-              cancellationPolicy: sampleStructuredPolicies.providerCancellationPolicy,
+              damageCompensation:
+                sampleStructuredPolicies.providerDamageCompensation,
+              cancellationPolicy:
+                sampleStructuredPolicies.providerCancellationPolicy,
             };
           }
           return null;
@@ -314,7 +368,9 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
     const mockConn = { db: mockDb } as any;
     const mockResolver = {
       clearCache: jest.fn(),
-      getActivePolicyByCode: jest.fn().mockResolvedValue({ code: 'P', version: 1, value: {} }),
+      getActivePolicyByCode: jest
+        .fn()
+        .mockResolvedValue({ code: 'P', version: 1, value: {} }),
     } as any;
 
     const snapshotService = new ContractSnapshotService(mockConn, mockResolver);
@@ -361,8 +417,10 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
     const mockDb = {
       collection: jest.fn((name: string) => ({
         findOne: jest.fn(async () => {
-          if (name === 'users') return { _id: custId, profile: { fullName: 'Khách Hàng' } };
-          if (name === 'providers') return { _id: provId, businessName: 'Studio Huế', policies: {} };
+          if (name === 'users')
+            return { _id: custId, profile: { fullName: 'Khách Hàng' } };
+          if (name === 'providers')
+            return { _id: provId, businessName: 'Studio Huế', policies: {} };
           if (name === 'products') {
             return {
               _id: prodId,
@@ -379,8 +437,10 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
               status: 'APPROVED',
               garmentCare: sampleStructuredPolicies.providerGarmentCare,
               lateReturn: sampleStructuredPolicies.providerLateReturn,
-              damageCompensation: sampleStructuredPolicies.providerDamageCompensation,
-              cancellationPolicy: sampleStructuredPolicies.providerCancellationPolicy,
+              damageCompensation:
+                sampleStructuredPolicies.providerDamageCompensation,
+              cancellationPolicy:
+                sampleStructuredPolicies.providerCancellationPolicy,
             };
           }
           return null;
@@ -390,7 +450,9 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
     const mockConn = { db: mockDb } as any;
     const mockResolver = {
       clearCache: jest.fn(),
-      getActivePolicyByCode: jest.fn().mockResolvedValue({ code: 'P', version: 1, value: {} }),
+      getActivePolicyByCode: jest
+        .fn()
+        .mockResolvedValue({ code: 'P', version: 1, value: {} }),
     } as any;
 
     const snapshotService = new ContractSnapshotService(mockConn, mockResolver);
@@ -422,7 +484,9 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
       ],
     } as any;
 
-    const snapshot = await snapshotService.build(mockContext, provId, { version: 'v1' } as any);
+    const snapshot = await snapshotService.build(mockContext, provId, {
+      version: 'v1',
+    } as any);
     expect(snapshot.providerItems[0].replacementValue).toBe(2500000);
   });
 
@@ -437,8 +501,10 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
     const mockDb = {
       collection: jest.fn((name: string) => ({
         findOne: jest.fn(async () => {
-          if (name === 'users') return { _id: custId, profile: { fullName: 'Khách Hàng' } };
-          if (name === 'providers') return { _id: provId, businessName: 'Studio Huế', policies: {} };
+          if (name === 'users')
+            return { _id: custId, profile: { fullName: 'Khách Hàng' } };
+          if (name === 'providers')
+            return { _id: provId, businessName: 'Studio Huế', policies: {} };
           if (name === 'products') {
             return {
               _id: prodId,
@@ -460,7 +526,8 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
                 severeDamageOrLossPercent: 0,
                 disputeResolutionNotes: 'Bồi thường thỏa thuận theo biên bản.',
               },
-              cancellationPolicy: sampleStructuredPolicies.providerCancellationPolicy,
+              cancellationPolicy:
+                sampleStructuredPolicies.providerCancellationPolicy,
             };
           }
           return null;
@@ -470,7 +537,9 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
     const mockConn = { db: mockDb } as any;
     const mockResolver = {
       clearCache: jest.fn(),
-      getActivePolicyByCode: jest.fn().mockResolvedValue({ code: 'P', version: 1, value: {} }),
+      getActivePolicyByCode: jest
+        .fn()
+        .mockResolvedValue({ code: 'P', version: 1, value: {} }),
     } as any;
 
     const snapshotService = new ContractSnapshotService(mockConn, mockResolver);
@@ -502,7 +571,9 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
     } as any;
 
     // Must succeed without throwing
-    const snapshot = await snapshotService.build(mockContext, provId, { version: 'v1' } as any);
+    const snapshot = await snapshotService.build(mockContext, provId, {
+      version: 'v1',
+    } as any);
     expect(snapshot.providerItems[0].replacementValue).toBeNull();
   });
 
@@ -519,14 +590,27 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
     const mockDb = {
       collection: jest.fn((name: string) => ({
         findOne: jest.fn(async (query: any) => {
-          if (name === 'users') return { _id: custId, profile: { fullName: 'Khách Hàng' } };
-          if (name === 'providers') return { _id: provId, businessName: 'Studio Huế', policies: {} };
+          if (name === 'users')
+            return { _id: custId, profile: { fullName: 'Khách Hàng' } };
+          if (name === 'providers')
+            return { _id: provId, businessName: 'Studio Huế', policies: {} };
           if (name === 'products') {
             if (query._id?.equals(prod1Id)) {
-              return { _id: prod1Id, providerId: provId, name: 'Áo dài 1', replacementValue: 2000000, moderationStatus: 'APPROVED' };
+              return {
+                _id: prod1Id,
+                providerId: provId,
+                name: 'Áo dài 1',
+                replacementValue: 2000000,
+                moderationStatus: 'APPROVED',
+              };
             }
             if (query._id?.equals(prod2Id)) {
-              return { _id: prod2Id, providerId: provId, name: 'Áo dài 2', replacementValue: null }; // Missing!
+              return {
+                _id: prod2Id,
+                providerId: provId,
+                name: 'Áo dài 2',
+                replacementValue: null,
+              }; // Missing!
             }
           }
           if (name === 'provider_contract_policies') {
@@ -535,8 +619,10 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
               status: 'APPROVED',
               garmentCare: sampleStructuredPolicies.providerGarmentCare,
               lateReturn: sampleStructuredPolicies.providerLateReturn,
-              damageCompensation: sampleStructuredPolicies.providerDamageCompensation,
-              cancellationPolicy: sampleStructuredPolicies.providerCancellationPolicy,
+              damageCompensation:
+                sampleStructuredPolicies.providerDamageCompensation,
+              cancellationPolicy:
+                sampleStructuredPolicies.providerCancellationPolicy,
             };
           }
           return null;
@@ -546,7 +632,9 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
     const mockConn = { db: mockDb } as any;
     const mockResolver = {
       clearCache: jest.fn(),
-      getActivePolicyByCode: jest.fn().mockResolvedValue({ code: 'P', version: 1, value: {} }),
+      getActivePolicyByCode: jest
+        .fn()
+        .mockResolvedValue({ code: 'P', version: 1, value: {} }),
     } as any;
 
     const snapshotService = new ContractSnapshotService(mockConn, mockResolver);

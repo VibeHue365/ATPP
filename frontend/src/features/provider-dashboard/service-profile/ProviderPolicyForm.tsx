@@ -174,7 +174,7 @@ export const ProviderPolicyForm: React.FC = () => {
         ).trim();
         if (existingDispute === 'Đối chiếu chứng cứ giao nhận và thương lượng.') {
           setDisputeMode('sample_1');
-        } else if (existingDispute === 'Thương lượng thiện chí và VibeHue hỗ trợ hòa giải trung gian.') {
+        } else if (existingDispute === 'Thương lượng thiện chí và TàGo hỗ trợ hòa giải trung gian.') {
           setDisputeMode('sample_2');
         } else if (existingDispute === 'Đối chiếu hình ảnh, biên bản và chứng từ nếu có; mức bồi thường vẫn theo phương thức đã duyệt.') {
           setDisputeMode('sample_3');
@@ -368,7 +368,7 @@ export const ProviderPolicyForm: React.FC = () => {
     setSuccessMsg(null);
     try {
       await contractService.submitProviderPolicyForReview(formData);
-      setSuccessMsg('Đã gửi chính sách lên Ban Quản trị Sàn VibeHue để kiểm duyệt!');
+      setSuccessMsg('Đã gửi chính sách lên Ban Quản trị Sàn TàGo để kiểm duyệt!');
       await loadPolicy();
     } catch (err: unknown) {
       setErrorMsg(translateError(err instanceof Error ? err.message : 'Gửi duyệt chính sách thất bại.'));
@@ -605,7 +605,7 @@ export const ProviderPolicyForm: React.FC = () => {
           <AlertTriangle size={16} className="text-amber-700 shrink-0 mt-0.5" />
           <div>
             <strong className="block mb-0.5">Chính sách đang chờ Ban Quản trị Sàn duyệt:</strong>
-            Phiên bản này đã được gửi lên ban điều hành VibeHue. Trong thời gian chờ duyệt, bạn vẫn có thể chỉnh sửa và lưu nháp phiên bản mới nhưng các booking hiện tại vẫn áp dụng theo chính sách đã được duyệt trước đó.
+            Phiên bản này đã được gửi lên ban điều hành TàGo. Trong thời gian chờ duyệt, bạn vẫn có thể chỉnh sửa và lưu nháp phiên bản mới nhưng các booking hiện tại vẫn áp dụng theo chính sách đã được duyệt trước đó.
           </div>
         </div>
       )}
@@ -954,7 +954,7 @@ export const ProviderPolicyForm: React.FC = () => {
                   {
                     id: 'sample_2',
                     title: 'Mẫu 2',
-                    text: 'Thương lượng thiện chí và VibeHue hỗ trợ hòa giải trung gian.',
+                    text: 'Thương lượng thiện chí và TàGo hỗ trợ hòa giải trung gian.',
                   },
                   {
                     id: 'sample_3',
@@ -978,7 +978,7 @@ export const ProviderPolicyForm: React.FC = () => {
                       ? disputeMode === 'custom' ||
                         ![
                           'Đối chiếu chứng cứ giao nhận và thương lượng.',
-                          'Thương lượng thiện chí và VibeHue hỗ trợ hòa giải trung gian.',
+                          'Thương lượng thiện chí và TàGo hỗ trợ hòa giải trung gian.',
                           'Đối chiếu hình ảnh, biên bản và chứng từ nếu có; mức bồi thường vẫn theo phương thức đã duyệt.',
                         ].includes(currentText)
                       : currentText === opt.text;
@@ -1050,7 +1050,7 @@ export const ProviderPolicyForm: React.FC = () => {
                   className="w-full px-2.5 py-1.5 border border-stone-300 rounded-md text-xs bg-white text-stone-800"
                 />
                 <span className="text-[10px] text-stone-400 block mt-1">
-                  Lưu ý: Nền tảng VibeHue chỉ hỗ trợ hòa giải thiện chí dựa trên chứng cứ giao nhận. Shop không tự ý đưa điều khoản ủy quyền cho Sàn làm trọng tài phán quyết hoặc tự ý giữ/khấu trừ tiền cọc.
+                  Lưu ý: Nền tảng TàGo chỉ hỗ trợ hòa giải thiện chí dựa trên chứng cứ giao nhận. Shop không tự ý đưa điều khoản ủy quyền cho Sàn làm trọng tài phán quyết hoặc tự ý giữ/khấu trừ tiền cọc.
                 </span>
               </div>
               {(() => {
@@ -1201,7 +1201,7 @@ export const ProviderPolicyForm: React.FC = () => {
               onChange={(e) =>
                 setFormData((prev) => ({ ...prev, customTermsText: e.target.value }))
               }
-              placeholder="Quy định thêm của cửa hàng (không được trái với quy chế sàn VibeHue)..."
+              placeholder="Quy định thêm của cửa hàng (không được trái với quy chế sàn TàGo)..."
               className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs leading-relaxed"
             />
           </div>

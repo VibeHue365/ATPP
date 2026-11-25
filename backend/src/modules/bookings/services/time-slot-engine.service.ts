@@ -6,7 +6,7 @@ export interface TimeSlotDefinition {
   slotIndex: number; // 1 to 7
   startHour: number; // 7, 9, 11, 13, 15, 17, 19
   startMinute: number;
-  endHour: number;   // 9, 11, 13, 15, 17, 19, 21
+  endHour: number; // 9, 11, 13, 15, 17, 19, 21
   endMinute: number;
   timeSlotString: string; // e.g. "07:00-09:00"
 }
@@ -28,17 +28,66 @@ export interface UpfrontBlockCalculation {
 
 export interface ShopScheduleConfig {
   offDays?: (Date | string)[]; // Specific dates e.g. "2026-11-22"
-  weeklyOffDays?: number[];     // e.g. [0] for Sunday
+  weeklyOffDays?: number[]; // e.g. [0] for Sunday
 }
 
 export const FIXED_TIME_SLOTS: TimeSlotDefinition[] = [
-  { slotIndex: 1, startHour: 7, startMinute: 0, endHour: 9, endMinute: 0, timeSlotString: '07:00-09:00' },
-  { slotIndex: 2, startHour: 9, startMinute: 0, endHour: 11, endMinute: 0, timeSlotString: '09:00-11:00' },
-  { slotIndex: 3, startHour: 11, startMinute: 0, endHour: 13, endMinute: 0, timeSlotString: '11:00-13:00' },
-  { slotIndex: 4, startHour: 13, startMinute: 0, endHour: 15, endMinute: 0, timeSlotString: '13:00-15:00' },
-  { slotIndex: 5, startHour: 15, startMinute: 0, endHour: 17, endMinute: 0, timeSlotString: '15:00-17:00' },
-  { slotIndex: 6, startHour: 17, startMinute: 0, endHour: 19, endMinute: 0, timeSlotString: '17:00-19:00' },
-  { slotIndex: 7, startHour: 19, startMinute: 0, endHour: 21, endMinute: 0, timeSlotString: '19:00-21:00' },
+  {
+    slotIndex: 1,
+    startHour: 7,
+    startMinute: 0,
+    endHour: 9,
+    endMinute: 0,
+    timeSlotString: '07:00-09:00',
+  },
+  {
+    slotIndex: 2,
+    startHour: 9,
+    startMinute: 0,
+    endHour: 11,
+    endMinute: 0,
+    timeSlotString: '09:00-11:00',
+  },
+  {
+    slotIndex: 3,
+    startHour: 11,
+    startMinute: 0,
+    endHour: 13,
+    endMinute: 0,
+    timeSlotString: '11:00-13:00',
+  },
+  {
+    slotIndex: 4,
+    startHour: 13,
+    startMinute: 0,
+    endHour: 15,
+    endMinute: 0,
+    timeSlotString: '13:00-15:00',
+  },
+  {
+    slotIndex: 5,
+    startHour: 15,
+    startMinute: 0,
+    endHour: 17,
+    endMinute: 0,
+    timeSlotString: '15:00-17:00',
+  },
+  {
+    slotIndex: 6,
+    startHour: 17,
+    startMinute: 0,
+    endHour: 19,
+    endMinute: 0,
+    timeSlotString: '17:00-19:00',
+  },
+  {
+    slotIndex: 7,
+    startHour: 19,
+    startMinute: 0,
+    endHour: 21,
+    endMinute: 0,
+    timeSlotString: '19:00-21:00',
+  },
 ];
 
 const SLOT_BOUNDARIES_MINUTES = [420, 540, 660, 780, 900, 1020, 1140, 1260]; // 07:00 to 21:00
@@ -73,7 +122,13 @@ export class TimeSlotEngineService {
   /**
    * Create a Date object from Vietnam local time components.
    */
-  makeVnDate(year: number, month: number, day: number, hour: number, minute: number): Date {
+  makeVnDate(
+    year: number,
+    month: number,
+    day: number,
+    hour: number,
+    minute: number,
+  ): Date {
     return new Date(Date.UTC(year, month - 1, day, hour - 7, minute, 0, 0));
   }
 
@@ -92,7 +147,10 @@ export class TimeSlotEngineService {
     if (!schedule) return false;
     const parts = this.getVnParts(date);
 
-    if (schedule.weeklyOffDays && schedule.weeklyOffDays.includes(parts.dayOfWeek)) {
+    if (
+      schedule.weeklyOffDays &&
+      schedule.weeklyOffDays.includes(parts.dayOfWeek)
+    ) {
       return true;
     }
 
@@ -115,7 +173,10 @@ export class TimeSlotEngineService {
   /**
    * Advance to the next working day's 07:00 if the current day is an off day.
    */
-  advanceToNextWorkingDayStart(fromDate: Date, schedule?: ShopScheduleConfig): Date {
+  advanceToNextWorkingDayStart(
+    fromDate: Date,
+    schedule?: ShopScheduleConfig,
+  ): Date {
     let current = new Date(fromDate);
     while (this.isOffDay(current, schedule)) {
       // Add 24 hours to go to the next day
@@ -131,13 +192,19 @@ export class TimeSlotEngineService {
    * If T falls outside working hours (>= 21:00), rollovers to 07:00 of the next working day.
    */
   roundUpToSlotBoundary(time: Date, schedule?: ShopScheduleConfig): Date {
-    let parts = this.getVnParts(time);
+    const parts = this.getVnParts(time);
 
     // If time falls on an off day, advance immediately to next working day at 07:00
     if (this.isOffDay(time, schedule)) {
       const nextDay = new Date(time.getTime() + 24 * 3600 * 1000);
       const nextParts = this.getVnParts(nextDay);
-      const startOfNext = this.makeVnDate(nextParts.year, nextParts.month, nextParts.day, 7, 0);
+      const startOfNext = this.makeVnDate(
+        nextParts.year,
+        nextParts.month,
+        nextParts.day,
+        7,
+        0,
+      );
       return this.advanceToNextWorkingDayStart(startOfNext, schedule);
     }
 
@@ -160,7 +227,13 @@ export class TimeSlotEngineService {
     // After closing (m > 1260 = after 21:00) -> Rollover to 07:00 of next working day
     const nextDay = new Date(time.getTime() + 24 * 3600 * 1000);
     const nextParts = this.getVnParts(nextDay);
-    const startOfNext = this.makeVnDate(nextParts.year, nextParts.month, nextParts.day, 7, 0);
+    const startOfNext = this.makeVnDate(
+      nextParts.year,
+      nextParts.month,
+      nextParts.day,
+      7,
+      0,
+    );
     return this.advanceToNextWorkingDayStart(startOfNext, schedule);
   }
 
@@ -173,8 +246,20 @@ export class TimeSlotEngineService {
       throw new Error(`Invalid slotIndex: ${slotIndex}. Must be 1 to 7.`);
     }
     const { year, month, day } = this.parseDateStr(dateStr);
-    const start = this.makeVnDate(year, month, day, slotDef.startHour, slotDef.startMinute);
-    const end = this.makeVnDate(year, month, day, slotDef.endHour, slotDef.endMinute);
+    const start = this.makeVnDate(
+      year,
+      month,
+      day,
+      slotDef.startHour,
+      slotDef.startMinute,
+    );
+    const end = this.makeVnDate(
+      year,
+      month,
+      day,
+      slotDef.endHour,
+      slotDef.endMinute,
+    );
     return {
       dateStr,
       slotIndex,
@@ -189,7 +274,10 @@ export class TimeSlotEngineService {
    * Accepts only boundary hours: 07, 09, 11, 13, 15, 17, 19, 21 with minute 0.
    * Duration must be a positive multiple of 2 hours.
    */
-  parseAndValidateTimeSlot(timeSlot: string): { startSlotIndex: number; rentalSlotCount: number } {
+  parseAndValidateTimeSlot(timeSlot: string): {
+    startSlotIndex: number;
+    rentalSlotCount: number;
+  } {
     if (!timeSlot || !timeSlot.includes('-')) {
       throw new BadRequestException(
         `Khung giờ thuê không hợp lệ: "${timeSlot}". Vui lòng chọn khung giờ dạng "07:00 - 11:00".`,
@@ -232,9 +320,13 @@ export class TimeSlotEngineService {
         return this.parseAndValidateTimeSlot(timeSlot).startSlotIndex;
       } catch {
         const startPart = trimmed.split('-')[0]?.trim();
-        const matchByStart = FIXED_TIME_SLOTS.find((s) => s.timeSlotString.startsWith(startPart));
+        const matchByStart = FIXED_TIME_SLOTS.find((s) =>
+          s.timeSlotString.startsWith(startPart),
+        );
         if (matchByStart) return matchByStart.slotIndex;
-        throw new BadRequestException(`Invalid time slot string: "${timeSlot}". Allowed: 07:00-09:00, 09:00-11:00, etc.`);
+        throw new BadRequestException(
+          `Invalid time slot string: "${timeSlot}". Allowed: 07:00-09:00, 09:00-11:00, etc.`,
+        );
       }
     }
     return found.slotIndex;
@@ -260,7 +352,9 @@ export class TimeSlotEngineService {
       if (curSlotIdx > 7) {
         // Advance to next working day
         const { year, month, day } = this.parseDateStr(curDateStr);
-        let nextDay = new Date(this.makeVnDate(year, month, day, 7, 0).getTime() + 24 * 3600 * 1000);
+        let nextDay = new Date(
+          this.makeVnDate(year, month, day, 7, 0).getTime() + 24 * 3600 * 1000,
+        );
         nextDay = this.advanceToNextWorkingDayStart(nextDay, schedule);
         curDateStr = this.getVnParts(nextDay).dateStr;
         curSlotIdx = 1;
@@ -279,7 +373,10 @@ export class TimeSlotEngineService {
         if (curSlotIdx > 7) {
           // Rollover to 07:00 of next working day
           const { year, month, day } = this.parseDateStr(curDateStr);
-          let nextDay = new Date(this.makeVnDate(year, month, day, 7, 0).getTime() + 24 * 3600 * 1000);
+          let nextDay = new Date(
+            this.makeVnDate(year, month, day, 7, 0).getTime() +
+              24 * 3600 * 1000,
+          );
           nextDay = this.advanceToNextWorkingDayStart(nextDay, schedule);
           curDateStr = this.getVnParts(nextDay).dateStr;
           curSlotIdx = 1;
@@ -289,9 +386,10 @@ export class TimeSlotEngineService {
       }
     }
 
-    const availableFrom = turnaroundSlots.length > 0
-      ? turnaroundSlots[turnaroundSlots.length - 1].end
-      : rentalTo;
+    const availableFrom =
+      turnaroundSlots.length > 0
+        ? turnaroundSlots[turnaroundSlots.length - 1].end
+        : rentalTo;
 
     return {
       rentalSlots,
@@ -314,7 +412,9 @@ export class TimeSlotEngineService {
   ): Date {
     if (turnaroundSlotsCount === 0) {
       const rounded = this.roundUpToSlotBoundary(actualReturnedAt, schedule);
-      return contractualRentalTo.getTime() > rounded.getTime() ? contractualRentalTo : rounded;
+      return contractualRentalTo.getTime() > rounded.getTime()
+        ? contractualRentalTo
+        : rounded;
     }
 
     // Advance actualReturnedAt by turnaroundSlotsCount * 2 hours in working hours
@@ -337,7 +437,13 @@ export class TimeSlotEngineService {
         // At or after 21:00 -> Rollover to next day 07:00
         const nextDay = new Date(current.getTime() + 24 * 3600 * 1000);
         const nextParts = this.getVnParts(nextDay);
-        current = this.makeVnDate(nextParts.year, nextParts.month, nextParts.day, 7, 0);
+        current = this.makeVnDate(
+          nextParts.year,
+          nextParts.month,
+          nextParts.day,
+          7,
+          0,
+        );
         current = this.advanceToNextWorkingDayStart(current, schedule);
       } else {
         // Inside working hours: available minutes until 21:00
@@ -350,7 +456,13 @@ export class TimeSlotEngineService {
           // Rollover to next day 07:00
           const nextDay = new Date(current.getTime() + 24 * 3600 * 1000);
           const nextParts = this.getVnParts(nextDay);
-          current = this.makeVnDate(nextParts.year, nextParts.month, nextParts.day, 7, 0);
+          current = this.makeVnDate(
+            nextParts.year,
+            nextParts.month,
+            nextParts.day,
+            7,
+            0,
+          );
           current = this.advanceToNextWorkingDayStart(current, schedule);
         }
       }

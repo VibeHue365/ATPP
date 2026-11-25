@@ -27,7 +27,10 @@ const VIETNAMESE_CHAR_MAP: Record<string, string> = {
  * Xây dựng regex pattern cho tiếng Việt: cho phép gõ không dấu vẫn tìm ra có dấu.
  * Giới hạn maxLength = 100 ký tự và escape toàn bộ ký tự đặc biệt để chống ReDoS / Injection.
  */
-export function buildVietnameseRegexPattern(text: string, maxLength: number = 100): string {
+export function buildVietnameseRegexPattern(
+  text: string,
+  maxLength: number = 100,
+): string {
   if (!text) return '';
   const truncated = text.trim().slice(0, maxLength);
   const escaped = escapeRegex(truncated).toLowerCase();

@@ -4,6 +4,7 @@ import type {
   PhotographerPackage,
   PhotographyQuote,
 } from './photographer.types';
+import type { PublicProviderStaffMember } from '../../provider-dashboard/staff/staffApi';
 import type {
   PhotographyCalendarDay,
   PhotographyTimeSlot,
@@ -81,5 +82,9 @@ export interface PhotographerPackageDetailLayoutProps {
   ineligibleVouchers?: IneligibleVoucherItem[];
   onOpenVoucherPicker?: () => void;
   onRemoveVoucher?: () => void;
+  studioStaff?: PublicProviderStaffMember[];
+  effectiveCapacity?: number;
+  preferredStaffId?: string;
+  onSelectPreferredStaff?: (staffId: string) => void;
 }
 

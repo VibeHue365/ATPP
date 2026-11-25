@@ -30,7 +30,11 @@ describe('VisualSearchController (VIB-93 visual search)', () => {
 
     await controller.visualMatch(null, image, { ip: '10.0.0.7' });
 
-    expect(rateLimit.assertRateLimit).toHaveBeenCalledWith('ai_match_10.0.0.7', 20, 60);
+    expect(rateLimit.assertRateLimit).toHaveBeenCalledWith(
+      'ai_match_10.0.0.7',
+      20,
+      60,
+    );
   });
 
   it('forwards only the image to the AI service', async () => {
@@ -82,7 +86,10 @@ describe('VisualSearchController (VIB-93 visual search)', () => {
 
   it('accepts only JPEG, PNG and WebP uploads', async () => {
     const errors = await validate(
-      plainToInstance(VisualSearchRequestDto, { image_base64: 'x', mime_type: 'image/gif' }),
+      plainToInstance(VisualSearchRequestDto, {
+        image_base64: 'x',
+        mime_type: 'image/gif',
+      }),
     );
 
     expect(errors.map((error) => error.property)).toEqual(['mime_type']);

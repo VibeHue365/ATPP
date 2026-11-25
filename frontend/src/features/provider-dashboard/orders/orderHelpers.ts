@@ -1,5 +1,11 @@
 
 import type React from 'react';
+import {
+  BOOKING_GROUP_LABELS,
+  getBookingStatusGroup,
+  getBookingStatusMeta,
+  normalizeBookingStatusCode,
+} from '../../../utils/bookingStatus';
 
 export const getPhotoScheduleStartsAt = (schedule?: Record<string, any>): Date | null => {
   if (schedule?.startsAt) {
@@ -37,45 +43,61 @@ export const formatPhotoStartTime = (value: Date): string =>
   }).format(value);
 
 export const getOrderGroup = (status: string): string => {
-  const s = (status || '').toUpperCase();
-  if (['CHỜ XỬ LÝ', 'CHỜ THANH TOÁN', 'PENDING', 'PENDING_PAYMENT'].includes(s)) {
-    return 'Chờ xử lý';
-  }
-  if ([
-    'ĐÃ ĐẶT CỌC', 'ĐANG THỰC HIỆN', 'CHỜ NHẬN ĐỒ', 'ĐANG THUÊ',
-    'CHỜ KHÁCH DUYỆT SỰ CỐ', 'CHỜ KIỂM TRA ĐỒ', 'ĐÃ TRẢ ĐỒ', 'TRANH CHẤP', 'ĐANG XỬ LÝ',
-    'DEPOSIT_PAID', 'CONFIRMED', 'PICKUP_PENDING', 'PICKED_UP',
-    'RETURN_PENDING', 'RETURNED', 'DISPUTED'
-  ].includes(s)) {
-    return 'Đang thực hiện';
-  }
-  if (['HOÀN THÀNH', 'COMPLETED'].includes(s)) {
-    return 'Hoàn thành';
-  }
-  if (['ĐÃ HỦY', 'CANCELLED'].includes(s)) {
-    return 'Đã hủy';
-  }
-  return 'Khác';
+  const group = getBookingStatusGroup(status);
+  if (!group) return 'Khác';
+  return BOOKING_GROUP_LABELS[group];
 };
 
 export const statusBadgeStyle = (status: string): React.CSSProperties => {
   const base: React.CSSProperties = {
-    display: 'inline-block', padding: '4px 10px', borderRadius: '4px', fontSize: '10px', fontWeight: 700,
-    letterSpacing: '0.05em', color: 'white', whiteSpace: 'nowrap',
+    display: 'inline-block',
+    padding: '4px 10px',
+    borderRadius: '4px',
+    fontSize: '10px',
+    fontWeight: 700,
+    letterSpacing: '0.05em',
+    color: 'white',
+    whiteSpace: 'nowrap',
   };
-  if (status === 'HOÀN THÀNH') return { ...base, backgroundColor: '#2e7d32' };
-  if (status === 'CHỜ KHÁCH DUYỆT SỰ CỐ' || status === 'CHỜ KIỂM TRA ĐỒ') return { ...base, backgroundColor: '#ed6c02' };
-  if (status === 'TRANH CHẤP') return { ...base, backgroundColor: '#d32f2f' };
-  if (status === 'ĐÃ HỦY') return { ...base, backgroundColor: '#757575' };
-  if (status === 'CHỜ XỬ LÝ') return { ...base, backgroundColor: 'var(--color-primary)' };
-  if (status === 'CHỜ THANH TOÁN') return { ...base, backgroundColor: '#9C27B0' };
-  if (status === 'ĐÃ ĐẶT CỌC') return { ...base, backgroundColor: '#1565C0' };
-  if (status === 'ĐANG THỰC HIỆN') return { ...base, backgroundColor: 'var(--color-gold)' };
-  if (status === 'ĐANG CHỤP') return { ...base, backgroundColor: '#059669' };
-  if (status === 'CHỜ KHÁCH XÁC NHẬN') return { ...base, backgroundColor: '#0284C7' };
-  if (status === 'CHỜ NHẬN ĐỒ') return { ...base, backgroundColor: '#E67E22' };
-  if (status === 'ĐANG THUÊ') return { ...base, backgroundColor: '#27AE60' };
-  if (status === 'ĐÃ DUYỆT ẢNH • CHỜ TRẢ ĐỒ') return { ...base, backgroundColor: '#15803D' };
-  if (status === 'ĐÃ TRẢ ĐỒ') return { ...base, backgroundColor: '#558B2F' };
-  return { ...base, backgroundColor: '#ccc', color: '#555' };
+  const code = normalizeBookingStatusCode(status);
+  if (!code) return { ...base, backgroundColor: '#ccc', color: '#555' };
+
+  switch (code) {
+    case 'COMPLETED':
+      return { ...base, backgroundColor: '#2e7d32' };
+    case 'RETURN_PENDING':
+      return { ...base, backgroundColor: '#ed6c02' };
+    case 'DISPUTED':
+      return { ...base, backgroundColor: '#d32f2f' };
+    case 'CANCELLED':
+      return { ...base, backgroundColor: '#757575' };
+    case 'DRAFT':
+      return { ...base, backgroundColor: '#64748b' };
+    case 'PENDING_PAYMENT':
+      return { ...base, backgroundColor: '#9C27B0' };
+    case 'DEPOSIT_PAID':
+      return { ...base, backgroundColor: '#1565C0' };
+    case 'CONFIRMED':
+      return { ...base, backgroundColor: 'var(--color-gold)' };
+    case 'IN_PROGRESS':
+      return { ...base, backgroundColor: '#059669' };
+    case 'AWAITING_REVIEW':
+      return { ...base, backgroundColor: '#0284C7' };
+    case 'PICKUP_PENDING':
+      return { ...base, backgroundColor: '#E67E22' };
+    case 'PICKED_UP':
+      return { ...base, backgroundColor: '#27AE60' };
+    case 'COMBO_PHOTOS_APPROVED':
+      return { ...base, backgroundColor: '#15803D' };
+    case 'RETURNED':
+      return { ...base, backgroundColor: '#558B2F' };
+    case 'PARTIALLY_REFUNDED':
+      return { ...base, backgroundColor: '#B45309' };
+    case 'REFUNDED':
+      return { ...base, backgroundColor: '#475569' };
+    default: {
+      const meta = getBookingStatusMeta(code);
+      return { ...base, backgroundColor: meta.color };
+    }
+  }
 };

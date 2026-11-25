@@ -8,6 +8,7 @@ import type { CartItem } from '../../context/CartContext';
 import { httpClient } from '../../services/httpClient';
 import { useToast } from '../../components/feedback/Toast';
 import { ConfirmModal } from '../../utils/confirmModal';
+import Swal from 'sweetalert2';
 
 import { productSlots, isTimeSlotOverlap } from '../rentals/product-detail/utils/timeSlotUtils';
 import { normalizeCol } from '../rentals/product-detail/utils/colorUtils';
@@ -78,13 +79,26 @@ export const CartPage: React.FC = () => {
   const editingItem = cart.find((i) => i.id === editingItemId);
   const editingItemType = editingItem?.rentalType || 'DAILY';
 
+  const cartProductSignature = useMemo(() => {
+    return cart
+      .filter((item) => item.itemType === 'PRODUCT' && item.productId)
+      .map((item) => {
+        const isHourly = item.rentalType === 'HOURLY';
+        const rentalFrom = item.rentalFrom || item.startDate || '';
+        const rentalTo = item.rentalTo || item.endDate || rentalFrom;
+        const slot = isHourly ? (item.shootTimeSlot || (item.startTime && item.endTime ? `${item.startTime}-${item.endTime}` : '')) : '';
+        return `${item.id}:${item.productId}:${item.size || ''}:${item.color || ''}:${rentalFrom}:${rentalTo}:${item.quantity || 1}:${item.rentalType || 'DAILY'}:${slot}`;
+      })
+      .join('|');
+  }, [cart]);
+
   // Batch fetch stocks
   useEffect(() => {
     let active = true;
-    const fetchStocks = async () => {
-      const productItems = cart.filter((item) => item.itemType === 'PRODUCT' && item.productId);
-      if (!productItems.length) return;
+    const productItems = cart.filter((item) => item.itemType === 'PRODUCT' && item.productId);
+    if (!productItems.length) return;
 
+    const timer = setTimeout(async () => {
       try {
         // Use the same date/slot-aware availability check as checkout. The old
         // stock endpoint only counted AVAILABLE inventory and ignored the
@@ -126,15 +140,13 @@ export const CartPage: React.FC = () => {
           }));
         }
       }
-    };
+    }, 250);
 
-    if (cart.length > 0) {
-      fetchStocks();
-    }
     return () => {
       active = false;
+      clearTimeout(timer);
     };
-  }, [cart]);
+  }, [cartProductSignature]);
 
   // Adjust item quantity if exceeds stock
   useEffect(() => {
@@ -304,12 +316,21 @@ export const CartPage: React.FC = () => {
         if (dateStr < currentFrom) {
           updateCartItemDates(editingItem.id, dateStr, '');
         } else {
-          const hasUnavailable = calendarDays.some(
-            (d) =>
-              !d.isEmpty && !d.isAvailable && d.dateStr >= currentFrom && d.dateStr <= dateStr,
-          );
-          if (hasUnavailable) {
-            toast.error('Khoảng thời gian chọn chứa ngày đã bị đặt!');
+          const [startYear, startMonth, startDay] = currentFrom.split('-').map(Number);
+          const [endYear, endMonth, endDay] = dateStr.split('-').map(Number);
+          const cursor = new Date(startYear, startMonth - 1, startDay);
+          const end = new Date(endYear, endMonth - 1, endDay);
+          let blockedDate = '';
+          while (cursor <= end) {
+            const current = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`;
+            if (effectiveBusyDates.includes(current)) {
+              blockedDate = current;
+              break;
+            }
+            cursor.setDate(cursor.getDate() + 1);
+          }
+          if (blockedDate) {
+            toast.error(`Khoảng thời gian chọn có ngày đã bị đặt (${blockedDate}).`);
             return;
           }
           updateCartItemDates(editingItem.id, currentFrom, dateStr);
@@ -830,7 +851,7 @@ export const CartPage: React.FC = () => {
         throw new Error('Vui lòng thanh toán từng gói chụp hoặc từng combo riêng biệt.');
       }
 
-      const rentalItemsPayload = productItems.map((item) => {
+      const mapItemToRentalPayload = (item: CartItem) => {
         let pId = item.productId || item.id;
         if (pId && !/^[0-9a-fA-F]{24}$/.test(pId)) {
           let matchedProd: any = null;
@@ -895,11 +916,9 @@ export const CartPage: React.FC = () => {
             item.shootTimeSlot ||
             (item.startTime && item.endTime ? `${item.startTime}-${item.endTime}` : null),
         };
-      });
+      };
 
-      let bookingId: string;
-      let bookingContractFlowVersion: number | null | undefined = null;
-      let paymentPurpose: 'FULL_PAYMENT' | 'DEPOSIT_PAYMENT' = 'FULL_PAYMENT';
+      const rentalItemsPayload = productItems.map(mapItemToRentalPayload);
 
       // Early Contract Eligibility Check (BEFORE creating booking or holding inventory)
       if (CONTRACTS_V2_ENABLED && rentalItemsPayload.length > 0 && typeof contractService.checkEligibility === 'function') {
@@ -925,88 +944,388 @@ export const CartPage: React.FC = () => {
         }
       }
 
-      if (photoItems.length === 1) {
-        const photo = photoItems[0];
-        if (
-          !isMongoObjectId(photo.photographyPackageId) ||
-          !photo.shootDate ||
-          !photo.shootTimeSlot ||
-          !photo.shootLocation ||
-          !Number.isFinite(photo.shootLocationLatitude) ||
-          !Number.isFinite(photo.shootLocationLongitude)
-        ) {
-          throw new Error(
-            'Gói chụp thiếu địa chỉ hoặc tọa độ bản đồ. Vui lòng xóa gói và chọn lại địa điểm chụp.',
+      // 1. Phân loại các mục được chọn: Combo vs Thuê riêng lẻ
+      const comboItems = selectedItems.filter((item) => Boolean(item.comboPromotionId));
+      const standaloneItems = selectedItems.filter((item) => !item.comboPromotionId);
+
+      const standalonePhotoItems = standaloneItems.filter((item) => item.itemType === 'PHOTOGRAPHY_PACKAGE');
+      const standaloneProductItems = standaloneItems.filter((item) => item.itemType === 'PRODUCT');
+
+      // Nhóm các mục Combo theo comboPromotionId
+      const comboGroupsMap = new Map<string, typeof selectedItems>();
+      comboItems.forEach((item) => {
+        const cId = item.comboPromotionId!;
+        const grp = comboGroupsMap.get(cId) || [];
+        grp.push(item);
+        comboGroupsMap.set(cId, grp);
+      });
+
+      // Hàm giải quyết thông tin Shop cho sản phẩm thuê lẻ
+      const resolveItemShopInfo = (it: typeof productItems[0]) => {
+        let pId = it.providerId;
+        let pName = (it as any).providerName;
+        if (!pId || !pName) {
+          const prod = realProductList.find(
+            (p) =>
+              p._id === it.productId ||
+              p._id === it.id ||
+              p.slug === it.productId ||
+              p.slug === it.id ||
+              (it.productId && p._id.toString() === it.productId.toString()),
           );
+          if (prod) {
+            if (!pId) {
+              pId = prod.providerId?._id
+                ? prod.providerId._id.toString()
+                : typeof prod.providerId === 'string'
+                  ? prod.providerId
+                  : '';
+            }
+            if (!pName) {
+              pName = prod.providerId?.businessName || prod.providerId?.name;
+            }
+          }
         }
-        const [startTime, endTime] = photo.shootTimeSlot.split('-').map((value) => value.trim());
-        if (!startTime || !endTime) {
-          throw new Error('Khung giờ chụp không hợp lệ. Vui lòng chọn lại lịch.');
-        }
-        const holdPayload = {
-          packageId: photo.photographyPackageId,
-          promoCode: selectedVoucher ? selectedVoucher.promotion.code : undefined,
-          sessions: [
-            {
-              clientId: photo.id,
-              startsAt: `${photo.shootDate}T${startTime}:00+07:00`,
-              endsAt: `${photo.shootDate}T${endTime}:00+07:00`,
-              locationAddress: photo.shootLocation,
-              locationLatitude: photo.shootLocationLatitude,
-              locationLongitude: photo.shootLocationLongitude,
-            },
-          ],
-          concept: photo.shootConcept || undefined,
-          customRequests: photo.customRequests || undefined,
-          referenceImage: photo.referenceImage || undefined,
-          ...(productItems.length > 0
-            ? {
-                aodaiItems: rentalItemsPayload.map((item) => ({
-                  productId: item.productId,
-                  selectedSize: item.selectedSize,
-                  selectedColor: item.selectedColor,
-                  rentalFrom: item.rentalFrom,
-                  rentalTo: item.rentalTo,
-                  quantity: item.quantity,
-                })),
-              }
-            : {}),
+        return {
+          providerId: pId || 'unknown_provider',
+          providerName: pName || 'Cửa hàng',
         };
-        const holdEndpoint =
-          productItems.length > 0
-            ? '/api/bookings/combo/photography-hold'
-            : '/api/bookings/photography/hold';
-        const idempotencyKey = `cart-hold-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        const holdRes: any = await httpClient.post(holdEndpoint, holdPayload, {
-          headers: { 'Idempotency-Key': idempotencyKey },
-        });
-        bookingId = holdRes.bookingId;
-        bookingContractFlowVersion = holdRes?.contractFlowVersion;
-        paymentPurpose = 'DEPOSIT_PAYMENT';
-      } else {
-        const bookingRes: any = await httpClient.post('/bookings', {
-          bookingType: 'AODAI_RENTAL',
-          items: rentalItemsPayload,
-          travelFee: 0,
-          serviceFee: 0,
-          promoCode: selectedVoucher ? selectedVoucher.promotion.code : undefined,
-        });
-        bookingId = bookingRes._id;
-        bookingContractFlowVersion = bookingRes?.contractFlowVersion;
+      };
+
+      // Nhóm các sản phẩm thuê lẻ theo (Cửa hàng + Ngày thuê) - Tuyệt đối không gộp chung với Combo
+      const rentalBatchesMap = new Map<string, typeof standaloneProductItems>();
+      standaloneProductItems.forEach((it) => {
+        const { providerId, providerName } = resolveItemShopInfo(it);
+        const from = it.rentalFrom || it.startDate || '';
+        const to = it.rentalTo || it.endDate || from;
+        const fromStr = from ? new Date(from).toISOString().split('T')[0] : '';
+        const toStr = to ? new Date(to).toISOString().split('T')[0] : '';
+        const key = `${providerId}___${fromStr}___${toStr}`;
+        const list = rentalBatchesMap.get(key) || [];
+        list.push({ ...it, providerId, providerName } as any);
+        rentalBatchesMap.set(key, list);
+      });
+
+      // Xây dựng danh sách các đơn hàng độc lập sẽ được tạo
+      interface BookingPlanUnit {
+        type: 'COMBO' | 'STANDALONE_PHOTO' | 'STANDALONE_RENTAL';
+        title: string;
+        subtitle: string;
+        detailsHtml: string;
+        subTotal: number;
+        comboId?: string;
+        photoItem?: typeof selectedItems[0];
+        comboProducts?: typeof selectedItems;
+        rentalBatch?: {
+          key: string;
+          providerId: string;
+          providerName: string;
+          fromStr: string;
+          toStr: string;
+          fFrom: string;
+          fTo: string;
+          dayCount: number;
+          items: typeof standaloneProductItems;
+        };
       }
 
-      toast.info('Đơn đã được giữ tạm thời.');
+      const bookingUnits: BookingPlanUnit[] = [];
 
-      // If booking was explicitly marked as legacy (null), skip contracts completely
-      const isLegacyBooking = bookingContractFlowVersion === null;
+      // 1. Thêm các gói Combo
+      Array.from(comboGroupsMap.entries()).forEach(([cId, group]) => {
+        const photo = group.find((i) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
+        const cProds = group.filter((i) => i.itemType === 'PRODUCT');
+        const comboName = photo?.packageName || cProds[0]?.productName || 'Gói Combo trọn gói';
+        const subTotal = group.reduce((sum, i) => sum + (i.basePrice || 0) * (i.quantity || 1), 0);
+        const prodNames = cProds.map((p) => p.name || p.productName || 'Áo dài').join(', ');
 
-      if (CONTRACTS_V2_ENABLED && !isLegacyBooking) {
+        bookingUnits.push({
+          type: 'COMBO',
+          title: `🎁 Gói Combo: ${comboName}`,
+          subtitle: `Dịch vụ trọn gói (Áo dài & Chụp ảnh)`,
+          detailsHtml: `<strong>Trang phục:</strong> ${prodNames || 'Áo dài'}<br/><strong>Nhiếp ảnh:</strong> ${photo?.photographerName || 'Nhiếp ảnh gia'}`,
+          subTotal,
+          comboId: cId,
+          photoItem: photo,
+          comboProducts: cProds,
+        });
+      });
+
+      // 2. Thêm các gói chụp ảnh lẻ
+      standalonePhotoItems.forEach((photo) => {
+        bookingUnits.push({
+          type: 'STANDALONE_PHOTO',
+          title: `📸 Gói chụp ảnh: ${photo.packageName || photo.name || 'Gói chụp ảnh'}`,
+          subtitle: `Nhiếp ảnh gia: ${photo.photographerName || 'Chuyên nghiệp'}`,
+          detailsHtml: `<strong>Lịch chụp:</strong> ${photo.shootDate ? new Date(photo.shootDate).toLocaleDateString('vi-VN') : 'Linh hoạt'} (${photo.shootTimeSlot || 'Chưa chọn giờ'})<br/><strong>Địa điểm:</strong> ${photo.shootLocation || 'Huế'}`,
+          subTotal: photo.basePrice || 0,
+          photoItem: photo,
+        });
+      });
+
+      // 3. Thêm các đơn thuê áo dài lẻ (tách theo từng shop & từng đợt ngày)
+      Array.from(rentalBatchesMap.entries()).forEach(([key, items]) => {
+        const [providerId, fromStr, toStr] = key.split('___');
+        const providerName = (items[0] as any)?.providerName || 'Cửa hàng';
+        const fFrom = fromStr ? new Date(fromStr).toLocaleDateString('vi-VN') : 'Chưa đặt';
+        const fTo = toStr ? new Date(toStr).toLocaleDateString('vi-VN') : '—';
+        let dayCount = 1;
+        if (fromStr && toStr) {
+          const diffMs = new Date(toStr).getTime() - new Date(fromStr).getTime();
+          dayCount = Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24)) + 1);
+        }
+        const namesWithSizes = items
+          .map((i) => `${i.name || i.productName || 'Áo dài'}${i.size ? ` (Size ${i.size})` : ''}`)
+          .join(', ');
+        const subTotal = items.reduce((sum, i) => sum + (i.basePrice || 0) * (i.quantity || 1), 0);
+
+        bookingUnits.push({
+          type: 'STANDALONE_RENTAL',
+          title: `🏪 Thuê trang phục: ${providerName}`,
+          subtitle: `Lịch nhận - trả: ${fFrom} đến ${fTo} (${dayCount} ngày)`,
+          detailsHtml: `<strong>Trang phục:</strong> ${namesWithSizes}`,
+          subTotal,
+          rentalBatch: {
+            key,
+            providerId,
+            providerName,
+            fromStr,
+            toStr,
+            fFrom,
+            fTo,
+            dayCount,
+            items,
+          },
+        });
+      });
+
+      // Nếu có nhiều hơn 1 đơn độc lập (ví dụ Combo + Áo dài lẻ, hoặc nhiều shop khác nhau):
+      if (bookingUnits.length > 1) {
+        setIsLoading(false);
+
+        const hasCombo = bookingUnits.some((u) => u.type === 'COMBO');
+        const hasRental = bookingUnits.some((u) => u.type === 'STANDALONE_RENTAL');
+        const hasStandalonePhoto = bookingUnits.some((u) => u.type === 'STANDALONE_PHOTO');
+
+        let modalTitle = 'Tách đơn hàng độc lập';
+        let reasonText = '';
+        if (hasCombo && hasRental) {
+          modalTitle = 'Tách đơn Combo & Thuê áo dài riêng';
+          reasonText = `Giỏ hàng của bạn bao gồm <strong>Gói Combo</strong> và <strong>Trang phục thuê riêng lẻ</strong>. Hệ thống sẽ tự động tách thành <strong>${bookingUnits.length} đơn hàng độc lập</strong>:`;
+        } else if (hasCombo && hasStandalonePhoto) {
+          modalTitle = 'Tách đơn Combo & Gói chụp riêng';
+          reasonText = `Giỏ hàng của bạn bao gồm <strong>Gói Combo</strong> và <strong>Gói chụp ảnh riêng</strong>. Hệ thống sẽ tự động tách thành <strong>${bookingUnits.length} đơn hàng độc lập</strong>:`;
+        } else {
+          modalTitle = 'Tách đơn hàng theo Cửa hàng & Lịch thuê';
+          reasonText = `Đơn hàng của bạn sẽ được tự động tách thành <strong>${bookingUnits.length} đơn hàng độc lập</strong> theo từng cửa hàng & đợt thuê:`;
+        }
+
+        const unitsHtml = bookingUnits
+          .map(
+            (u, idx) => `
+          <div style="background: #FCFAF8; border: 1px solid #ECE5DB; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; text-align: left;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-weight: 800; color: #8E1B2E; font-size: 13.5px;">Đơn ${idx + 1}: ${u.title}</span>
+              <span style="font-weight: 700; color: #231F20; font-size: 13px;">${u.subTotal.toLocaleString('vi-VN')}đ</span>
+            </div>
+            <div style="font-size: 12.5px; color: #78350F; margin-bottom: 4px;">
+              ${u.subtitle}
+            </div>
+            <div style="font-size: 12.5px; color: #574D4F; line-height: 1.5;">
+              ${u.detailsHtml}
+            </div>
+          </div>
+        `,
+          )
+          .join('');
+
+        const confirmRes = await Swal.fire({
+          title: modalTitle,
+          html: `
+            <div style="font-size: 13.5px; color: #4A3F35; line-height: 1.6; text-align: left;">
+              <p style="margin-bottom: 12px;">
+                ${reasonText}
+              </p>
+              ${unitsHtml}
+              <div style="background: #FFFBEB; border: 1px solid #FCD34D; border-radius: 8px; padding: 10px 12px; margin-top: 12px; font-size: 12.5px; color: #78350F;">
+                <strong>Bạn có chắc chắn muốn tiến hành đặt không?</strong><br/>
+                <em>Hệ thống sẽ tạo <strong>${bookingUnits.length} đơn hàng độc lập</strong> để đảm bảo quản lý và đối soát chính xác.<br/>
+                ✨ Bạn chỉ cần <strong>thanh toán chung 1 lần duy nhất</strong> cho toàn bộ các đơn hàng này!</em>
+              </div>
+            </div>
+          `,
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: `Xác nhận đặt & Thanh toán chung (${bookingUnits.length} đơn)`,
+          cancelButtonText: 'Kiểm tra lại giỏ hàng',
+          confirmButtonColor: '#8E1B2E',
+          cancelButtonColor: '#7D736B',
+        });
+
+        if (!confirmRes.isConfirmed) {
+          return;
+        }
+      }
+
+      setIsLoading(true);
+
+      const createdBookings: Array<{
+        bookingId: string;
+        bookingCode?: string;
+        contractFlowVersion?: number | null;
+        paymentPurpose: 'FULL_PAYMENT' | 'DEPOSIT_PAYMENT';
+      }> = [];
+
+      for (let uIdx = 0; uIdx < bookingUnits.length; uIdx++) {
+        const unit = bookingUnits[uIdx];
+
+        if (unit.type === 'COMBO') {
+          const photo = unit.photoItem;
+          if (!photo) continue;
+          if (
+            !isMongoObjectId(photo.photographyPackageId) ||
+            !photo.shootDate ||
+            !photo.shootTimeSlot ||
+            !photo.shootLocation ||
+            !Number.isFinite(photo.shootLocationLatitude) ||
+            !Number.isFinite(photo.shootLocationLongitude)
+          ) {
+            throw new Error('Gói chụp thiếu địa chỉ hoặc tọa độ bản đồ. Vui lòng chọn lại địa điểm chụp.');
+          }
+          const [startTime, endTime] = photo.shootTimeSlot.split('-').map((v) => v.trim());
+          if (!startTime || !endTime) {
+            throw new Error('Khung giờ chụp không hợp lệ. Vui lòng chọn lại lịch.');
+          }
+
+          const comboRentalPayload = (unit.comboProducts || []).map(mapItemToRentalPayload);
+          const holdPayload = {
+            packageId: photo.photographyPackageId,
+            promoCode: uIdx === 0 && selectedVoucher ? selectedVoucher.promotion.code : undefined,
+            sessions: [
+              {
+                clientId: photo.id,
+                startsAt: `${photo.shootDate}T${startTime}:00+07:00`,
+                endsAt: `${photo.shootDate}T${endTime}:00+07:00`,
+                locationAddress: photo.shootLocation,
+                locationLatitude: photo.shootLocationLatitude,
+                locationLongitude: photo.shootLocationLongitude,
+              },
+            ],
+            concept: photo.shootConcept || undefined,
+            customRequests: photo.customRequests || undefined,
+            referenceImage: photo.referenceImage || undefined,
+            ...(comboRentalPayload.length > 0
+              ? {
+                  aodaiItems: comboRentalPayload.map((item) => ({
+                    productId: item.productId,
+                    selectedSize: item.selectedSize,
+                    selectedColor: item.selectedColor,
+                    rentalFrom: item.rentalFrom,
+                    rentalTo: item.rentalTo,
+                    quantity: item.quantity,
+                  })),
+                }
+              : {}),
+          };
+
+          const idempotencyKey = `cart-combo-${Date.now()}-${uIdx}-${Math.random().toString(36).slice(2)}`;
+          const holdRes: any = await httpClient.post('/api/bookings/combo/photography-hold', holdPayload, {
+            headers: { 'Idempotency-Key': idempotencyKey },
+          });
+
+          createdBookings.push({
+            bookingId: holdRes.bookingId,
+            bookingCode: holdRes.bookingCode || `BK-${String(holdRes.bookingId).slice(-4)}`,
+            contractFlowVersion: holdRes?.contractFlowVersion,
+            paymentPurpose: 'DEPOSIT_PAYMENT',
+          });
+        } else if (unit.type === 'STANDALONE_PHOTO') {
+          const photo = unit.photoItem;
+          if (!photo) continue;
+          if (
+            !isMongoObjectId(photo.photographyPackageId) ||
+            !photo.shootDate ||
+            !photo.shootTimeSlot ||
+            !photo.shootLocation ||
+            !Number.isFinite(photo.shootLocationLatitude) ||
+            !Number.isFinite(photo.shootLocationLongitude)
+          ) {
+            throw new Error('Gói chụp thiếu địa chỉ hoặc tọa độ bản đồ. Vui lòng chọn lại địa điểm chụp.');
+          }
+          const [startTime, endTime] = photo.shootTimeSlot.split('-').map((v) => v.trim());
+          if (!startTime || !endTime) {
+            throw new Error('Khung giờ chụp không hợp lệ. Vui lòng chọn lại lịch.');
+          }
+
+          const holdPayload = {
+            packageId: photo.photographyPackageId,
+            promoCode: uIdx === 0 && selectedVoucher ? selectedVoucher.promotion.code : undefined,
+            sessions: [
+              {
+                clientId: photo.id,
+                startsAt: `${photo.shootDate}T${startTime}:00+07:00`,
+                endsAt: `${photo.shootDate}T${endTime}:00+07:00`,
+                locationAddress: photo.shootLocation,
+                locationLatitude: photo.shootLocationLatitude,
+                locationLongitude: photo.shootLocationLongitude,
+              },
+            ],
+            concept: photo.shootConcept || undefined,
+            customRequests: photo.customRequests || undefined,
+            referenceImage: photo.referenceImage || undefined,
+          };
+
+          const idempotencyKey = `cart-photo-${Date.now()}-${uIdx}-${Math.random().toString(36).slice(2)}`;
+          const holdRes: any = await httpClient.post('/api/bookings/photography/hold', holdPayload, {
+            headers: { 'Idempotency-Key': idempotencyKey },
+          });
+
+          createdBookings.push({
+            bookingId: holdRes.bookingId,
+            bookingCode: holdRes.bookingCode || `PS-${String(holdRes.bookingId).slice(-4)}`,
+            contractFlowVersion: holdRes?.contractFlowVersion,
+            paymentPurpose: 'DEPOSIT_PAYMENT',
+          });
+        } else if (unit.type === 'STANDALONE_RENTAL' && unit.rentalBatch) {
+          const batchPayload = unit.rentalBatch.items.map(mapItemToRentalPayload);
+
+          const bRes: any = await httpClient.post('/bookings', {
+            bookingType: 'AODAI_RENTAL',
+            items: batchPayload,
+            travelFee: 0,
+            serviceFee: 0,
+            promoCode: uIdx === 0 && selectedVoucher ? selectedVoucher.promotion.code : undefined,
+          });
+
+          createdBookings.push({
+            bookingId: bRes._id,
+            bookingCode: bRes.bookingCode || `RT-${String(bRes._id).slice(-4)}`,
+            contractFlowVersion: bRes?.contractFlowVersion,
+            paymentPurpose: 'FULL_PAYMENT',
+          });
+        }
+      }
+
+      // Xóa tất cả các mục đã đặt khỏi giỏ hàng
+      selectedItems.forEach((it) => removeFromCart(it.id));
+
+      const allBookingIds = createdBookings.map((b) => b.bookingId);
+      const primaryBooking = createdBookings[0];
+      const targetPaymentPurpose = createdBookings.some((b) => b.paymentPurpose === 'DEPOSIT_PAYMENT')
+        ? 'DEPOSIT_PAYMENT'
+        : 'FULL_PAYMENT';
+
+      // Kiểm tra hợp đồng điện tử nếu chỉ có 1 đơn
+      if (
+        allBookingIds.length === 1 &&
+        CONTRACTS_V2_ENABLED &&
+        primaryBooking.contractFlowVersion !== null
+      ) {
         try {
-          const readiness = await contractService.getBookingReadiness(bookingId);
+          const readiness = await contractService.getBookingReadiness(primaryBooking.bookingId);
           if (readiness.requirement === 'REQUIRED' && !readiness.ready) {
-            setPendingContractBookingId(bookingId);
-            setPendingPaymentPurpose(paymentPurpose);
-
+            setPendingContractBookingId(primaryBooking.bookingId);
+            setPendingPaymentPurpose(targetPaymentPurpose);
             setIsContractModalOpen(true);
             setIsLoading(false);
             return;
@@ -1018,7 +1337,8 @@ export const CartPage: React.FC = () => {
         }
       }
 
-      await proceedToPayment(bookingId, paymentPurpose);
+      await proceedToPayment(allBookingIds, targetPaymentPurpose);
+      return;
     } catch (err: any) {
       const errMsg = err?.message || err?.response?.data?.message || '';
       if (errMsg.includes('MIXED_CONTRACT_FLOW_UNSUPPORTED')) {
@@ -1036,19 +1356,30 @@ export const CartPage: React.FC = () => {
     }
   };
 
-  const proceedToPayment = async (targetBookingId: string, purpose: string) => {
+  const proceedToPayment = async (
+    targetBookingId: string | string[],
+    purpose: string,
+  ) => {
     setIsLoading(true);
     try {
       toast.info('Đang chuyển đến cổng thanh toán…');
+      const primaryId = Array.isArray(targetBookingId) ? targetBookingId[0] : targetBookingId;
+      const allIds = Array.isArray(targetBookingId) ? targetBookingId : [targetBookingId];
+
       const paymentRes: any = await httpClient.post('/payments/create-link', {
-        bookingId: targetBookingId,
+        bookingId: primaryId,
+        bookingIds: allIds,
         purpose,
       });
 
       if (paymentRes.payos && paymentRes.payos.checkoutUrl) {
         localStorage.setItem(
           `vh_pending_checkout_${paymentRes.paymentCode}`,
-          JSON.stringify({ bookingId: targetBookingId, cartItemIds: selectedItems.map((item) => item.id) }),
+          JSON.stringify({
+            bookingId: primaryId,
+            bookingIds: allIds,
+            cartItemIds: selectedItems.map((item) => item.id),
+          }),
         );
         setTimeout(() => {
           window.location.href = paymentRes.payos.checkoutUrl;

@@ -1,4 +1,7 @@
-import { NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import {
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { Types } from 'mongoose';
 import { ContractAccessService } from '../contract-access.service';
 import { ContractReadService } from '../contract-read.service';
@@ -165,12 +168,20 @@ describe('Phase 7B.1: Backend Authorization — IDOR & Cross-Provider Isolation 
             }
             if (name === 'providers') {
               if (query.userId?.toString() === providerA_UserId.toString()) {
-                if (query._id?.$in?.some((id: any) => id.toString() === providerA_Id.toString())) {
+                if (
+                  query._id?.$in?.some(
+                    (id: any) => id.toString() === providerA_Id.toString(),
+                  )
+                ) {
                   return { _id: providerA_Id, userId: providerA_UserId };
                 }
               }
               if (query.userId?.toString() === providerB_UserId.toString()) {
-                if (query._id?.$in?.some((id: any) => id.toString() === providerB_Id.toString())) {
+                if (
+                  query._id?.$in?.some(
+                    (id: any) => id.toString() === providerB_Id.toString(),
+                  )
+                ) {
                   return { _id: providerB_Id, userId: providerB_UserId };
                 }
               }
@@ -182,7 +193,7 @@ describe('Phase 7B.1: Backend Authorization — IDOR & Cross-Provider Isolation 
       },
     };
 
-    accessService = new ContractAccessService(mockConnection as any);
+    accessService = new ContractAccessService(mockConnection);
 
     // Mock Models for ReadService
     mockContractsModel = {
@@ -190,8 +201,16 @@ describe('Phase 7B.1: Backend Authorization — IDOR & Cross-Provider Isolation 
         lean: async () => {
           const list = [contractA, contractB];
           return list.filter((c) => {
-            if (filter.bookingId && c.bookingId.toString() !== filter.bookingId.toString()) return false;
-            if (filter.providerId && c.providerId.toString() !== filter.providerId.toString()) return false;
+            if (
+              filter.bookingId &&
+              c.bookingId.toString() !== filter.bookingId.toString()
+            )
+              return false;
+            if (
+              filter.providerId &&
+              c.providerId.toString() !== filter.providerId.toString()
+            )
+              return false;
             return true;
           });
         },
@@ -248,10 +267,15 @@ describe('Phase 7B.1: Backend Authorization — IDOR & Cross-Provider Isolation 
 
   describe('1. Customer IDOR Protection', () => {
     it('Customer A can view their own contract details in multi-provider booking', async () => {
-      const contractDetails = await readService.get(userCustomerA, contractA_Id.toString());
+      const contractDetails = await readService.get(
+        userCustomerA,
+        contractA_Id.toString(),
+      );
       expect(contractDetails).toBeDefined();
       expect(contractDetails.contractId).toBe(contractA_Id.toString());
-      expect(contractDetails.renderedText).toContain('HỢP ĐỒNG ÁO DÀI ĐỐI TÁC A');
+      expect(contractDetails.renderedText).toContain(
+        'HỢP ĐỒNG ÁO DÀI ĐỐI TÁC A',
+      );
     });
 
     it('Customer A CANNOT view contracts of Customer B (throws 404 CONTRACT_NOT_FOUND)', async () => {
@@ -267,14 +291,17 @@ describe('Phase 7B.1: Backend Authorization — IDOR & Cross-Provider Isolation 
         }),
       });
 
-      await expect(readService.get(userCustomerA, contractA_Id.toString())).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        readService.get(userCustomerA, contractA_Id.toString()),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('Customer A cannot list contracts for Customer B booking', async () => {
       await expect(
-        readService.listForBooking(userCustomerA, bookingCustomerBId.toString()),
+        readService.listForBooking(
+          userCustomerA,
+          bookingCustomerBId.toString(),
+        ),
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -313,9 +340,9 @@ describe('Phase 7B.1: Backend Authorization — IDOR & Cross-Provider Isolation 
 
     it('Provider A CANNOT access details of Provider B contract (IDOR cross-provider defense)', async () => {
       // Provider A tries to access Provider B's contract directly
-      await expect(readService.get(userProviderA, contractB_Id.toString())).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        readService.get(userProviderA, contractB_Id.toString()),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('Provider A CANNOT access evidence metadata of Provider B contract', async () => {
@@ -333,7 +360,10 @@ describe('Phase 7B.1: Backend Authorization — IDOR & Cross-Provider Isolation 
 
   describe('3. Admin Privilege Scoping & Fail-Closed Behavior', () => {
     it('Fully privileged Admin (user:read & provider:read) can read contract', async () => {
-      const contractDetails = await readService.get(userAdminValid, contractA_Id.toString());
+      const contractDetails = await readService.get(
+        userAdminValid,
+        contractA_Id.toString(),
+      );
       expect(contractDetails).toBeDefined();
       expect(contractDetails.contractId).toBe(contractA_Id.toString());
     });
@@ -367,7 +397,9 @@ describe('Phase 7B.1: Backend Authorization — IDOR & Cross-Provider Isolation 
       });
 
       // Override generateAndStorePdf to not alter status (simulate worker delay)
-      evidenceService.generateAndStorePdf = jest.fn().mockResolvedValue(undefined);
+      evidenceService.generateAndStorePdf = jest
+        .fn()
+        .mockResolvedValue(undefined);
 
       await expect(
         evidenceService.getPdfStream(userCustomerA, contractA_Id.toString()),
@@ -385,7 +417,10 @@ describe('Phase 7B.1: Backend Authorization — IDOR & Cross-Provider Isolation 
         contentHash: versionA.contentHash,
       });
 
-      const result = await evidenceService.getPdfStream(userCustomerA, contractA_Id.toString());
+      const result = await evidenceService.getPdfStream(
+        userCustomerA,
+        contractA_Id.toString(),
+      );
       expect(result.filename).toBe('HD-PROV-A-v1.pdf');
       expect(result.sha256).toBe('sha256_pdf_a');
       expect(result.contentHash).toBe('content_hash_a');
@@ -428,7 +463,9 @@ describe('Phase 7B.1: Backend Authorization — IDOR & Cross-Provider Isolation 
     });
 
     it('Allows customer owner to refresh contracts and invokes prepare()', async () => {
-      jest.spyOn(accessService, 'booking').mockResolvedValue(bookingMultiPending as any);
+      jest
+        .spyOn(accessService, 'booking')
+        .mockResolvedValue(bookingMultiPending as any);
 
       const res = await readService.refreshContractsForBooking(
         userCustomerA,
@@ -439,7 +476,9 @@ describe('Phase 7B.1: Backend Authorization — IDOR & Cross-Provider Isolation 
     });
 
     it('Blocks another customer (IDOR) with NotFoundException, without calling prepare()', async () => {
-      jest.spyOn(accessService, 'booking').mockResolvedValue(bookingMultiPending as any);
+      jest
+        .spyOn(accessService, 'booking')
+        .mockResolvedValue(bookingMultiPending as any);
 
       await expect(
         readService.refreshContractsForBooking(
@@ -451,7 +490,9 @@ describe('Phase 7B.1: Backend Authorization — IDOR & Cross-Provider Isolation 
     });
 
     it('Blocks Admin with NotFoundException, without calling prepare()', async () => {
-      jest.spyOn(accessService, 'booking').mockResolvedValue(bookingMultiPending as any);
+      jest
+        .spyOn(accessService, 'booking')
+        .mockResolvedValue(bookingMultiPending as any);
 
       await expect(
         readService.refreshContractsForBooking(
@@ -463,7 +504,9 @@ describe('Phase 7B.1: Backend Authorization — IDOR & Cross-Provider Isolation 
     });
 
     it('Blocks Provider A belonging to the multi-shop booking with NotFoundException, without calling prepare()', async () => {
-      jest.spyOn(accessService, 'booking').mockResolvedValue(bookingMultiPending as any);
+      jest
+        .spyOn(accessService, 'booking')
+        .mockResolvedValue(bookingMultiPending as any);
 
       await expect(
         readService.refreshContractsForBooking(
@@ -475,7 +518,9 @@ describe('Phase 7B.1: Backend Authorization — IDOR & Cross-Provider Isolation 
     });
 
     it('Blocks Provider B belonging to the multi-shop booking with NotFoundException, without calling prepare()', async () => {
-      jest.spyOn(accessService, 'booking').mockResolvedValue(bookingMultiPending as any);
+      jest
+        .spyOn(accessService, 'booking')
+        .mockResolvedValue(bookingMultiPending as any);
 
       await expect(
         readService.refreshContractsForBooking(

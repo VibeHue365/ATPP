@@ -12,7 +12,10 @@ import { ContractReadService } from '../contract-read.service';
 import { ContractCheckoutGuard } from '../contract-checkout-guard.service';
 import { ProviderContractApprovalService } from '../provider-contract-approval.service';
 import { ContractTemplateService } from '../contract-template';
-import { ContractMechanismService, AUTO_ACCEPTANCE_MECHANISM_V2 } from '../contract-mechanism.service';
+import {
+  ContractMechanismService,
+  AUTO_ACCEPTANCE_MECHANISM_V2,
+} from '../contract-mechanism.service';
 import { hashContract, canonicalizeContract } from '../canonical-contract';
 import {
   ContractApprovalMode,
@@ -75,7 +78,7 @@ const oid = () => new Types.ObjectId();
     const mechanismService = {
       getDraft: () => approvedMechanism,
       getApproved: () => approvedMechanism,
-    } as unknown as ContractMechanismService;
+    };
 
     beforeAll(async () => {
       scratchDbName = `contract_p01_${oid().toHexString()}_test`;
@@ -90,7 +93,9 @@ const oid = () => new Types.ObjectId();
       // Preflight: Ensure connection is to primary replica set rsContractTest
       const hello = await connection.db!.admin().command({ hello: 1 });
       if (hello.setName !== 'rsContractTest' || !hello.isWritablePrimary) {
-        throw new Error('Integration tests require isolated primary replica set rsContractTest');
+        throw new Error(
+          'Integration tests require isolated primary replica set rsContractTest',
+        );
       }
 
       // Initialize models on scratch connection
@@ -103,27 +108,35 @@ const oid = () => new Types.ObjectId();
       );
 
       // Create indexes required for contracts v2
-      await connection.db!.collection('digital_contracts').createIndex(
-        { bookingId: 1, providerId: 1, scope: 1 },
-        { unique: true, name: 'booking_provider_scope_unique' },
-      );
-      await connection.db!.collection('contract_versions').createIndex(
-        { contractId: 1, version: 1 },
-        { unique: true },
-      );
-      await connection.db!.collection('contract_consents').createIndex(
-        { contractVersionId: 1, actorUserId: 1 },
-        { unique: true },
-      );
-      await connection.db!.collection('provider_contract_acceptances').createIndex(
-        { providerId: 1, scope: 1 },
-        { unique: true, partialFilterExpression: { status: 'ACTIVE' } },
-      );
+      await connection
+        .db!.collection('digital_contracts')
+        .createIndex(
+          { bookingId: 1, providerId: 1, scope: 1 },
+          { unique: true, name: 'booking_provider_scope_unique' },
+        );
+      await connection
+        .db!.collection('contract_versions')
+        .createIndex({ contractId: 1, version: 1 }, { unique: true });
+      await connection
+        .db!.collection('contract_consents')
+        .createIndex(
+          { contractVersionId: 1, actorUserId: 1 },
+          { unique: true },
+        );
+      await connection
+        .db!.collection('provider_contract_acceptances')
+        .createIndex(
+          { providerId: 1, scope: 1 },
+          { unique: true, partialFilterExpression: { status: 'ACTIVE' } },
+        );
     });
 
     afterAll(async () => {
       if (connection) {
-        if (scratchDbName.startsWith('contract_p01_') && scratchDbName.endsWith('_test')) {
+        if (
+          scratchDbName.startsWith('contract_p01_') &&
+          scratchDbName.endsWith('_test')
+        ) {
           await connection.dropDatabase();
         }
         await connection.close();
@@ -144,7 +157,11 @@ const oid = () => new Types.ObjectId();
         providerId: pId.toString(),
         bookingType: 'AODAI_RENTAL',
         bookingItemIds: itemIds.map((id) => id.toString()),
-        booking: { code: 'B-001', note: 'test booking', ...(overrides.booking || {}) },
+        booking: {
+          code: 'B-001',
+          note: 'test booking',
+          ...(overrides.booking || {}),
+        },
         customer: { fullName: 'Customer A' },
         provider: { businessName: 'Ao Dai Shop A' },
         providerItems: itemIds.map((id) => ({
@@ -154,7 +171,12 @@ const oid = () => new Types.ObjectId();
           unitPrice: 150000,
           quantity: 1,
         })),
-        pricing: { rentalFee: 150000, depositFee: 100000, total: 250000, ...(overrides.pricing || {}) },
+        pricing: {
+          rentalFee: 150000,
+          depositFee: 100000,
+          total: 250000,
+          ...(overrides.pricing || {}),
+        },
         policies: overrides.policies || policies,
         template: approvedTemplate,
       };
@@ -171,11 +193,16 @@ const oid = () => new Types.ObjectId();
           const snap = snapshotMap.get(providerId.toString());
           if (snap) return Promise.resolve(snap);
           return Promise.resolve(
-            createValidSnapshot(oid(), oid(), providerId, [oid()], { rentalPolicy: 'Standard terms' }),
+            createValidSnapshot(oid(), oid(), providerId, [oid()], {
+              rentalPolicy: 'Standard terms',
+            }),
           );
         }),
         currentPoliciesForProvider: jest.fn((providerId: Types.ObjectId) => {
-          return connection.db!.collection('providers').findOne({ _id: providerId }).then((p) => p?.policies || {});
+          return connection
+            .db!.collection('providers')
+            .findOne({ _id: providerId })
+            .then((p) => p?.policies || {});
         }),
       };
 
@@ -235,10 +262,12 @@ const oid = () => new Types.ObjectId();
       };
     }
 
-    async function seedScenario(overrides: {
-      providerPolicies?: Record<string, unknown>;
-      numProviders?: number;
-    } = {}) {
+    async function seedScenario(
+      overrides: {
+        providerPolicies?: Record<string, unknown>;
+        numProviders?: number;
+      } = {},
+    ) {
       const customerId = oid();
       const customerUserId = customerId;
       const bookingId = oid();
@@ -391,15 +420,20 @@ const oid = () => new Types.ObjectId();
       };
 
       // 1. Calling readiness when provider has not accepted
-      const readiness = await harness.read.readiness(customerUser, seed.bookingId.toString());
+      const readiness = await harness.read.readiness(
+        customerUser,
+        seed.bookingId.toString(),
+      );
 
       expect(readiness.providers[0].status).toBe('PROVIDER_ACCEPTANCE_MISSING');
       expect(readiness.blockers).toContain('PROVIDER_AUTO_ACCEPTANCE_MISSING');
 
       // 2. CRITICAL AUDIT: In real MongoDB, collection provider_contract_acceptances MUST REMAIN EMPTY!
-      const countInDb = await connection.db!.collection('provider_contract_acceptances').countDocuments({
-        providerId: seed.providerAId,
-      });
+      const countInDb = await connection
+        .db!.collection('provider_contract_acceptances')
+        .countDocuments({
+          providerId: seed.providerAId,
+        });
       expect(countInDb).toBe(0);
     });
 
@@ -416,17 +450,26 @@ const oid = () => new Types.ObjectId();
       };
 
       // Authenticated acceptance call by actual shop owner
-      const acceptResult = await harness.approval.accept(providerUser, approvedMechanism.hash);
+      const acceptResult = await harness.approval.accept(
+        providerUser,
+        approvedMechanism.hash,
+      );
       expect(acceptResult.acceptanceId).toBeDefined();
 
       // Verify active acceptance document in MongoDB
-      const acceptanceDoc = await connection.db!.collection('provider_contract_acceptances').findOne({
-        _id: new Types.ObjectId(acceptResult.acceptanceId),
-      });
+      const acceptanceDoc = await connection
+        .db!.collection('provider_contract_acceptances')
+        .findOne({
+          _id: new Types.ObjectId(acceptResult.acceptanceId),
+        });
       expect(acceptanceDoc).toBeDefined();
       expect(acceptanceDoc.status).toBe('ACTIVE');
-      expect(acceptanceDoc.acceptedByUserId.toString()).toBe(seed.providerUserA.toString());
-      expect(acceptanceDoc.policyFingerprint).toBe(hashContract(seed.policiesA));
+      expect(acceptanceDoc.acceptedByUserId.toString()).toBe(
+        seed.providerUserA.toString(),
+      );
+      expect(acceptanceDoc.policyFingerprint).toBe(
+        hashContract(seed.policiesA),
+      );
 
       // Customer prepares contract
       const snapshot = createValidSnapshot(
@@ -438,16 +481,23 @@ const oid = () => new Types.ObjectId();
       );
       harness.snapshotMap.set(seed.providerAId.toString(), snapshot);
 
-      const prepareResult = await harness.prep.prepare(seed.bookingId.toString(), seed.providerAId.toString());
+      const prepareResult = await harness.prep.prepare(
+        seed.bookingId.toString(),
+        seed.providerAId.toString(),
+      );
       expect(prepareResult.version).toBe(1);
       expect(prepareResult.reused).toBe(false);
 
       // Verify contract version in MongoDB
-      const versionDoc = await connection.db!.collection('contract_versions').findOne({
-        _id: new Types.ObjectId(prepareResult.versionId),
-      });
+      const versionDoc = await connection
+        .db!.collection('contract_versions')
+        .findOne({
+          _id: new Types.ObjectId(prepareResult.versionId),
+        });
       expect(versionDoc.state).toBe(ContractVersionState.Offered);
-      expect(versionDoc.providerAcceptanceId.toString()).toBe(acceptResult.acceptanceId);
+      expect(versionDoc.providerAcceptanceId.toString()).toBe(
+        acceptResult.acceptanceId,
+      );
     });
 
     // --- TEST SCENARIO 4 ---
@@ -463,7 +513,10 @@ const oid = () => new Types.ObjectId();
       };
 
       // Provider accepts initial policy
-      const acceptResult = await harness.approval.accept(providerUser, approvedMechanism.hash);
+      const acceptResult = await harness.approval.accept(
+        providerUser,
+        approvedMechanism.hash,
+      );
       const initialFingerprint = hashContract(seed.policiesA);
 
       // Shop silently alters rental policies in MongoDB
@@ -471,10 +524,12 @@ const oid = () => new Types.ObjectId();
         ...seed.policiesA,
         lateFeePolicy: 'Surprise high late fee 500k',
       };
-      await connection.db!.collection('providers').updateOne(
-        { _id: seed.providerAId },
-        { $set: { policies: mutatedPolicies } },
-      );
+      await connection
+        .db!.collection('providers')
+        .updateOne(
+          { _id: seed.providerAId },
+          { $set: { policies: mutatedPolicies } },
+        );
 
       const newSnapshot = createValidSnapshot(
         seed.bookingId,
@@ -487,15 +542,22 @@ const oid = () => new Types.ObjectId();
 
       // Prepare must fail closed with PROVIDER_POLICY_ACCEPTANCE_STALE!
       await expect(
-        harness.prep.prepare(seed.bookingId.toString(), seed.providerAId.toString()),
+        harness.prep.prepare(
+          seed.bookingId.toString(),
+          seed.providerAId.toString(),
+        ),
       ).rejects.toThrow('PROVIDER_POLICY_ACCEPTANCE_STALE');
 
       // CRITICAL AUDIT: MongoDB acceptance record MUST NOT be silently updated!
-      const currentAcceptance = await connection.db!.collection('provider_contract_acceptances').findOne({
-        _id: new Types.ObjectId(acceptResult.acceptanceId),
-      });
+      const currentAcceptance = await connection
+        .db!.collection('provider_contract_acceptances')
+        .findOne({
+          _id: new Types.ObjectId(acceptResult.acceptanceId),
+        });
       expect(currentAcceptance.policyFingerprint).toBe(initialFingerprint);
-      expect(currentAcceptance.policyFingerprint).not.toBe(hashContract(mutatedPolicies));
+      expect(currentAcceptance.policyFingerprint).not.toBe(
+        hashContract(mutatedPolicies),
+      );
     });
 
     // --- TEST SCENARIO 5 ---
@@ -516,15 +578,20 @@ const oid = () => new Types.ObjectId();
       const revokeRes = await harness.approval.revoke(providerUser);
       expect(revokeRes.revoked).toBe(true);
 
-      const acceptanceInDb = await connection.db!.collection('provider_contract_acceptances').findOne({
-        providerId: seed.providerAId,
-      });
+      const acceptanceInDb = await connection
+        .db!.collection('provider_contract_acceptances')
+        .findOne({
+          providerId: seed.providerAId,
+        });
       expect(acceptanceInDb.status).toBe(ProviderAcceptanceStatus.Revoked);
       expect(acceptanceInDb.revokedAt).toBeDefined();
 
       // Subsequent prepare attempt must fail closed!
       await expect(
-        harness.prep.prepare(seed.bookingId.toString(), seed.providerAId.toString()),
+        harness.prep.prepare(
+          seed.bookingId.toString(),
+          seed.providerAId.toString(),
+        ),
       ).rejects.toThrow('PROVIDER_AUTO_ACCEPTANCE_MISSING');
     });
 
@@ -552,9 +619,11 @@ const oid = () => new Types.ObjectId();
         harness.approval.accept(imposterUser, approvedMechanism.hash),
       ).rejects.toThrow('PROVIDER_NOT_FOUND');
 
-      const count = await connection.db!.collection('provider_contract_acceptances').countDocuments({
-        acceptedByUserId: imposterUserId,
-      });
+      const count = await connection
+        .db!.collection('provider_contract_acceptances')
+        .countDocuments({
+          acceptedByUserId: imposterUserId,
+        });
       expect(count).toBe(0);
     });
 
@@ -582,10 +651,12 @@ const oid = () => new Types.ObjectId();
       expect(results).toHaveLength(5);
 
       // Unique partial index on MongoDB ensures exactly 1 ACTIVE record exists!
-      const activeCount = await connection.db!.collection('provider_contract_acceptances').countDocuments({
-        providerId: seed.providerAId,
-        status: ProviderAcceptanceStatus.Active,
-      });
+      const activeCount = await connection
+        .db!.collection('provider_contract_acceptances')
+        .countDocuments({
+          providerId: seed.providerAId,
+          status: ProviderAcceptanceStatus.Active,
+        });
       expect(activeCount).toBe(1);
     });
 
@@ -596,7 +667,13 @@ const oid = () => new Types.ObjectId();
 
       // Provider A accepts
       await harness.approval.accept(
-        { sub: seed.providerUserA.toString(), roles: ['PROVIDER'], permissions: [], email: '', sessionId: '' },
+        {
+          sub: seed.providerUserA.toString(),
+          roles: ['PROVIDER'],
+          permissions: [],
+          email: '',
+          sessionId: '',
+        },
         approvedMechanism.hash,
       );
 
@@ -611,18 +688,27 @@ const oid = () => new Types.ObjectId();
       harness.snapshotMap.set(seed.providerAId.toString(), snapshotA);
 
       // Prepare contract for A and customer accepts A
-      const prepA = await harness.prep.prepare(seed.bookingId.toString(), seed.providerAId.toString());
-      const contractA = await connection.db!.collection('digital_contracts').findOne({
-        _id: new Types.ObjectId(prepA.contractId),
-      });
-      const versionA = await connection.db!.collection('contract_versions').findOne({
-        _id: new Types.ObjectId(prepA.versionId),
-      });
-
-      await connection.db!.collection('contract_versions').updateOne(
-        { _id: versionA._id },
-        { $set: { state: ContractVersionState.Accepted } },
+      const prepA = await harness.prep.prepare(
+        seed.bookingId.toString(),
+        seed.providerAId.toString(),
       );
+      const contractA = await connection
+        .db!.collection('digital_contracts')
+        .findOne({
+          _id: new Types.ObjectId(prepA.contractId),
+        });
+      const versionA = await connection
+        .db!.collection('contract_versions')
+        .findOne({
+          _id: new Types.ObjectId(prepA.versionId),
+        });
+
+      await connection
+        .db!.collection('contract_versions')
+        .updateOne(
+          { _id: versionA._id },
+          { $set: { state: ContractVersionState.Accepted } },
+        );
 
       await connection.db!.collection('contract_consents').insertOne({
         _id: oid(),
@@ -638,7 +724,11 @@ const oid = () => new Types.ObjectId();
 
       // Provider B has no contract / no acceptance -> guard.evaluate MUST fail closed!
       await expect(
-        harness.guard.evaluate(seed.bookingId.toString(), 350000, PaymentPurpose.RentalInitial),
+        harness.guard.evaluate(
+          seed.bookingId.toString(),
+          350000,
+          PaymentPurpose.RentalInitial,
+        ),
       ).rejects.toThrow();
     });
 
@@ -648,12 +738,18 @@ const oid = () => new Types.ObjectId();
       const harnessOff = buildHarness({ contractsV2Enabled: false });
 
       // Change booking to legacy flow
-      await connection.db!.collection('bookings').updateOne(
-        { _id: seed.bookingId },
-        { $set: { contractFlowVersion: 1 } },
-      );
+      await connection
+        .db!.collection('bookings')
+        .updateOne(
+          { _id: seed.bookingId },
+          { $set: { contractFlowVersion: 1 } },
+        );
 
-      const decision = await harnessOff.guard.evaluate(seed.bookingId.toString(), 150000, PaymentPurpose.RentalInitial);
+      const decision = await harnessOff.guard.evaluate(
+        seed.bookingId.toString(),
+        150000,
+        PaymentPurpose.RentalInitial,
+      );
       expect(decision).toEqual({ binding: null, context: null });
     });
 
@@ -664,7 +760,13 @@ const oid = () => new Types.ObjectId();
 
       // Provider accepts
       await harness.approval.accept(
-        { sub: seed.providerUserA.toString(), roles: ['PROVIDER'], permissions: [], email: '', sessionId: '' },
+        {
+          sub: seed.providerUserA.toString(),
+          roles: ['PROVIDER'],
+          permissions: [],
+          email: '',
+          sessionId: '',
+        },
         approvedMechanism.hash,
       );
 
@@ -678,18 +780,25 @@ const oid = () => new Types.ObjectId();
       );
       harness.snapshotMap.set(seed.providerAId.toString(), initialSnapshot);
 
-      const prep1 = await harness.prep.prepare(seed.bookingId.toString(), seed.providerAId.toString());
+      const prep1 = await harness.prep.prepare(
+        seed.bookingId.toString(),
+        seed.providerAId.toString(),
+      );
       expect(prep1.version).toBe(1);
 
       // Customer accepts Version 1
-      await connection.db!.collection('contract_versions').updateOne(
-        { _id: new Types.ObjectId(prep1.versionId) },
-        { $set: { state: ContractVersionState.Accepted } },
-      );
+      await connection
+        .db!.collection('contract_versions')
+        .updateOne(
+          { _id: new Types.ObjectId(prep1.versionId) },
+          { $set: { state: ContractVersionState.Accepted } },
+        );
 
-      const v1Before = await connection.db!.collection('contract_versions').findOne({
-        _id: new Types.ObjectId(prep1.versionId),
-      });
+      const v1Before = await connection
+        .db!.collection('contract_versions')
+        .findOne({
+          _id: new Types.ObjectId(prep1.versionId),
+        });
 
       // Booking details update
       const updatedSnapshot = createValidSnapshot(
@@ -702,13 +811,18 @@ const oid = () => new Types.ObjectId();
       );
       harness.snapshotMap.set(seed.providerAId.toString(), updatedSnapshot);
 
-      const prep2 = await harness.prep.prepare(seed.bookingId.toString(), seed.providerAId.toString());
+      const prep2 = await harness.prep.prepare(
+        seed.bookingId.toString(),
+        seed.providerAId.toString(),
+      );
       expect(prep2.version).toBe(2);
 
       // CRITICAL IMMUTABILITY AUDIT ON REAL MONGODB:
-      const v1After = await connection.db!.collection('contract_versions').findOne({
-        _id: new Types.ObjectId(prep1.versionId),
-      });
+      const v1After = await connection
+        .db!.collection('contract_versions')
+        .findOne({
+          _id: new Types.ObjectId(prep1.versionId),
+        });
 
       expect(v1After.state).toBe(ContractVersionState.Accepted);
       expect(v1After.contentHash).toBe(v1Before.contentHash);

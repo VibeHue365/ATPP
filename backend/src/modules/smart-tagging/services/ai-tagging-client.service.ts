@@ -62,7 +62,9 @@ export class AiTaggingClientService {
       return { status: SmartTagSourceStatus.Skipped, suggestions: [] };
     }
 
-    const allowedCodes = new Set(input.definitions.map((definition) => definition.code));
+    const allowedCodes = new Set(
+      input.definitions.map((definition) => definition.code),
+    );
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
@@ -118,10 +120,9 @@ export class AiTaggingClientService {
               modelMetadata: {
                 provider: 'local_embedding',
                 model: String(payload.model || 'unknown').slice(0, 100),
-                promptVersion: String(payload.prompt_version || 'unknown').slice(
-                  0,
-                  100,
-                ),
+                promptVersion: String(
+                  payload.prompt_version || 'unknown',
+                ).slice(0, 100),
                 latencyMs: Math.max(0, Number(payload.latency_ms) || 0),
               },
             },
@@ -139,9 +140,14 @@ export class AiTaggingClientService {
 
   private getTimeoutMs(): number {
     const configured = Number(
-      this.configService.get<string>('SMART_TAG_AI_TIMEOUT_MS', String(DEFAULT_TIMEOUT_MS)),
+      this.configService.get<string>(
+        'SMART_TAG_AI_TIMEOUT_MS',
+        String(DEFAULT_TIMEOUT_MS),
+      ),
     );
-    return Number.isFinite(configured) && configured >= 1_000 && configured <= 30_000
+    return Number.isFinite(configured) &&
+      configured >= 1_000 &&
+      configured <= 30_000
       ? configured
       : DEFAULT_TIMEOUT_MS;
   }

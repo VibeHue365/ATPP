@@ -128,7 +128,7 @@ export const RegisterForm: React.FC = () => {
           Tạo tài khoản <span>mới</span>
         </h1>
         <p className="lume-auth-subtitle">
-          Tham gia cộng đồng LUMÉ để thuê áo dài và đặt lịch chụp ảnh cao cấp.
+          Tham gia cộng đồng TàGo để thuê áo dài và đặt lịch chụp ảnh cao cấp.
         </p>
       </div>
 
@@ -392,7 +392,7 @@ export const RegisterForm: React.FC = () => {
               >
                 Chính sách bảo mật
               </a>{" "}
-              của LUMÉ Heritage.
+              của TàGo Heritage.
             </span>
           </label>
         </div>

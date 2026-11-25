@@ -21,7 +21,10 @@ describe('DiscountCampaignService.createCampaign (VIB-43 seasonal discount & sur
     const usersRepository = {
       findUserById: jest.fn().mockResolvedValue({ provider: { providerId } }),
     };
-    service = new DiscountCampaignService(campaignModel as any, usersRepository as any);
+    service = new DiscountCampaignService(
+      campaignModel as any,
+      usersRepository as any,
+    );
   });
 
   const dto = (overrides: Record<string, unknown> = {}) => ({
@@ -33,33 +36,51 @@ describe('DiscountCampaignService.createCampaign (VIB-43 seasonal discount & sur
   });
 
   it('stores a surcharge campaign with its type', async () => {
-    await service.createCampaign(new Types.ObjectId().toString(), dto({ type: 'SURCHARGE' }) as any);
+    await service.createCampaign(
+      new Types.ObjectId().toString(),
+      dto({ type: 'SURCHARGE' }),
+    );
     expect(campaignModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'SURCHARGE', discountPercent: 20, isActive: true }),
+      expect.objectContaining({
+        type: 'SURCHARGE',
+        discountPercent: 20,
+        isActive: true,
+      }),
     );
   });
 
   it('defaults to a discount campaign when no type is sent (old clients)', async () => {
-    await service.createCampaign(new Types.ObjectId().toString(), dto() as any);
-    expect(campaignModel.create).toHaveBeenCalledWith(expect.objectContaining({ type: 'DISCOUNT' }));
+    await service.createCampaign(new Types.ObjectId().toString(), dto());
+    expect(campaignModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'DISCOUNT' }),
+    );
   });
 
   it('allows a surcharge of up to 100%', async () => {
     await expect(
-      service.createCampaign(new Types.ObjectId().toString(), dto({ type: 'SURCHARGE', discountPercent: 100 }) as any),
+      service.createCampaign(
+        new Types.ObjectId().toString(),
+        dto({ type: 'SURCHARGE', discountPercent: 100 }) as any,
+      ),
     ).resolves.toEqual(expect.objectContaining({ discountPercent: 100 }));
   });
 
   it('rejects a discount above 90%', async () => {
     await expect(
-      service.createCampaign(new Types.ObjectId().toString(), dto({ type: 'DISCOUNT', discountPercent: 95 }) as any),
+      service.createCampaign(
+        new Types.ObjectId().toString(),
+        dto({ type: 'DISCOUNT', discountPercent: 95 }) as any,
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(campaignModel.create).not.toHaveBeenCalled();
   });
 
   it('accepts a one-day occasion where start and end are the same day', async () => {
     const day = dayFromNow(5);
-    await service.createCampaign(new Types.ObjectId().toString(), dto({ startDate: day, endDate: day }) as any);
+    await service.createCampaign(
+      new Types.ObjectId().toString(),
+      dto({ startDate: day, endDate: day }),
+    );
     expect(campaignModel.create).toHaveBeenCalled();
   });
 
@@ -73,7 +94,7 @@ describe('DiscountCampaignService.createCampaign (VIB-43 seasonal discount & sur
   });
 
   it('deactivates the previous campaign so each shop keeps a single active one', async () => {
-    await service.createCampaign(new Types.ObjectId().toString(), dto() as any);
+    await service.createCampaign(new Types.ObjectId().toString(), dto());
     expect(campaignModel.updateMany).toHaveBeenCalledWith(
       { providerId, isActive: true },
       { $set: { isActive: false } },

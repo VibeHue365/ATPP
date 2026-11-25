@@ -245,7 +245,7 @@ export function TrustPanel({
             }}
           >
             Hệ thống đánh giá hành vi khách hàng sau khi hoàn tất đơn và tra cứu hồ
-            sơ tín nhiệm trên toàn sàn VibeHue để chủ động quản lý rủi ro cho thuê.
+            sơ tín nhiệm trên toàn sàn TàGo để chủ động quản lý rủi ro cho thuê.
           </p>
         </div>
 
@@ -572,7 +572,7 @@ export function TrustPanel({
                       <strong style={{ color: '#1F2937' }}>
                         {trustScoreResult.totalReviews} lượt đánh giá hành vi
                       </strong>{' '}
-                      từ các đối tác trên nền tảng VibeHue.
+                      từ các đối tác trên nền tảng TàGo.
                     </p>
                   </div>
                 </div>

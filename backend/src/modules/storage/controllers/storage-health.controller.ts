@@ -13,7 +13,10 @@ export class StorageHealthController {
       const result = await this.publicMedia.health();
       return { status: result.status, provider: 'CLOUDINARY' };
     } catch {
-      throw new ServiceUnavailableException({ status: 'DOWN', provider: 'CLOUDINARY' });
+      throw new ServiceUnavailableException({
+        status: 'DOWN',
+        provider: 'CLOUDINARY',
+      });
     }
   }
 }

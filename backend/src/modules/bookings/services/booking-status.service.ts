@@ -4,7 +4,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
-/* eslint-disable @typescript-eslint/restrict-template-expressions */
+
 import {
   BadRequestException,
   Injectable,
@@ -22,7 +22,10 @@ import {
   BookingItemDocument,
 } from '../schemas/booking-item.schema';
 import { Provider } from '../../providers/schemas/provider.schema';
-import { BookingScheduleStatus } from '../schemas/booking-schedule.schema';
+import {
+  BookingScheduleStatus,
+  BookingScheduleType,
+} from '../schemas/booking-schedule.schema';
 import {
   InventoryReservation,
   ReservationStatus,
@@ -84,7 +87,9 @@ export class BookingStatusService {
 
     try {
       const now = new Date();
-      const cutoff = new Date(now.getTime() - SYSTEM_POLICIES.BOOKING_HOLD_TIMEOUT_MS);
+      const cutoff = new Date(
+        now.getTime() - SYSTEM_POLICIES.BOOKING_HOLD_TIMEOUT_MS,
+      );
       const expiryFilter = pendingBookingExpiryFilter(now, cutoff);
 
       const expiredBookings = await this.bookingsRepository.findBookings(
@@ -96,14 +101,23 @@ export class BookingStatusService {
       if (expiredBookings.length > 0) {
         for (const booking of expiredBookings) {
           // A successful gateway payment can precede booking finalization.
-          if (await this.bookingsRepository.hasSuccessfulPayment(booking._id, session))
+          if (
+            await this.bookingsRepository.hasSuccessfulPayment(
+              booking._id,
+              session,
+            )
+          )
             continue;
           // A payment or another expiry worker may have changed the booking
           // after the initial scan. Only the winner may release its resources.
           const isV2 = booking.contractFlowVersion === 2;
           const changed = await this.bookingsRepository.updateManyBookings(
             isV2
-              ? { _id: booking._id, contractFlowVersion: 2, $and: [expiryFilter, freePaymentClaim(now)] }
+              ? {
+                  _id: booking._id,
+                  contractFlowVersion: 2,
+                  $and: [expiryFilter, freePaymentClaim(now)],
+                }
               : { _id: booking._id, ...expiryFilter },
             {
               $set: {
@@ -137,7 +151,10 @@ export class BookingStatusService {
           );
           await this.inventoryReservationModel
             .updateMany(
-              { bookingId: booking._id, status: ReservationStatus.TempReserved },
+              {
+                bookingId: booking._id,
+                status: ReservationStatus.TempReserved,
+              },
               { $set: { status: ReservationStatus.Cancelled } },
             )
             .session(session);
@@ -537,9 +554,7 @@ export class BookingStatusService {
           : null;
       const cancelReason =
         reason ||
-        (isProvider
-          ? 'Nhà cung cấp chủ động hủy lịch'
-          : 'Khách hàng hủy đơn');
+        (isProvider ? 'Nhà cung cấp chủ động hủy lịch' : 'Khách hàng hủy đơn');
       const timelineNote = isFreeCancel
         ? `Đơn hàng đã được hủy thành công. Hoàn tiền 100% (${refundAmount.toLocaleString('vi-VN')}đ).`
         : `Đơn hàng đã bị hủy. Khách bị phạt tiền dịch vụ (${penaltyAmount.toLocaleString('vi-VN')}đ). Hoàn cọc giữ đồ & số dư (${refundAmount.toLocaleString('vi-VN')}đ). Lý do phạt: ${penaltyReason}`;
@@ -587,8 +602,13 @@ export class BookingStatusService {
         );
 
         if (booking.providerIds && booking.providerIds.length > 0) {
-          const query = this.providerModel.find({ _id: { $in: booking.providerIds } });
-          const rawProviders = typeof (query as any)?.select === 'function' ? await (query as any).select('userId').lean() : await query;
+          const query = this.providerModel.find({
+            _id: { $in: booking.providerIds },
+          });
+          const rawProviders =
+            typeof (query as any)?.select === 'function'
+              ? await (query as any).select('userId').lean()
+              : await query;
           const providers = Array.isArray(rawProviders) ? rawProviders : [];
 
           for (const prov of providers as any[]) {
@@ -632,7 +652,9 @@ export class BookingStatusService {
           .updateMany(
             {
               bookingId: booking._id,
-              status: { $in: [SlotLeaseStatus.Temp, SlotLeaseStatus.Confirmed] },
+              status: {
+                $in: [SlotLeaseStatus.Temp, SlotLeaseStatus.Confirmed],
+              },
             },
             {
               $set: {
@@ -675,8 +697,7 @@ export class BookingStatusService {
         .findOne({ bookingId: booking._id })
         .session(session);
       if (escrow && escrow.status === 'HELD') {
-        escrow.status =
-          refundAmount > 0 ? 'REFUNDED' : 'CANCELLED';
+        escrow.status = 'REFUNDED';
         await escrow.save({ session });
       }
 
@@ -852,11 +873,26 @@ export class BookingStatusService {
         [BookingStatus.PickedUp]: [
           BookingStatus.Returned,
           BookingStatus.ReturnPending,
+          BookingStatus.Overdue,
+          BookingStatus.LostItem,
           BookingStatus.Disputed,
           BookingStatus.InProgress,
         ],
         [BookingStatus.ReturnPending]: [
           BookingStatus.Returned,
+          BookingStatus.Overdue,
+          BookingStatus.LostItem,
+          BookingStatus.Disputed,
+        ],
+        [BookingStatus.Overdue]: [
+          BookingStatus.Returned,
+          BookingStatus.LostItem,
+          BookingStatus.Disputed,
+          BookingStatus.Completed,
+        ],
+        [BookingStatus.LostItem]: [
+          BookingStatus.Returned,
+          BookingStatus.Completed,
           BookingStatus.Disputed,
         ],
         [BookingStatus.Returned]: [
@@ -913,6 +949,40 @@ export class BookingStatusService {
         note: note || `Cập nhật trạng thái bởi nhà cung cấp`,
       });
 
+      // Side effect: notify assigned STAFF when Studio Owner approves DEPOSIT_PAID -> CONFIRMED
+      if (
+        currentStatus === BookingStatus.DepositPaid &&
+        nextStatus === BookingStatus.Confirmed &&
+        typeof this.bookingsRepository.findSchedules === 'function'
+      ) {
+        try {
+          const shootSchedules = await this.bookingsRepository.findSchedules(
+            {
+              bookingId: booking._id,
+              scheduleType: BookingScheduleType.Photoshoot,
+              status: { $ne: BookingScheduleStatus.Cancelled },
+            },
+            session,
+          );
+          const notifiedStaffUsers = new Set<string>();
+          for (const sch of shootSchedules ?? []) {
+            const linkedUserId = (sch as any)?.assignedStaffSnapshot?.linkedUserId;
+            if (linkedUserId && !notifiedStaffUsers.has(String(linkedUserId))) {
+              notifiedStaffUsers.add(String(linkedUserId));
+              await this.notificationsService.createNotification(
+                String(linkedUserId),
+                'Lịch chụp đã được Chủ Studio xác nhận',
+                `Đơn ${booking.bookingCode} đã được Chủ Studio duyệt. Bạn đã có thể Check-in bắt đầu chụp khi đến giờ hẹn.`,
+                NotificationType.Booking,
+                { bookingId: booking._id, scheduleId: (sch as any)._id },
+              );
+            }
+          }
+        } catch (e) {
+          console.error('Failed to notify assigned staff on CONFIRMED:', e);
+        }
+      }
+
       // Side effect: set awaitingReviewSince timestamp for 48h auto-complete window
       if (nextStatus === BookingStatus.AwaitingReview) {
         booking.awaitingReviewSince = new Date();
@@ -966,30 +1036,38 @@ export class BookingStatusService {
 
       const getStatusLabel = (s: BookingStatus): string => {
         switch (s) {
+          case BookingStatus.Draft:
+            return 'Bản nháp';
+          case BookingStatus.PendingPayment:
+            return 'Chờ thanh toán';
           case BookingStatus.Confirmed:
             return 'Đã xác nhận';
           case BookingStatus.DepositPaid:
-            return 'Đã đặt cọc';
+            return 'Đã đặt cọc · Chờ duyệt';
           case BookingStatus.PickupPending:
-            return 'Đang bàn giao nhận áo';
+            return 'Chờ bàn giao / nhận áo';
           case BookingStatus.PickedUp:
             return 'Đang thuê';
           case BookingStatus.InProgress:
-            return 'Đang thực hiện';
+            return 'Đang thực hiện buổi chụp';
           case BookingStatus.ReturnPending:
-            return 'Đang bàn giao trả áo';
+            return 'Chờ nhận trả đồ';
           case BookingStatus.Returned:
-            return 'Đã trả áo';
+            return 'Đã trả đồ · Chờ hoàn cọc';
           case BookingStatus.AwaitingReview:
-            return 'Chờ xác nhận hoàn tất';
+            return 'Đã giao ảnh · Chờ duyệt';
           case BookingStatus.ComboPhotosApproved:
-            return 'Đã duyệt ảnh';
+            return 'Đã duyệt ảnh · Chờ trả đồ';
           case BookingStatus.Completed:
-            return 'Hoàn thành';
+            return 'Hoàn tất';
           case BookingStatus.Cancelled:
             return 'Đã hủy';
           case BookingStatus.Disputed:
-            return 'Tranh chấp';
+            return 'Đang tranh chấp';
+          case BookingStatus.PartiallyRefunded:
+            return 'Hoàn tiền một phần';
+          case BookingStatus.Refunded:
+            return 'Đã hoàn tiền';
           default:
             return s;
         }
@@ -1015,8 +1093,13 @@ export class BookingStatusService {
         );
 
         if (booking.providerIds && booking.providerIds.length > 0) {
-          const query = this.providerModel.find({ _id: { $in: booking.providerIds } });
-          const rawProviders = typeof (query as any)?.select === 'function' ? await (query as any).select('userId').lean() : await query;
+          const query = this.providerModel.find({
+            _id: { $in: booking.providerIds },
+          });
+          const rawProviders =
+            typeof (query as any)?.select === 'function'
+              ? await (query as any).select('userId').lean()
+              : await query;
           const providers = Array.isArray(rawProviders) ? rawProviders : [];
 
           for (const prov of providers as any[]) {

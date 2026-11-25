@@ -501,6 +501,10 @@ export const LandingHeader: React.FC = () => {
                         <Link to={ROUTES.PROVIDER_DASHBOARD} onClick={() => setIsDropdownOpen(false)} className="lume-account__item lume-account__item--accent">
                           <Sparkles size={16} /><span>Kênh đối tác</span>
                         </Link>
+                      ) : user?.roles?.includes("STAFF") ? (
+                        <Link to={ROUTES.STAFF_PORTAL} onClick={() => setIsDropdownOpen(false)} className="lume-account__item lume-account__item--accent">
+                          <Sparkles size={16} /><span>Lịch chụp của tôi</span>
+                        </Link>
                       ) : (
                         <Link to={ROUTES.PROVIDER_REGISTER} onClick={() => setIsDropdownOpen(false)} className="lume-account__item lume-account__item--accent">
                           <Sparkles size={16} /><span>Đăng ký đối tác</span>

@@ -1,10 +1,12 @@
-    import {
+import {
   BadRequestException,
   forwardRef,
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { StaffAvailabilityService } from '../../bookings/services/staff-availability.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { BookingsService } from '../../bookings/services/bookings.service';
@@ -79,6 +81,8 @@ export class PhotographyQuoteService {
     private readonly bookingScheduleModel: Model<BookingSchedule>,
     @Inject(forwardRef(() => BookingsService))
     private readonly bookingsService: BookingsService,
+    @Optional()
+    private readonly staffAvailabilityService?: StaffAvailabilityService,
   ) {}
 
   /**
@@ -108,10 +112,14 @@ export class PhotographyQuoteService {
       }),
     ]);
     if (!providerDoc) {
-      throw new NotFoundException('Không tìm thấy nhiếp ảnh gia đang hoạt động.');
+      throw new NotFoundException(
+        'Không tìm thấy nhiếp ảnh gia đang hoạt động.',
+      );
     }
     if (!photographyPackage) {
-      throw new NotFoundException('Không tìm thấy gói chụp đang hoạt động của nhiếp ảnh gia này.');
+      throw new NotFoundException(
+        'Không tìm thấy gói chụp đang hoạt động của nhiếp ảnh gia này.',
+      );
     }
 
     const { sessions, errors } = this.parseAndValidatePayload(dto.sessions);
@@ -120,33 +128,72 @@ export class PhotographyQuoteService {
     this.validateSessionTimeStep(photographyPackage, sessions, errors);
     if (errors.length) return this.invalidQuote(photographyPackage, errors);
 
-    const dateKeys = [...new Set(sessions.map((session) => session.providerLocalDate))];
-    const [busyRangesByDate, workingRangesByDate] = await Promise.all([
-      this.getBusyRanges(providerId, dateKeys),
-      this.getWorkingRanges(providerId, dateKeys),
-    ]);
+    const dateKeys = [
+      ...new Set(sessions.map((session) => session.providerLocalDate)),
+    ];
+    const workingRangesByDate = await this.getWorkingRanges(
+      providerId,
+      dateKeys,
+    );
 
+    const workingValidSessions: ParsedSession[] = [];
     for (const session of sessions) {
-      const workingRanges = workingRangesByDate.get(session.providerLocalDate) ?? [];
+      const workingRanges =
+        workingRangesByDate.get(session.providerLocalDate) ?? [];
       if (!workingRanges.some((range) => this.contains(range, session))) {
         errors.push({
           clientId: session.clientId,
           code: 'OUTSIDE_WORKING_HOURS',
-          message: 'Khung giờ chụp phải nằm trọn trong một ca làm việc của nhiếp ảnh gia.',
+          message:
+            'Khung giờ chụp phải nằm trọn trong một ca làm việc của nhiếp ảnh gia.',
         });
         continue;
       }
+      workingValidSessions.push(session);
+    }
 
-      const busyRanges = busyRangesByDate.get(session.providerLocalDate) ?? [];
-      if (busyRanges.some((range) => this.overlaps(range, session))) {
-        errors.push({
+    let staffEvaluation: Awaited<
+      ReturnType<StaffAvailabilityService['evaluateSessions']>
+    > | null = null;
+    if (this.staffAvailabilityService && workingValidSessions.length > 0) {
+      staffEvaluation = await this.staffAvailabilityService.evaluateSessions(
+        providerId,
+        workingValidSessions.map((session) => ({
           clientId: session.clientId,
-          code: 'SLOT_UNAVAILABLE',
-          message: 'Khung giờ này vừa có người khác đặt hoặc đang được giữ chỗ.',
-        });
+          dateKey: session.providerLocalDate,
+          startMin: session.startMinutes,
+          endMin: session.endMinutes,
+        })),
+        { preferredStaffId: dto.preferredStaffId ?? null },
+      );
+      if (!staffEvaluation.valid) {
+        for (const err of staffEvaluation.errors) {
+          errors.push({
+            clientId: err.clientId,
+            code: 'SLOT_UNAVAILABLE',
+            message: err.message,
+          });
+        }
       }
+    } else if (workingValidSessions.length > 0) {
+      const busyRangesByDate = await this.getBusyRanges(providerId, dateKeys);
+      for (const session of workingValidSessions) {
+        const busyRanges = busyRangesByDate.get(session.providerLocalDate) ?? [];
+        if (busyRanges.some((range) => this.overlaps(range, session))) {
+          errors.push({
+            clientId: session.clientId,
+            code: 'SLOT_UNAVAILABLE',
+            message:
+              'Khung giờ này vừa có người khác đặt hoặc đang được giữ chỗ.',
+          });
+        }
+      }
+    }
 
-      const radiusKm = (providerDoc as any)?.photographySettings?.serviceRadiusKm;
+    for (const session of sessions) {
+
+      const radiusKm = (providerDoc as any)?.photographySettings
+        ?.serviceRadiusKm;
       const coordinates = (providerDoc as any)?.address?.geo?.coordinates;
       if (
         radiusKm !== null &&
@@ -216,9 +263,18 @@ export class PhotographyQuoteService {
           endsAt: session.endsAt.toISOString(),
           providerLocalDate: session.providerLocalDate,
           durationMinutes: session.durationMinutes,
-          overtimeMinutes: quote.overtimeMinutesByClientId[session.clientId] ?? 0,
+          overtimeMinutes:
+            quote.overtimeMinutesByClientId[session.clientId] ?? 0,
           locationAddress: session.locationAddress ?? null,
+          remainingStaffCount:
+            staffEvaluation?.remainingByClientId.get(session.clientId) ?? null,
         })),
+        staffCapacity: staffEvaluation
+          ? {
+              activeStaffCount: staffEvaluation.activeStaffCount,
+              effectiveCapacity: staffEvaluation.configuredCapacity,
+            }
+          : null,
         errors: [],
         breakdown: quote.breakdown,
         totals: {
@@ -237,7 +293,9 @@ export class PhotographyQuoteService {
   }
 
   private invalidQuote(
-    photographyPackage: Pick<PhotographyPackage, 'name'> & { _id: Types.ObjectId },
+    photographyPackage: Pick<PhotographyPackage, 'name'> & {
+      _id: Types.ObjectId;
+    },
     errors: PhotographyQuoteSessionError[],
   ) {
     return {
@@ -275,7 +333,10 @@ export class PhotographyQuoteService {
       }
       clientIds.add(item.clientId);
 
-      if (!this.hasExplicitTimeZone(item.startsAt) || !this.hasExplicitTimeZone(item.endsAt)) {
+      if (
+        !this.hasExplicitTimeZone(item.startsAt) ||
+        !this.hasExplicitTimeZone(item.endsAt)
+      ) {
         errors.push({
           clientId: item.clientId,
           code: 'INVALID_TIME',
@@ -286,7 +347,11 @@ export class PhotographyQuoteService {
 
       const startsAt = new Date(item.startsAt);
       const endsAt = new Date(item.endsAt);
-      if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || startsAt >= endsAt) {
+      if (
+        Number.isNaN(startsAt.getTime()) ||
+        Number.isNaN(endsAt.getTime()) ||
+        startsAt >= endsAt
+      ) {
         errors.push({
           clientId: item.clientId,
           code: 'INVALID_TIME',
@@ -309,12 +374,15 @@ export class PhotographyQuoteService {
         errors.push({
           clientId: item.clientId,
           code: 'CROSSES_MIDNIGHT',
-          message: 'Mỗi buổi chụp hiện chỉ được phép trong một ngày theo giờ Việt Nam.',
+          message:
+            'Mỗi buổi chụp hiện chỉ được phép trong một ngày theo giờ Việt Nam.',
         });
         continue;
       }
 
-      const durationMinutes = Math.round((endsAt.getTime() - startsAt.getTime()) / 60000);
+      const durationMinutes = Math.round(
+        (endsAt.getTime() - startsAt.getTime()) / 60000,
+      );
       if (durationMinutes < MINIMUM_SESSION_MINUTES) {
         errors.push({
           clientId: item.clientId,
@@ -347,7 +415,8 @@ export class PhotographyQuoteService {
         errors.push({
           clientId: session.clientId,
           code: 'OVERLAPS_REQUEST',
-          message: 'Buổi chụp này đang chồng thời gian với một buổi khác trong cùng yêu cầu.',
+          message:
+            'Buổi chụp này đang chồng thời gian với một buổi khác trong cùng yêu cầu.',
         });
       }
       if (!latestEnd || session.endsAt > latestEnd.endsAt) latestEnd = session;
@@ -513,10 +582,12 @@ export class PhotographyQuoteService {
     };
 
     for (const schedule of v2Schedules) {
-      if (!schedule.startsAt || !schedule.endsAt || !schedule.providerLocalDate) continue;
+      if (!schedule.startsAt || !schedule.endsAt || !schedule.providerLocalDate)
+        continue;
       const start = this.getBusinessTimeParts(new Date(schedule.startsAt));
       const end = this.getBusinessTimeParts(new Date(schedule.endsAt));
-      if (start.date !== schedule.providerLocalDate || start.date !== end.date) continue;
+      if (start.date !== schedule.providerLocalDate || start.date !== end.date)
+        continue;
       addRange(start.date, { start: start.minutes, end: end.minutes });
     }
     for (const slot of legacyBusySchedules.bookedSlots) {
@@ -526,7 +597,9 @@ export class PhotographyQuoteService {
   }
 
   private contains(range: TimeRange, session: ParsedSession): boolean {
-    return range.start <= session.startMinutes && session.endMinutes <= range.end;
+    return (
+      range.start <= session.startMinutes && session.endMinutes <= range.end
+    );
   }
 
   private overlaps(range: TimeRange, session: ParsedSession): boolean {
@@ -537,7 +610,9 @@ export class PhotographyQuoteService {
     const [startValue, endValue] = value.split('-').map((part) => part.trim());
     const start = this.toMinutes(startValue);
     const end = this.toMinutes(endValue);
-    return start !== null && end !== null && start < end ? { start, end } : null;
+    return start !== null && end !== null && start < end
+      ? { start, end }
+      : null;
   }
 
   private toMinutes(value: string): number | null {
@@ -561,7 +636,8 @@ export class PhotographyQuoteService {
       minute: '2-digit',
       hourCycle: 'h23',
     }).formatToParts(value);
-    const part = (type: string) => parts.find((item) => item.type === type)?.value;
+    const part = (type: string) =>
+      parts.find((item) => item.type === type)?.value;
     const hour = Number(part('hour'));
     const minute = Number(part('minute'));
     return {

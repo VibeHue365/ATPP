@@ -37,7 +37,12 @@ describe('DisputesService', () => {
       findOneAndUpdate: jest.fn(),
     };
     disputeModel = { findOneAndUpdate: jest.fn() };
-    privateEvidenceUploadModel = { insertMany: jest.fn(), countDocuments: jest.fn(), updateMany: jest.fn(), findOne: jest.fn() };
+    privateEvidenceUploadModel = {
+      insertMany: jest.fn(),
+      countDocuments: jest.fn(),
+      updateMany: jest.fn(),
+      findOne: jest.fn(),
+    };
     bookingItemModel = {
       findOne: jest.fn().mockResolvedValue(null),
       updateMany: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
@@ -65,7 +70,10 @@ describe('DisputesService', () => {
       findById: jest.fn(),
       db: { model: jest.fn() },
     };
-    privateStorage = { readPrivateFile: jest.fn(), deletePrivateFile: jest.fn() };
+    privateStorage = {
+      readPrivateFile: jest.fn(),
+      deletePrivateFile: jest.fn(),
+    };
 
     service = new DisputesService(
       incidentModel,
@@ -94,12 +102,17 @@ describe('DisputesService', () => {
   });
 
   it('lets the provider preview their unattached evidence before submitting', async () => {
-    const reference = 'private://dispute-evidence-private/dispute-evidence/2026-07-15/evidence.jpg';
+    const reference =
+      'private://dispute-evidence-private/dispute-evidence/2026-07-15/evidence.jpg';
     incidentModel.findOne.mockResolvedValue(null);
     privateEvidenceUploadModel.findOne.mockResolvedValue({ reference });
     privateStorage.readPrivateFile.mockResolvedValue({ pipe: jest.fn() });
 
-    const result = await service.viewEvidence(customerId.toString(), ['PROVIDER'], reference);
+    const result = await service.viewEvidence(
+      customerId.toString(),
+      ['PROVIDER'],
+      reference,
+    );
 
     expect(privateStorage.readPrivateFile).toHaveBeenCalledWith(
       'dispute-evidence-private',
@@ -202,7 +215,9 @@ describe('DisputesService', () => {
       status: IncidentStatus.Disputed,
     });
     bookingModel.findById.mockResolvedValue(booking);
-    disputeModel.findOneAndUpdate.mockResolvedValue({ status: DisputeStatus.Open });
+    disputeModel.findOneAndUpdate.mockResolvedValue({
+      status: DisputeStatus.Open,
+    });
     policyResolverService.getDisputePolicy.mockResolvedValue({
       allowDisputeAfterCompletedHours: 72,
       requireEvidence: false,
@@ -403,10 +418,12 @@ describe('DisputesService', () => {
       transferRef: 'COMPENSATION_VH-001',
     });
 
-    expect(result).toEqual(expect.objectContaining({
-      success: true,
-      idempotent: true,
-    }));
+    expect(result).toEqual(
+      expect.objectContaining({
+        success: true,
+        idempotent: true,
+      }),
+    );
     expect(bankingService.executeAutoTransfer).not.toHaveBeenCalled();
   });
 });

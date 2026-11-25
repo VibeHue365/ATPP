@@ -28,7 +28,7 @@ export const SYNTHETIC_TEST_MECHANISM_V2: AutoAcceptanceMechanism =
     approvedAt: '2026-10-31T00:00:00.000Z',
     scope: 'AO_DAI_RENTAL',
     description:
-      'Quy chế hoạt động sàn giao dịch VibeHue: Nhà cung cấp cam kết và chấp thuận trước cơ chế giao kết hợp đồng điện tử tự động khi khách hàng đặt thuê áo dài.',
+      'Quy chế hoạt động sàn giao dịch TàGo: Nhà cung cấp cam kết và chấp thuận trước cơ chế giao kết hợp đồng điện tử tự động khi khách hàng đặt thuê áo dài.',
   });
 
 /** Backward-compatibility alias for test fixtures only */

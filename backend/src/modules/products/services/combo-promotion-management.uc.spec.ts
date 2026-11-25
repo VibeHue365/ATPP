@@ -5,7 +5,7 @@ import { ComboPromotionService } from './combo-promotion.service';
 
 type Row = Record<string, any>;
 
-describe('UC-28 Smart Combo Recommendation - combo management (DaiBLL)', () => {
+describe('UC-27 Smart Combo Recommendation - combo management (DaiBLL)', () => {
   const providerId = new Types.ObjectId().toString();
   const otherProviderId = new Types.ObjectId().toString();
   const productId = new Types.ObjectId().toString();
@@ -82,7 +82,7 @@ describe('UC-28 Smart Combo Recommendation - combo management (DaiBLL)', () => {
     };
   }
 
-  it('UT-28 UTCID06 rejects a combo whose Ao Dai product does not exist', async () => {
+  it('UT-27 UTCID06 rejects a combo whose Ao Dai product does not exist', async () => {
     const { service, comboModel } = createService({ product: null });
 
     await expect(service.create(providerId, createDto())).rejects.toThrow(
@@ -91,7 +91,7 @@ describe('UC-28 Smart Combo Recommendation - combo management (DaiBLL)', () => {
     expect(comboModel.create).not.toHaveBeenCalled();
   });
 
-  it('UT-28 UTCID07 rejects a combo that uses another shop Ao Dai product', async () => {
+  it('UT-27 UTCID07 rejects a combo that uses another shop Ao Dai product', async () => {
     const { service } = createService({
       product: { providerId: otherProviderId },
     });
@@ -101,7 +101,7 @@ describe('UC-28 Smart Combo Recommendation - combo management (DaiBLL)', () => {
     );
   });
 
-  it('UT-28 UTCID08 rejects a combo whose photography package does not exist', async () => {
+  it('UT-27 UTCID08 rejects a combo whose photography package does not exist', async () => {
     const { service } = createService({ pkg: null });
 
     await expect(service.create(providerId, createDto())).rejects.toThrow(
@@ -109,7 +109,7 @@ describe('UC-28 Smart Combo Recommendation - combo management (DaiBLL)', () => {
     );
   });
 
-  it('UT-28 UTCID09 rejects a combo that uses another shop photography package', async () => {
+  it('UT-27 UTCID09 rejects a combo that uses another shop photography package', async () => {
     const { service } = createService({ pkg: { providerId: otherProviderId } });
 
     await expect(service.create(providerId, createDto())).rejects.toThrow(
@@ -117,7 +117,7 @@ describe('UC-28 Smart Combo Recommendation - combo management (DaiBLL)', () => {
     );
   });
 
-  it('UT-28 UTCID10 rejects discounts of 0% and 81%', async () => {
+  it('UT-27 UTCID10 rejects discounts of 0% and 81%', async () => {
     const { service, comboModel } = createService();
     const message = 'Phần trăm giảm giá phải từ 1% đến 80%';
 
@@ -130,7 +130,7 @@ describe('UC-28 Smart Combo Recommendation - combo management (DaiBLL)', () => {
     expect(comboModel.create).not.toHaveBeenCalled();
   });
 
-  it('UT-28 UTCID11 accepts 1% and 80% discounts and submits the combo for review', async () => {
+  it('UT-27 UTCID11 accepts 1% and 80% discounts and submits the combo for review', async () => {
     const { service, comboModel } = createService();
 
     await service.create(providerId, createDto({ discountPercent: 1 }));
@@ -148,7 +148,7 @@ describe('UC-28 Smart Combo Recommendation - combo management (DaiBLL)', () => {
     });
   });
 
-  it('UT-28 UTCID12 rejects an update of another shop combo', async () => {
+  it('UT-27 UTCID12 rejects an update of another shop combo', async () => {
     const { service, comboModel } = createService({
       combo: { providerId: otherProviderId },
     });
@@ -161,13 +161,13 @@ describe('UC-28 Smart Combo Recommendation - combo management (DaiBLL)', () => {
     expect(comboModel.findByIdAndUpdate).not.toHaveBeenCalled();
   });
 
-  it('UT-28 UTCID13 returns an edited combo to review and ignores a self-activation request', async () => {
+  it('UT-27 UTCID13 returns an edited combo to review and ignores a self-activation request', async () => {
     const { service, comboModel } = createService();
 
     await service.update(comboId, providerId, {
       discountPercent: 20,
       status: ComboPromotionStatus.Active,
-    } as any);
+    });
 
     expect(comboModel.findByIdAndUpdate).toHaveBeenCalledWith(
       comboId,
@@ -176,7 +176,7 @@ describe('UC-28 Smart Combo Recommendation - combo management (DaiBLL)', () => {
     );
   });
 
-  it('UT-28 UTCID14 rejects deletion of another shop combo', async () => {
+  it('UT-27 UTCID14 rejects deletion of another shop combo', async () => {
     const { service, comboModel } = createService({
       combo: { providerId: otherProviderId },
     });
@@ -187,7 +187,7 @@ describe('UC-28 Smart Combo Recommendation - combo management (DaiBLL)', () => {
     expect(comboModel.findByIdAndDelete).not.toHaveBeenCalled();
   });
 
-  it('UT-28 UTCID15 lists at most 12 active public combos with the highest discount first', async () => {
+  it('UT-27 UTCID15 lists at most 12 active public combos with the highest discount first', async () => {
     const { service, comboModel } = createService();
 
     await service.findActivePublic();

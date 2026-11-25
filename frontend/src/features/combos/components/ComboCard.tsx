@@ -95,7 +95,7 @@ export const ComboCard: React.FC<ComboCardProps> = ({ combo }) => {
         <div className="lume-combo-card-provider-row">
           <div className="lume-combo-card-provider-info">
             <span className="lume-combo-card-provider-name">
-              {combo.providerId?.businessName || 'LUMÉ Partner Studio'}
+              {combo.providerId?.businessName || 'Đối tác Studio TàGo'}
             </span>
             <ShieldCheck size={14} color="#8E1B2E" className="lume-combo-card-verified-icon" />
           </div>

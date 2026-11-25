@@ -84,7 +84,8 @@ describe('P0: Dispute Terms Guardrail & Model A Integrity Test Suite', () => {
           minorDamageFee: 50000,
           moderateDamagePercent: 20,
           severeDamageOrLossPercent: 100,
-          disputeResolutionTerms: 'Sàn VibeHue làm trọng tài hòa giải và bảo lưu tiền cọc.',
+          disputeResolutionTerms:
+            'Sàn VibeHue làm trọng tài hòa giải và bảo lưu tiền cọc.',
         },
         cancellationPolicy: {
           refundRules: [{ daysBeforeRental: 3, refundPercentage: 100 }],
@@ -132,7 +133,8 @@ describe('P0: Dispute Terms Guardrail & Model A Integrity Test Suite', () => {
           minorDamageFee: 50000,
           moderateDamagePercent: 20,
           severeDamageOrLossPercent: 100,
-          disputeResolutionNotes: 'Sàn VibeHue làm trọng tài hòa giải và bảo lưu tiền cọc.',
+          disputeResolutionNotes:
+            'Sàn VibeHue làm trọng tài hòa giải và bảo lưu tiền cọc.',
         },
       };
 
@@ -190,7 +192,9 @@ describe('P0: Dispute Terms Guardrail & Model A Integrity Test Suite', () => {
             if (name === 'providers') {
               return {
                 updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
-                findOne: jest.fn().mockResolvedValue({ userId: 'user_provider_123' }),
+                findOne: jest
+                  .fn()
+                  .mockResolvedValue({ userId: 'user_provider_123' }),
               };
             }
             return {
@@ -215,7 +219,8 @@ describe('P0: Dispute Terms Guardrail & Model A Integrity Test Suite', () => {
         providerId: 'provider_123',
         status: ProviderPolicyReviewStatus.PendingReview,
         damageCompensation: {
-          disputeResolutionTerms: 'Sàn VibeHue làm trọng tài hòa giải và bảo lưu tiền cọc.',
+          disputeResolutionTerms:
+            'Sàn VibeHue làm trọng tài hòa giải và bảo lưu tiền cọc.',
         },
         save: jest.fn().mockResolvedValue(this),
       };
@@ -224,14 +229,20 @@ describe('P0: Dispute Terms Guardrail & Model A Integrity Test Suite', () => {
       const adminUser = { sub: '507f1f77bcf86cd799439011', roles: ['ADMIN'] };
 
       await expect(
-        service.adminReview(adminUser as any, 'pending_v1', { action: 'APPROVE' }),
+        service.adminReview(adminUser as any, 'pending_v1', {
+          action: 'APPROVE',
+        }),
       ).rejects.toThrow(UnprocessableEntityException);
 
       try {
-        await service.adminReview(adminUser as any, 'pending_v1', { action: 'APPROVE' });
+        await service.adminReview(adminUser as any, 'pending_v1', {
+          action: 'APPROVE',
+        });
       } catch (err: any) {
         expect(err.message).toContain('GUARDRAIL_UNAUTHORIZED_DISPUTE_POWERS');
-        expect(mockPendingVersion.status).toBe(ProviderPolicyReviewStatus.PendingReview);
+        expect(mockPendingVersion.status).toBe(
+          ProviderPolicyReviewStatus.PendingReview,
+        );
       }
     });
 
@@ -241,7 +252,8 @@ describe('P0: Dispute Terms Guardrail & Model A Integrity Test Suite', () => {
         providerId: 'provider_123',
         status: ProviderPolicyReviewStatus.PendingReview,
         damageCompensation: {
-          disputeResolutionTerms: 'Sàn VibeHue làm trọng tài hòa giải và bảo lưu tiền cọc.',
+          disputeResolutionTerms:
+            'Sàn VibeHue làm trọng tài hòa giải và bảo lưu tiền cọc.',
         },
         save: jest.fn().mockImplementation(function (this: any) {
           return Promise.resolve(this);
@@ -251,13 +263,19 @@ describe('P0: Dispute Terms Guardrail & Model A Integrity Test Suite', () => {
 
       const adminUser = { sub: '507f1f77bcf86cd799439011', roles: ['ADMIN'] };
 
-      const rejected = await service.adminReview(adminUser as any, 'pending_v2', {
-        action: 'REJECT',
-        reviewNote: 'Điều khoản vi phạm quyền trọng tài của sàn',
-      });
+      const rejected = await service.adminReview(
+        adminUser as any,
+        'pending_v2',
+        {
+          action: 'REJECT',
+          reviewNote: 'Điều khoản vi phạm quyền trọng tài của sàn',
+        },
+      );
 
       expect(rejected.status).toBe(ProviderPolicyReviewStatus.Rejected);
-      expect(rejected.reviewNote).toBe('Điều khoản vi phạm quyền trọng tài của sàn');
+      expect(rejected.reviewNote).toBe(
+        'Điều khoản vi phạm quyền trọng tài của sàn',
+      );
       expect(notifInsertSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'user_provider_123',
@@ -270,7 +288,9 @@ describe('P0: Dispute Terms Guardrail & Model A Integrity Test Suite', () => {
     it('Case G3: Rejects direct API call from non-admin account with ForbiddenException', async () => {
       const nonAdmin = { sub: 'user_02', roles: ['PROVIDER'] };
       await expect(
-        service.adminReview(nonAdmin as any, 'pending_v1', { action: 'APPROVE' }),
+        service.adminReview(nonAdmin as any, 'pending_v1', {
+          action: 'APPROVE',
+        }),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -281,7 +301,8 @@ describe('P0: Dispute Terms Guardrail & Model A Integrity Test Suite', () => {
         versionNumber: 8,
         status: ProviderPolicyReviewStatus.PendingReview,
         damageCompensation: {
-          disputeResolutionTerms: 'Hai bên tự thương lượng dựa trên ảnh giao nhận; VibeHue hỗ trợ hòa giải.',
+          disputeResolutionTerms:
+            'Hai bên tự thương lượng dựa trên ảnh giao nhận; VibeHue hỗ trợ hòa giải.',
         },
         save: jest.fn().mockImplementation(function (this: any) {
           return Promise.resolve(this);
@@ -290,10 +311,14 @@ describe('P0: Dispute Terms Guardrail & Model A Integrity Test Suite', () => {
       policyModel.findById.mockResolvedValue(mockPendingClean);
 
       const adminUser = { sub: '507f1f77bcf86cd799439011', roles: ['ADMIN'] };
-      const approved = await service.adminReview(adminUser as any, 'pending_v3', {
-        action: 'APPROVE',
-        reviewNote: 'Chính sách hợp lệ',
-      });
+      const approved = await service.adminReview(
+        adminUser as any,
+        'pending_v3',
+        {
+          action: 'APPROVE',
+          reviewNote: 'Chính sách hợp lệ',
+        },
+      );
 
       expect(approved.status).toBe(ProviderPolicyReviewStatus.Approved);
       expect(notifInsertSpy).toHaveBeenCalledWith(

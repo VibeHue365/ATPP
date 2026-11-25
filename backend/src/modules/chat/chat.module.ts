@@ -9,14 +9,30 @@ import { ChatService } from './chat.service';
 import { ChatController } from './chat.controller';
 import { CloudinaryService } from './cloudinary.service';
 import { providerModels } from '../providers/providers.module';
+import { Booking, BookingSchema } from '../bookings/schemas/booking.schema';
+import {
+  BookingSchedule,
+  BookingScheduleSchema,
+} from '../bookings/schemas/booking-schedule.schema';
 
 export const chatModels = MongooseModule.forFeature([
   { name: ChatRoom.name, schema: ChatRoomSchema },
   { name: ChatMessage.name, schema: ChatMessageSchema },
 ]);
 
+const chatSupportModels = MongooseModule.forFeature([
+  { name: Booking.name, schema: BookingSchema },
+  { name: BookingSchedule.name, schema: BookingScheduleSchema },
+]);
+
 @Module({
-  imports: [chatModels, providerModels, AuthModule, UsersModule],
+  imports: [
+    chatModels,
+    chatSupportModels,
+    providerModels,
+    AuthModule,
+    UsersModule,
+  ],
   controllers: [ChatController],
   providers: [ChatGateway, ChatService, CloudinaryService],
   exports: [chatModels, ChatGateway, ChatService, CloudinaryService],

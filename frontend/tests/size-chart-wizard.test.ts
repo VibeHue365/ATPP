@@ -9,7 +9,10 @@ beforeEach(() => vi.clearAllMocks());
 function fixture(policy: number | undefined, isNew = false, wizardStep = 1, createdDraftId: string | null = isNew ? 'p' : null) {
   const values: Record<string, unknown> = {
     editingProduct: isNew ? null : { _id: 'p', sizeChartPolicyVersion: policy }, createdDraftId,
-    prodName: 'Áo kiểm thử', prodCategoryId: 'c', prodBasePrice: '100', prodDepositAmount: '10',
+    prodName: 'Áo kiểm thử', prodCategoryId: 'c',
+    // step 1 rules (code of 24/11/2026): daily price 50,000-10,000,000 VND in steps of 1,000; deposit 0 or >= 20,000
+    prodBasePrice: '100000', prodDepositAmount: '20000',
+    prodReplacementValue: '',
     prodDescription: '', prodImages: ['/fixture.jpg'], prodColorImages: {}, prodVideos: [], prodStyle: 'traditional',
     prodOccasions: [], prodStyleCategoryIds: [], prodEventCategoryIds: [], prodCustomTags: [], prodStatus: 'DRAFT',
     variants: [], wizardStep, editInvSummary: [], categories: [], styleCategories: [], eventCategories: [], activeTagCodes: ['TRUYEN_THONG'],
@@ -64,6 +67,6 @@ it('checks chart size coverage without altering existing product payload fields'
   expect(productsApi.update).not.toHaveBeenCalled();
   vi.mocked(sizeChartApi.get).mockResolvedValue({ version: 2, sizeChart: chart, sizes: ['M'] });
   await actions.handleWizardFinish();
-  expect(productsApi.update).toHaveBeenCalledWith('p', expect.objectContaining({ basePrice: 100, depositAmount: 10, images: ['/fixture.jpg'] }));
+  expect(productsApi.update).toHaveBeenCalledWith('p', expect.objectContaining({ basePrice: 100000, depositAmount: 20000, images: ['/fixture.jpg'] }));
   expect(toast.success).toHaveBeenCalled();
 });

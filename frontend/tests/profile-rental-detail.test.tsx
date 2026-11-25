@@ -122,6 +122,7 @@ describe('ProfileRentalDetailPage address object regression test', () => {
     expect(screen.getByText('Lụa gấm')).toBeDefined();
   });
 
+  // full ProfilePage with lazy parts: allow 5 s per step (the coverage run is several times slower)
   it('renders ProfilePage and navigates to detail view on click without white screen', async () => {
     render(
       <MemoryRouter initialEntries={['/dashboard/profile?tab=schedule&category=rental']}>
@@ -131,14 +132,14 @@ describe('ProfileRentalDetailPage address object regression test', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Ao dai rong')).toBeDefined();
-    });
+    }, { timeout: 5000 });
 
     const detailBtn = screen.getByRole('button', { name: /Chi tiết/i });
     fireEvent.click(detailBtn);
 
     await waitFor(() => {
       expect(screen.getByText('Xem chi tiết')).toBeDefined();
-    });
+    }, { timeout: 5000 });
 
     const viewDetailBtn = screen.getByText('Xem chi tiết');
     fireEvent.click(viewDetailBtn);
@@ -146,7 +147,7 @@ describe('ProfileRentalDetailPage address object regression test', () => {
     await waitFor(() => {
       expect(screen.getByText('Chi tiết lịch thuê')).toBeDefined();
       expect(screen.getByText('15 Lê Lợi, Phú Hội, TP. Huế')).toBeDefined();
-    });
+    }, { timeout: 5000 });
   });
 });
 
@@ -183,7 +184,7 @@ describe('Customer Pickup Inspection and Reporting Workflow Suite', () => {
     expect(screen.getAllByText(/Từ chối nhận áo/i).length).toBeGreaterThan(0);
   });
 
-  it('2. READY_FOR_PICKUP displays inspection area and all 3 action buttons', () => {
+  it('2. READY_FOR_PICKUP without handoverPhotos hides inspection area and shows waiting notice', () => {
     const readyBooking = {
       ...mockBookingWithObjectAddress,
       status: 'READY_FOR_PICKUP',
@@ -197,11 +198,9 @@ describe('Customer Pickup Inspection and Reporting Workflow Suite', () => {
       />
     );
 
-    expect(screen.getByText('Kiểm tra áo khi nhận')).toBeDefined();
-    expect(screen.getByText(/Shop chưa cung cấp ảnh bàn giao/i)).toBeDefined();
-    expect(screen.getAllByText(/Áo đúng tình trạng/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Có vấn đề nhưng vẫn nhận/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Từ chối nhận áo/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText('Kiểm tra áo khi nhận')).toBeNull();
+    expect(screen.getByText(/Cửa hàng đang chuẩn bị bàn giao áo dài/i)).toBeDefined();
+    expect(screen.getByText(/Chụp \/ Tải CCCD \(2 mặt\)/i)).toBeDefined();
   });
 
   it('reconciles private pickup evidence when the booking payload has no handover photos', async () => {
@@ -600,6 +599,14 @@ describe('Customer Pickup Inspection and Reporting Workflow Suite', () => {
           ...mockBookingWithObjectAddress,
           status: 'CONFIRMED',
           rentalFrom: futureDate,
+          // the page reads the pickup date from the item first; the fixture item date (24/11/2026) is now in the past
+          items: [
+            {
+              ...mockBookingWithObjectAddress.items[0],
+              rentalFrom: futureDate,
+              shootDate: null,
+            },
+          ],
         }}
         onBack={() => {}}
       />

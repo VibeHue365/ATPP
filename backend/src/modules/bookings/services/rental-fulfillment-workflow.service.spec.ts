@@ -26,13 +26,24 @@ describe('RentalFulfillmentWorkflowService', () => {
     itemType: 'PRODUCT',
     rentalFulfillment: { status: 'PENDING' },
   };
-  const providerUser = { sub: providerUserId.toString(), roles: ['PROVIDER'] } as any;
+  const providerUser = {
+    sub: providerUserId.toString(),
+    roles: ['PROVIDER'],
+  } as any;
 
   function setup(providerMatch = true, withNotifications = false) {
     const inventoryItemModel = {
       updateOne: jest.fn(() => ({ exec: async () => ({ modifiedCount: 1 }) })),
       updateMany: jest.fn(() => ({ exec: async () => ({ modifiedCount: 1 }) })),
-      find: jest.fn(() => query([{ _id: new Types.ObjectId(), status: 'CLEANING', conditionStatus: 'GOOD' }])),
+      find: jest.fn(() =>
+        query([
+          {
+            _id: new Types.ObjectId(),
+            status: 'CLEANING',
+            conditionStatus: 'GOOD',
+          },
+        ]),
+      ),
     };
     const reservationModel = {
       find: jest.fn(() => query([{ inventoryItemId: new Types.ObjectId() }])),
@@ -65,17 +76,28 @@ describe('RentalFulfillmentWorkflowService', () => {
       updateMany: jest.fn(() => ({ exec: async () => ({ modifiedCount: 1 }) })),
     };
     const fulfillment = {
-      markReady: jest.fn(async (input) => ({ ...input, status: 'READY_FOR_PICKUP' })),
+      markReady: jest.fn(async (input) => ({
+        ...input,
+        status: 'READY_FOR_PICKUP',
+      })),
       submitPickupEvidence: jest.fn(),
-      markReturned: jest.fn(async (input) => ({ ...input, status: 'RETURNED' })),
-      confirmNoIncident: jest.fn(async (input) => ({ ...input, status: 'RETURNED' })),
+      markReturned: jest.fn(async (input) => ({
+        ...input,
+        status: 'RETURNED',
+      })),
+      confirmNoIncident: jest.fn(async (input) => ({
+        ...input,
+        status: 'RETURNED',
+      })),
       markCompleted: jest.fn(),
     };
     const slotLeaseService = {
       reconcileTurnaroundLeases: jest.fn().mockResolvedValue(undefined),
     };
     const timeEngineService = {
-      calculateReturnAvailableFrom: jest.fn().mockReturnValue(new Date('2026-11-20T10:00:00.000Z')),
+      calculateReturnAvailableFrom: jest
+        .fn()
+        .mockReturnValue(new Date('2026-11-20T10:00:00.000Z')),
     };
     const notifications = { emitBookingUpdate: jest.fn() };
 
@@ -107,43 +129,76 @@ describe('RentalFulfillmentWorkflowService', () => {
   it('allows only the provider that owns this booking item to mark it ready', async () => {
     const { service, fulfillment } = setup(true);
 
-    await service.markReady(bookingId.toString(), itemId.toString(), providerUser, 'Ready at shop');
+    await service.markReady(
+      bookingId.toString(),
+      itemId.toString(),
+      providerUser,
+      'Ready at shop',
+    );
 
-    expect(fulfillment.markReady).toHaveBeenCalledWith(expect.objectContaining({
-      itemId: itemId.toString(),
-      actor: { id: providerUserId.toString(), role: 'PROVIDER' },
-    }));
+    expect(fulfillment.markReady).toHaveBeenCalledWith(
+      expect.objectContaining({
+        itemId: itemId.toString(),
+        actor: { id: providerUserId.toString(), role: 'PROVIDER' },
+      }),
+    );
   });
 
   it('rejects a provider that does not own this booking item', async () => {
     const { service } = setup(false);
-    const otherProviderUser = { sub: otherProviderUserId.toString(), roles: ['PROVIDER'] } as any;
+    const otherProviderUser = {
+      sub: otherProviderUserId.toString(),
+      roles: ['PROVIDER'],
+    } as any;
 
-    await expect(service.markReady(bookingId.toString(), itemId.toString(), otherProviderUser)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.markReady(
+        bookingId.toString(),
+        itemId.toString(),
+        otherProviderUser,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('accepts evidence only when every private file belongs to the actor and item', async () => {
     const { service, evidenceModel } = setup(true);
     evidenceModel.find.mockReturnValue(query([{ fileId: 'owned-file' }]));
 
-    await service.markPickedUp(bookingId.toString(), itemId.toString(), providerUser, { fileIds: ['owned-file'] });
+    await service.markPickedUp(
+      bookingId.toString(),
+      itemId.toString(),
+      providerUser,
+      { fileIds: ['owned-file'] },
+    );
 
-    expect(evidenceModel.find).toHaveBeenCalledWith(expect.objectContaining({
-      bookingId,
-      bookingItemId: itemId,
-      uploadedBy: providerUserId,
-    }));
+    expect(evidenceModel.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bookingId,
+        bookingItemId: itemId,
+        uploadedBy: providerUserId,
+      }),
+    );
   });
 
   it('consumes pickup evidence so it cannot be reused for a later handover', async () => {
     const { service, evidenceModel } = setup(true);
     evidenceModel.find.mockReturnValue(query([{ fileId: 'owned-file' }]));
 
-    await service.markPickedUp(bookingId.toString(), itemId.toString(), providerUser, { fileIds: ['owned-file'] });
+    await service.markPickedUp(
+      bookingId.toString(),
+      itemId.toString(),
+      providerUser,
+      { fileIds: ['owned-file'] },
+    );
 
     expect(evidenceModel.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ fileId: { $in: ['owned-file'] }, consumedAt: null }),
-      expect.objectContaining({ $set: expect.objectContaining({ consumedFor: 'PICKUP' }) }),
+      expect.objectContaining({
+        fileId: { $in: ['owned-file'] },
+        consumedAt: null,
+      }),
+      expect.objectContaining({
+        $set: expect.objectContaining({ consumedFor: 'PICKUP' }),
+      }),
     );
   });
 
@@ -161,7 +216,12 @@ describe('RentalFulfillmentWorkflowService', () => {
   it('passes an allowed final inventory state only after authorization', async () => {
     const { service, fulfillment } = setup(true);
 
-    await service.markCompleted(bookingId.toString(), itemId.toString(), providerUser, RentalInventoryStatus.Available);
+    await service.markCompleted(
+      bookingId.toString(),
+      itemId.toString(),
+      providerUser,
+      RentalInventoryStatus.Available,
+    );
 
     expect(fulfillment.markCompleted).toHaveBeenCalledWith(
       expect.objectContaining({ itemId: itemId.toString() }),
@@ -206,12 +266,15 @@ describe('RentalFulfillmentWorkflowService', () => {
     });
 
     it('markCleaningCompleted succeeds when item is CLEANING, updates to AVAILABLE, clears operationalAvailableFrom and reconciles leases', async () => {
-      const { service, inventoryItemModel, itemModel, slotLeaseService } = setup(true);
+      const { service, inventoryItemModel, itemModel, slotLeaseService } =
+        setup(true);
       // Item fulfillment status is RETURNED
-      itemModel.findOne.mockReturnValue(query({
-        ...item,
-        rentalFulfillment: { status: 'RETURNED' },
-      }));
+      itemModel.findOne.mockReturnValue(
+        query({
+          ...item,
+          rentalFulfillment: { status: 'RETURNED' },
+        }),
+      );
 
       const res = await service.markCleaningCompleted(
         bookingId.toString(),
@@ -222,7 +285,10 @@ describe('RentalFulfillmentWorkflowService', () => {
 
       expect(res.message).toContain('thành công');
       expect(inventoryItemModel.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({ status: 'CLEANING', conditionStatus: { $nin: ['RETIRED', 'LOCKED', 'MINOR_DAMAGE'] } }),
+        expect.objectContaining({
+          status: 'CLEANING',
+          conditionStatus: { $nin: ['RETIRED', 'LOCKED', 'MINOR_DAMAGE'] },
+        }),
         expect.objectContaining({
           $set: expect.objectContaining({
             status: 'AVAILABLE',
@@ -231,7 +297,10 @@ describe('RentalFulfillmentWorkflowService', () => {
           }),
         }),
       );
-      expect(slotLeaseService.reconcileTurnaroundLeases).toHaveBeenCalledWith(itemId, expect.any(Date));
+      expect(slotLeaseService.reconcileTurnaroundLeases).toHaveBeenCalledWith(
+        itemId,
+        expect.any(Date),
+      );
       expect(itemModel.updateOne).toHaveBeenCalledWith(
         expect.objectContaining({ _id: itemId }),
         expect.objectContaining({
@@ -245,18 +314,25 @@ describe('RentalFulfillmentWorkflowService', () => {
     });
 
     it('markCleaningCompleted rejects with ConflictException if repeated call (modifiedCount === 0), no duplicate history', async () => {
-      const { service, inventoryItemModel, itemModel, slotLeaseService } = setup(true);
-      itemModel.findOne.mockReturnValue(query({
-        ...item,
-        rentalFulfillment: { status: 'RETURNED' },
-      }));
+      const { service, inventoryItemModel, itemModel, slotLeaseService } =
+        setup(true);
+      itemModel.findOne.mockReturnValue(
+        query({
+          ...item,
+          rentalFulfillment: { status: 'RETURNED' },
+        }),
+      );
       // Simulate modifiedCount 0 (already marked AVAILABLE previously)
       inventoryItemModel.updateMany.mockReturnValue({
         exec: async () => ({ modifiedCount: 0 }),
       });
 
       await expect(
-        service.markCleaningCompleted(bookingId.toString(), itemId.toString(), providerUser),
+        service.markCleaningCompleted(
+          bookingId.toString(),
+          itemId.toString(),
+          providerUser,
+        ),
       ).rejects.toThrow(ConflictException);
 
       expect(slotLeaseService.reconcileTurnaroundLeases).not.toHaveBeenCalled();
@@ -264,18 +340,31 @@ describe('RentalFulfillmentWorkflowService', () => {
     });
 
     it('markCleaningCompleted rejects with ConflictException if item is MAINTENANCE or RETIRED, zero lease release', async () => {
-      const { service, inventoryItemModel, itemModel, slotLeaseService } = setup(true);
-      itemModel.findOne.mockReturnValue(query({
-        ...item,
-        rentalFulfillment: { status: 'RETURNED' },
-      }));
+      const { service, inventoryItemModel, itemModel, slotLeaseService } =
+        setup(true);
+      itemModel.findOne.mockReturnValue(
+        query({
+          ...item,
+          rentalFulfillment: { status: 'RETURNED' },
+        }),
+      );
       // Item is currently in MAINTENANCE
-      inventoryItemModel.find.mockReturnValue(query([
-        { _id: new Types.ObjectId(), status: 'MAINTENANCE', conditionStatus: 'GOOD' },
-      ]));
+      inventoryItemModel.find.mockReturnValue(
+        query([
+          {
+            _id: new Types.ObjectId(),
+            status: 'MAINTENANCE',
+            conditionStatus: 'GOOD',
+          },
+        ]),
+      );
 
       await expect(
-        service.markCleaningCompleted(bookingId.toString(), itemId.toString(), providerUser),
+        service.markCleaningCompleted(
+          bookingId.toString(),
+          itemId.toString(),
+          providerUser,
+        ),
       ).rejects.toThrow(ConflictException);
 
       expect(inventoryItemModel.updateMany).not.toHaveBeenCalled();
@@ -284,13 +373,18 @@ describe('RentalFulfillmentWorkflowService', () => {
 
     describe('Transition-level Returned status guards (Requirement 2)', () => {
       it('AVAILABLE + GOOD -> Returned -> CLEANING có operationalAvailableFrom', async () => {
-        const { service, inventoryItemModel, reservationModel, evidenceModel } = setup(true);
-        evidenceModel.find.mockReturnValue(query([{ fileId: 'return-file-1' }]));
+        const { service, inventoryItemModel, reservationModel, evidenceModel } =
+          setup(true);
+        evidenceModel.find.mockReturnValue(
+          query([{ fileId: 'return-file-1' }]),
+        );
 
         const goodItemId = new Types.ObjectId();
-        reservationModel.find.mockReturnValue(query([{ inventoryItemId: goodItemId }]));
+        reservationModel.find.mockReturnValue(
+          query([{ inventoryItemId: goodItemId }]),
+        );
 
-        let storedItem: any = {
+        const storedItem: any = {
           _id: goodItemId,
           status: 'AVAILABLE',
           conditionStatus: 'GOOD',
@@ -298,16 +392,24 @@ describe('RentalFulfillmentWorkflowService', () => {
           activeTurnaroundBookingItemId: null,
         };
 
-        inventoryItemModel.updateOne.mockImplementation((filter: any, update: any) => {
-          const statusOk = !filter.status?.$ne || storedItem.status !== filter.status.$ne;
-          const conditionOk = !filter.conditionStatus?.$nin || !filter.conditionStatus.$nin.includes(storedItem.conditionStatus);
-          const match = filter._id.toString() === storedItem._id.toString() && statusOk && conditionOk;
-          if (match) {
-            Object.assign(storedItem, update.$set);
-            return { exec: async () => ({ modifiedCount: 1 }) };
-          }
-          return { exec: async () => ({ modifiedCount: 0 }) };
-        });
+        inventoryItemModel.updateOne.mockImplementation(
+          (filter: any, update: any) => {
+            const statusOk =
+              !filter.status?.$ne || storedItem.status !== filter.status.$ne;
+            const conditionOk =
+              !filter.conditionStatus?.$nin ||
+              !filter.conditionStatus.$nin.includes(storedItem.conditionStatus);
+            const match =
+              filter._id.toString() === storedItem._id.toString() &&
+              statusOk &&
+              conditionOk;
+            if (match) {
+              Object.assign(storedItem, update.$set);
+              return { exec: async () => ({ modifiedCount: 1 }) };
+            }
+            return { exec: async () => ({ modifiedCount: 0 }) };
+          },
+        );
 
         await service.markReturned(
           bookingId.toString(),
@@ -331,13 +433,18 @@ describe('RentalFulfillmentWorkflowService', () => {
       });
 
       it('MAINTENANCE + MINOR_DAMAGE -> Returned -> vẫn MAINTENANCE, không thay operationalAvailableFrom', async () => {
-        const { service, inventoryItemModel, reservationModel, evidenceModel } = setup(true);
-        evidenceModel.find.mockReturnValue(query([{ fileId: 'return-file-2' }]));
+        const { service, inventoryItemModel, reservationModel, evidenceModel } =
+          setup(true);
+        evidenceModel.find.mockReturnValue(
+          query([{ fileId: 'return-file-2' }]),
+        );
 
         const damagedItemId = new Types.ObjectId();
-        reservationModel.find.mockReturnValue(query([{ inventoryItemId: damagedItemId }]));
+        reservationModel.find.mockReturnValue(
+          query([{ inventoryItemId: damagedItemId }]),
+        );
 
-        let storedItem: any = {
+        const storedItem: any = {
           _id: damagedItemId,
           status: 'MAINTENANCE',
           conditionStatus: 'MINOR_DAMAGE',
@@ -345,16 +452,24 @@ describe('RentalFulfillmentWorkflowService', () => {
           activeTurnaroundBookingItemId: null,
         };
 
-        inventoryItemModel.updateOne.mockImplementation((filter: any, update: any) => {
-          const statusOk = !filter.status?.$ne || storedItem.status !== filter.status.$ne;
-          const conditionOk = !filter.conditionStatus?.$nin || !filter.conditionStatus.$nin.includes(storedItem.conditionStatus);
-          const match = filter._id.toString() === storedItem._id.toString() && statusOk && conditionOk;
-          if (match) {
-            Object.assign(storedItem, update.$set);
-            return { exec: async () => ({ modifiedCount: 1 }) };
-          }
-          return { exec: async () => ({ modifiedCount: 0 }) };
-        });
+        inventoryItemModel.updateOne.mockImplementation(
+          (filter: any, update: any) => {
+            const statusOk =
+              !filter.status?.$ne || storedItem.status !== filter.status.$ne;
+            const conditionOk =
+              !filter.conditionStatus?.$nin ||
+              !filter.conditionStatus.$nin.includes(storedItem.conditionStatus);
+            const match =
+              filter._id.toString() === storedItem._id.toString() &&
+              statusOk &&
+              conditionOk;
+            if (match) {
+              Object.assign(storedItem, update.$set);
+              return { exec: async () => ({ modifiedCount: 1 }) };
+            }
+            return { exec: async () => ({ modifiedCount: 0 }) };
+          },
+        );
 
         await service.markReturned(
           bookingId.toString(),
@@ -378,31 +493,54 @@ describe('RentalFulfillmentWorkflowService', () => {
       });
 
       it('LOCKED / RETIRED -> Returned -> không thay đổi', async () => {
-        const { service, inventoryItemModel, reservationModel, evidenceModel } = setup(true);
-        evidenceModel.find.mockReturnValue(query([{ fileId: 'return-file-3' }]));
+        const { service, inventoryItemModel, reservationModel, evidenceModel } =
+          setup(true);
+        evidenceModel.find.mockReturnValue(
+          query([{ fileId: 'return-file-3' }]),
+        );
 
         const lockedItemId = new Types.ObjectId();
         const retiredItemId = new Types.ObjectId();
         reservationModel.find.mockReturnValue(
-          query([{ inventoryItemId: lockedItemId }, { inventoryItemId: retiredItemId }]),
+          query([
+            { inventoryItemId: lockedItemId },
+            { inventoryItemId: retiredItemId },
+          ]),
         );
 
         const storedItems: any[] = [
-          { _id: lockedItemId, status: 'AVAILABLE', conditionStatus: 'LOCKED', operationalAvailableFrom: null },
-          { _id: retiredItemId, status: 'AVAILABLE', conditionStatus: 'RETIRED', operationalAvailableFrom: null },
+          {
+            _id: lockedItemId,
+            status: 'AVAILABLE',
+            conditionStatus: 'LOCKED',
+            operationalAvailableFrom: null,
+          },
+          {
+            _id: retiredItemId,
+            status: 'AVAILABLE',
+            conditionStatus: 'RETIRED',
+            operationalAvailableFrom: null,
+          },
         ];
 
-        inventoryItemModel.updateOne.mockImplementation((filter: any, update: any) => {
-          const item = storedItems.find((it) => it._id.toString() === filter._id.toString());
-          if (!item) return { exec: async () => ({ modifiedCount: 0 }) };
-          const statusOk = !filter.status?.$ne || item.status !== filter.status.$ne;
-          const conditionOk = !filter.conditionStatus?.$nin || !filter.conditionStatus.$nin.includes(item.conditionStatus);
-          if (statusOk && conditionOk) {
-            Object.assign(item, update.$set);
-            return { exec: async () => ({ modifiedCount: 1 }) };
-          }
-          return { exec: async () => ({ modifiedCount: 0 }) };
-        });
+        inventoryItemModel.updateOne.mockImplementation(
+          (filter: any, update: any) => {
+            const item = storedItems.find(
+              (it) => it._id.toString() === filter._id.toString(),
+            );
+            if (!item) return { exec: async () => ({ modifiedCount: 0 }) };
+            const statusOk =
+              !filter.status?.$ne || item.status !== filter.status.$ne;
+            const conditionOk =
+              !filter.conditionStatus?.$nin ||
+              !filter.conditionStatus.$nin.includes(item.conditionStatus);
+            if (statusOk && conditionOk) {
+              Object.assign(item, update.$set);
+              return { exec: async () => ({ modifiedCount: 1 }) };
+            }
+            return { exec: async () => ({ modifiedCount: 0 }) };
+          },
+        );
 
         await service.markReturned(
           bookingId.toString(),
@@ -437,7 +575,9 @@ describe('RentalFulfillmentWorkflowService', () => {
         const timeEngine = new TimeSlotEngineService();
         const mockAvailability = {
           find: jest.fn().mockImplementation((query: any) => {
-            const excludedByCondition = query.conditionStatus?.$nin?.includes(damagedItem.conditionStatus);
+            const excludedByCondition = query.conditionStatus?.$nin?.includes(
+              damagedItem.conditionStatus,
+            );
             if (excludedByCondition) return { exec: async () => [] };
             const matchesStatus = query.$or?.some((cond: any) => {
               if (cond.status === damagedItem.status) return true;
@@ -449,12 +589,39 @@ describe('RentalFulfillmentWorkflowService', () => {
 
         const testProductId = new Types.ObjectId();
         const prodAvailService = new ProductAvailabilityService(
-          { findPublicById: jest.fn().mockResolvedValue({ _id: testProductId, providerId }) } as any,
+          {
+            findPublicById: jest
+              .fn()
+              .mockResolvedValue({ _id: testProductId, providerId }),
+          } as any,
           mockAvailability as any,
-          { find: jest.fn().mockReturnValue({ select: () => ({ lean: () => ({ exec: async () => [] }) }) }) } as any,
-          { find: jest.fn().mockReturnValue({ lean: () => ({ exec: async () => [] }) }) } as any,
-          { findById: jest.fn().mockReturnValue({ select: () => ({ lean: () => ({ exec: async () => ({ _id: providerId, useSlotLeases: false }) }) }) }) } as any,
-          { find: jest.fn().mockReturnValue({ select: () => ({ lean: () => ({ exec: async () => [] }) }) }) } as any,
+          {
+            find: jest.fn().mockReturnValue({
+              select: () => ({ lean: () => ({ exec: async () => [] }) }),
+            }),
+          } as any,
+          {
+            find: jest
+              .fn()
+              .mockReturnValue({ lean: () => ({ exec: async () => [] }) }),
+          } as any,
+          {
+            findById: jest.fn().mockReturnValue({
+              select: () => ({
+                lean: () => ({
+                  exec: async () => ({
+                    _id: providerId,
+                    useSlotLeases: false,
+                  }),
+                }),
+              }),
+            }),
+          } as any,
+          {
+            find: jest.fn().mockReturnValue({
+              select: () => ({ lean: () => ({ exec: async () => [] }) }),
+            }),
+          } as any,
           timeEngine,
         );
 

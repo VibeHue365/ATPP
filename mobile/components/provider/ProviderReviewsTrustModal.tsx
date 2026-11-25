@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   View,
   Text,
   StyleSheet,
@@ -11,9 +13,10 @@ import {
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { providerApi } from '@/apis/providerApi';
-import { TagoAlert } from '@/components/ui/TagoAlertModal';
+import { TagoConfirmOverlay } from '@/components/ui/TagoAlertModal';
 import { useToast } from '@/contexts/ToastContext';
 import { FontFamily } from '@/constants/theme';
+import { bookingStatus } from '@/utils/booking';
 
 interface ProviderReviewsTrustModalProps {
   visible: boolean;
@@ -35,6 +38,8 @@ export function ProviderReviewsTrustModal({
   const [replyingId, setReplyingId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [reportTargetId, setReportTargetId] = useState<string | null>(null);
+  const [reportingReview, setReportingReview] = useState(false);
 
   // Customer Trust state
   const [selectedBookingForRate, setSelectedBookingForRate] = useState<any | null>(null);
@@ -80,25 +85,21 @@ export function ProviderReviewsTrustModal({
   };
 
   const handleReportReview = (reviewId: string) => {
-    TagoAlert.alert(
-      'Báo cáo đánh giá vi phạm',
-      'Báo cáo đánh giá này có ngôn từ không phù hợp hoặc spam lên hệ thống Admin?',
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Gửi báo cáo',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await providerApi.reportReview(reviewId, 'Spam, ngôn từ không phù hợp');
-              show('Đã gửi báo cáo vi phạm lên hệ thống Admin!', 'success');
-            } catch {
-              show('Không thể gửi báo cáo đánh giá', 'error');
-            }
-          },
-        },
-      ],
-    );
+    setReportTargetId(reviewId);
+  };
+
+  const confirmReportReview = async () => {
+    if (!reportTargetId) return;
+    setReportingReview(true);
+    try {
+      await providerApi.reportReview(reportTargetId, 'Spam, ngôn từ không phù hợp');
+      setReportTargetId(null);
+      show('Đã gửi báo cáo vi phạm lên hệ thống Admin!', 'success');
+    } catch {
+      show('Không thể gửi báo cáo đánh giá', 'error');
+    } finally {
+      setReportingReview(false);
+    }
   };
 
   const handleCheckCustomerTrust = async (customerId?: string) => {
@@ -159,7 +160,10 @@ export function ProviderReviewsTrustModal({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
+      <KeyboardAvoidingView
+        style={styles.backdrop}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
         <View style={styles.sheet}>
@@ -416,7 +420,7 @@ export function ProviderReviewsTrustModal({
                         <View style={{ flex: 1 }}>
                           <Text style={styles.reviewerName}>{custName}</Text>
                           <Text style={styles.customerSub}>
-                            Đơn {code} • Trạng thái: {b.status}
+                            Đơn {code} • Trạng thái: {bookingStatus[b.status]?.label || b.status}
                           </Text>
                         </View>
 
@@ -450,7 +454,28 @@ export function ProviderReviewsTrustModal({
             </ScrollView>
           )}
         </View>
-      </View>
+
+        <TagoConfirmOverlay
+          visible={Boolean(reportTargetId)}
+          title="Báo cáo đánh giá vi phạm"
+          message="Báo cáo đánh giá này có ngôn từ không phù hợp hoặc spam lên hệ thống Admin?"
+          loading={reportingReview}
+          onClose={() => {
+            if (!reportingReview) setReportTargetId(null);
+          }}
+          buttons={[
+            {
+              text: 'Hủy',
+              style: 'cancel',
+            },
+            {
+              text: 'Gửi báo cáo',
+              style: 'destructive',
+              onPress: () => void confirmReportReview(),
+            },
+          ]}
+        />
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -506,6 +531,7 @@ const styles = StyleSheet.create({
   },
   tabRow: {
     flexDirection: 'row',
+    flexShrink: 0,
     paddingHorizontal: 20,
     paddingVertical: 12,
     gap: 10,

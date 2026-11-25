@@ -55,7 +55,8 @@ export class AdminBannersController {
     }),
   )
   async uploadBanner(@UploadedFile() file: Express.Multer.File | undefined) {
-    if (!file) throw new BadRequestException('Vui lòng chọn file ảnh để tải lên');
+    if (!file)
+      throw new BadRequestException('Vui lòng chọn file ảnh để tải lên');
     return this.bannersService.uploadBannerImage(file);
   }
 
@@ -71,6 +72,8 @@ export class AdminBannersController {
 
   @Delete(':placement')
   async deleteBanner(@Param('placement') placement: string) {
-    return this.bannersService.deleteBanner(placement.toUpperCase() as BannerPlacement);
+    return this.bannersService.deleteBanner(
+      placement.toUpperCase() as BannerPlacement,
+    );
   }
 }

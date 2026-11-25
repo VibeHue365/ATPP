@@ -45,7 +45,9 @@ export class CategoriesService {
     this.publicCache.clear();
   }
 
-  async findPublic(query: QueryCategoriesDto): Promise<Record<string, unknown>> {
+  async findPublic(
+    query: QueryCategoriesDto,
+  ): Promise<Record<string, unknown>> {
     const cacheKey = `public:${JSON.stringify(query)}`;
     const now = Date.now();
     const cached = this.publicCache.get(cacheKey);
@@ -67,7 +69,10 @@ export class CategoriesService {
     const result = {
       data: query.includeTree ? this.toTree(items) : items,
     };
-    this.publicCache.set(cacheKey, { data: result, expiresAt: now + this.CACHE_TTL_MS });
+    this.publicCache.set(cacheKey, {
+      data: result,
+      expiresAt: now + this.CACHE_TTL_MS,
+    });
     return result;
   }
 
@@ -98,7 +103,10 @@ export class CategoriesService {
     }
 
     const result = this.toResponse(category);
-    this.publicCache.set(cacheKey, { data: result, expiresAt: now + this.CACHE_TTL_MS });
+    this.publicCache.set(cacheKey, {
+      data: result,
+      expiresAt: now + this.CACHE_TTL_MS,
+    });
     return result;
   }
 
@@ -407,12 +415,18 @@ export class CategoriesService {
       .lean();
 
     const result = categories.map((category) => this.toResponse(category));
-    this.publicCache.set(cacheKey, { data: result, expiresAt: now + this.CACHE_TTL_MS });
+    this.publicCache.set(cacheKey, {
+      data: result,
+      expiresAt: now + this.CACHE_TTL_MS,
+    });
     return result;
   }
 
   async assertActiveProductCategory(categoryId: string): Promise<void> {
-    await this.assertActiveCategory(categoryId, ServiceCategoryType.AodaiCategory);
+    await this.assertActiveCategory(
+      categoryId,
+      ServiceCategoryType.AodaiCategory,
+    );
   }
 
   async assertActiveCategory(
@@ -429,7 +443,9 @@ export class CategoriesService {
     const uniqueIds = [...new Set(categoryIds)];
     if (uniqueIds.length === 0) return;
 
-    const objectIds = uniqueIds.map((categoryId) => this.toObjectId(categoryId));
+    const objectIds = uniqueIds.map((categoryId) =>
+      this.toObjectId(categoryId),
+    );
     const validCount = await this.categoryModel.countDocuments({
       _id: { $in: objectIds },
       type,
@@ -459,10 +475,7 @@ export class CategoriesService {
     if (query.keyword?.trim()) {
       const regex = createSafeRegex(query.keyword);
       if (regex) {
-        filter.$or = [
-          { name: regex },
-          { slug: regex },
-        ];
+        filter.$or = [{ name: regex }, { slug: regex }];
       }
     }
 

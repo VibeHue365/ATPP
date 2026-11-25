@@ -15,6 +15,7 @@ import { httpClient } from "../../../services/httpClient";
 import { useToast } from "../../../components/feedback/Toast";
 import { API_BASE_URL } from "../../../config/env";
 import { AdminSmartTagPanel } from "../../../features/smart-tagging/components/AdminSmartTagPanel";
+import { MODERATION_STATUS_META } from "../../../utils/bookingStatus";
 
 type ModerationStatus = "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "HIDDEN";
 
@@ -44,10 +45,10 @@ interface ProductItem {
 }
 
 const labels: Record<ModerationStatus, string> = {
-  PENDING_REVIEW: "Chờ duyệt",
-  APPROVED: "Đã duyệt",
-  REJECTED: "Từ chối", // matching standard text or let's use 'Từ chối'
-  HIDDEN: "Đã ẩn",
+  PENDING_REVIEW: MODERATION_STATUS_META.PENDING_REVIEW.label,
+  APPROVED: MODERATION_STATUS_META.APPROVED.label,
+  REJECTED: MODERATION_STATUS_META.REJECTED.label,
+  HIDDEN: MODERATION_STATUS_META.HIDDEN.label,
 };
 
 const fallbackImage =

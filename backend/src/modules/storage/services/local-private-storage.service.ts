@@ -1,9 +1,19 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { existsSync, mkdirSync, createReadStream, writeFileSync, unlinkSync, statSync } from 'fs';
+import {
+  existsSync,
+  mkdirSync,
+  createReadStream,
+  writeFileSync,
+  unlinkSync,
+  statSync,
+} from 'fs';
 import { join, dirname } from 'path';
 import { Readable } from 'stream';
-import { PrivateStoragePutResult, PrivateStorageService } from './private-storage.service';
+import {
+  PrivateStoragePutResult,
+  PrivateStorageService,
+} from './private-storage.service';
 
 /**
  * Local filesystem implementation of PrivateStorageService.
@@ -49,7 +59,9 @@ export class LocalPrivateStorageService extends PrivateStorageService {
     const filePath = this.resolveFilePath(bucket, storageKey);
 
     if (!existsSync(filePath)) {
-      throw new NotFoundException(`Private file not found: ${bucket}/${storageKey}`);
+      throw new NotFoundException(
+        `Private file not found: ${bucket}/${storageKey}`,
+      );
     }
 
     return createReadStream(filePath);

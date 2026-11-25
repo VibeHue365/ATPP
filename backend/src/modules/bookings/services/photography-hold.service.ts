@@ -5,6 +5,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model, Types } from 'mongoose';
@@ -56,6 +57,12 @@ import { VoucherPricingService } from '../../products/services/voucher-pricing.s
 import { DiscountCampaignService } from '../../products/services/discount-campaign.service';
 import { applyCampaignToRate } from '../../products/utils/campaign-pricing.util';
 import { PromotionDocument } from '../../products/schemas/promotion.schema';
+import {
+  StaffAvailabilityService,
+  type StaffAssignmentDecision,
+  toIctMinutes,
+} from './staff-availability.service';
+import { bumpProviderAvailabilityVersion } from './provider-availability-version';
 
 const HOLD_DURATION_MS = 10 * 60 * 1000;
 const BUSINESS_TIME_ZONE = 'Asia/Ho_Chi_Minh';
@@ -120,6 +127,8 @@ export class PhotographyHoldService {
     private readonly promotionsService: PromotionsService,
     private readonly voucherPricingService: VoucherPricingService,
     private readonly discountCampaignService: DiscountCampaignService,
+    @Optional()
+    private readonly staffAvailabilityService?: StaffAvailabilityService,
   ) {}
 
   async createHold(
@@ -128,9 +137,7 @@ export class PhotographyHoldService {
     idempotencyKey: string,
   ) {
     if (!Types.ObjectId.isValid(customerIdValue)) {
-      throw new BadRequestException(
-        'Tài khoản đặt lịch không hợp lệ.',
-      );
+      throw new BadRequestException('Tài khoản đặt lịch không hợp lệ.');
     }
     if (!Types.ObjectId.isValid(dto.packageId)) {
       throw new BadRequestException('Gói chụp không hợp lệ.');
@@ -150,9 +157,7 @@ export class PhotographyHoldService {
       status: PackageStatus.Active,
     });
     if (!packagePreview) {
-      throw new NotFoundException(
-        'Không tìm thấy gói chụp đang hoạt động.',
-      );
+      throw new NotFoundException('Không tìm thấy gói chụp đang hoạt động.');
     }
 
     // The preflight checks working hours, blocked days and existing legacy data.
@@ -190,9 +195,7 @@ export class PhotographyHoldService {
     idempotencyKey: string,
   ) {
     if (!Types.ObjectId.isValid(customerIdValue)) {
-      throw new BadRequestException(
-        'Tài khoản đặt lịch không hợp lệ.',
-      );
+      throw new BadRequestException('Tài khoản đặt lịch không hợp lệ.');
     }
     if (!Types.ObjectId.isValid(dto.packageId)) {
       throw new BadRequestException('Gói chụp không hợp lệ.');
@@ -212,9 +215,7 @@ export class PhotographyHoldService {
       status: PackageStatus.Active,
     });
     if (!packagePreview) {
-      throw new NotFoundException(
-        'Không tìm thấy gói chụp đang hoạt động.',
-      );
+      throw new NotFoundException('Không tìm thấy gói chụp đang hoạt động.');
     }
 
     const preflight = await this.quoteService.quote(
@@ -277,9 +278,10 @@ export class PhotographyHoldService {
       })),
       session,
     );
-    await this.assertNoActiveOverlap(
+    const staffAssignments = await this.assertCapacityAndAssignStaff(
       photographyPackage.providerId,
       sessions,
+      dto.preferredStaffId,
       session,
     );
 
@@ -457,8 +459,7 @@ export class PhotographyHoldService {
       pricingSummary: {
         subTotal,
         depositTotal: productDepositTotal,
-        discountAmount:
-          comboDiscountTotal + pricingResult.voucherDiscountTotal,
+        discountAmount: comboDiscountTotal + pricingResult.voucherDiscountTotal,
         comboDiscountTotal,
         voucherDiscountTotal: pricingResult.voucherDiscountTotal,
         platformSubsidyAmount: pricingResult.platformSubsidyAmount,
@@ -546,26 +547,32 @@ export class PhotographyHoldService {
     await photographyItem.save({ session });
 
     await this.bookingScheduleModel.insertMany(
-      sessions.map((item) => ({
-        bookingId: booking._id,
-        bookingItemId: photographyItem._id,
-        providerId: photographyPackage.providerId,
-        scheduleType: BookingScheduleType.Photoshoot,
-        startsAt: item.startsAt,
-        endsAt: item.endsAt,
-        providerLocalDate: item.providerLocalDate,
-        holdExpiresAt,
-        locationAddress: item.locationAddress ?? null,
-        locationSnapshot: this.toLocationSnapshot(item),
-        includedDurationMinutes:
-          photographyPackage.includedDurationMinutes ??
-          Math.round(photographyPackage.durationHours * 60),
-        overtimeMinutes: quote.overtimeMinutesByClientId[item.clientId] ?? 0,
-        scheduleSchemaVersion: 2,
-        status: BookingScheduleStatus.Held,
-      })),
+      sessions.map((item) => {
+        const assignment = staffAssignments.get(item.clientId);
+        return {
+          bookingId: booking._id,
+          bookingItemId: photographyItem._id,
+          providerId: photographyPackage.providerId,
+          scheduleType: BookingScheduleType.Photoshoot,
+          startsAt: item.startsAt,
+          endsAt: item.endsAt,
+          providerLocalDate: item.providerLocalDate,
+          holdExpiresAt,
+          assignedStaffId: assignment?.assignedStaffId ?? null,
+          assignedStaffSnapshot: assignment?.assignedStaffSnapshot ?? null,
+          locationAddress: item.locationAddress ?? null,
+          locationSnapshot: this.toLocationSnapshot(item),
+          includedDurationMinutes:
+            photographyPackage.includedDurationMinutes ??
+            Math.round(photographyPackage.durationHours * 60),
+          overtimeMinutes: quote.overtimeMinutesByClientId[item.clientId] ?? 0,
+          scheduleSchemaVersion: 2,
+          status: BookingScheduleStatus.Held,
+        };
+      }),
       { session },
     );
+    bumpProviderAvailabilityVersion(photographyPackage.providerId.toString());
 
     let aodaiAllocationIndex = 1;
     for (const reservation of aodaiReservations) {
@@ -618,8 +625,7 @@ export class PhotographyHoldService {
           priceBreakdown: [],
           comboDiscountPercent: 10,
           comboDiscountAmount: itemDiscount,
-          shopVoucherDiscountAmount:
-            allocation?.shopVoucherDiscountAmount || 0,
+          shopVoucherDiscountAmount: allocation?.shopVoucherDiscountAmount || 0,
           platformVoucherDiscountAmount:
             allocation?.platformVoucherDiscountAmount || 0,
         });
@@ -645,15 +651,19 @@ export class PhotographyHoldService {
     const firstProductRes = aodaiReservations[0];
     if (firstProductRes?.product?._id) {
       try {
-        await this.bookingModel.db.model('ComboPromotion').updateOne(
-          {
-            providerId: photographyPackage.providerId,
-            productId: firstProductRes.product._id,
-            photographyPackageId: photographyPackage._id,
-            status: 'ACTIVE',
-          },
-          { $inc: { usedCount: 1 } },
-        ).session(session).exec();
+        await this.bookingModel.db
+          .model('ComboPromotion')
+          .updateOne(
+            {
+              providerId: photographyPackage.providerId,
+              productId: firstProductRes.product._id,
+              photographyPackageId: photographyPackage._id,
+              status: 'ACTIVE',
+            },
+            { $inc: { usedCount: 1 } },
+          )
+          .session(session)
+          .exec();
       } catch (e) {
         console.warn('Failed to increment ComboPromotion usedCount:', e);
       }
@@ -680,9 +690,7 @@ export class PhotographyHoldService {
       .session(session)
       .exec();
     if (!product) {
-      throw new NotFoundException(
-        'Không tìm thấy áo dài đang hoạt động.',
-      );
+      throw new NotFoundException('Không tìm thấy áo dài đang hoạt động.');
     }
 
     const provider = await this.providerModel
@@ -700,9 +708,7 @@ export class PhotographyHoldService {
       product.sizes.length &&
       !product.sizes.some((size) => size.trim().toUpperCase() === selectedSize)
     ) {
-      throw new BadRequestException(
-        'Kích cỡ áo dài đã chọn không khả dụng.',
-      );
+      throw new BadRequestException('Kích cỡ áo dài đã chọn không khả dụng.');
     }
     if (
       product.colors.length &&
@@ -710,9 +716,7 @@ export class PhotographyHoldService {
         (color) => this.normalizeInventoryColor(color) === selectedColor,
       )
     ) {
-      throw new BadRequestException(
-        'Màu sắc áo dài đã chọn không khả dụng.',
-      );
+      throw new BadRequestException('Màu sắc áo dài đã chọn không khả dụng.');
     }
 
     const { rentalFrom, rentalTo } = this.toRentalRange(
@@ -727,9 +731,7 @@ export class PhotographyHoldService {
     const rentalDurationDays =
       Math.floor((rentalTo.getTime() - rentalFrom.getTime()) / 86_400_000) + 1;
     if (rentalDurationDays > 30) {
-      throw new BadRequestException(
-        'Thời gian thuê áo dài tối đa là 30 ngày.',
-      );
+      throw new BadRequestException('Thời gian thuê áo dài tối đa là 30 ngày.');
     }
 
     const rentalFromKey = this.toBusinessDateKey(rentalFrom);
@@ -831,7 +833,7 @@ export class PhotographyHoldService {
     }
 
     return {
-      product: product as Product & { _id: Types.ObjectId },
+      product: product,
       inventoryItemIds: selectedIds,
       rentalFrom,
       rentalTo,
@@ -1173,7 +1175,9 @@ export class PhotographyHoldService {
       expiredBookingIds.add(schedule.bookingId.toString());
     }
     if (!expiredCount) return 0;
-    const bookingIds = [...expiredBookingIds].map((id) => new Types.ObjectId(id));
+    const bookingIds = [...expiredBookingIds].map(
+      (id) => new Types.ObjectId(id),
+    );
     await this.inventoryReservationModel.updateMany(
       {
         bookingId: { $in: bookingIds },
@@ -1254,9 +1258,10 @@ export class PhotographyHoldService {
       providerLocalDate: item.providerLocalDate,
     }));
     await this.acquireLocks(lockKeys, session);
-    await this.assertNoActiveOverlap(
+    const staffAssignments = await this.assertCapacityAndAssignStaff(
       photographyPackage.providerId,
       sessions,
+      dto.preferredStaffId,
       session,
     );
 
@@ -1416,26 +1421,32 @@ export class PhotographyHoldService {
     await bookingItem.save({ session });
 
     await this.bookingScheduleModel.insertMany(
-      sessions.map((item) => ({
-        bookingId: booking._id,
-        bookingItemId: bookingItem._id,
-        providerId: photographyPackage.providerId,
-        scheduleType: BookingScheduleType.Photoshoot,
-        startsAt: item.startsAt,
-        endsAt: item.endsAt,
-        providerLocalDate: item.providerLocalDate,
-        holdExpiresAt,
-        locationAddress: item.locationAddress ?? null,
-        locationSnapshot: this.toLocationSnapshot(item),
-        includedDurationMinutes:
-          photographyPackage.includedDurationMinutes ??
-          Math.round(photographyPackage.durationHours * 60),
-        overtimeMinutes: quote.overtimeMinutesByClientId[item.clientId] ?? 0,
-        scheduleSchemaVersion: 2,
-        status: BookingScheduleStatus.Held,
-      })),
+      sessions.map((item) => {
+        const assignment = staffAssignments.get(item.clientId);
+        return {
+          bookingId: booking._id,
+          bookingItemId: bookingItem._id,
+          providerId: photographyPackage.providerId,
+          scheduleType: BookingScheduleType.Photoshoot,
+          startsAt: item.startsAt,
+          endsAt: item.endsAt,
+          providerLocalDate: item.providerLocalDate,
+          holdExpiresAt,
+          assignedStaffId: assignment?.assignedStaffId ?? null,
+          assignedStaffSnapshot: assignment?.assignedStaffSnapshot ?? null,
+          locationAddress: item.locationAddress ?? null,
+          locationSnapshot: this.toLocationSnapshot(item),
+          includedDurationMinutes:
+            photographyPackage.includedDurationMinutes ??
+            Math.round(photographyPackage.durationHours * 60),
+          overtimeMinutes: quote.overtimeMinutesByClientId[item.clientId] ?? 0,
+          scheduleSchemaVersion: 2,
+          status: BookingScheduleStatus.Held,
+        };
+      }),
       { session },
     );
+    bumpProviderAvailabilityVersion(photographyPackage.providerId.toString());
 
     return this.toHoldResponse(booking, session);
   }
@@ -1468,6 +1479,49 @@ export class PhotographyHoldService {
       }
       throw error;
     }
+  }
+
+  private async assertCapacityAndAssignStaff(
+    providerId: Types.ObjectId,
+    requested: HoldSession[],
+    preferredStaffId: string | undefined,
+    session: ClientSession,
+  ): Promise<Map<string, StaffAssignmentDecision>> {
+    if (!this.staffAvailabilityService) {
+      await this.assertNoActiveOverlap(providerId, requested, session);
+      return new Map();
+    }
+
+    const evaluation = await this.staffAvailabilityService.evaluateSessions(
+      providerId,
+      requested.map((item) => {
+        const startMin = toIctMinutes(item.startsAt);
+        const rawEnd = toIctMinutes(item.endsAt);
+        const endMin =
+          rawEnd === 0 && item.endsAt.getTime() > item.startsAt.getTime()
+            ? 24 * 60
+            : rawEnd;
+        return {
+          clientId: item.clientId,
+          dateKey: item.providerLocalDate,
+          startMin,
+          endMin,
+        };
+      }),
+      {
+        preferredStaffId: preferredStaffId ?? null,
+        session,
+      },
+    );
+
+    if (!evaluation.valid) {
+      throw new ConflictException(
+        evaluation.errors[0]?.message ||
+          'Khung giờ chụp vừa được khách khác giữ hoặc đã hết thợ trống. Vui lòng chọn giờ khác.',
+      );
+    }
+
+    return evaluation.assignmentsByClientId;
   }
 
   private async assertNoActiveOverlap(
@@ -1641,11 +1695,13 @@ export class PhotographyHoldService {
           : BookingScheduleStatus.Expired,
       holdExpiresAt: booking.holdExpiresAt?.toISOString() ?? null,
       paymentRequiredAmount: booking.pricingSummary.depositTotal,
-      schedules: schedules.map((schedule) => ({
+      schedules: schedules.map((schedule: any) => ({
         id: schedule._id.toString(),
         startsAt: schedule.startsAt?.toISOString() ?? null,
         endsAt: schedule.endsAt?.toISOString() ?? null,
         status: schedule.status,
+        assignedStaffId: schedule.assignedStaffId?.toString?.() ?? null,
+        assignedStaff: schedule.assignedStaffSnapshot ?? null,
       })),
     };
   }

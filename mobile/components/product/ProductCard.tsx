@@ -1,12 +1,13 @@
 import React from 'react';
 import { Ionicons, MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { type Href, router } from 'expo-router';
+import { type Href, router, usePathname } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors, FontFamily, Shadow } from '@/constants/theme';
 import type { Product } from '@/types/product';
 import { formatCampaignPercent, isSurchargeCampaign } from '@/utils/campaignPricing';
 import { getMediaUrl } from '@/utils/media';
+import { buildLoginHref } from '@/utils/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 
@@ -22,6 +23,7 @@ export function ProductCard({
 }) {
   const { isAuthenticated, isFavorite, toggleFavorite } = useAuth();
   const { show } = useToast();
+  const pathname = usePathname();
 
   const provider = typeof product.providerId === 'object' ? product.providerId : undefined;
   const liked = isFavorite('PRODUCT', product._id);
@@ -29,7 +31,7 @@ export function ProductCard({
   const onFavorite = async (event: { stopPropagation: () => void }) => {
     event.stopPropagation();
     if (!isAuthenticated) {
-      router.push('/(auth)/login' as Href);
+      router.push(buildLoginHref(pathname));
       return;
     }
     try {

@@ -9,7 +9,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { getApiErrorMessage } from '@/utils/apiError';
 
 const money=(value=0)=>new Intl.NumberFormat('vi-VN').format(value)+'đ';
-const labels:Record<string,string>={PENDING:'Chờ duyệt',APPROVED:'Đã duyệt',PROCESSING:'Đang xử lý',COMPLETED:'Hoàn tiền thành công',REJECTED:'Đã từ chối',FAILED:'Xử lý thất bại'};
+const labels:Record<string,string>={PENDING:'Chờ duyệt',APPROVED:'Đã duyệt',PROCESSING:'Đang xử lý',COMPLETED:'Hoàn tiền thành công',REJECTED:'Đã từ chối',FAILED:'Xử lý thất bại',CANCELLED:'Đã hủy yêu cầu'};
 const bookingIdOf=(refund:CustomerRefund)=>typeof refund.bookingId==='string'?refund.bookingId:refund.bookingId?._id;
 
 export function CustomerRefundPanel({bookingId}:{bookingId:string}){

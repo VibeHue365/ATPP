@@ -1,7 +1,21 @@
-import { useMemo, useState } from 'react';
-import { CheckCircle2, Clock3, ImagePlus, LoaderCircle, PackageCheck, RotateCcw, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { useMemo, useState, useEffect } from 'react';
+import {
+  CheckCircle2,
+  Clock3,
+  ImagePlus,
+  LoaderCircle,
+  PackageCheck,
+  RotateCcw,
+  ShieldCheck,
+  AlertTriangle,
+  Camera,
+  Eye,
+  Lock,
+  X,
+} from 'lucide-react';
 import { httpClient } from '../../../services/httpClient';
 import { RentalEvidenceImage } from './RentalEvidenceImage';
+import { RENTAL_FULFILLMENT_STATUS_META } from '../../../utils/bookingStatus';
 import './RentalFulfillmentOperationsPanel.css';
 
 type ViewerRole = 'customer' | 'provider' | 'admin';
@@ -41,13 +55,13 @@ interface Props {
 }
 
 const labelByStatus: Record<string, string> = {
-  PENDING: 'Chờ shop chuẩn bị',
-  READY_FOR_PICKUP: 'Sẵn sàng nhận áo',
-  PICKED_UP: 'Khách đang thuê',
-  CUSTOMER_RETURN_REQUESTED: 'Khách đã trả áo • Chờ shop nhận',
-  RETURNED: 'Đã nhận lại, chờ tất toán',
-  COMPLETED: 'Đã hoàn tất',
-  CANCELLED: 'Đã hủy',
+  PENDING: RENTAL_FULFILLMENT_STATUS_META.PENDING.label,
+  READY_FOR_PICKUP: RENTAL_FULFILLMENT_STATUS_META.READY_FOR_PICKUP.label,
+  PICKED_UP: RENTAL_FULFILLMENT_STATUS_META.PICKED_UP.label,
+  CUSTOMER_RETURN_REQUESTED: RENTAL_FULFILLMENT_STATUS_META.CUSTOMER_RETURN_REQUESTED.label,
+  RETURNED: RENTAL_FULFILLMENT_STATUS_META.RETURNED.label,
+  COMPLETED: RENTAL_FULFILLMENT_STATUS_META.COMPLETED.label,
+  CANCELLED: RENTAL_FULFILLMENT_STATUS_META.CANCELLED.label,
 };
 
 const formatDateTime = (value?: string | null) => value
@@ -67,11 +81,111 @@ export const RentalFulfillmentOperationsPanel = ({ bookingId, item, viewerRole, 
   const [incidentDescription, setIncidentDescription] = useState('');
   const [incidentFiles, setIncidentFiles] = useState<File[]>([]);
   const [isSubmittingIncident, setIsSubmittingIncident] = useState(false);
+
+  // CCCD (Customer Identity Card) states
+  const [identityCard, setIdentityCard] = useState<{
+    hasIdentityCard?: boolean;
+    hasFrontImage?: boolean;
+    hasBackImage?: boolean;
+    idNumberMasked?: string | null;
+    idNumber?: string | null;
+    fullName?: string | null;
+    capturedAt?: string | null;
+    capturedBy?: string | null;
+    frontUrl?: string | null;
+    backUrl?: string | null;
+  } | null>(null);
+  const [frontCccdFile, setFrontCccdFile] = useState<File | null>(null);
+  const [backCccdFile, setBackCccdFile] = useState<File | null>(null);
+  const [cccdFullName, setCccdFullName] = useState('');
+  const [cccdIdNumber, setCccdIdNumber] = useState('');
+  const [isSavingCccd, setIsSavingCccd] = useState(false);
+  const [isUploadingCccd, setIsUploadingCccd] = useState(false);
+  const [showCccdViewer, setShowCccdViewer] = useState(false);
+  const [activeCccdSide, setActiveCccdSide] = useState<'front' | 'back'>('front');
+  const [frontBlobUrl, setFrontBlobUrl] = useState<string | null>(null);
+  const [backBlobUrl, setBackBlobUrl] = useState<string | null>(null);
+  const [isLoadingBlob, setIsLoadingBlob] = useState(false);
+
   const isOperator = viewerRole === 'provider' || viewerRole === 'admin';
   const status = fulfillment?.status ?? 'PENDING';
   const hasPickupEvidence = Boolean(fulfillment?.pickupEvidence?.files?.length);
   const productName = typeof item.productId === 'object' ? item.productId?.name : undefined;
   const basePath = `/bookings/${bookingId}/items/${item._id}/rental`;
+
+  const loadIdentityCard = async () => {
+    try {
+      const res: any = await httpClient.get(`/bookings/${bookingId}/customer-identity`);
+      setIdentityCard(res);
+      if (res?.fullName) setCccdFullName(res.fullName);
+      if (res?.idNumber) setCccdIdNumber(res.idNumber);
+    } catch {
+      // Identity card optional / silent error
+    }
+  };
+
+  useEffect(() => {
+    loadIdentityCard();
+  }, [bookingId]);
+
+  useEffect(() => {
+    if (!showCccdViewer) return;
+    setIsLoadingBlob(true);
+    let frontObjUrl: string | null = null;
+    let backObjUrl: string | null = null;
+
+    const loadImages = async () => {
+      try {
+        if (identityCard?.hasFrontImage) {
+          const blob = await httpClient.getBlob(`/bookings/${bookingId}/customer-identity/image/front`);
+          frontObjUrl = URL.createObjectURL(blob);
+          setFrontBlobUrl(frontObjUrl);
+        }
+        if (identityCard?.hasBackImage) {
+          const blob = await httpClient.getBlob(`/bookings/${bookingId}/customer-identity/image/back`);
+          backObjUrl = URL.createObjectURL(blob);
+          setBackBlobUrl(backObjUrl);
+        }
+      } catch (err) {
+        console.warn('Failed to load CCCD image blob:', err);
+      } finally {
+        setIsLoadingBlob(false);
+      }
+    };
+
+    void loadImages();
+
+    return () => {
+      if (frontObjUrl) URL.revokeObjectURL(frontObjUrl);
+      if (backObjUrl) URL.revokeObjectURL(backObjUrl);
+    };
+  }, [showCccdViewer, bookingId, identityCard]);
+
+  const handleSaveCccd = async () => {
+    if (!frontCccdFile && !backCccdFile) {
+      setMessage('Vui lòng chọn ít nhất ảnh mặt trước CCCD.');
+      return;
+    }
+    setIsSavingCccd(true);
+    setMessage(null);
+    try {
+      const formData = new FormData();
+      if (frontCccdFile) formData.append('front', frontCccdFile);
+      if (backCccdFile) formData.append('back', backCccdFile);
+      if (cccdFullName) formData.append('fullName', cccdFullName);
+      if (cccdIdNumber) formData.append('idNumber', cccdIdNumber);
+
+      await httpClient.post(`/bookings/${bookingId}/customer-identity`, formData);
+      await loadIdentityCard();
+      setIsUploadingCccd(false);
+      setFrontCccdFile(null);
+      setBackCccdFile(null);
+    } catch (err: any) {
+      setMessage(err?.response?.data?.message || err?.message || 'Không thể lưu CCCD.');
+    } finally {
+      setIsSavingCccd(false);
+    }
+  };
   const timeline = useMemo(() => [
     { key: 'PENDING', label: 'Chuẩn bị' },
     { key: 'READY_FOR_PICKUP', label: 'Sẵn sàng' },
@@ -93,6 +207,10 @@ export const RentalFulfillmentOperationsPanel = ({ bookingId, item, viewerRole, 
   };
 
   const runAction = async (action: 'ready' | 'pickup' | 'return') => {
+    if (action === 'pickup' && !identityCard?.hasIdentityCard) {
+      setMessage('⚠️ Bắt buộc phải chụp/lưu ảnh CCCD khách thuê (Bước 1) tại quầy trước khi gửi ảnh bàn giao!');
+      return;
+    }
     setBusyAction(action);
     setMessage(null);
     try {
@@ -279,17 +397,307 @@ export const RentalFulfillmentOperationsPanel = ({ bookingId, item, viewerRole, 
       )}
 
       {isOperator && status === 'READY_FOR_PICKUP' && !hasPickupEvidence && (
-        <div className="rental-fulfillment__form">
-          <label>
-            <ImagePlus size={15} /> Ảnh tình trạng áo dài lúc bàn giao <em>*</em>
+        <div className="rental-fulfillment__form" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* PHẦN 1: CCCD KHÁCH THUÊ CHỤP TẠI QUẦY */}
+          {identityCard?.hasIdentityCard && !isUploadingCccd ? (
+            <div style={{ padding: '14px 16px', background: '#F0FDF4', border: '1.5px solid #BBF7D0', borderRadius: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#166534', fontWeight: 700, fontSize: '13px' }}>
+                  <ShieldCheck size={18} />
+                  <span>Đã có ảnh CCCD khách thuê (Bước 1 hoàn tất)</span>
+                </div>
+                <span style={{ fontSize: '11px', background: '#DCFCE7', color: '#15803D', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                  Private Vault
+                </span>
+              </div>
+              <div style={{ fontSize: '12.5px', color: '#166534', lineHeight: 1.6, marginBottom: '10px' }}>
+                <div><strong>Họ và tên:</strong> {identityCard.fullName || 'Khách thuê'}</div>
+                <div><strong>Số CCCD:</strong> {identityCard.idNumberMasked || '*** (Đã mã hóa)'}</div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowCccdViewer(true)}
+                  style={{ padding: '6px 12px', background: '#166534', color: '#FFF', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <Eye size={13} /> Xem ảnh CCCD 2 mặt
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsUploadingCccd(true)}
+                  style={{ padding: '6px 12px', background: '#FFF', color: '#166534', border: '1px solid #86EFAC', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <Camera size={13} /> Chụp lại tại quầy
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ padding: '16px', background: '#FFFDF7', border: '1.5px dashed #F59E0B', borderRadius: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#B45309', fontWeight: 700, fontSize: '13.5px', marginBottom: '8px' }}>
+                <Camera size={18} />
+                <span>Bước 1: Chụp / Tải ảnh CCCD khách tại quầy (Bắt buộc trước khi giao áo)</span>
+              </div>
+              <p style={{ fontSize: '12px', color: '#78350F', margin: '0 0 12px', lineHeight: 1.5 }}>
+                Chụp rõ nét 2 mặt Căn cước công dân của khách tại quầy. Ảnh được lưu trữ bảo mật chỉ phục vụ đối soát giữa Shop, Khách và Ban Quản Trị TàGo theo Nghị định 13/2023/NĐ-CP.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div style={{ background: '#FFF', padding: '10px', borderRadius: '8px', border: '1px solid #E5E7EB' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#374151', marginBottom: '6px' }}>
+                    Mặt trước CCCD *
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(e) => setFrontCccdFile(e.target.files?.[0] || null)}
+                    style={{ fontSize: '12px', width: '100%' }}
+                  />
+                  {frontCccdFile && <div style={{ color: '#059669', fontSize: '11px', marginTop: '4px', fontWeight: 600 }}>✓ {frontCccdFile.name}</div>}
+                </div>
+                <div style={{ background: '#FFF', padding: '10px', borderRadius: '8px', border: '1px solid #E5E7EB' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#374151', marginBottom: '6px' }}>
+                    Mặt sau CCCD *
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(e) => setBackCccdFile(e.target.files?.[0] || null)}
+                    style={{ fontSize: '12px', width: '100%' }}
+                  />
+                  {backCccdFile && <div style={{ color: '#059669', fontSize: '11px', marginTop: '4px', fontWeight: 600 }}>✓ {backCccdFile.name}</div>}
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <input
+                  type="text"
+                  placeholder="Họ và tên khách (tùy chọn)"
+                  value={cccdFullName}
+                  onChange={(e) => setCccdFullName(e.target.value)}
+                  style={{ padding: '8px 10px', fontSize: '12px', borderRadius: '6px', border: '1px solid #D1D5DB' }}
+                />
+                <input
+                  type="text"
+                  placeholder="Số CCCD (12 số - tùy chọn)"
+                  value={cccdIdNumber}
+                  onChange={(e) => setCccdIdNumber(e.target.value)}
+                  style={{ padding: '8px 10px', fontSize: '12px', borderRadius: '6px', border: '1px solid #D1D5DB' }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={handleSaveCccd}
+                  disabled={isSavingCccd || (!frontCccdFile && !backCccdFile)}
+                  style={{
+                    padding: '8px 16px',
+                    background: '#881337',
+                    color: '#FFF',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '12.5px',
+                    fontWeight: 700,
+                    cursor: (isSavingCccd || (!frontCccdFile && !backCccdFile)) ? 'not-allowed' : 'pointer',
+                    opacity: (isSavingCccd || (!frontCccdFile && !backCccdFile)) ? 0.6 : 1,
+                  }}
+                >
+                  {isSavingCccd ? 'Đang lưu CCCD...' : 'Lưu ảnh CCCD khách tại quầy'}
+                </button>
+                {identityCard?.hasIdentityCard && (
+                  <button
+                    type="button"
+                    onClick={() => setIsUploadingCccd(false)}
+                    style={{ padding: '8px 14px', background: '#E5E7EB', border: 'none', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}
+                  >
+                    Hủy
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* PHẦN 2: ẢNH HIỆN TRẠNG ÁO DÀI LÚC BÀN GIAO */}
+          <div style={{ padding: '14px 16px', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: '12px' }}>
+            <label style={{ fontWeight: 700, fontSize: '13px', color: '#1F2937', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+              <ImagePlus size={16} /> Bước 2: Ảnh tình trạng áo dài lúc bàn giao <em>*</em>
+            </label>
             <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => setFiles(Array.from(event.target.files || []).slice(0, 5))} />
-          </label>
-          {files.length > 0 && <small>Đã chọn {files.length} ảnh. Ảnh chỉ hiển thị cho khách, shop sở hữu item và Admin.</small>}
-          <textarea value={conditionNote} onChange={(event) => setConditionNote(event.target.value)} maxLength={2000} placeholder="Ghi chú tình trạng áo dài (không bắt buộc)" />
-          <button type="button" className="rental-fulfillment__action" disabled={busyAction !== null} onClick={() => void runAction('pickup')}>
+            {files.length > 0 && <div style={{ fontSize: '11px', color: '#059669', marginTop: '6px', fontWeight: 600 }}>✓ Đã chọn {files.length} ảnh bàn giao.</div>}
+            <textarea
+              value={conditionNote}
+              onChange={(event) => setConditionNote(event.target.value)}
+              maxLength={2000}
+              placeholder="Ghi chú tình trạng áo dài (cổ áo, tà áo, phụ kiện đính kèm...)"
+              style={{ marginTop: '10px' }}
+            />
+          </div>
+
+          <button
+            type="button"
+            className="rental-fulfillment__action"
+            disabled={busyAction !== null || !identityCard?.hasIdentityCard}
+            onClick={() => void runAction('pickup')}
+            title={!identityCard?.hasIdentityCard ? 'Vui lòng lưu ảnh CCCD khách thuê ở Bước 1 trước' : undefined}
+            style={{
+              opacity: !identityCard?.hasIdentityCard ? 0.6 : 1,
+              cursor: !identityCard?.hasIdentityCard ? 'not-allowed' : 'pointer',
+            }}
+          >
             {busyAction ? <LoaderCircle className="is-spinning" size={16} /> : <PackageCheck size={16} />}
             Gửi ảnh bàn giao – chờ khách xác nhận
           </button>
+        </div>
+      )}
+
+      {/* POPUP XEM CCCD 2 MẶT CÓ WATERMARK BẢO MẬT */}
+      {showCccdViewer && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.65)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+          }}
+          onClick={() => setShowCccdViewer(false)}
+        >
+          <div
+            style={{
+              background: '#FFF',
+              borderRadius: '16px',
+              maxWidth: '560px',
+              width: '100%',
+              padding: '24px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)',
+              position: 'relative',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Lock size={18} color="#881337" />
+                <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#1F2937' }}>
+                  Căn cước công dân khách thuê
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCccdViewer(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ fontSize: '12.5px', color: '#4B5563', marginBottom: '16px', lineHeight: 1.5, background: '#F9FAFB', padding: '10px 14px', borderRadius: '8px', border: '1px solid #E5E7EB' }}>
+              <div><strong>Khách hàng:</strong> {identityCard?.fullName || 'Khách thuê'}</div>
+              <div><strong>Số CCCD:</strong> {identityCard?.idNumberMasked || '*** (Đã mã hóa)'}</div>
+              <div style={{ fontSize: '11px', color: '#9CA3AF', marginTop: '4px' }}>
+                🔒 Dữ liệu được mã hóa bảo mật. Chỉ hiển thị cho Shop sở hữu đơn và Quản trị viên TàGo theo Nghị định 13/2023/NĐ-CP.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+              <button
+                type="button"
+                onClick={() => setActiveCccdSide('front')}
+                style={{
+                  flex: 1,
+                  padding: '8px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontWeight: 700,
+                  fontSize: '12.5px',
+                  cursor: 'pointer',
+                  background: activeCccdSide === 'front' ? '#881337' : '#E5E7EB',
+                  color: activeCccdSide === 'front' ? '#FFF' : '#374151',
+                }}
+              >
+                Mặt trước
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveCccdSide('back')}
+                style={{
+                  flex: 1,
+                  padding: '8px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontWeight: 700,
+                  fontSize: '12.5px',
+                  cursor: 'pointer',
+                  background: activeCccdSide === 'back' ? '#881337' : '#E5E7EB',
+                  color: activeCccdSide === 'back' ? '#FFF' : '#374151',
+                }}
+              >
+                Mặt sau
+              </button>
+            </div>
+
+            <div
+              style={{
+                position: 'relative',
+                width: '100%',
+                height: '280px',
+                background: '#1F2937',
+                borderRadius: '10px',
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {isLoadingBlob ? (
+                <div style={{ color: '#9CA3AF', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <LoaderCircle className="is-spinning" size={18} /> Đang tải ảnh bảo mật...
+                </div>
+              ) : (activeCccdSide === 'front' ? frontBlobUrl : backBlobUrl) ? (
+                <>
+                  <img
+                    src={(activeCccdSide === 'front' ? frontBlobUrl : backBlobUrl) || ''}
+                    alt={`CCCD mặt ${activeCccdSide === 'front' ? 'trước' : 'sau'}`}
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  />
+                  {/* WATERMARK BẢO VỆ */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      pointerEvents: 'none',
+                      transform: 'rotate(-25deg)',
+                      fontSize: '14px',
+                      fontWeight: 800,
+                      color: 'rgba(255, 255, 255, 0.45)',
+                      textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+                      textAlign: 'center',
+                      padding: '20px',
+                      userSelect: 'none',
+                    }}
+                  >
+                    ĐỐI SOÁT ĐƠN HÀNG #{bookingId.slice(-6).toUpperCase()} - SÀN TÀGO
+                  </div>
+                </>
+              ) : (
+                <div style={{ color: '#9CA3AF', fontSize: '13px' }}>
+                  Chưa có ảnh mặt {activeCccdSide === 'front' ? 'trước' : 'sau'}
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setShowCccdViewer(false)}
+                style={{ padding: '8px 20px', background: '#374151', color: '#FFF', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

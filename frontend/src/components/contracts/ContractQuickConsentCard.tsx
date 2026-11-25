@@ -252,6 +252,15 @@ export const ContractQuickConsentCard: React.FC<ContractQuickConsentCardProps> =
     } catch (err: unknown) {
       console.error('Failed to submit quick consent:', err);
       const msg = err instanceof Error ? err.message : '';
+      if (
+        msg.includes('CONTRACT_CONSENT_ALREADY_DECIDED') ||
+        msg.includes('consent_already_decided') ||
+        (err as any)?.status === 409
+      ) {
+        toast.success('Hợp đồng đã được xác nhận thành công!');
+        onConsented();
+        return;
+      }
       const translated = translateError(msg) || 'Lỗi khi ghi nhận chấp thuận điều khoản.';
       setErrorMsg(translated);
       toast.error(translated);

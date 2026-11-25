@@ -4,7 +4,26 @@ import { httpClient } from "../../../services/httpClient";
 import type {
   SmartTagAssignment,
   SmartTagDecisionAction,
+  SmartTagStatus,
 } from "../types/smartTag.types";
+
+const smartTagStatusLabels: Record<SmartTagStatus, string> = {
+  SUGGESTED: "Gợi ý",
+  ACTIVE: "Đã chọn",
+  REJECTED: "Đã từ chối",
+  REMOVED: "Đã gỡ",
+  STALE: "Cần tạo lại",
+};
+
+const smartTagSourceLabels: Record<
+  SmartTagAssignment["signals"][number]["source"],
+  string
+> = {
+  RULE: "Luật tự động",
+  AI_TEXT: "AI văn bản",
+  AI_IMAGE: "AI hình ảnh",
+  MANUAL: "Thủ công",
+};
 
 interface Props {
   entityType: "PRODUCT" | "PORTFOLIO";
@@ -105,7 +124,9 @@ export const AdminSmartTagPanel: React.FC<Props> = ({
                 {assignment.definition?.label || assignment.tagCode}
               </strong>
               <p style={{ ...hintStyle, margin: "2px 0 0" }}>
-                {assignment.status} · {assignment.signals[0]?.source || "RULE"}
+                {smartTagStatusLabels[assignment.status] ?? assignment.status} ·{" "}
+                {smartTagSourceLabels[assignment.signals[0]?.source || "RULE"] ??
+                  (assignment.signals[0]?.source || "RULE")}
                 {assignment.signals[0]?.confidence
                   ? ` · ${Math.round(assignment.signals[0].confidence * 100)}%`
                   : ""}

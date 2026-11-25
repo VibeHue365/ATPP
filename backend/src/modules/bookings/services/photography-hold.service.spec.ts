@@ -29,7 +29,9 @@ describe('PhotographyHoldService.confirmForBooking', () => {
       holdExpiresAt,
     };
     const mongoSession = {
-      withTransaction: jest.fn(async (callback: () => Promise<unknown>) => callback()),
+      withTransaction: jest.fn(async (callback: () => Promise<unknown>) =>
+        callback(),
+      ),
       endSession: jest.fn().mockResolvedValue(undefined),
     };
     const bookingModel = {
@@ -190,7 +192,8 @@ describe('PhotographyHoldService.confirmForBooking', () => {
     };
     const productModel = {
       findOne: jest.fn().mockReturnValue(queryResult(product)),
-    };    const inventoryModel = {
+    };
+    const inventoryModel = {
       find: jest.fn().mockReturnValue(
         queryResult([
           {

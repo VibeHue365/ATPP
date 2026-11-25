@@ -27,6 +27,8 @@ import type { useProviderSessionState } from '../hooks/useProviderSessionState';
 import type { useProviderOrderState } from '../orders/useProviderOrderState';
 import { toLocalDateKey } from '../shared/dateHelpers';
 import { getImageUrl } from '../shared/mediaHelpers';
+import { formatLocationAddress } from '../../../utils/addressFormat';
+import { getRentalFulfillmentMeta } from '../../../utils/bookingStatus';
 import type { Order } from '../types';
 import traditionalAoDaiImg from '../../../assets/images/onboarding_traditional.webp';
 import { RentalEvidenceImage } from '../../rentals/components/RentalEvidenceImage';
@@ -110,6 +112,8 @@ export function RentalOperationsPanel({
     let pending = 0;
     let ready = 0;
     let rented = 0;
+    let returnRequested = 0;
+    let returned = 0;
     let returningToday = 0;
     let completed = 0;
     let overdue = 0;
@@ -125,8 +129,11 @@ export function RentalOperationsPanel({
       else if (status === 'READY_FOR_PICKUP') ready++;
       else if (isAwaitingRentalReturn(status)) {
         if (status === 'PICKED_UP') rented++;
+        else if (status === 'CUSTOMER_RETURN_REQUESTED') returnRequested++;
         if (returnDue === todayKey) returningToday++;
         if (isOverdueRentalItem(item)) overdue++;
+      } else if (status === 'RETURNED') {
+        returned++;
       } else if (status === 'COMPLETED') {
         completed++;
       }
@@ -136,6 +143,8 @@ export function RentalOperationsPanel({
       pending,
       ready,
       rented,
+      returnRequested,
+      returned,
       returningToday,
       completed,
       overdue,
@@ -157,6 +166,8 @@ export function RentalOperationsPanel({
       if (activeStatusTab === 'PENDING' && status !== 'PENDING') return false;
       if (activeStatusTab === 'READY' && status !== 'READY_FOR_PICKUP') return false;
       if (activeStatusTab === 'RENTED' && status !== 'PICKED_UP') return false;
+      if (activeStatusTab === 'RETURN_REQUESTED' && status !== 'CUSTOMER_RETURN_REQUESTED') return false;
+      if (activeStatusTab === 'RETURNED' && status !== 'RETURNED') return false;
       if (activeStatusTab === 'RETURNING_TODAY' && (!isAwaitingRentalReturn(status) || returnDue !== todayKey)) return false;
       if (activeStatusTab === 'OVERDUE' && !isOverdue) return false;
       if (activeStatusTab === 'COMPLETED' && status !== 'COMPLETED') return false;
@@ -205,12 +216,25 @@ export function RentalOperationsPanel({
     const isOverdue = isOverdueRentalItem({ ...rentalItem, rentalFulfillment: fulfillment });
 
     const hasProposedCharges = Object.values(fulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED');
-    if (hasProposedCharges || fulfillment?.issueStatus === 'REPORTED') {
+    if (
+      hasProposedCharges ||
+      fulfillment?.issueStatus === 'REPORTED' ||
+      fulfillment?.issueStatus === 'UNDER_REVIEW'
+    ) {
       return {
         label: 'Chờ duyệt trừ cọc',
         sub: 'Đã báo sự cố',
         className: 'ro-status-late',
         dot: '#DC2626',
+      };
+    }
+
+    if (status === 'CANCELLED') {
+      return {
+        label: getRentalFulfillmentMeta('CANCELLED').label,
+        sub: 'Đơn đã hủy',
+        className: 'ro-status-returned',
+        dot: '#9CA3AF',
       };
     }
 
@@ -240,15 +264,15 @@ export function RentalOperationsPanel({
     }
     if (status === 'PENDING') {
       return {
-        label: 'Cần chuẩn bị',
-        sub: 'Còn 2 ngày',
+        label: getRentalFulfillmentMeta('PENDING').label,
+        sub: 'Chuẩn bị trang phục',
         className: 'ro-status-pending',
         dot: '#D97706',
       };
     }
     if (status === 'READY_FOR_PICKUP') {
       return {
-        label: 'Sẵn sàng giao',
+        label: getRentalFulfillmentMeta('READY_FOR_PICKUP').label,
         sub: 'Chờ khách nhận',
         className: 'ro-status-ready',
         dot: '#2563EB',
@@ -256,25 +280,41 @@ export function RentalOperationsPanel({
     }
     if (status === 'PICKED_UP') {
       return {
-        label: 'Khách đang thuê',
-        sub: 'Còn 1 ngày',
+        label: getRentalFulfillmentMeta('PICKED_UP').label,
+        sub: 'Đang sử dụng',
         className: 'ro-status-rented',
         dot: '#7C3AED',
       };
     }
+    if (status === 'CUSTOMER_RETURN_REQUESTED') {
+      return {
+        label: getRentalFulfillmentMeta('CUSTOMER_RETURN_REQUESTED').label,
+        sub: 'Chờ shop xác nhận nhận lại',
+        className: 'ro-status-pending',
+        dot: '#EA580C',
+      };
+    }
     if (status === 'RETURNED') {
       return {
-        label: 'Đã nhận lại',
-        sub: 'Chờ giặt ủi',
+        label: getRentalFulfillmentMeta('RETURNED').label,
+        sub: 'Chờ giặt ủi / hoàn tất',
         className: 'ro-status-returned',
         dot: '#4B5563',
       };
     }
+    if (status === 'COMPLETED') {
+      return {
+        label: getRentalFulfillmentMeta('COMPLETED').label,
+        sub: 'Đã tất toán',
+        className: 'ro-status-completed',
+        dot: '#047857',
+      };
+    }
     return {
-      label: 'Hoàn tất',
-      sub: 'Đã tất toán',
-      className: 'ro-status-completed',
-      dot: '#047857',
+      label: getRentalFulfillmentMeta(status).label,
+      sub: 'Đang cập nhật',
+      className: 'ro-status-returned',
+      dot: '#6B7280',
     };
   };
 
@@ -374,7 +414,7 @@ export function RentalOperationsPanel({
             <div className="ro-safety-text">
               <h4>Quy tắc vận hành &amp; Ký quỹ an toàn</h4>
               <p>
-                Vui lòng kiểm tra kỹ hiện trạng áo dài và chụp ảnh minh chứng ở mỗi bước giao nhận. Tiền cọc được VibeHue giữ hộ và sẽ tự động hoàn trả cho khách sau khi đơn hoàn tất.
+                Vui lòng kiểm tra kỹ hiện trạng áo dài và chụp ảnh minh chứng ở mỗi bước giao nhận. Tiền cọc được TàGo giữ hộ và sẽ tự động hoàn trả cho khách sau khi đơn hoàn tất.
               </p>
             </div>
           </div>
@@ -426,6 +466,20 @@ export function RentalOperationsPanel({
           </button>
           <button
             type="button"
+            onClick={() => { setActiveStatusTab('RETURN_REQUESTED'); setCurrentPage(1); }}
+            className={`ro-tab-pill ${activeStatusTab === 'RETURN_REQUESTED' ? 'active' : ''}`}
+          >
+            Khách hẹn trả ({metrics.returnRequested})
+          </button>
+          <button
+            type="button"
+            onClick={() => { setActiveStatusTab('RETURNED'); setCurrentPage(1); }}
+            className={`ro-tab-pill ${activeStatusTab === 'RETURNED' ? 'active' : ''}`}
+          >
+            Đã nhận lại ({metrics.returned})
+          </button>
+          <button
+            type="button"
             onClick={() => { setActiveStatusTab('OVERDUE'); setCurrentPage(1); }}
             className={`ro-tab-pill ${activeStatusTab === 'OVERDUE' ? 'active' : ''}`}
           >
@@ -436,7 +490,7 @@ export function RentalOperationsPanel({
             onClick={() => { setActiveStatusTab('COMPLETED'); setCurrentPage(1); }}
             className={`ro-tab-pill ${activeStatusTab === 'COMPLETED' ? 'active' : ''}`}
           >
-            Đã hoàn thành ({metrics.completed})
+            Hoàn tất ({metrics.completed})
           </button>
         </div>
 
@@ -475,7 +529,8 @@ export function RentalOperationsPanel({
             <option value="PICKED_UP">Đang thuê</option>
             <option value="CUSTOMER_RETURN_REQUESTED">Khách yêu cầu trả</option>
             <option value="RETURNED">Đã nhận lại</option>
-            <option value="COMPLETED">Đã hoàn thành</option>
+            <option value="COMPLETED">Hoàn tất</option>
+            <option value="CANCELLED">Đã hủy</option>
           </select>
 
           <select
@@ -543,8 +598,8 @@ export function RentalOperationsPanel({
                   const isCombo = order.bookingType === 'COMBO' || (order.items && order.items.length > 1);
                   const productName = typeof item.productId === 'object' ? item.productId?.name : item.name || order.productName || 'Áo dài';
                   const productImg = resolveProductImg(item);
-                  const size = item.size || 'M';
-                  const color = item.color || 'Trắng';
+                  const size = item.selectedSize || item.size || item.inventoryItem?.size || 'M';
+                  const color = item.selectedColor || item.color || item.inventoryItem?.color || 'Trắng';
 
                   const pickupDate = parseSafeDate(fulfillment.pickupDueAt || order.startDate);
                   const returnDate = parseSafeDate(fulfillment.returnDueAt || item.rentalTo || order.endDate);
@@ -563,7 +618,7 @@ export function RentalOperationsPanel({
                     >
                       {/* 1. Đơn hàng */}
                       <td className="ro-td">
-                        <span className="ro-order-id-title">{order.id || `#VH-${(order._id || '').slice(-5).toUpperCase()}`}</span>
+                        <span className="ro-order-id-title">{order.id || `#TG-${(order._id || '').slice(-5).toUpperCase()}`}</span>
                         {isCombo ? (
                           <span className="ro-badge-type ro-badge-combo">
                             <Gift size={10} /> Combo
@@ -718,7 +773,7 @@ export function RentalOperationsPanel({
             {/* Drawer Header */}
             <div className="ro-drawer-header">
               <h3 className="ro-drawer-title">
-                Chi tiết đơn {currentItem.order.id || `#VH-${(currentItem.order._id || '').slice(-5).toUpperCase()}`}
+                Chi tiết đơn {currentItem.order.id || `#TG-${(currentItem.order._id || '').slice(-5).toUpperCase()}`}
               </h3>
               <button
                 type="button"
@@ -841,7 +896,7 @@ export function RentalOperationsPanel({
                         </div>
                         <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '2px' }}>
                           📞 {currentItem.order.customerPhone || '0901 234 567'}<br />
-                          ✉️ {currentItem.order.customerEmail || 'thaomy@gmail.com'}
+                          ✉️ {currentItem.order.customerEmail || 'Đang cập nhật'}
                         </div>
                       </div>
                     </div>
@@ -891,7 +946,7 @@ export function RentalOperationsPanel({
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12px', color: '#4B5563', borderTop: '1px solid #EBE4D8', paddingTop: '8px' }}>
                       <MapPin size={15} style={{ color: '#DC2626', flexShrink: 0, marginTop: 2 }} />
                       <div style={{ flex: 1 }}>
-                        <strong>Địa điểm nhận:</strong> {currentItem.order.pickupLocation || 'Số 23 Đặng Thái Thân, TP. Huế'}
+                        <strong>Địa điểm nhận:</strong> {formatLocationAddress(currentItem.item?.pickupReturnLocationSnapshot) || formatLocationAddress(currentItem.order.pickupLocation) || 'Tại cửa hàng đối tác'}
                       </div>
                       <button
                         type="button"
@@ -915,10 +970,18 @@ export function RentalOperationsPanel({
 
                     {(() => {
                       const status = currentItem.item.rentalFulfillment?.status || 'PENDING';
+                      if (status === 'CANCELLED') {
+                        return (
+                          <div style={{ padding: '10px 12px', borderRadius: '8px', background: '#FEF2F2', color: '#B91C1C', fontSize: '12.5px', fontWeight: 600 }}>
+                            Đơn hàng đã hủy — quy trình giao nhận dừng lại.
+                          </div>
+                        );
+                      }
                       const steps = [
                         { key: 'PENDING', label: 'Chờ chuẩn bị' },
                         { key: 'READY_FOR_PICKUP', label: 'Sẵn sàng giao' },
                         { key: 'PICKED_UP', label: 'Khách đang thuê' },
+                        { key: 'CUSTOMER_RETURN_REQUESTED', label: 'Khách hẹn trả' },
                         { key: 'RETURNED', label: 'Đã nhận lại' },
                         { key: 'COMPLETED', label: 'Hoàn tất' },
                       ];
@@ -927,8 +990,8 @@ export function RentalOperationsPanel({
                       return (
                         <div className="ro-stepper">
                           {steps.map((st, idx) => {
-                            const isDone = idx < activeIdx;
-                            const isActive = idx === activeIdx;
+                            const isDone = status === 'COMPLETED' ? true : idx < activeIdx;
+                            const isActive = status !== 'COMPLETED' && idx === activeIdx;
 
                             return (
                               <div key={st.key} className="ro-stepper-item">
@@ -953,23 +1016,36 @@ export function RentalOperationsPanel({
                     <div className="ro-step-action-box">
                       <div style={{ position: 'relative', zIndex: 2 }}>
                         <div className="ro-step-action-title">
-                          {currentItem.item.rentalFulfillment?.status === 'READY_FOR_PICKUP'
-                            ? 'Bước hiện tại: Sẵn sàng giao áo cho khách'
-                            : currentItem.item.rentalFulfillment?.status === 'PICKED_UP'
-                              ? 'Bước hiện tại: Khách đang trong thời gian thuê'
-                              : currentItem.item.rentalFulfillment?.status === 'RETURNED'
-                                ? Object.values(currentItem.item.rentalFulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED') || currentItem.item.rentalFulfillment?.issueStatus === 'REPORTED'
-                                  ? 'Bước hiện tại: Đang chờ duyệt khấu trừ bồi thường cọc'
-                                  : 'Bước hiện tại: Đã nhận lại áo, kiểm tra giặt ủi'
-                                : 'Bước hiện tại: Chờ chuẩn bị áo dài'}
+                          {(() => {
+                            const st = currentItem.item.rentalFulfillment?.status || 'PENDING';
+                            const hasIssue =
+                              Object.values(currentItem.item.rentalFulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED') ||
+                              currentItem.item.rentalFulfillment?.issueStatus === 'REPORTED' ||
+                              currentItem.item.rentalFulfillment?.issueStatus === 'UNDER_REVIEW';
+                            if (st === 'CANCELLED') return 'Bước hiện tại: Đơn hàng đã hủy';
+                            if (st === 'COMPLETED') return 'Bước hiện tại: Hoàn tất giao nhận & đối soát';
+                            if (st === 'CUSTOMER_RETURN_REQUESTED') return 'Bước hiện tại: Khách đã hẹn trả, chờ shop xác nhận nhận lại';
+                            if (st === 'READY_FOR_PICKUP') return 'Bước hiện tại: Sẵn sàng giao áo cho khách';
+                            if (st === 'PICKED_UP') return 'Bước hiện tại: Khách đang trong thời gian thuê';
+                            if (st === 'RETURNED') {
+                              return hasIssue
+                                ? 'Bước hiện tại: Đang chờ duyệt khấu trừ bồi thường cọc'
+                                : 'Bước hiện tại: Đã nhận lại áo, kiểm tra giặt ủi';
+                            }
+                            return 'Bước hiện tại: Chờ chuẩn bị áo dài';
+                          })()}
                         </div>
                         <div className="ro-step-action-desc">
-                          {Object.values(currentItem.item.rentalFulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED') || currentItem.item.rentalFulfillment?.issueStatus === 'REPORTED'
+                          {Object.values(currentItem.item.rentalFulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED') ||
+                          currentItem.item.rentalFulfillment?.issueStatus === 'REPORTED' ||
+                          currentItem.item.rentalFulfillment?.issueStatus === 'UNDER_REVIEW'
                             ? 'Yêu cầu trừ cọc do hư hỏng / vi phạm hợp đồng đã được ghi nhận và đang chờ Admin xử lý.'
                             : 'Hãy kiểm tra sản phẩm, chuẩn bị đúng mẫu, size và phụ kiện đi kèm theo hợp đồng.'}
                         </div>
 
-                        {(Object.values(currentItem.item.rentalFulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED') || currentItem.item.rentalFulfillment?.issueStatus === 'REPORTED') && (
+                        {(Object.values(currentItem.item.rentalFulfillment?.charges || {}).some((c: any) => c?.status === 'PROPOSED') ||
+                          currentItem.item.rentalFulfillment?.issueStatus === 'REPORTED' ||
+                          currentItem.item.rentalFulfillment?.issueStatus === 'UNDER_REVIEW') && (
                           <div style={{ backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '8px', padding: '10px 12px', marginTop: '10px' }}>
                             <div style={{ color: '#991B1B', fontWeight: 600, fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <AlertTriangle size={15} />
@@ -1048,7 +1124,7 @@ export function RentalOperationsPanel({
                             {typeof it.productId === 'object' ? it.productId?.name : it.name || 'Áo dài'}
                           </strong>
                           <span style={{ fontSize: '11.5px', color: '#6B7280' }}>
-                            Size: {it.size || 'M'} · Màu: {it.color || 'Trắng'} · SKU: {it.sku || 'AD-001'}
+                            Size: {it.selectedSize || it.size || it.inventoryItem?.size || 'M'} · Màu: {it.selectedColor || it.color || it.inventoryItem?.color || 'Trắng'} · SKU: <strong style={{ color: '#8E1B2E', fontFamily: 'monospace' }}>{it.sku || it.inventoryItem?.sku || it.inventoryItemId?.sku || 'Chưa gán SKU'}</strong>
                           </span>
                         </div>
                       </div>
@@ -1095,7 +1171,7 @@ export function RentalOperationsPanel({
                       <strong>{(currentItem.order.depositTotal || 1400000).toLocaleString('vi-VN')}đ</strong>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #EBE4D8', paddingTop: '6px' }}>
-                      <span>Ký quỹ VibeHue:</span>
+                      <span>Ký quỹ TàGo:</span>
                       <span style={{ color: '#059669', fontWeight: 700 }}>Đã bảo đảm</span>
                     </div>
                   </div>
@@ -1221,7 +1297,7 @@ export function RentalOperationsPanel({
 
             <div style={{ fontSize: '13.5px', color: '#374151', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <p style={{ margin: 0 }}>
-                Nhằm bảo vệ quyền lợi của Nhà cung cấp và khách hàng khi thuê áo dài trên LUMÉ, xin vui lòng tuân thủ các bước sau:
+                Nhằm bảo vệ quyền lợi của Nhà cung cấp và khách hàng khi thuê áo dài trên TàGo, xin vui lòng tuân thủ các bước sau:
               </p>
               <div style={{ padding: '12px', background: '#FAF8F5', borderRadius: '8px', border: '1px solid #E8E2D5' }}>
                 <strong>1. Chuẩn bị &amp; Chụp ảnh bàn giao:</strong> Trước khi giao áo dài, chụp ít nhất 1 ảnh rõ nét hiện trạng áo và phụ kiện.
@@ -1230,7 +1306,7 @@ export function RentalOperationsPanel({
                 <strong>2. Kiểm tra khi nhận lại:</strong> Kiểm tra kỹ đường may, vết ố bẩn hoặc hư hỏng trước khi xác nhận đã nhận lại.
               </div>
               <div style={{ padding: '12px', background: '#FAF8F5', borderRadius: '8px', border: '1px solid #E8E2D5' }}>
-                <strong>3. Hoàn trả tiền cọc:</strong> Sau khi xác nhận nhận lại và hoàn tất đơn, hệ thống VibeHue Escrow sẽ tự động giải tỏa tiền cọc cho khách trong vòng 24h.
+                <strong>3. Hoàn trả tiền cọc:</strong> Sau khi xác nhận nhận lại và hoàn tất đơn, hệ thống TàGo Escrow sẽ tự động giải tỏa tiền cọc cho khách trong vòng 24h.
               </div>
             </div>
 

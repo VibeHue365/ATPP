@@ -18,6 +18,7 @@ import { contractService } from '../../../../services/contractService';
 import type { CustomerContractItem } from '../../../../services/contractService';
 import { ContractDetailViewerModal } from '../../../../components/contracts/ContractDetailViewerModal';
 import { ContractCodeDisplay } from '../../../../components/contracts/ContractCodeDisplay';
+import { getBookingStatusLabel } from '../../../../utils/bookingStatus';
 
 interface ProfileContractsTabProps {
   onNavigateRental?: () => void;
@@ -306,7 +307,7 @@ export const ProfileContractsTab: React.FC<ProfileContractsTabProps> = ({ onNavi
                 Chưa có hợp đồng nào đang có hiệu lực
               </h4>
               <p style={{ margin: '0 0 18px', fontSize: '13px', color: '#64748b', maxWidth: '420px', marginLeft: 'auto', marginRight: 'auto' }}>
-                Khi bạn đặt thuê trang phục áo dài trên VibeHue, hợp đồng điện tử cho các đơn hàng đang tiến hành sẽ xuất hiện tại đây.
+                Khi bạn đặt thuê trang phục áo dài trên TàGo, hợp đồng điện tử cho các đơn hàng đang tiến hành sẽ xuất hiện tại đây.
               </p>
               {onNavigateRental && (
                 <button
@@ -449,7 +450,7 @@ export const ProfileContractsTab: React.FC<ProfileContractsTabProps> = ({ onNavi
                           border: '1px solid #fde68a',
                         }}
                       >
-                        {c.bookingStatus}
+                        {getBookingStatusLabel(c.bookingStatus, { uppercase: true })}
                       </span>
                     )}
                   </div>

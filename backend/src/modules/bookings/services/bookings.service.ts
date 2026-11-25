@@ -46,7 +46,10 @@ import { PromotionsService } from '../../products/services/promotions.service';
 import { DiscountType } from '../../products/schemas/promotion.schema';
 import { PaymentsService } from '../../payments/services/payments.service';
 import { RefundWorkflowService } from '../../payments/services/refund-workflow.service';
-import { TimeSlotEngineService, ShopScheduleConfig } from './time-slot-engine.service';
+import {
+  TimeSlotEngineService,
+  ShopScheduleConfig,
+} from './time-slot-engine.service';
 import { ProductBusyCacheService } from './product-busy-cache.service';
 import { InventorySlotLeaseService } from './inventory-slot-lease.service';
 import {
@@ -76,7 +79,10 @@ import {
   BookingScheduleType,
   BookingScheduleStatus,
 } from '../schemas/booking-schedule.schema';
-import { InventoryItem, InventoryItemStatus } from '../../products/schemas/inventory-item.schema';
+import {
+  InventoryItem,
+  InventoryItemStatus,
+} from '../../products/schemas/inventory-item.schema';
 import {
   InventoryReservation,
   ReservationStatus,
@@ -100,6 +106,15 @@ import { PolicyResolverService } from '../../system-policies/services/policy-res
 import { pendingBookingExpiryFilter } from './booking-expiry-filter';
 import { freePaymentClaim, newPaymentClaim } from './payment-expiry-claim';
 import { buildReservationOverlapFilter } from './reservation-overlap-filter';
+import {
+  StaffAvailabilityService,
+  parseTimeRangeToMinutes,
+  toIctDateKey,
+} from './staff-availability.service';
+import {
+  bumpProviderAvailabilityVersion,
+  getProviderAvailabilityVersion,
+} from './provider-availability-version';
 
 // ─── DTOs (dùng chung với controller) ────────────────────────────────────────
 
@@ -256,16 +271,49 @@ export class CreatePhotographyBookingDto {
 export class BookingsService implements OnApplicationBootstrap {
   private readonly productBusyCache = new Map<
     string,
-    { value: { bookedDates: string[]; bookedSlots: { date: string; timeSlot: string }[]; variantBookedDates?: Record<string, string[]>; workingDays?: number[]; offDays?: string[]; hasSchedule?: boolean }; expiresAt: number }
+    {
+      value: {
+        bookedDates: string[];
+        bookedSlots: { date: string; timeSlot: string }[];
+        variantBookedDates?: Record<string, string[]>;
+        workingDays?: number[];
+        offDays?: string[];
+        hasSchedule?: boolean;
+      };
+      expiresAt: number;
+    }
   >();
   private readonly providerBusyCache = new Map<
     string,
-    { value: { bookedDates: string[]; bookedSlots: { date: string; timeSlot: string; bookingItemId: string }[] }; expiresAt: number }
+    {
+      value: {
+        bookedDates: string[];
+        bookedSlots: {
+          date: string;
+          timeSlot: string;
+          bookingItemId: string;
+        }[];
+        totalActiveStaff?: number;
+        maxConcurrentSessions?: number | null;
+        effectiveCapacity?: number;
+        slotAvailability?: any[];
+      };
+      expiresAt: number;
+      version: number;
+    }
   >();
 
-  /** Local-demo switch only. Keep this unset/false outside manual testing. */
+  /** Local-demo / dev switch. In dev, allows early pickup by default unless explicitly disabled with ALLOW_EARLY_RENTAL_PICKUP=false */
   private allowEarlyRentalPickup(): boolean {
-    return process.env.ALLOW_EARLY_RENTAL_PICKUP === 'true';
+    if (process.env.ALLOW_EARLY_RENTAL_PICKUP === 'false') {
+      return false;
+    }
+    if (process.env.ALLOW_EARLY_RENTAL_PICKUP === 'true') {
+      return true;
+    }
+    return (
+      process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test'
+    );
   }
 
   constructor(
@@ -312,6 +360,8 @@ export class BookingsService implements OnApplicationBootstrap {
     @Optional()
     @InjectModel(ProviderSchedule.name)
     private readonly providerScheduleModel?: Model<ProviderSchedule>,
+    @Optional()
+    private readonly staffAvailabilityService?: StaffAvailabilityService,
   ) {}
 
   private async getProviderScheduleConfig(
@@ -379,8 +429,8 @@ export class BookingsService implements OnApplicationBootstrap {
   ): Promise<'LEGACY' | 'CONTRACT_ACTIVE' | 'CONTRACT_SUSPENDED'> {
     if (
       this.contractPolicyService &&
-      typeof this.contractPolicyService.getProviderContractParticipationStatus ===
-        'function'
+      typeof this.contractPolicyService
+        .getProviderContractParticipationStatus === 'function'
     ) {
       const res =
         await this.contractPolicyService.getProviderContractParticipationStatus(
@@ -429,7 +479,7 @@ export class BookingsService implements OnApplicationBootstrap {
           '==================================================================',
         );
         console.error(
-          'FATAL ERROR: VibeHue requires MongoDB to run as a Replica Set to',
+          'FATAL ERROR: TàGo requires MongoDB to run as a Replica Set to',
         );
         console.error('support database transactions for inventory locking.');
         console.error(
@@ -470,11 +520,16 @@ export class BookingsService implements OnApplicationBootstrap {
         },
         {
           $set: { status: BookingStatus.Returned },
-          $pull: { statusTimeline: { status: BookingStatus.ComboPhotosApproved } },
+          $pull: {
+            statusTimeline: { status: BookingStatus.ComboPhotosApproved },
+          },
         },
       );
     } catch (e) {
-      console.warn('Failed to auto-heal mismatched combo statuses in bootstrap:', e);
+      console.warn(
+        'Failed to auto-heal mismatched combo statuses in bootstrap:',
+        e,
+      );
     }
   }
 
@@ -543,11 +598,13 @@ export class BookingsService implements OnApplicationBootstrap {
             { $set: { status: ReservationStatus.Cancelled } },
             { session },
           );
-          await this.bookingModel.db.model('Payment').updateMany(
-            { bookingId: booking._id, status: 'PENDING' },
-            { $set: { status: 'FAILED' } },
-            { session },
-          );
+          await this.bookingModel.db
+            .model('Payment')
+            .updateMany(
+              { bookingId: booking._id, status: 'PENDING' },
+              { $set: { status: 'FAILED' } },
+              { session },
+            );
           await this.promotionsService.releaseVoucher(booking._id, session);
         });
         continue;
@@ -574,10 +631,12 @@ export class BookingsService implements OnApplicationBootstrap {
         { bookingId: booking._id, status: ReservationStatus.TempReserved },
         { $set: { status: ReservationStatus.Cancelled } },
       );
-      await this.bookingModel.db.model('Payment').updateMany(
-        { bookingId: booking._id, status: 'PENDING' },
-        { $set: { status: 'FAILED' } },
-      );
+      await this.bookingModel.db
+        .model('Payment')
+        .updateMany(
+          { bookingId: booking._id, status: 'PENDING' },
+          { $set: { status: 'FAILED' } },
+        );
     }
   }
 
@@ -711,12 +770,11 @@ export class BookingsService implements OnApplicationBootstrap {
     const selectedItemIds = availableItems.slice(0, quantity).map((i) => i._id);
 
     // Acquire write locks on selected inventory items to trigger MongoDB WriteConflict on concurrent transactions
-    await this.inventoryItemModel
-      .updateMany(
-        { _id: { $in: selectedItemIds } },
-        { $inc: { reservationVersion: 1 } },
-        { session },
-      );
+    await this.inventoryItemModel.updateMany(
+      { _id: { $in: selectedItemIds } },
+      { $inc: { reservationVersion: 1 } },
+      { session },
+    );
 
     return selectedItemIds;
   }
@@ -872,7 +930,8 @@ export class BookingsService implements OnApplicationBootstrap {
           $set: {
             'rescheduleRequest.status': 'REJECTED',
             'rescheduleRequest.resolvedAt': new Date(),
-            'rescheduleRequest.providerNote': 'Yêu cầu đổi lịch đã hết hạn phản hồi 12 giờ.',
+            'rescheduleRequest.providerNote':
+              'Yêu cầu đổi lịch đã hết hạn phản hồi 12 giờ.',
           },
         },
       );
@@ -1298,8 +1357,9 @@ export class BookingsService implements OnApplicationBootstrap {
           }
 
           try {
-            const leaseColl =
-              this.bookingModel.db.collection('inventory_slot_leases');
+            const leaseColl = this.bookingModel.db.collection(
+              'inventory_slot_leases',
+            );
             const allNewSlots = [
               ...upfrontBlock.rentalSlots.map((s: any) => ({
                 dateStr: s.dateStr,
@@ -1546,7 +1606,9 @@ export class BookingsService implements OnApplicationBootstrap {
           );
         }
         if (dto.newRentalTo < dto.newRentalFrom) {
-          throw new BadRequestException('Ngày trả phải sau hoặc bằng ngày nhận');
+          throw new BadRequestException(
+            'Ngày trả phải sau hoặc bằng ngày nhận',
+          );
         }
 
         // Check for conflicts on the inventory reservation
@@ -1613,7 +1675,11 @@ export class BookingsService implements OnApplicationBootstrap {
         dailyScheduleFrom.setHours(0, 0, 0, 0);
         const dailyScheduleTo = new Date(dto.newRentalTo);
         dailyScheduleTo.setHours(23, 59, 59, 999);
-        for (const date = new Date(dailyScheduleFrom); date <= dailyScheduleTo; date.setDate(date.getDate() + 1)) {
+        for (
+          const date = new Date(dailyScheduleFrom);
+          date <= dailyScheduleTo;
+          date.setDate(date.getDate() + 1)
+        ) {
           dailyScheduleDates.push(new Date(date));
         }
         await this.replaceRescheduledSchedules({
@@ -1634,14 +1700,65 @@ export class BookingsService implements OnApplicationBootstrap {
         );
       }
 
-      // Check photographer availability using existing busy schedules logic
       const photographerId = bookingItem.providerId?.toString();
-      if (photographerId) {
-        const busySchedules =
-          await this.getBusySchedulesForProvider(photographerId);
-        const isSlotConflict =
-          dto.newShootTimeSlot &&
-          busySchedules.bookedSlots.some(
+      let reassignedDecision: {
+        assignedStaffId: Types.ObjectId | null;
+        assignedStaffSnapshot: any;
+      } | null = null;
+
+      if (photographerId && dto.newShootTimeSlot) {
+        const parsedRange = parseTimeRangeToMinutes(dto.newShootTimeSlot);
+        if (this.staffAvailabilityService && parsedRange) {
+          const currentSchedule = await this.bookingScheduleModel
+            .findOne({
+              bookingId: booking._id,
+              bookingItemId: bookingItem._id,
+              scheduleType: BookingScheduleType.Photoshoot,
+              status: {
+                $in: [
+                  BookingScheduleStatus.Confirmed,
+                  BookingScheduleStatus.Scheduled,
+                  BookingScheduleStatus.Held,
+                ],
+              },
+            })
+            .select('_id assignedStaffId')
+            .lean()
+            .exec();
+          const evaluation = await this.staffAvailabilityService.evaluateSessions(
+            new Types.ObjectId(photographerId),
+            [
+              {
+                clientId: 'reschedule',
+                dateKey: dto.newShootDate,
+                startMin: parsedRange.startMin,
+                endMin: parsedRange.endMin,
+              },
+            ],
+            {
+              excludeScheduleId: currentSchedule?._id,
+              excludeBookingItemId: bookingItem._id,
+              preferStaffIdForReschedule:
+                (currentSchedule as any)?.assignedStaffId?.toString?.() ?? null,
+            },
+          );
+          if (!evaluation.valid) {
+            throw new BadRequestException(
+              evaluation.errors[0]?.message ||
+                `Thợ ảnh đã có lịch vào ngày ${dto.newShootDate} khung giờ ${dto.newShootTimeSlot}`,
+            );
+          }
+          const decision = evaluation.assignmentsByClientId.get('reschedule');
+          if (decision) {
+            reassignedDecision = {
+              assignedStaffId: decision.assignedStaffId,
+              assignedStaffSnapshot: decision.assignedStaffSnapshot,
+            };
+          }
+        } else {
+          const busySchedules =
+            await this.getBusySchedulesForProvider(photographerId);
+          const isSlotConflict = busySchedules.bookedSlots.some(
             (slot: any) =>
               slot.date === dto.newShootDate &&
               slot.timeSlot &&
@@ -1649,10 +1766,11 @@ export class BookingsService implements OnApplicationBootstrap {
               slot.bookingItemId !== dto.itemId,
           );
 
-        if (isSlotConflict) {
-          throw new BadRequestException(
-            `Thợ ảnh đã có lịch vào ngày ${dto.newShootDate} khung giờ ${dto.newShootTimeSlot}`,
-          );
+          if (isSlotConflict) {
+            throw new BadRequestException(
+              `Thợ ảnh đã có lịch vào ngày ${dto.newShootDate} khung giờ ${dto.newShootTimeSlot}`,
+            );
+          }
         }
       }
 
@@ -1674,6 +1792,46 @@ export class BookingsService implements OnApplicationBootstrap {
         dates: [new Date(dto.newShootDate)],
         timeSlot: dto.newShootTimeSlot ?? null,
       });
+
+      if (dto.newShootTimeSlot) {
+        const parsedRange = parseTimeRangeToMinutes(dto.newShootTimeSlot);
+        if (parsedRange) {
+          const startHHmm = `${String(Math.floor(parsedRange.startMin / 60)).padStart(2, '0')}:${String(parsedRange.startMin % 60).padStart(2, '0')}`;
+          const endHHmm = `${String(Math.floor(parsedRange.endMin / 60)).padStart(2, '0')}:${String(parsedRange.endMin % 60).padStart(2, '0')}`;
+          const nextStartsAt = new Date(`${dto.newShootDate}T${startHHmm}:00+07:00`);
+          const nextEndsAt = new Date(`${dto.newShootDate}T${endHHmm}:00+07:00`);
+          await this.bookingScheduleModel.updateMany(
+            {
+              bookingId: booking._id,
+              bookingItemId: bookingItem._id,
+              scheduleType: BookingScheduleType.Photoshoot,
+              status: {
+                $in: [
+                  BookingScheduleStatus.Scheduled,
+                  BookingScheduleStatus.Confirmed,
+                ],
+              },
+            },
+            {
+              $set: {
+                startsAt: nextStartsAt,
+                endsAt: nextEndsAt,
+                providerLocalDate: dto.newShootDate,
+                ...(reassignedDecision
+                  ? {
+                      assignedStaffId: reassignedDecision.assignedStaffId,
+                      assignedStaffSnapshot:
+                        reassignedDecision.assignedStaffSnapshot,
+                    }
+                  : {}),
+              },
+            },
+          );
+        }
+      }
+      if (photographerId) {
+        bumpProviderAvailabilityVersion(photographerId);
+      }
     }
 
     // Send notification (best effort)
@@ -1709,7 +1867,8 @@ export class BookingsService implements OnApplicationBootstrap {
     timeSlot: string | null;
     session?: ClientSession;
   }): Promise<void> {
-    const { bookingId, bookingItem, scheduleType, dates, timeSlot, session } = input;
+    const { bookingId, bookingItem, scheduleType, dates, timeSlot, session } =
+      input;
     const options = session ? { session } : undefined;
     await this.bookingScheduleModel.updateMany(
       {
@@ -1817,10 +1976,14 @@ export class BookingsService implements OnApplicationBootstrap {
     dto: CreateBookingDto,
   ): Promise<BookingDocument> {
     if (this.bookingCreationService) {
-      const result = await this.bookingCreationService.createBooking(userIdStr, dto);
+      const result = await this.bookingCreationService.createBooking(
+        userIdStr,
+        dto,
+      );
       if (dto.items) {
         dto.items.forEach((it) => {
-          if (it.productId) this.invalidateProductBusyCache(it.productId.toString());
+          if (it.productId)
+            this.invalidateProductBusyCache(it.productId.toString());
         });
       }
       return result;
@@ -1885,13 +2048,7 @@ export class BookingsService implements OnApplicationBootstrap {
 
           const rType = item.rentalType === 'HOURLY' ? 'HOURLY' : 'DAILY';
           if (rType === 'HOURLY') {
-            // Chiến dịch giá (giảm/phụ thu) áp theo ngày thuê, cả với thuê theo giờ.
-            const hourlyRate = await this.campaignService.calculateHourlyRate(
-              product.basePrice,
-              product.hourlyPrice,
-              product.providerId,
-              item.shootDate ?? new Date(),
-            );
+            // Chiến dịch giá (giảm/phụ thu) áp theo ngày thuê, có trần tối đa bằng giá ngày.
             let durationHours = 2;
             if (item.shootTimeSlot) {
               const parts = item.shootTimeSlot.split('-');
@@ -1910,7 +2067,14 @@ export class BookingsService implements OnApplicationBootstrap {
                 );
               }
             }
-            unitPrice = hourlyRate * durationHours;
+            const hourlyQuote = await this.campaignService.calculateHourlyRental(
+              product.basePrice,
+              product.hourlyPrice,
+              product.providerId,
+              item.shootDate ?? new Date(),
+              durationHours,
+            );
+            unitPrice = hourlyQuote.total;
           } else {
             // Không đủ ngày hợp lệ thì tính 1 ngày (giữ hành vi cũ); chiến dịch áp theo từng ngày thuê.
             let rentalFrom = new Date();
@@ -2001,13 +2165,12 @@ export class BookingsService implements OnApplicationBootstrap {
 
             inventoryItemId = availableItemIds[0];
 
-            const createdReservations =
-              await this.reserveInventoryItemsAtomic(
-                availableItemIds,
-                reservedFrom,
-                reservedTo,
-                session,
-              );
+            const createdReservations = await this.reserveInventoryItemsAtomic(
+              availableItemIds,
+              reservedFrom,
+              reservedTo,
+              session,
+            );
             itemReservations.push(...createdReservations);
           }
         } else if (item.photographyPackageId) {
@@ -2073,8 +2236,11 @@ export class BookingsService implements OnApplicationBootstrap {
           depositAmount,
           replacementValue,
           quantity,
-          rentalFrom: reservedFrom || (item.rentalFrom ? new Date(item.rentalFrom) : null),
-          rentalTo: reservedTo || (item.rentalTo ? new Date(item.rentalTo) : null),
+          rentalFrom:
+            reservedFrom ||
+            (item.rentalFrom ? new Date(item.rentalFrom) : null),
+          rentalTo:
+            reservedTo || (item.rentalTo ? new Date(item.rentalTo) : null),
           shootDate: item.shootDate ? new Date(item.shootDate) : null,
           shootTimeSlot: item.shootTimeSlot || null,
           customRequests: item.customRequests || '',
@@ -2212,10 +2378,14 @@ export class BookingsService implements OnApplicationBootstrap {
       const discountAmount = comboDiscountTotal + voucherDiscountTotal;
       const productDepositTotal = itemDetails
         .filter((i) => i.itemType === BookingItemType.Product)
-        .reduce((sum, i) => sum + (i.depositAmount || 0) * (i.quantity || 1), 0);
+        .reduce(
+          (sum, i) => sum + (i.depositAmount || 0) * (i.quantity || 1),
+          0,
+        );
       const serviceFee = 0;
       const grandTotal =
-        Math.max(subTotal - discountAmount + travelFee, 0) + productDepositTotal;
+        Math.max(subTotal - discountAmount + travelFee, 0) +
+        productDepositTotal;
 
       // Determine contract flow version based on rental providers
       let contractFlowVersion: 2 | null = null;
@@ -2314,16 +2484,23 @@ export class BookingsService implements OnApplicationBootstrap {
         const pkgItem = itemDetails.find((i) => i.photographyPackageId);
         if (prodItem?.productId && pkgItem?.photographyPackageId) {
           try {
-            await this.bookingModel.db.model('ComboPromotion').updateOne(
-              {
-                productId: prodItem.productId,
-                photographyPackageId: pkgItem.photographyPackageId,
-                status: 'ACTIVE',
-              },
-              { $inc: { usedCount: 1 } },
-            ).session(session).exec();
+            await this.bookingModel.db
+              .model('ComboPromotion')
+              .updateOne(
+                {
+                  productId: prodItem.productId,
+                  photographyPackageId: pkgItem.photographyPackageId,
+                  status: 'ACTIVE',
+                },
+                { $inc: { usedCount: 1 } },
+              )
+              .session(session)
+              .exec();
           } catch (e) {
-            console.warn('Failed to increment ComboPromotion usedCount in createBooking:', e);
+            console.warn(
+              'Failed to increment ComboPromotion usedCount in createBooking:',
+              e,
+            );
           }
         }
       }
@@ -2512,14 +2689,6 @@ export class BookingsService implements OnApplicationBootstrap {
           'Yêu cầu giờ bắt đầu và giờ kết thúc khi thuê theo giờ',
         );
       }
-      // Chiến dịch giá (giảm/phụ thu) áp theo ngày thuê, cả với thuê theo giờ.
-      const hourlyRate = await this.campaignService.calculateHourlyRate(
-        product.basePrice,
-        product.hourlyPrice,
-        product.providerId,
-        start,
-      );
-
       const [sh, sm] = startTime.split(':').map(Number);
       const [eh, em] = endTime.split(':').map(Number);
 
@@ -2535,8 +2704,17 @@ export class BookingsService implements OnApplicationBootstrap {
         throw new BadRequestException('Thời gian thuê tối thiểu là 2 tiếng');
       }
 
-      unitPrice = hourlyRate;
-      subTotal = unitPrice * durationHours * quantity;
+      // Chiến dịch giá (giảm/phụ thu) áp theo ngày thuê, có trần tối đa bằng giá ngày.
+      const hourlyQuote = await this.campaignService.calculateHourlyRental(
+        product.basePrice,
+        product.hourlyPrice,
+        product.providerId,
+        start,
+        durationHours,
+      );
+
+      unitPrice = hourlyQuote.total;
+      subTotal = hourlyQuote.total * quantity;
       shootDate = start;
       shootTimeSlot = `${startTime}-${endTime}`;
     } else {
@@ -2553,15 +2731,14 @@ export class BookingsService implements OnApplicationBootstrap {
         throw new BadRequestException('Ngày kết thúc phải sau ngày bắt đầu');
       }
 
-      // Chiến dịch giá áp theo từng ngày thuê; unitPrice giữ nghĩa giá một ngày (trung bình).
-      const { total, days: durationDays } =
-        await this.campaignService.calculateDailyRental(
-          product.basePrice,
-          product.providerId,
-          start,
-          end,
-        );
-      unitPrice = Math.round(total / durationDays);
+      // Chiến dịch giá áp theo từng ngày thuê; unitPrice lưu tổng tiền thuê của 1 bộ cho cả kỳ để khớp Settlement.
+      const { total } = await this.campaignService.calculateDailyRental(
+        product.basePrice,
+        product.providerId,
+        start,
+        end,
+      );
+      unitPrice = total;
       subTotal = total * quantity;
       rentalFrom = start;
       rentalTo = end;
@@ -2581,7 +2758,7 @@ export class BookingsService implements OnApplicationBootstrap {
       priceVersion = await this.priceVersionModel.create({
         targetType: PriceTargetType.Product,
         targetId: new Types.ObjectId(productId),
-        price: unitPrice,
+        price: product.basePrice,
         depositAmount: product.depositAmount,
         effectiveFrom: new Date(),
         note: 'Tự động tạo khi booking',
@@ -3142,13 +3319,11 @@ export class BookingsService implements OnApplicationBootstrap {
       .lean()
       .exec();
 
-
     // 1 query lấy toàn bộ schedules bằng model đã inject sẵn
     const allSchedules = await this.bookingScheduleModel
       .find({ bookingId: { $in: bookingIds } })
       .lean()
       .exec();
-
 
     // Gom nhóm in-memory O(1)
     const itemsByBooking = new Map<string, any[]>();
@@ -3205,13 +3380,13 @@ export class BookingsService implements OnApplicationBootstrap {
       const activeIncident = incidentsByBooking.get(bIdStr) || null;
 
       const updatedItems = items.map((item) => {
-        const prodName = (item.productId as any)?.name;
-        const pkgName = (item.photographyPackageId as any)?.name;
+        const prodName = item.productId?.name;
+        const pkgName = item.photographyPackageId?.name;
         const resolvedName =
           prodName ||
           pkgName ||
-          (item as any).packageSnapshot?.name ||
-          (item as any).name ||
+          item.packageSnapshot?.name ||
+          item.name ||
           null;
 
         if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
@@ -3220,8 +3395,21 @@ export class BookingsService implements OnApplicationBootstrap {
               s.scheduleType === 'PHOTOSHOOT' &&
               s.status !== 'CANCELLED' &&
               s.status !== 'EXPIRED',
-          ) as any;
+          );
           if (matchedSchedule) {
+            let slot = item.shootTimeSlot || matchedSchedule.timeSlot;
+            if (!slot && matchedSchedule.startsAt && matchedSchedule.endsAt) {
+              const startD = new Date(matchedSchedule.startsAt);
+              const endD = new Date(matchedSchedule.endsAt);
+              const startH = String(startD.getHours()).padStart(2, '0');
+              const startM = String(startD.getMinutes()).padStart(2, '0');
+              const endH = String(endD.getHours()).padStart(2, '0');
+              const endM = String(endD.getMinutes()).padStart(2, '0');
+              slot = `${startH}:${startM} - ${endH}:${endM}`;
+            }
+            if (slot && !matchedSchedule.timeSlot) {
+              matchedSchedule.timeSlot = slot;
+            }
             return {
               ...item,
               name: resolvedName,
@@ -3229,7 +3417,7 @@ export class BookingsService implements OnApplicationBootstrap {
                 item.shootDate ||
                 matchedSchedule.startsAt ||
                 matchedSchedule.scheduledDate,
-              shootTimeSlot: item.shootTimeSlot || matchedSchedule.timeSlot,
+              shootTimeSlot: slot || null,
               shootLocation:
                 item.shootLocation || matchedSchedule.locationAddress,
             };
@@ -3269,20 +3457,23 @@ export class BookingsService implements OnApplicationBootstrap {
 
     const bookings = await this.bookingModel
       .find({ providerIds: provider._id })
-      .populate('customerId', 'profile.fullName profile.avatarUrl auth.phone auth.email')
+      .populate(
+        'customerId',
+        'profile.fullName profile.avatarUrl auth.phone auth.email',
+      )
       .sort({ createdAt: -1 })
       .lean()
       .exec();
 
     bookings.forEach((b: any) => {
       if (
-        (b.bookingType === BookingType.AoDaiRental || b.type === BookingType.AoDaiRental) &&
+        (b.bookingType === BookingType.AoDaiRental ||
+          b.type === BookingType.AoDaiRental) &&
         b.status === BookingStatus.ComboPhotosApproved
       ) {
         b.status = BookingStatus.Returned;
       }
     });
-
 
     const bookingIds = bookings.map((booking) => booking._id);
     const items = bookingIds.length
@@ -3290,17 +3481,68 @@ export class BookingsService implements OnApplicationBootstrap {
           .find({ bookingId: { $in: bookingIds } })
           .populate('productId')
           .populate('photographyPackageId')
+          .populate('inventoryItemId')
           .lean()
           .exec()
       : [];
 
-    const schedules = bookingIds.length
-      ? await this.bookingModel.db
-          .model('BookingSchedule')
-          .find({ bookingId: { $in: bookingIds } })
+    const schedules =
+      bookingIds.length && typeof this.bookingModel?.db?.model === 'function'
+        ? await this.bookingModel.db
+            .model('BookingSchedule')
+            .find({ bookingId: { $in: bookingIds } })
+            .lean()
+            .exec()
+        : [];
+
+    // Load inventory docs from both direct inventoryItemId and InventoryReservation
+    const invMap = new Map<string, any>();
+    try {
+      const resDocs: any[] =
+        bookingIds.length && typeof this.bookingModel?.db?.model === 'function'
+          ? ((await this.bookingModel.db
+              .model('InventoryReservation')
+              .find({
+                $or: [
+                  { bookingId: { $in: bookingIds } },
+                  { bookingItemId: { $in: items.map((i) => i._id) } },
+                ],
+              })
+              .lean()
+              .exec()) as any[])
+          : [];
+
+      const allInvIds = [
+        ...items
+          .map((i: any) => i.inventoryItemId?._id || i.inventoryItemId)
+          .filter(Boolean),
+        ...resDocs
+          .map((r: any) => r.inventoryItemId?._id || r.inventoryItemId)
+          .filter(Boolean),
+      ];
+      if (allInvIds.length > 0 && this.inventoryItemModel) {
+        const invDocs = await this.inventoryItemModel
+          .find({ _id: { $in: allInvIds } })
           .lean()
-          .exec()
-      : [];
+          .exec();
+        for (const doc of invDocs) {
+          invMap.set(doc._id.toString(), doc);
+        }
+      }
+      for (const res of resDocs) {
+        if (res.bookingItemId && res.inventoryItemId) {
+          const invIdStr = (
+            res.inventoryItemId._id || res.inventoryItemId
+          ).toString();
+          const matchedInv = invMap.get(invIdStr);
+          if (matchedInv) {
+            invMap.set(`item_${res.bookingItemId.toString()}`, matchedInv);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load inventory docs in getProviderBookings:', e);
+    }
 
     const updatedItems = items.map((item) => {
       const prodName = (item.productId as any)?.name;
@@ -3314,6 +3556,36 @@ export class BookingsService implements OnApplicationBootstrap {
 
       const isMyItem = item.providerId?.toString() === provider._id.toString();
 
+      let invDoc = item.inventoryItemId
+        ? typeof item.inventoryItemId === 'object' &&
+          (item.inventoryItemId as any).sku
+          ? item.inventoryItemId
+          : invMap.get(
+              (item.inventoryItemId._id || item.inventoryItemId).toString(),
+            )
+        : null;
+      if (!invDoc) {
+        invDoc = invMap.get(`item_${item._id.toString()}`) || null;
+      }
+
+      const inventoryItem = invDoc
+        ? {
+            _id: invDoc._id.toString(),
+            sku: invDoc.sku,
+            size: invDoc.size,
+            color: invDoc.color,
+            status: invDoc.status,
+            conditionStatus: invDoc.conditionStatus,
+            operationalAvailableFrom: invDoc.operationalAvailableFrom,
+          }
+        : null;
+
+      const resolvedSku = invDoc?.sku || (item as any).sku || null;
+      const resolvedSize =
+        item.selectedSize || invDoc?.size || (item as any).size || null;
+      const resolvedColor =
+        item.selectedColor || invDoc?.color || (item as any).color || null;
+
       if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
         const matchedSchedule = schedules.find(
           (s: any) =>
@@ -3323,15 +3595,34 @@ export class BookingsService implements OnApplicationBootstrap {
             s.status !== 'EXPIRED',
         ) as any;
         if (matchedSchedule) {
+          let slot = item.shootTimeSlot || matchedSchedule.timeSlot;
+          if (!slot && matchedSchedule.startsAt && matchedSchedule.endsAt) {
+            const startD = new Date(matchedSchedule.startsAt);
+            const endD = new Date(matchedSchedule.endsAt);
+            const startH = String(startD.getHours()).padStart(2, '0');
+            const startM = String(startD.getMinutes()).padStart(2, '0');
+            const endH = String(endD.getHours()).padStart(2, '0');
+            const endM = String(endD.getMinutes()).padStart(2, '0');
+            slot = `${startH}:${startM} - ${endH}:${endM}`;
+          }
+          if (slot && !matchedSchedule.timeSlot) {
+            matchedSchedule.timeSlot = slot;
+          }
           return {
             ...item,
             name: resolvedName,
             isMyItem,
+            sku: resolvedSku,
+            size: resolvedSize,
+            color: resolvedColor,
+            selectedSize: resolvedSize,
+            selectedColor: resolvedColor,
+            inventoryItem,
             shootDate:
               item.shootDate ||
               matchedSchedule.startsAt ||
               matchedSchedule.scheduledDate,
-            shootTimeSlot: item.shootTimeSlot || matchedSchedule.timeSlot,
+            shootTimeSlot: slot || null,
             shootLocation:
               item.shootLocation || matchedSchedule.locationAddress,
           };
@@ -3341,6 +3632,12 @@ export class BookingsService implements OnApplicationBootstrap {
         ...item,
         name: resolvedName,
         isMyItem,
+        sku: resolvedSku,
+        size: resolvedSize,
+        color: resolvedColor,
+        selectedSize: resolvedSize,
+        selectedColor: resolvedColor,
+        inventoryItem,
       };
     });
 
@@ -3390,14 +3687,14 @@ export class BookingsService implements OnApplicationBootstrap {
 
     const reviewsByBooking = new Map<string, any>();
     for (const rev of customerReviews) {
-      const bId = (rev as any).bookingId;
+      const bId = rev.bookingId;
       if (!bId) continue;
       reviewsByBooking.set(bId.toString(), rev);
     }
 
     const incidentByBooking = new Map<string, any>();
     for (const inc of incidents) {
-      const bId = (inc as any).bookingId;
+      const bId = inc.bookingId;
       if (!bId) continue;
       incidentByBooking.set(bId.toString(), inc);
     }
@@ -3419,18 +3716,25 @@ export class BookingsService implements OnApplicationBootstrap {
     const bookingId = new Types.ObjectId(bookingIdStr);
     let booking = await this.bookingModel
       .findById(bookingId)
-      .populate('customerId', 'profile.fullName profile.avatarUrl auth.phone auth.email');
+      .populate(
+        'customerId',
+        'profile.fullName profile.avatarUrl auth.phone auth.email',
+      )
+      .populate('providerIds');
     if (!booking) throw new NotFoundException('Booking not found');
 
     if (
-      (booking.bookingType === BookingType.AoDaiRental || (booking as any).type === BookingType.AoDaiRental) &&
+      (booking.bookingType === BookingType.AoDaiRental ||
+        (booking as any).type === BookingType.AoDaiRental) &&
       booking.status === BookingStatus.ComboPhotosApproved
     ) {
       await this.bookingModel.updateOne(
         { _id: bookingId },
         {
           $set: { status: BookingStatus.Returned },
-          $pull: { statusTimeline: { status: BookingStatus.ComboPhotosApproved } },
+          $pull: {
+            statusTimeline: { status: BookingStatus.ComboPhotosApproved },
+          },
         },
       );
       booking.status = BookingStatus.Returned;
@@ -3446,11 +3750,15 @@ export class BookingsService implements OnApplicationBootstrap {
       await this.rentalDepositRefundCoordinator.coordinate(bookingIdStr);
       booking = (await this.bookingModel
         .findById(bookingId)
-        .populate('customerId', 'profile.fullName profile.avatarUrl auth.phone auth.email'))!;
+        .populate(
+          'customerId',
+          'profile.fullName profile.avatarUrl auth.phone auth.email',
+        ))!;
     }
 
     if (userId) {
-      const isAdmin = roles?.includes('ADMIN') || roles?.includes('admin');
+      const isAdmin =
+        roles?.some((r) => String(r).toUpperCase() === 'ADMIN') || false;
       // customerId has been populated into a User object, so extract _id safely
       const customerIdRaw =
         (booking.customerId as any)?._id || booking.customerId;
@@ -3460,8 +3768,8 @@ export class BookingsService implements OnApplicationBootstrap {
         userId: new Types.ObjectId(userId),
       });
       const userProviderIds = userProviders.map((p) => p._id.toString());
-      const isProvider = booking.providerIds.some((id) =>
-        userProviderIds.includes(id.toString()),
+      const isProvider = booking.providerIds.some((p: any) =>
+        userProviderIds.includes(((p as any)?._id || p).toString()),
       );
 
       if (!isAdmin && !isCustomer && !isProvider) {
@@ -3473,8 +3781,12 @@ export class BookingsService implements OnApplicationBootstrap {
 
     const items = await this.bookingItemModel
       .find({ bookingId })
-      .populate('productId')
+      .populate({
+        path: 'productId',
+        populate: { path: 'providerId' },
+      })
       .populate('photographyPackageId')
+      .populate('providerId')
       .lean()
       .exec();
 
@@ -3484,10 +3796,11 @@ export class BookingsService implements OnApplicationBootstrap {
       .lean()
       .exec();
 
-
     const invMap = new Map<string, any>();
     try {
-      const invIdsFromItems = items.map((it: any) => it.inventoryItemId).filter(Boolean);
+      const invIdsFromItems = items
+        .map((it: any) => it.inventoryItemId)
+        .filter(Boolean);
       const resDocs = await this.inventoryReservationModel
         .find({ bookingId })
         .select({ bookingItemId: 1, inventoryItemId: 1 })
@@ -3528,7 +3841,9 @@ export class BookingsService implements OnApplicationBootstrap {
         (item as any).name ||
         null;
 
-      let invDoc = item.inventoryItemId ? invMap.get(item.inventoryItemId.toString()) : null;
+      let invDoc = item.inventoryItemId
+        ? invMap.get(item.inventoryItemId.toString())
+        : null;
       if (!invDoc) {
         invDoc = invMap.get(`item_${item._id.toString()}`) || null;
       }
@@ -3550,6 +3865,16 @@ export class BookingsService implements OnApplicationBootstrap {
             s.status !== 'EXPIRED',
         ) as any;
         if (matchedSchedule) {
+          let slot = item.shootTimeSlot || matchedSchedule.timeSlot || null;
+          if (!slot && matchedSchedule.startsAt && matchedSchedule.endsAt) {
+            const fmt = new Intl.DateTimeFormat('en-GB', {
+              timeZone: matchedSchedule.timezone || 'Asia/Ho_Chi_Minh',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            });
+            slot = `${fmt.format(new Date(matchedSchedule.startsAt))} - ${fmt.format(new Date(matchedSchedule.endsAt))}`;
+          }
           return {
             ...item,
             name: resolvedName,
@@ -3558,7 +3883,7 @@ export class BookingsService implements OnApplicationBootstrap {
               item.shootDate ||
               matchedSchedule.startsAt ||
               matchedSchedule.scheduledDate,
-            shootTimeSlot: item.shootTimeSlot || matchedSchedule.timeSlot,
+            shootTimeSlot: slot,
             shootLocation:
               item.shootLocation || matchedSchedule.locationAddress,
           };
@@ -3572,7 +3897,8 @@ export class BookingsService implements OnApplicationBootstrap {
     });
 
     const rentalItems = updatedItems.filter(
-      (it: any) => it.itemType === BookingItemType.Product && it.rentalFulfillment,
+      (it: any) =>
+        it.itemType === BookingItemType.Product && it.rentalFulfillment,
     );
 
     let canCustomerConfirmCompletion = false;
@@ -3585,7 +3911,8 @@ export class BookingsService implements OnApplicationBootstrap {
         const allReady = rentalItems.every((it: any) => {
           const rf = it.rentalFulfillment;
           if (!rf) return false;
-          const isStatusCompleted = rf.status === RentalFulfillmentStatus.Completed;
+          const isStatusCompleted =
+            rf.status === RentalFulfillmentStatus.Completed;
           const isDepositSettled = [
             DepositSettlementStatus.FullyReleased,
             DepositSettlementStatus.PartiallyDeducted,
@@ -3791,7 +4118,8 @@ export class BookingsService implements OnApplicationBootstrap {
         rentalLifecycleItems.length > 0 &&
         rentalLifecycleItems.some(
           (item) =>
-            item.rentalFulfillment?.status !== RentalFulfillmentStatus.Completed &&
+            item.rentalFulfillment?.status !==
+              RentalFulfillmentStatus.Completed &&
             item.rentalFulfillment?.status !== RentalFulfillmentStatus.Returned,
         );
 
@@ -3818,7 +4146,10 @@ export class BookingsService implements OnApplicationBootstrap {
             recipientIds,
           );
         } catch (e) {
-          console.warn('Failed to emit booking_updated in confirmCompleteByCustomer:', e);
+          console.warn(
+            'Failed to emit booking_updated in confirmCompleteByCustomer:',
+            e,
+          );
         }
 
         return booking;
@@ -3839,7 +4170,8 @@ export class BookingsService implements OnApplicationBootstrap {
       const allReady = rentalLifecycleItems.every((item: any) => {
         const rf = item.rentalFulfillment;
         if (!rf) return false;
-        const isStatusCompleted = rf.status === RentalFulfillmentStatus.Completed;
+        const isStatusCompleted =
+          rf.status === RentalFulfillmentStatus.Completed;
         const isDepositSettled = [
           DepositSettlementStatus.FullyReleased,
           DepositSettlementStatus.PartiallyDeducted,
@@ -3875,6 +4207,7 @@ export class BookingsService implements OnApplicationBootstrap {
     deliveryDriveUrl?: string,
     evidencePhotos?: string[],
     isInternalSync = false,
+    assignedStaffId?: string,
   ): Promise<BookingDocument> {
     const booking = await this.bookingModel.findById(bookingIdStr);
     if (!booking) throw new NotFoundException('Không tìm thấy đơn hàng');
@@ -3917,7 +4250,10 @@ export class BookingsService implements OnApplicationBootstrap {
         userProviderIds.includes(id.toString()),
       );
 
-      if (newStatus === BookingStatus.Disputed || newStatus === BookingStatus.ReturnPending) {
+      if (
+        newStatus === BookingStatus.Disputed ||
+        newStatus === BookingStatus.ReturnPending
+      ) {
         if (!isAdmin && !isProvider && !isCustomer) {
           throw new ForbiddenException(
             'Bạn không có quyền cập nhật trạng thái này cho đơn hàng.',
@@ -4010,6 +4346,8 @@ export class BookingsService implements OnApplicationBootstrap {
       ],
       [BookingStatus.PickedUp]: [
         BookingStatus.ReturnPending,
+        BookingStatus.Overdue,
+        BookingStatus.LostItem,
         BookingStatus.Disputed,
         BookingStatus.Returned,
         BookingStatus.InProgress,
@@ -4017,8 +4355,21 @@ export class BookingsService implements OnApplicationBootstrap {
       ],
       [BookingStatus.ReturnPending]: [
         BookingStatus.Returned,
+        BookingStatus.Overdue,
+        BookingStatus.LostItem,
         BookingStatus.InProgress,
         BookingStatus.AwaitingReview,
+        BookingStatus.Disputed,
+      ],
+      [BookingStatus.Overdue]: [
+        BookingStatus.Returned,
+        BookingStatus.LostItem,
+        BookingStatus.Disputed,
+        BookingStatus.Completed,
+      ],
+      [BookingStatus.LostItem]: [
+        BookingStatus.Returned,
+        BookingStatus.Completed,
         BookingStatus.Disputed,
       ],
       [BookingStatus.Returned]: [
@@ -4073,7 +4424,8 @@ export class BookingsService implements OnApplicationBootstrap {
     const isAdmin = roles?.includes('ADMIN') || roles?.includes('admin');
     if (
       currentStatus === BookingStatus.AwaitingReview &&
-      (nextStatus === BookingStatus.Completed || nextStatus === BookingStatus.ComboPhotosApproved) &&
+      (nextStatus === BookingStatus.Completed ||
+        nextStatus === BookingStatus.ComboPhotosApproved) &&
       !isAdmin
     ) {
       throw new BadRequestException(
@@ -4096,37 +4448,50 @@ export class BookingsService implements OnApplicationBootstrap {
       }
     }
     if (nextStatus === BookingStatus.Disputed) {
-      const isNoShowDispute = note && (
-        note.includes('vắng mặt') ||
-        note.includes('không đến') ||
-        note.includes('Thợ chụp')
-      );
+      const isNoShowDispute =
+        note &&
+        (note.includes('vắng mặt') ||
+          note.includes('không đến') ||
+          note.includes('Thợ chụp'));
 
       if (isNoShowDispute) {
         let shootStartTime: Date | null = null;
         try {
           const scheduleModel = this.bookingModel.db.model('BookingSchedule');
-          const schedule: any = await scheduleModel.findOne({
-            bookingId: booking._id,
-            scheduleType: 'PHOTOSHOOT',
-            status: { $ne: 'CANCELLED' }
-          }).lean().exec();
+          const schedule: any = await scheduleModel
+            .findOne({
+              bookingId: booking._id,
+              scheduleType: 'PHOTOSHOOT',
+              status: { $ne: 'CANCELLED' },
+            })
+            .lean()
+            .exec();
 
           if (schedule?.startsAt) {
             shootStartTime = new Date(schedule.startsAt);
           } else if (schedule?.scheduledDate) {
             shootStartTime = new Date(schedule.scheduledDate);
             if (schedule.timeSlot) {
-              const startHour = parseInt(schedule.timeSlot.split('-')[0] || '0', 10);
-              if (!isNaN(startHour)) shootStartTime.setHours(startHour, 0, 0, 0);
+              const startHour = parseInt(
+                schedule.timeSlot.split('-')[0] || '0',
+                10,
+              );
+              if (!isNaN(startHour))
+                shootStartTime.setHours(startHour, 0, 0, 0);
             }
           } else {
-            const photoItem = (booking as any).items?.find((i: any) => i?.shootDate || i?.itemType === 'PHOTOGRAPHY_PACKAGE');
+            const photoItem = (booking as any).items?.find(
+              (i: any) => i?.shootDate || i?.itemType === 'PHOTOGRAPHY_PACKAGE',
+            );
             if (photoItem?.shootDate) {
               shootStartTime = new Date(photoItem.shootDate);
               if (photoItem.shootTimeSlot) {
-                const startHour = parseInt(photoItem.shootTimeSlot.split('-')[0] || '0', 10);
-                if (!isNaN(startHour)) shootStartTime.setHours(startHour, 0, 0, 0);
+                const startHour = parseInt(
+                  photoItem.shootTimeSlot.split('-')[0] || '0',
+                  10,
+                );
+                if (!isNaN(startHour))
+                  shootStartTime.setHours(startHour, 0, 0, 0);
               }
             }
           }
@@ -4136,9 +4501,13 @@ export class BookingsService implements OnApplicationBootstrap {
 
         if (shootStartTime) {
           const now = new Date();
-          const minAllowedTime = new Date(shootStartTime.getTime() + 15 * 60 * 1000);
+          const minAllowedTime = new Date(
+            shootStartTime.getTime() + 15 * 60 * 1000,
+          );
           if (now < minAllowedTime) {
-            throw new BadRequestException('Bạn chỉ có thể báo cáo thợ chụp ảnh vắng mặt sau giờ hẹn ít nhất 15 phút.');
+            throw new BadRequestException(
+              'Bạn chỉ có thể báo cáo thợ chụp ảnh vắng mặt sau giờ hẹn ít nhất 15 phút.',
+            );
           }
         }
       }
@@ -4181,9 +4550,11 @@ export class BookingsService implements OnApplicationBootstrap {
             reason:
               note || 'Khách hàng gửi khiếu nại chất lượng dịch vụ/sản phẩm',
             evidencePhotos:
-              (evidencePhotos && evidencePhotos.length > 0)
+              evidencePhotos && evidencePhotos.length > 0
                 ? evidencePhotos
-                : (booking as any).deliveredPhotos || booking.handoverPhotos || [],
+                : (booking as any).deliveredPhotos ||
+                  booking.handoverPhotos ||
+                  [],
             status: 'OPEN',
           });
         }
@@ -4195,7 +4566,11 @@ export class BookingsService implements OnApplicationBootstrap {
       try {
         const providerUserId = booking.providerIds?.[0];
         if (providerUserId) {
-          const providerDoc: any = await this.bookingModel.db.model('Provider').findById(providerUserId).lean().exec();
+          const providerDoc: any = await this.bookingModel.db
+            .model('Provider')
+            .findById(providerUserId)
+            .lean()
+            .exec();
           const targetUserId = providerDoc?.userId || providerUserId;
           await this.notificationsService.createNotification(
             targetUserId.toString(),
@@ -4210,9 +4585,12 @@ export class BookingsService implements OnApplicationBootstrap {
       }
     }
     if (nextStatus === BookingStatus.PickupPending) {
-      const items = await this.bookingItemModel.find({ bookingId: booking._id });
+      const items = await this.bookingItemModel.find({
+        bookingId: booking._id,
+      });
       const startDates: Date[] = [];
-      if ((booking as any).rentalFrom) startDates.push(new Date((booking as any).rentalFrom));
+      if ((booking as any).rentalFrom)
+        startDates.push(new Date((booking as any).rentalFrom));
       for (const it of items) {
         if (it.rentalFrom) startDates.push(new Date(it.rentalFrom));
         if (it.shootDate) {
@@ -4226,8 +4604,13 @@ export class BookingsService implements OnApplicationBootstrap {
       }
       const validStarts = startDates.filter((d) => !isNaN(d.getTime()));
       if (validStarts.length > 0) {
-        const earliestStart = new Date(Math.min(...validStarts.map((d) => d.getTime())));
-        if (earliestStart.getTime() - Date.now() > 24 * 60 * 60 * 1000) {
+        const earliestStart = new Date(
+          Math.min(...validStarts.map((d) => d.getTime())),
+        );
+        if (
+          !this.allowEarlyRentalPickup() &&
+          earliestStart.getTime() - Date.now() > 24 * 60 * 60 * 1000
+        ) {
           throw new BadRequestException(
             'Chưa đến thời điểm nhận đồ. Chỉ có thể chuẩn bị bàn giao trong vòng 24 giờ trước thời gian bắt đầu thuê.',
           );
@@ -4244,9 +4627,12 @@ export class BookingsService implements OnApplicationBootstrap {
           'Chỉ có thể chuyển sang Đang thuê khi đơn hàng đang ở trạng thái Chờ nhận đồ (PICKUP_PENDING).',
         );
       }
-      const items = await this.bookingItemModel.find({ bookingId: booking._id });
+      const items = await this.bookingItemModel.find({
+        bookingId: booking._id,
+      });
       const startDates: Date[] = [];
-      if ((booking as any).rentalFrom) startDates.push(new Date((booking as any).rentalFrom));
+      if ((booking as any).rentalFrom)
+        startDates.push(new Date((booking as any).rentalFrom));
       for (const it of items) {
         if (it.rentalFrom) startDates.push(new Date(it.rentalFrom));
         if (it.shootDate) {
@@ -4260,8 +4646,13 @@ export class BookingsService implements OnApplicationBootstrap {
       }
       const validStarts = startDates.filter((d) => !isNaN(d.getTime()));
       if (validStarts.length > 0) {
-        const earliestStart = new Date(Math.min(...validStarts.map((d) => d.getTime())));
-        if (!this.allowEarlyRentalPickup() && Date.now() < earliestStart.getTime() - 60 * 60 * 1000) {
+        const earliestStart = new Date(
+          Math.min(...validStarts.map((d) => d.getTime())),
+        );
+        if (
+          !this.allowEarlyRentalPickup() &&
+          Date.now() < earliestStart.getTime() - 60 * 60 * 1000
+        ) {
           throw new BadRequestException(
             'Chưa đến khung giờ nhận đồ theo lịch hẹn. Chỉ có thể bàn giao khi đến giờ nhận áo.',
           );
@@ -4269,9 +4660,13 @@ export class BookingsService implements OnApplicationBootstrap {
       }
     }
     if (nextStatus === BookingStatus.Returned) {
-      if (currentStatus !== BookingStatus.PickedUp && currentStatus !== BookingStatus.ReturnPending) {
+      if (
+        currentStatus !== BookingStatus.PickedUp &&
+        currentStatus !== BookingStatus.ReturnPending &&
+        currentStatus !== BookingStatus.ComboPhotosApproved
+      ) {
         throw new BadRequestException(
-          'Chỉ có thể xác nhận đã trả áo khi đơn hàng đang ở trạng thái Đang thuê (PICKED_UP) hoặc Chờ kiểm tra đồ (RETURN_PENDING).',
+          'Chỉ có thể xác nhận đã trả áo khi đơn hàng đang ở trạng thái Đang thuê (PICKED_UP), Chờ kiểm tra đồ (RETURN_PENDING) hoặc Đã duyệt ảnh (COMBO_PHOTOS_APPROVED).',
         );
       }
       booking.returnedAt = new Date();
@@ -4283,9 +4678,13 @@ export class BookingsService implements OnApplicationBootstrap {
     });
 
     const isMultiCollectionTransition =
-      nextStatus === BookingStatus.PickedUp || nextStatus === BookingStatus.Returned;
+      nextStatus === BookingStatus.PickedUp ||
+      nextStatus === BookingStatus.Returned;
     let session: ClientSession | null = null;
-    if (isMultiCollectionTransition && typeof this.bookingModel.db?.startSession === 'function') {
+    if (
+      isMultiCollectionTransition &&
+      typeof this.bookingModel.db?.startSession === 'function'
+    ) {
       try {
         session = await this.bookingModel.db.startSession();
         session.startTransaction();
@@ -4312,21 +4711,25 @@ export class BookingsService implements OnApplicationBootstrap {
         extraFulfillmentSet['rentalFulfillment.status'] = nextFulfillmentStatus;
       }
       if (nextStatus === BookingStatus.PickedUp) {
-        extraFulfillmentSet['rentalFulfillment.inventoryStatus'] = RentalInventoryStatus.RentedOut;
+        extraFulfillmentSet['rentalFulfillment.inventoryStatus'] =
+          RentalInventoryStatus.RentedOut;
         extraFulfillmentSet['rentalFulfillment.pickedUpAt'] = new Date();
       } else if (nextStatus === BookingStatus.ReturnPending) {
-        extraFulfillmentSet['rentalFulfillment.inventoryStatus'] = RentalInventoryStatus.ReturnedPendingInspection;
+        extraFulfillmentSet['rentalFulfillment.inventoryStatus'] =
+          RentalInventoryStatus.ReturnedPendingInspection;
         if (evidencePhotos && evidencePhotos.length > 0) {
           const returnEvData = {
             files: evidencePhotos,
             returnedAt: new Date(),
             note: note || null,
           };
-          extraFulfillmentSet['rentalFulfillment.customerReturnEvidence'] = returnEvData;
+          extraFulfillmentSet['rentalFulfillment.customerReturnEvidence'] =
+            returnEvData;
           (booking as any).customerReturnEvidence = returnEvData;
         }
       } else if (nextStatus === BookingStatus.Returned) {
-        extraFulfillmentSet['rentalFulfillment.inventoryStatus'] = RentalInventoryStatus.ReturnedPendingInspection;
+        extraFulfillmentSet['rentalFulfillment.inventoryStatus'] =
+          RentalInventoryStatus.ReturnedPendingInspection;
         extraFulfillmentSet['rentalFulfillment.returnedAt'] = new Date();
       }
       if (Object.keys(extraFulfillmentSet).length > 0) {
@@ -4344,33 +4747,35 @@ export class BookingsService implements OnApplicationBootstrap {
         );
       }
 
-        if (nextStatus === BookingStatus.PickedUp) {
-          const items = await this.bookingItemModel.find(
-            { bookingId: booking._id },
-            null,
-            session ? { session } : undefined,
-          );
-          const reservations = this.inventoryReservationModel
-            ? await this.inventoryReservationModel.find(
-                { bookingId: booking._id },
-                null,
-                session ? { session } : undefined,
-              )
-            : [];
-          const invItemIds = [
-            ...new Set([
+      if (nextStatus === BookingStatus.PickedUp) {
+        const items = await this.bookingItemModel.find(
+          { bookingId: booking._id },
+          null,
+          session ? { session } : undefined,
+        );
+        const reservations = this.inventoryReservationModel
+          ? await this.inventoryReservationModel.find(
+              { bookingId: booking._id },
+              null,
+              session ? { session } : undefined,
+            )
+          : [];
+        const invItemIds = [
+          ...new Set(
+            [
               ...items.map((it) => it.inventoryItemId?.toString()),
               ...reservations.map((r) => r.inventoryItemId?.toString()),
-            ].filter(Boolean)),
-          ];
-          if (invItemIds.length > 0) {
-            await this.inventoryItemModel.updateMany(
-              { _id: { $in: invItemIds.map((id) => new Types.ObjectId(id)) } },
-              { $set: { status: InventoryItemStatus.Rented } },
-              session ? { session } : undefined,
-            );
-          }
+            ].filter(Boolean),
+          ),
+        ];
+        if (invItemIds.length > 0) {
+          await this.inventoryItemModel.updateMany(
+            { _id: { $in: invItemIds.map((id) => new Types.ObjectId(id)) } },
+            { $set: { status: InventoryItemStatus.Rented } },
+            session ? { session } : undefined,
+          );
         }
+      }
 
       if (
         nextStatus === BookingStatus.Confirmed ||
@@ -4401,7 +4806,8 @@ export class BookingsService implements OnApplicationBootstrap {
         const actualReturnedAt = new Date();
 
         for (const item of items) {
-          const contractualRentalTo = (item as any).rentalTo || actualReturnedAt;
+          const contractualRentalTo =
+            (item as any).rentalTo || actualReturnedAt;
           const turnaroundSlotsCount = Number(
             (item as any).rentalFulfillment?.turnaroundSlotsSnapshot ?? 1,
           );
@@ -4432,7 +4838,9 @@ export class BookingsService implements OnApplicationBootstrap {
                 {
                   _id: { $in: itemInventoryIds },
                   status: { $ne: 'MAINTENANCE' },
-                  conditionStatus: { $nin: ['LOCKED', 'RETIRED', 'MINOR_DAMAGE'] },
+                  conditionStatus: {
+                    $nin: ['LOCKED', 'RETIRED', 'MINOR_DAMAGE'],
+                  },
                 },
                 {
                   $set: {
@@ -4469,11 +4877,32 @@ export class BookingsService implements OnApplicationBootstrap {
       }
     }
 
+    const bookingStatusLabels: Record<string, string> = {
+      DRAFT: 'Bản nháp',
+      PENDING_PAYMENT: 'Chờ thanh toán',
+      DEPOSIT_PAID: 'Đã đặt cọc · Chờ duyệt',
+      CONFIRMED: 'Đã xác nhận',
+      PICKUP_PENDING: 'Chờ bàn giao / nhận áo',
+      PICKED_UP: 'Đang thuê',
+      RETURN_PENDING: 'Chờ nhận trả đồ',
+      RETURNED: 'Đã trả đồ · Chờ hoàn cọc',
+      IN_PROGRESS: 'Đang thực hiện buổi chụp',
+      AWAITING_REVIEW: 'Đã giao ảnh · Chờ duyệt',
+      COMBO_PHOTOS_APPROVED: 'Đã duyệt ảnh · Chờ trả đồ',
+      COMPLETED: 'Hoàn tất',
+      CANCELLED: 'Đã hủy',
+      DISPUTED: 'Đang tranh chấp',
+      PARTIALLY_REFUNDED: 'Hoàn tiền một phần',
+      REFUNDED: 'Đã hoàn tiền',
+    };
+
     try {
+      const readableStatus =
+        bookingStatusLabels[String(newStatus).toUpperCase()] ?? newStatus;
       await this.notificationsService.createNotification(
         this.getCustomerIdStr(booking),
         `Cập nhật trạng thái đơn hàng`,
-        `Đơn hàng ${booking.bookingCode} của bạn đã chuyển sang trạng thái: ${newStatus}`,
+        `Đơn hàng ${booking.bookingCode} của bạn đã chuyển sang trạng thái: ${readableStatus}`,
         NotificationType.Booking,
         { bookingId: booking._id },
       );
@@ -4504,16 +4933,17 @@ export class BookingsService implements OnApplicationBootstrap {
       Boolean((booking as any).photosApproved) ||
       Boolean((booking as any).deliveredPhotos?.length > 0) ||
       Boolean((booking as any).deliveryDriveUrl) ||
-      booking.statusTimeline?.some((t) => t.status === BookingStatus.ComboPhotosApproved || t.status === BookingStatus.Completed);
+      booking.statusTimeline?.some(
+        (t) =>
+          t.status === BookingStatus.ComboPhotosApproved ||
+          t.status === BookingStatus.Completed,
+      );
 
     const isReturnedRentalCompletion =
       nextStatus === BookingStatus.Returned &&
       (booking.bookingType === BookingType.AoDaiRental ||
         (booking.bookingType === BookingType.Combo && isComboPhotoDelivered));
-    if (
-      nextStatus === BookingStatus.Completed ||
-      isReturnedRentalCompletion
-    ) {
+    if (nextStatus === BookingStatus.Completed || isReturnedRentalCompletion) {
       try {
         await this.paymentsService.settleBooking(bookingIdStr);
       } catch (settleErr) {
@@ -4521,7 +4951,63 @@ export class BookingsService implements OnApplicationBootstrap {
       }
     }
 
+    if (
+      nextStatus === BookingStatus.Confirmed &&
+      assignedStaffId &&
+      this.staffAvailabilityService
+    ) {
+      await this.staffAvailabilityService.assignStaffToBooking(
+        bookingIdStr,
+        assignedStaffId,
+        userId || 'provider',
+        roles,
+        'Chủ Studio phân công thợ khi xác nhận đơn',
+      );
+    }
+
+    for (const pid of booking.providerIds ?? []) {
+      bumpProviderAvailabilityVersion(pid.toString());
+    }
+
     return booking;
+  }
+
+  async getAvailableStaffForSchedule(
+    bookingIdStr: string,
+    scheduleIdStr: string,
+    actorUserId: string,
+    actorRoles?: string[],
+  ) {
+    if (!this.staffAvailabilityService) {
+      throw new NotFoundException('Dịch vụ kiểm tra thợ chụp chưa được bật.');
+    }
+    return this.staffAvailabilityService.getAvailableStaffForSchedule(
+      bookingIdStr,
+      scheduleIdStr,
+      actorUserId,
+      actorRoles,
+    );
+  }
+
+  async assignStaffToSchedule(
+    bookingIdStr: string,
+    scheduleIdStr: string,
+    staffIdStr: string,
+    actorUserId: string,
+    actorRoles?: string[],
+    reason?: string,
+  ) {
+    if (!this.staffAvailabilityService) {
+      throw new NotFoundException('Dịch vụ điều phối thợ chụp chưa được bật.');
+    }
+    return this.staffAvailabilityService.assignStaffToSchedule(
+      bookingIdStr,
+      scheduleIdStr,
+      staffIdStr,
+      actorUserId,
+      actorRoles,
+      reason,
+    );
   }
 
   /** Hủy đơn → trigger hoàn tiền cọc (PaymentsService.refundDeposit) */
@@ -4583,6 +5069,30 @@ export class BookingsService implements OnApplicationBootstrap {
       throw new BadRequestException(
         'Không thể hủy đơn đặt lịch đang thực hiện hoặc đã hoàn thành',
       );
+    }
+
+    // PR 3 Financial Guard: Chặn hủy thông thường khi đang có yêu cầu thời tiết chờ xử lý
+    if (booking.hasPendingWeatherAction) {
+      throw new BadRequestException(
+        'Đơn hàng đang có yêu cầu đổi lịch hoặc hủy vì thời tiết đang chờ xử lý. Không thể thực hiện hủy đơn thông thường.',
+      );
+    }
+
+    try {
+      const activeWeatherCancel = await this.bookingModel.db
+        .model('WeatherCancellationRequest')
+        .findOne({
+          bookingId: booking._id,
+          status: 'PENDING_ADMIN_REVIEW',
+        })
+        .lean();
+      if (activeWeatherCancel) {
+        throw new BadRequestException(
+          'Đơn hàng đang có yêu cầu hủy vì thời tiết chờ Admin xử lý. Không thể thực hiện hủy đơn thông thường.',
+        );
+      }
+    } catch (err: any) {
+      if (err instanceof BadRequestException) throw err;
     }
 
     const now = new Date();
@@ -4722,8 +5232,7 @@ export class BookingsService implements OnApplicationBootstrap {
     }
 
     let penaltyAmount = 0;
-    const wasPendingPayment =
-      booking.status === BookingStatus.PendingPayment;
+    const wasPendingPayment = booking.status === BookingStatus.PendingPayment;
     const isNoShow = reason.includes('[KHÁCH VẮNG MẶT - NO SHOW]');
     const depositAmt =
       (booking as any).depositAmount ||
@@ -4806,36 +5315,42 @@ export class BookingsService implements OnApplicationBootstrap {
         }
 
         if (providerPenalty > 0) {
-          const provider = await this.bookingModel.db
-            .model('Provider')
-            .findById(new Types.ObjectId(pIdStr));
-          if (provider) {
-            let bankName = 'VietinBank';
-            let accountNumber = '1029384756';
-            let accountHolder = 'PROVIDER STUDIO';
-
-            if (
-              provider.paymentAccounts &&
-              provider.paymentAccounts.length > 0
-            ) {
-              const activeAccount =
-                provider.paymentAccounts.find((a: any) => a.isDefault) ||
-                provider.paymentAccounts[0];
-              bankName = activeAccount.bankName || bankName;
-              accountNumber = activeAccount.accountNumberMasked
-                ? activeAccount.accountNumberMasked.replace(/\*/g, '8')
-                : accountNumber;
-              accountHolder = activeAccount.accountHolder || accountHolder;
-            }
-
-            const transferRef = `CANCEL_PENALTY_${booking.bookingCode}`;
-            await this.paymentsService.executeAutoTransfer(
-              bankName,
-              accountNumber,
-              accountHolder,
-              providerPenalty,
-              transferRef,
+          if (booking.hasPendingWeatherAction) {
+            console.warn(
+              `Blocked executeAutoTransfer penalty for booking ${booking.bookingCode} due to active weather action.`,
             );
+          } else {
+            const provider = await this.bookingModel.db
+              .model('Provider')
+              .findById(new Types.ObjectId(pIdStr));
+            if (provider) {
+              let bankName = 'VietinBank';
+              let accountNumber = '1029384756';
+              let accountHolder = 'PROVIDER STUDIO';
+
+              if (
+                provider.paymentAccounts &&
+                provider.paymentAccounts.length > 0
+              ) {
+                const activeAccount =
+                  provider.paymentAccounts.find((a: any) => a.isDefault) ||
+                  provider.paymentAccounts[0];
+                bankName = activeAccount.bankName || bankName;
+                accountNumber = activeAccount.accountNumberMasked
+                  ? activeAccount.accountNumberMasked.replace(/\*/g, '8')
+                  : accountNumber;
+                accountHolder = activeAccount.accountHolder || accountHolder;
+              }
+
+              const transferRef = `CANCEL_PENALTY_${booking.bookingCode}`;
+              await this.paymentsService.executeAutoTransfer(
+                bankName,
+                accountNumber,
+                accountHolder,
+                providerPenalty,
+                transferRef,
+              );
+            }
           }
         }
       }
@@ -4863,8 +5378,8 @@ export class BookingsService implements OnApplicationBootstrap {
       note: wasPendingPayment
         ? 'Đơn hàng đã được hủy trước khi thanh toán.'
         : isFreeCancel
-        ? `Đơn hàng đã được hủy thành công. Hoàn tiền 100% (${refundAmount.toLocaleString('vi-VN')}đ).`
-        : `Đơn hàng đã bị hủy. Khách bị phạt mất cọc dịch vụ (${penaltyAmount.toLocaleString('vi-VN')}đ). Hoàn cọc giữ đồ & số dư (${refundAmount.toLocaleString('vi-VN')}đ). Lý do phạt: ${penaltyReason}`,
+          ? `Đơn hàng đã được hủy thành công. Hoàn tiền 100% (${refundAmount.toLocaleString('vi-VN')}đ).`
+          : `Đơn hàng đã bị hủy. Khách bị phạt mất cọc dịch vụ (${penaltyAmount.toLocaleString('vi-VN')}đ). Hoàn cọc giữ đồ & số dư (${refundAmount.toLocaleString('vi-VN')}đ). Lý do phạt: ${penaltyReason}`,
       changedBy: userId ? new Types.ObjectId(userId) : null,
     });
 
@@ -4896,11 +5411,15 @@ export class BookingsService implements OnApplicationBootstrap {
 
     // Giải phóng slot leases liên quan
     if (this.slotLeaseService) {
-      await this.slotLeaseService.releaseBookingLeases(booking._id, 'CANCELLED');
+      await this.slotLeaseService.releaseBookingLeases(
+        booking._id,
+        'CANCELLED',
+      );
     } else {
       try {
-        const leaseColl =
-          this.bookingModel?.db?.collection('inventory_slot_leases');
+        const leaseColl = this.bookingModel?.db?.collection(
+          'inventory_slot_leases',
+        );
         if (leaseColl) {
           await leaseColl.updateMany(
             {
@@ -5027,13 +5546,13 @@ export class BookingsService implements OnApplicationBootstrap {
       const schedules = schedulesByBookingMap.get(bId) || [];
 
       const updatedItems = items.map((item) => {
-        const prodName = (item.productId as any)?.name;
-        const pkgName = (item.photographyPackageId as any)?.name;
+        const prodName = item.productId?.name;
+        const pkgName = item.photographyPackageId?.name;
         const resolvedName =
           prodName ||
           pkgName ||
-          (item as any).packageSnapshot?.name ||
-          (item as any).name ||
+          item.packageSnapshot?.name ||
+          item.name ||
           null;
 
         if (item.itemType === 'PHOTOGRAPHY_PACKAGE') {
@@ -5042,7 +5561,7 @@ export class BookingsService implements OnApplicationBootstrap {
               s.scheduleType === 'PHOTOSHOOT' &&
               s.status !== 'CANCELLED' &&
               s.status !== 'EXPIRED',
-          ) as any;
+          );
           if (matchedSchedule) {
             let slot = item.shootTimeSlot || matchedSchedule.timeSlot;
             if (!slot && matchedSchedule.startsAt && matchedSchedule.endsAt) {
@@ -5114,7 +5633,10 @@ export class BookingsService implements OnApplicationBootstrap {
     offDays?: string[];
     hasSchedule?: boolean;
   }> {
-    const idStr = typeof productId === 'string' ? productId : (productId as any)?.toString?.();
+    const idStr =
+      typeof productId === 'string'
+        ? productId
+        : (productId as any)?.toString?.();
     if (
       !idStr ||
       !Types.ObjectId.isValid(idStr) ||
@@ -5129,24 +5651,32 @@ export class BookingsService implements OnApplicationBootstrap {
       : this.productBusyCache.get(cacheKey)?.value;
     if (cached) return cached;
 
-    const inventoryItems = await this.inventoryItemModel.find({
-      productId: new Types.ObjectId(idStr),
-      conditionStatus: { $nin: ['LOCKED', 'RETIRED'] },
-      // Only operational inventory can satisfy a new rental. Previously
-      // RENTED/MAINTENANCE rows were counted as stock, so the calendar could
-      // leave dates selectable and checkout rejected them later.
-      $or: [
-        { status: 'AVAILABLE' },
-        { status: 'CLEANING', operationalAvailableFrom: { $ne: null } },
-      ],
-    } as any).select('_id size color status operationalAvailableFrom').lean().exec();
+    const inventoryItems = await this.inventoryItemModel
+      .find({
+        productId: new Types.ObjectId(idStr),
+        conditionStatus: { $nin: ['LOCKED', 'RETIRED'] },
+        // Only operational inventory can satisfy a new rental. Previously
+        // RENTED/MAINTENANCE rows were counted as stock, so the calendar could
+        // leave dates selectable and checkout rejected them later.
+        $or: [
+          { status: 'AVAILABLE' },
+          { status: 'CLEANING', operationalAvailableFrom: { $ne: null } },
+        ],
+      } as any)
+      .select('_id size color status operationalAvailableFrom')
+      .lean()
+      .exec();
 
     // Keep locked/maintenance variants in the response so the product calendar
     // can disable them instead of allowing a selection that checkout will reject.
-    const allVariantItems = await this.inventoryItemModel.find({
-      productId: new Types.ObjectId(idStr),
-      conditionStatus: { $ne: 'RETIRED' },
-    } as any).select('_id size color conditionStatus status').lean().exec();
+    const allVariantItems = await this.inventoryItemModel
+      .find({
+        productId: new Types.ObjectId(idStr),
+        conditionStatus: { $ne: 'RETIRED' },
+      } as any)
+      .select('_id size color conditionStatus status')
+      .lean()
+      .exec();
 
     if (inventoryItems.length === 0) {
       const variantUnavailableDates: Record<string, string[]> = {};
@@ -5156,11 +5686,20 @@ export class BookingsService implements OnApplicationBootstrap {
         const key = `${item.size.toUpperCase()}_${this.normalizeColor(item.color)}`;
         if (!variantUnavailableDates[key]) variantUnavailableDates[key] = [];
       }
-      const value = { bookedDates: [], bookedSlots: [], variantBookedDates: {}, variantUnavailableDates, variantBookedSlots: {} };
+      const value = {
+        bookedDates: [],
+        bookedSlots: [],
+        variantBookedDates: {},
+        variantUnavailableDates,
+        variantBookedSlots: {},
+      };
       if (this.productBusyCacheService) {
         this.productBusyCacheService.set(cacheKey, value);
       } else {
-        this.productBusyCache.set(cacheKey, { value, expiresAt: Date.now() + 10_000 });
+        this.productBusyCache.set(cacheKey, {
+          value,
+          expiresAt: Date.now() + 10_000,
+        });
       }
       return value;
     }
@@ -5170,7 +5709,9 @@ export class BookingsService implements OnApplicationBootstrap {
     const itemToVariantKey = new Map<string, string>();
     const allVariantKeys = new Set<string>();
     allVariantItems.forEach((item: any) => {
-      allVariantKeys.add(`${item.size.toUpperCase()}_${this.normalizeColor(item.color)}`);
+      allVariantKeys.add(
+        `${item.size.toUpperCase()}_${this.normalizeColor(item.color)}`,
+      );
     });
 
     inventoryItems.forEach((item) => {
@@ -5184,16 +5725,20 @@ export class BookingsService implements OnApplicationBootstrap {
     const now = new Date();
 
     // Query active reservations (CONFIRMED or unexpired TEMP_RESERVED)
-    const reservations = await this.inventoryReservationModel.find({
-      inventoryItemId: { $in: itemIds },
-      $or: [
-        { status: ReservationStatus.Confirmed },
-        {
-          status: ReservationStatus.TempReserved,
-          expiresAt: { $gt: now },
-        },
-      ],
-    }).select('inventoryItemId reservedFrom reservedTo status expiresAt').lean().exec();
+    const reservations = await this.inventoryReservationModel
+      .find({
+        inventoryItemId: { $in: itemIds },
+        $or: [
+          { status: ReservationStatus.Confirmed },
+          {
+            status: ReservationStatus.TempReserved,
+            expiresAt: { $gt: now },
+          },
+        ],
+      })
+      .select('inventoryItemId reservedFrom reservedTo status expiresAt')
+      .lean()
+      .exec();
 
     // Filter to strictly confirmed or active unexpired temp reservations (guards against TTL lag)
     const activeReservations = reservations.filter((res) => {
@@ -5207,15 +5752,20 @@ export class BookingsService implements OnApplicationBootstrap {
     // Query active slot leases (both RENTAL and TURNAROUND leases)
     // Fail-closed: database query errors must propagate and fail closed (do NOT catch and return empty array).
     let slotLeases: any[] = [];
-    const leaseColl = this.bookingModel?.db?.collection('inventory_slot_leases');
+    const leaseColl = this.bookingModel?.db?.collection(
+      'inventory_slot_leases',
+    );
     if (leaseColl) {
-      slotLeases = await leaseColl.find({
-        inventoryItemId: { $in: itemIds },
-        $or: [
-          { status: 'CONFIRMED' },
-          { status: 'TEMP', expiresAt: { $gt: now } },
-        ],
-      }).project({ inventoryItemId: 1, dateStr: 1, slotIndex: 1, purpose: 1 }).toArray();
+      slotLeases = await leaseColl
+        .find({
+          inventoryItemId: { $in: itemIds },
+          $or: [
+            { status: 'CONFIRMED' },
+            { status: 'TEMP', expiresAt: { $gt: now } },
+          ],
+        })
+        .project({ inventoryItemId: 1, dateStr: 1, slotIndex: 1, purpose: 1 })
+        .toArray();
     }
 
     const SLOT_INDEX_TO_TIME_SLOT: Record<number, string> = {
@@ -5249,32 +5799,39 @@ export class BookingsService implements OnApplicationBootstrap {
             turnaroundSlotsCount = Number(prov.rentalSettings.turnaroundSlots);
           }
         }
-        const schedColl = this.bookingModel?.db?.collection('provider_schedules');
+        const schedColl =
+          this.bookingModel?.db?.collection('provider_schedules');
         if (schedColl) {
           const scheds = await schedColl
             .find({
               providerId: new Types.ObjectId(product.providerId.toString()),
-              $or: [
-                { capability: null },
-                { capability: 'AODAI_RENTAL' },
-              ],
+              $or: [{ capability: null }, { capability: 'AODAI_RENTAL' }],
             })
             .toArray();
 
           if (scheds && scheds.length > 0) {
             hasSchedule = true;
             const recurringSchedules = scheds.filter(
-              (s: any) => s.scheduleType === 'RECURRING' && typeof s.dayOfWeek === 'number',
+              (s: any) =>
+                s.scheduleType === 'RECURRING' &&
+                typeof s.dayOfWeek === 'number',
             );
             let weeklyOffDays: number[] | undefined = undefined;
             if (recurringSchedules.length > 0) {
-              const workingSet = new Set(recurringSchedules.map((s: any) => s.dayOfWeek as number));
+              const workingSet = new Set(
+                recurringSchedules.map((s: any) => s.dayOfWeek as number),
+              );
               workingDays = Array.from(workingSet);
-              weeklyOffDays = [0, 1, 2, 3, 4, 5, 6].filter((d) => !workingSet.has(d));
+              weeklyOffDays = [0, 1, 2, 3, 4, 5, 6].filter(
+                (d) => !workingSet.has(d),
+              );
             }
 
             for (const s of scheds) {
-              if (s.scheduleType === 'SPECIFIC_DATE' && Array.isArray(s.offDays)) {
+              if (
+                s.scheduleType === 'SPECIFIC_DATE' &&
+                Array.isArray(s.offDays)
+              ) {
                 for (const d of s.offDays) {
                   const dateStr = new Date(d).toLocaleDateString('en-CA', {
                     timeZone: 'Asia/Ho_Chi_Minh',
@@ -5298,7 +5855,10 @@ export class BookingsService implements OnApplicationBootstrap {
     // this rule), so keep lease dates in the same per-variant calendar model.
     const dailyLeaseBookings = new Map<string, Map<string, Set<string>>>();
     // variantKey -> slotKey (dateStr_timeSlot) -> Map<itemIdStr, 'RENTAL' | 'TURNAROUND' | undefined>
-    const variantHourly = new Map<string, Map<string, Map<string, 'RENTAL' | 'TURNAROUND' | undefined>>>();
+    const variantHourly = new Map<
+      string,
+      Map<string, Map<string, 'RENTAL' | 'TURNAROUND' | undefined>>
+    >();
 
     const trackHourly = (
       variantKey: string,
@@ -5328,14 +5888,21 @@ export class BookingsService implements OnApplicationBootstrap {
       const variantKey = itemToVariantKey.get(itemIdStr);
       if (!variantKey) return;
       if (lease.dateStr) {
-        if (!dailyLeaseBookings.has(lease.dateStr)) dailyLeaseBookings.set(lease.dateStr, new Map());
+        if (!dailyLeaseBookings.has(lease.dateStr))
+          dailyLeaseBookings.set(lease.dateStr, new Map());
         const byVariant = dailyLeaseBookings.get(lease.dateStr)!;
         if (!byVariant.has(variantKey)) byVariant.set(variantKey, new Set());
         byVariant.get(variantKey)!.add(itemIdStr);
       }
       const timeSlot = SLOT_INDEX_TO_TIME_SLOT[lease.slotIndex];
       if (timeSlot && lease.dateStr) {
-        trackHourly(variantKey, lease.dateStr, timeSlot, itemIdStr, lease.purpose);
+        trackHourly(
+          variantKey,
+          lease.dateStr,
+          timeSlot,
+          itemIdStr,
+          lease.purpose,
+        );
       }
     });
 
@@ -5349,7 +5916,8 @@ export class BookingsService implements OnApplicationBootstrap {
       const end = new Date(res.reservedTo);
 
       const diffMs = end.getTime() - start.getTime();
-      const isHourly = diffMs < 24 * 60 * 60 * 1000 && (diffMs % (24 * 60 * 60 * 1000) !== 0);
+      const isHourly =
+        diffMs < 24 * 60 * 60 * 1000 && diffMs % (24 * 60 * 60 * 1000) !== 0;
 
       if (!isHourly) {
         const current = new Date(start);
@@ -5389,7 +5957,8 @@ export class BookingsService implements OnApplicationBootstrap {
         if (turnaroundSlotsCount >= 0) {
           try {
             const timeEngine = new TimeSlotEngineService();
-            const { startSlotIndex, rentalSlotCount } = timeEngine.parseAndValidateTimeSlot(timeSlot);
+            const { startSlotIndex, rentalSlotCount } =
+              timeEngine.parseAndValidateTimeSlot(timeSlot);
             const upfront = timeEngine.calculateUpfrontBlock(
               dateStr,
               startSlotIndex,
@@ -5400,13 +5969,25 @@ export class BookingsService implements OnApplicationBootstrap {
             for (const rSlot of upfront.rentalSlots) {
               const rSlotStr = SLOT_INDEX_TO_TIME_SLOT[rSlot.slotIndex];
               if (rSlotStr && rSlot.dateStr) {
-                trackHourly(variantKey, rSlot.dateStr, rSlotStr, itemIdStr, 'RENTAL');
+                trackHourly(
+                  variantKey,
+                  rSlot.dateStr,
+                  rSlotStr,
+                  itemIdStr,
+                  'RENTAL',
+                );
               }
             }
             for (const tSlot of upfront.turnaroundSlots) {
               const tSlotStr = SLOT_INDEX_TO_TIME_SLOT[tSlot.slotIndex];
               if (tSlotStr && tSlot.dateStr) {
-                trackHourly(variantKey, tSlot.dateStr, tSlotStr, itemIdStr, 'TURNAROUND');
+                trackHourly(
+                  variantKey,
+                  tSlot.dateStr,
+                  tSlotStr,
+                  itemIdStr,
+                  'TURNAROUND',
+                );
               }
             }
             parsedSuccessfully = true;
@@ -5440,7 +6021,9 @@ export class BookingsService implements OnApplicationBootstrap {
     const cursor = new Date();
     cursor.setHours(0, 0, 0, 0);
     for (let i = 0; i <= 365; i++) {
-      unavailableHorizon.push(cursor.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }));
+      unavailableHorizon.push(
+        cursor.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }),
+      );
       cursor.setDate(cursor.getDate() + 1);
     }
     allVariantKeys.forEach((key) => {
@@ -5469,7 +6052,11 @@ export class BookingsService implements OnApplicationBootstrap {
     const bookedSlots: { date: string; timeSlot: string }[] = [];
     const variantBookedSlots: Record<
       string,
-      Array<{ date: string; timeSlot: string; purpose?: 'RENTAL' | 'TURNAROUND' }>
+      Array<{
+        date: string;
+        timeSlot: string;
+        purpose?: 'RENTAL' | 'TURNAROUND';
+      }>
     > = {};
     for (const key of sizeColors) {
       variantBookedSlots[key] = [];
@@ -5535,22 +6122,63 @@ export class BookingsService implements OnApplicationBootstrap {
     if (this.productBusyCacheService) {
       this.productBusyCacheService.set(cacheKey, value);
     } else {
-      this.productBusyCache.set(cacheKey, { value, expiresAt: Date.now() + 10_000 });
+      this.productBusyCache.set(cacheKey, {
+        value,
+        expiresAt: Date.now() + 10_000,
+      });
     }
     return value;
   }
 
-  async getBusySchedulesForProvider(providerId: string): Promise<{
+  async getBusySchedulesForProvider(
+    providerId: string,
+    staffId?: string,
+  ): Promise<{
     bookedDates: string[];
     bookedSlots: { date: string; timeSlot: string; bookingItemId: string }[];
+    totalActiveStaff?: number;
+    maxConcurrentSessions?: number | null;
+    effectiveCapacity?: number;
+    slotAvailability?: any[];
   }> {
-    const idStr = typeof providerId === 'string' ? providerId : (providerId as any)?.toString?.();
+    const idStr =
+      typeof providerId === 'string'
+        ? providerId
+        : (providerId as any)?.toString?.();
     if (
       !idStr ||
       !Types.ObjectId.isValid(idStr) ||
       !/^[0-9a-fA-F]{24}$/.test(idStr)
     ) {
       throw new BadRequestException('ID nhà cung cấp không hợp lệ');
+    }
+
+    const providerObjId = new Types.ObjectId(idStr);
+    const cacheKey = `${providerObjId.toString()}:${staffId || 'ALL'}`;
+    const currentVersion = getProviderAvailabilityVersion(
+      providerObjId.toString(),
+    );
+    const cached = this.providerBusyCache.get(cacheKey);
+    if (
+      cached &&
+      cached.expiresAt > Date.now() &&
+      cached.version === currentVersion
+    ) {
+      return cached.value;
+    }
+
+    if (this.staffAvailabilityService) {
+      const value =
+        await this.staffAvailabilityService.computeBusyScheduleSummary(
+          providerObjId,
+          staffId,
+        );
+      this.providerBusyCache.set(cacheKey, {
+        value,
+        expiresAt: Date.now() + 10_000,
+        version: currentVersion,
+      });
+      return value;
     }
 
     const bookedDates = new Set<string>();
@@ -5560,13 +6188,6 @@ export class BookingsService implements OnApplicationBootstrap {
       bookingItemId: string;
     }[] = [];
     const now = new Date();
-
-    const providerObjId = new Types.ObjectId(idStr);
-    const cacheKey = providerObjId.toString();
-    const cached = this.providerBusyCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) {
-      return cached.value;
-    }
 
     // Start both data sources immediately. They are independent queries and
     // must not wait on each other over the remote MongoDB connection.
@@ -5589,7 +6210,6 @@ export class BookingsService implements OnApplicationBootstrap {
       .select('bookingId shootDate shootTimeSlot rescheduleRequest')
       .lean()
       .exec();
-
 
     // 1. Query BookingSchedule (v2 schedules)
     try {
@@ -5639,7 +6259,9 @@ export class BookingsService implements OnApplicationBootstrap {
       const items = await legacyItemsPromise;
 
       if (items.length) {
-        const bookingIds = [...new Set(items.map((item) => item.bookingId.toString()))]
+        const bookingIds = [
+          ...new Set(items.map((item) => item.bookingId.toString())),
+        ]
           .filter((id) => Types.ObjectId.isValid(id))
           .map((id) => new Types.ObjectId(id));
         const activeBookings = await this.bookingModel
@@ -5657,49 +6279,54 @@ export class BookingsService implements OnApplicationBootstrap {
           .select('_id')
           .lean()
           .exec();
-        const activeBookingIds = new Set(activeBookings.map((booking) => booking._id.toString()));
+        const activeBookingIds = new Set(
+          activeBookings.map((booking) => booking._id.toString()),
+        );
 
-        items.filter((item) => activeBookingIds.has(item.bookingId.toString())).forEach((item) => {
-        let dateStr = '';
-        if (item.shootDate) {
-          const rawDate: any = item.shootDate;
-          if (typeof rawDate === 'string') {
-            dateStr = rawDate.slice(0, 10);
-          } else {
-            dateStr = new Date(rawDate).toLocaleDateString('en-CA', {
-              timeZone: 'Asia/Ho_Chi_Minh',
-            });
-          }
-        }
+        items
+          .filter((item) => activeBookingIds.has(item.bookingId.toString()))
+          .forEach((item) => {
+            let dateStr = '';
+            if (item.shootDate) {
+              const rawDate: any = item.shootDate;
+              if (typeof rawDate === 'string') {
+                dateStr = rawDate.slice(0, 10);
+              } else {
+                dateStr = new Date(rawDate).toLocaleDateString('en-CA', {
+                  timeZone: 'Asia/Ho_Chi_Minh',
+                });
+              }
+            }
 
-        if (dateStr && item.shootTimeSlot) {
-          bookedSlots.push({
-            date: dateStr,
-            timeSlot: item.shootTimeSlot,
-            bookingItemId: item._id.toString(),
+            if (dateStr && item.shootTimeSlot) {
+              bookedSlots.push({
+                date: dateStr,
+                timeSlot: item.shootTimeSlot,
+                bookingItemId: item._id.toString(),
+              });
+              bookedDates.add(dateStr);
+            }
+            const req = (item as any).rescheduleRequest;
+            if (
+              req &&
+              ['PENDING', 'PROCESSING'].includes(req.status) &&
+              req.newShootDate &&
+              req.newShootTimeSlot &&
+              (!req.lockedExpiresAt ||
+                new Date(req.lockedExpiresAt) > new Date())
+            ) {
+              const reqDateStr =
+                typeof req.newShootDate === 'string'
+                  ? req.newShootDate.slice(0, 10)
+                  : req.newShootDate;
+              bookedSlots.push({
+                date: reqDateStr,
+                timeSlot: req.newShootTimeSlot,
+                bookingItemId: item._id.toString(),
+              });
+              bookedDates.add(reqDateStr);
+            }
           });
-          bookedDates.add(dateStr);
-        }
-        const req = (item as any).rescheduleRequest;
-        if (
-          req &&
-          ['PENDING', 'PROCESSING'].includes(req.status) &&
-          req.newShootDate &&
-          req.newShootTimeSlot &&
-          (!req.lockedExpiresAt || new Date(req.lockedExpiresAt) > new Date())
-        ) {
-          const reqDateStr =
-            typeof req.newShootDate === 'string'
-              ? req.newShootDate.slice(0, 10)
-              : req.newShootDate;
-          bookedSlots.push({
-            date: reqDateStr,
-            timeSlot: req.newShootTimeSlot,
-            bookingItemId: item._id.toString(),
-          });
-          bookedDates.add(reqDateStr);
-        }
-        });
       }
     } catch (e) {
       console.warn('Unable to query BookingItems for provider:', e);
@@ -5712,6 +6339,7 @@ export class BookingsService implements OnApplicationBootstrap {
     this.providerBusyCache.set(cacheKey, {
       value,
       expiresAt: Date.now() + 10_000,
+      version: currentVersion,
     });
     return value;
   }
@@ -5756,19 +6384,25 @@ export class BookingsService implements OnApplicationBootstrap {
   }
 
   async getProductStockCounts(
-    requests: Array<{ key?: string; productId?: string; size?: string; color?: string }>,
+    requests: Array<{
+      key?: string;
+      productId?: string;
+      size?: string;
+      color?: string;
+    }>,
   ): Promise<Array<{ key: string; stock: number }>> {
     const normalized = requests
-      .filter((item) =>
-        Types.ObjectId.isValid(item.productId ?? '')
-        && Boolean(item.size?.trim())
-        && Boolean(item.color?.trim()),
+      .filter(
+        (item) =>
+          Types.ObjectId.isValid(item.productId ?? '') &&
+          Boolean(item.size?.trim()) &&
+          Boolean(item.color?.trim()),
       )
       .map((item) => ({
         requestKey: item.key,
         productId: new Types.ObjectId(item.productId as string),
         size: item.size!.trim().toUpperCase(),
-        color: this.normalizeColor(item.color!),
+        color: this.normalizeColor(item.color),
       }));
 
     if (!normalized.length) return [];
@@ -5781,25 +6415,27 @@ export class BookingsService implements OnApplicationBootstrap {
         ]),
       ).values(),
     );
-    const counts = await this.inventoryItemModel.aggregate([
-      {
-        $match: {
-          $or: uniqueRequests.map((item) => ({
-            productId: item.productId,
-            size: item.size,
-            color: item.color,
-          })),
-          status: 'AVAILABLE',
-          conditionStatus: { $nin: ['LOCKED', 'RETIRED'] },
+    const counts = await this.inventoryItemModel
+      .aggregate([
+        {
+          $match: {
+            $or: uniqueRequests.map((item) => ({
+              productId: item.productId,
+              size: item.size,
+              color: item.color,
+            })),
+            status: 'AVAILABLE',
+            conditionStatus: { $nin: ['LOCKED', 'RETIRED'] },
+          },
         },
-      },
-      {
-        $group: {
-          _id: { productId: '$productId', size: '$size', color: '$color' },
-          stock: { $sum: 1 },
+        {
+          $group: {
+            _id: { productId: '$productId', size: '$size', color: '$color' },
+            stock: { $sum: 1 },
+          },
         },
-      },
-    ]).exec();
+      ])
+      .exec();
     const stockByKey = new Map(
       counts.map((row: any) => [
         `${row._id.productId.toString()}:${row._id.size}:${row._id.color}`,
@@ -5861,9 +6497,13 @@ export class BookingsService implements OnApplicationBootstrap {
     // Server validation: verify current time has reached valid pickup window (within 60m before start or after)
     const items = await this.bookingItemModel.find({ bookingId: booking._id });
     const startDates: Date[] = [];
-    if ((booking as any).rentalFrom) startDates.push(new Date((booking as any).rentalFrom));
+    if ((booking as any).rentalFrom)
+      startDates.push(new Date((booking as any).rentalFrom));
     for (const it of items) {
-      const rFrom = it.rentalFrom || (it as any).rentalFulfillment?.rentalFrom || (it as any).bookingDate;
+      const rFrom =
+        it.rentalFrom ||
+        (it as any).rentalFulfillment?.rentalFrom ||
+        (it as any).bookingDate;
       if (rFrom) startDates.push(new Date(rFrom));
       if (it.shootDate) {
         const d = new Date(it.shootDate);
@@ -5876,23 +6516,33 @@ export class BookingsService implements OnApplicationBootstrap {
     }
     const validStarts = startDates.filter((d) => !isNaN(d.getTime()));
     if (validStarts.length > 0) {
-      const earliestStart = new Date(Math.min(...validStarts.map((d) => d.getTime())));
-      if (!this.allowEarlyRentalPickup() && Date.now() < earliestStart.getTime() - 60 * 60 * 1000) {
+      const earliestStart = new Date(
+        Math.min(...validStarts.map((d) => d.getTime())),
+      );
+      if (
+        !this.allowEarlyRentalPickup() &&
+        Date.now() < earliestStart.getTime() - 60 * 60 * 1000
+      ) {
         throw new BadRequestException(
           'Chưa đến khung giờ nhận đồ theo lịch hẹn. Bạn chỉ có thể xác nhận khi đến giờ nhận áo.',
         );
       }
     }
 
-    const rentalItems = items.filter((item) =>
-      item.itemType === BookingItemType.Product && !!item.rentalFulfillment,
+    const rentalItems = items.filter(
+      (item) =>
+        item.itemType === BookingItemType.Product && !!item.rentalFulfillment,
     );
-    const itemsMissingHandoverEvidence = rentalItems.filter((item) =>
-      item.rentalFulfillment?.status !== RentalFulfillmentStatus.ReadyForPickup ||
-      !item.rentalFulfillment?.pickupEvidence?.files?.length,
+    const itemsMissingHandoverEvidence = rentalItems.filter(
+      (item) =>
+        item.rentalFulfillment?.status !==
+          RentalFulfillmentStatus.ReadyForPickup ||
+        !item.rentalFulfillment?.pickupEvidence?.files?.length,
     );
     if (itemsMissingHandoverEvidence.length > 0) {
-      throw new BadRequestException('Shop chưa gửi đầy đủ ảnh bàn giao cho từng trang phục. Bạn chưa thể xác nhận nhận áo.');
+      throw new BadRequestException(
+        'Shop chưa gửi đầy đủ ảnh bàn giao cho từng trang phục. Bạn chưa thể xác nhận nhận áo.',
+      );
     }
 
     let session: ClientSession | null = null;
@@ -5930,7 +6580,8 @@ export class BookingsService implements OnApplicationBootstrap {
         {
           $set: {
             'rentalFulfillment.status': RentalFulfillmentStatus.PickedUp,
-            'rentalFulfillment.inventoryStatus': RentalInventoryStatus.RentedOut,
+            'rentalFulfillment.inventoryStatus':
+              RentalInventoryStatus.RentedOut,
             'rentalFulfillment.pickedUpAt': new Date(),
           },
         },
@@ -5945,10 +6596,12 @@ export class BookingsService implements OnApplicationBootstrap {
           )
         : [];
       const invItemIds = [
-        ...new Set([
-          ...items.map((it) => it.inventoryItemId?.toString()),
-          ...reservations.map((r) => r.inventoryItemId?.toString()),
-        ].filter(Boolean)),
+        ...new Set(
+          [
+            ...items.map((it) => it.inventoryItemId?.toString()),
+            ...reservations.map((r) => r.inventoryItemId?.toString()),
+          ].filter(Boolean),
+        ),
       ];
       if (invItemIds.length > 0) {
         await this.inventoryItemModel.updateMany(
@@ -5984,7 +6637,10 @@ export class BookingsService implements OnApplicationBootstrap {
         recipientIds,
       );
     } catch (e) {
-      console.warn('Failed to emit booking_updated in customerConfirmPickup:', e);
+      console.warn(
+        'Failed to emit booking_updated in customerConfirmPickup:',
+        e,
+      );
     }
 
     return { success: true, booking };
@@ -6002,7 +6658,9 @@ export class BookingsService implements OnApplicationBootstrap {
       );
     }
     if (!description || !description.trim()) {
-      throw new BadRequestException('Báo cáo lỗi bắt buộc phải có mô tả chi tiết.');
+      throw new BadRequestException(
+        'Báo cáo lỗi bắt buộc phải có mô tả chi tiết.',
+      );
     }
 
     const booking = await this.bookingModel.findById(bookingId);
@@ -6033,9 +6691,13 @@ export class BookingsService implements OnApplicationBootstrap {
 
     const items = await this.bookingItemModel.find({ bookingId: booking._id });
     const startDates: Date[] = [];
-    if ((booking as any).rentalFrom) startDates.push(new Date((booking as any).rentalFrom));
+    if ((booking as any).rentalFrom)
+      startDates.push(new Date((booking as any).rentalFrom));
     for (const it of items) {
-      const rFrom = it.rentalFrom || (it as any).rentalFulfillment?.rentalFrom || (it as any).bookingDate;
+      const rFrom =
+        it.rentalFrom ||
+        (it as any).rentalFulfillment?.rentalFrom ||
+        (it as any).bookingDate;
       if (rFrom) startDates.push(new Date(rFrom));
       if (it.shootDate) {
         const d = new Date(it.shootDate);
@@ -6048,8 +6710,13 @@ export class BookingsService implements OnApplicationBootstrap {
     }
     const validStarts = startDates.filter((d) => !isNaN(d.getTime()));
     if (validStarts.length > 0) {
-      const earliestStart = new Date(Math.min(...validStarts.map((d) => d.getTime())));
-      if (!this.allowEarlyRentalPickup() && Date.now() < earliestStart.getTime() - 60 * 60 * 1000) {
+      const earliestStart = new Date(
+        Math.min(...validStarts.map((d) => d.getTime())),
+      );
+      if (
+        !this.allowEarlyRentalPickup() &&
+        Date.now() < earliestStart.getTime() - 60 * 60 * 1000
+      ) {
         throw new BadRequestException(
           'Chưa đến khung giờ nhận đồ theo lịch hẹn. Bạn chỉ có thể xác nhận khi đến giờ nhận áo.',
         );
@@ -6090,7 +6757,8 @@ export class BookingsService implements OnApplicationBootstrap {
         {
           $set: {
             'rentalFulfillment.status': RentalFulfillmentStatus.PickedUp,
-            'rentalFulfillment.inventoryStatus': RentalInventoryStatus.RentedOut,
+            'rentalFulfillment.inventoryStatus':
+              RentalInventoryStatus.RentedOut,
             'rentalFulfillment.pickedUpAt': new Date(),
           },
         },
@@ -6105,10 +6773,12 @@ export class BookingsService implements OnApplicationBootstrap {
           )
         : [];
       const invItemIds = [
-        ...new Set([
-          ...items.map((it) => it.inventoryItemId?.toString()),
-          ...reservations.map((r) => r.inventoryItemId?.toString()),
-        ].filter(Boolean)),
+        ...new Set(
+          [
+            ...items.map((it) => it.inventoryItemId?.toString()),
+            ...reservations.map((r) => r.inventoryItemId?.toString()),
+          ].filter(Boolean),
+        ),
       ];
       if (invItemIds.length > 0) {
         await this.inventoryItemModel.updateMany(
@@ -6162,7 +6832,10 @@ export class BookingsService implements OnApplicationBootstrap {
         recipientIds,
       );
     } catch (e) {
-      console.warn('Failed to emit booking_updated in customerReportDamage:', e);
+      console.warn(
+        'Failed to emit booking_updated in customerReportDamage:',
+        e,
+      );
     }
 
     return { success: true, booking };
@@ -6180,7 +6853,9 @@ export class BookingsService implements OnApplicationBootstrap {
       );
     }
     if (!reason || !reason.trim()) {
-      throw new BadRequestException('Từ chối nhận đồ bắt buộc phải có lý do chi tiết.');
+      throw new BadRequestException(
+        'Từ chối nhận đồ bắt buộc phải có lý do chi tiết.',
+      );
     }
 
     const booking = await this.bookingModel.findById(bookingId);
@@ -6234,10 +6909,12 @@ export class BookingsService implements OnApplicationBootstrap {
       // b) InventoryReservation.inventoryItemId của booking/item
       // Dedupe inventory ids.
       const invItemIds = [
-        ...new Set([
-          ...items.map((it) => it.inventoryItemId?.toString()),
-          ...reservations.map((r) => r.inventoryItemId?.toString()),
-        ].filter(Boolean)),
+        ...new Set(
+          [
+            ...items.map((it) => it.inventoryItemId?.toString()),
+            ...reservations.map((r) => r.inventoryItemId?.toString()),
+          ].filter(Boolean),
+        ),
       ];
 
       const maintenanceUntil = new Date(Date.now() + 48 * 60 * 60 * 1000);
@@ -6264,7 +6941,8 @@ export class BookingsService implements OnApplicationBootstrap {
         {
           $set: {
             'rentalFulfillment.status': RentalFulfillmentStatus.Cancelled,
-            'rentalFulfillment.inventoryStatus': RentalInventoryStatus.Maintenance,
+            'rentalFulfillment.inventoryStatus':
+              RentalInventoryStatus.Maintenance,
             'rentalFulfillment.issueStatus': RentalIssueStatus.Reported,
           },
         },
@@ -6305,7 +6983,11 @@ export class BookingsService implements OnApplicationBootstrap {
             status: 'OPEN',
           },
         },
-        { upsert: true, returnDocument: 'after', session: session || undefined },
+        {
+          upsert: true,
+          returnDocument: 'after',
+          session: session || undefined,
+        },
       );
 
       if (session) {
@@ -6364,72 +7046,81 @@ export class BookingsService implements OnApplicationBootstrap {
     const isCustomer = userId && this.getCustomerIdStr(booking) === userId;
 
     if (!isAdmin && !isCustomer) {
-      throw new ForbiddenException('Chỉ khách hàng của đơn hoặc Admin mới có quyền xác nhận trả áo.');
+      throw new ForbiddenException(
+        'Chỉ khách hàng của đơn hoặc Admin mới có quyền xác nhận trả áo.',
+      );
     }
 
     if (
       booking.status !== BookingStatus.PickedUp &&
       booking.status !== BookingStatus.InProgress &&
-      booking.status !== BookingStatus.ReturnPending
+      booking.status !== BookingStatus.ReturnPending &&
+      booking.status !== BookingStatus.ComboPhotosApproved
     ) {
       throw new BadRequestException(
-        `Không thể yêu cầu trả áo khi đơn hàng đang ở trạng thái ${booking.status}. Đơn hàng phải đang ở trạng thái Đang thuê (PICKED_UP).`,
+        `Không thể yêu cầu trả áo khi đơn hàng đang ở trạng thái ${booking.status}. Đơn hàng phải đang ở trạng thái Đang thuê (PICKED_UP) hoặc Đã duyệt ảnh (COMBO_PHOTOS_APPROVED).`,
       );
     }
 
-    if (!evidencePhotos || !Array.isArray(evidencePhotos) || evidencePhotos.filter(Boolean).length === 0) {
-      throw new BadRequestException('Bắt buộc tải lên ít nhất một ảnh bằng chứng tình trạng áo khi trả.');
+    if (
+      !evidencePhotos ||
+      !Array.isArray(evidencePhotos) ||
+      evidencePhotos.filter(Boolean).length === 0
+    ) {
+      throw new BadRequestException(
+        'Bắt buộc tải lên ít nhất một ảnh bằng chứng tình trạng áo khi trả.',
+      );
     }
 
     // 1. Tìm các rental items của booking
-    const items = await this.bookingItemModel.find({
-      bookingId: booking._id,
-      $or: [
-        { itemType: BookingItemType.Product },
-        { productId: { $exists: true, $ne: null } },
-        { 'rentalFulfillment.status': { $exists: true } },
-      ],
-    }).exec();
+    const items = await this.bookingItemModel
+      .find({
+        bookingId: booking._id,
+        $or: [
+          { itemType: BookingItemType.Product },
+          { productId: { $exists: true, $ne: null } },
+          { 'rentalFulfillment.status': { $exists: true } },
+        ],
+      })
+      .exec();
 
     if (!items.length) {
-      throw new NotFoundException('Không tìm thấy sản phẩm áo dài thuê trong đơn hàng này.');
+      throw new NotFoundException(
+        'Không tìm thấy sản phẩm áo dài thuê trong đơn hàng này.',
+      );
     }
 
-    let targetItem: any | null = null;
+    const targetItems: any[] = [];
     if (bookingItemId) {
-      targetItem = items.find((i) => i._id.toString() === bookingItemId) || null;
-      if (!targetItem) {
-        throw new NotFoundException(`Không tìm thấy sản phẩm ${bookingItemId} trong đơn hàng.`);
-      }
-    } else {
-      if (items.length === 1) {
-        targetItem = items[0];
-      } else {
-        const pickedUpItems = items.filter(
-          (i) => i.rentalFulfillment?.status === RentalFulfillmentStatus.PickedUp,
+      const found =
+        items.find((i) => i._id.toString() === bookingItemId) || null;
+      if (!found) {
+        throw new NotFoundException(
+          `Không tìm thấy sản phẩm ${bookingItemId} trong đơn hàng.`,
         );
-        if (pickedUpItems.length === 1) {
-          targetItem = pickedUpItems[0];
-        } else {
-          throw new BadRequestException(
-            'Đơn hàng có nhiều áo dài thuê. Vui lòng chỉ định rõ mã sản phẩm (bookingItemId) cần trả.',
+      }
+      targetItems.push(found);
+    } else {
+      const pickedUpItems = items.filter(
+        (i) => i.rentalFulfillment?.status === RentalFulfillmentStatus.PickedUp,
+      );
+      if (pickedUpItems.length > 0) {
+        targetItems.push(...pickedUpItems);
+      } else {
+        const returnRequestedItems = items.filter(
+          (i) =>
+            i.rentalFulfillment?.status ===
+            RentalFulfillmentStatus.CustomerReturnRequested,
+        );
+        if (returnRequestedItems.length > 0) {
+          throw new ConflictException(
+            'Trang phục trong đơn đã được gửi yêu cầu trả trước đó, đang chờ Shop nhận lại.',
           );
         }
+        throw new BadRequestException(
+          'Không có trang phục nào đang ở trạng thái Đang thuê (PICKED_UP) để trả.',
+        );
       }
-    }
-
-    // 2. Kiểm tra trạng thái targetItem
-    const currentItemStatus = targetItem.rentalFulfillment?.status;
-    if (currentItemStatus === RentalFulfillmentStatus.CustomerReturnRequested) {
-      throw new ConflictException('Sản phẩm này đã được gửi yêu cầu trả trước đó, đang chờ Shop nhận lại.');
-    }
-    if (currentItemStatus === RentalFulfillmentStatus.Returned || currentItemStatus === RentalFulfillmentStatus.Completed) {
-      throw new ConflictException('Sản phẩm này đã được Shop nhận lại.');
-    }
-    if (currentItemStatus !== RentalFulfillmentStatus.PickedUp) {
-      throw new BadRequestException(
-        `Sản phẩm này đang ở trạng thái ${currentItemStatus}, không thể gửi yêu cầu trả áo.`,
-      );
     }
 
     const returnEvData = {
@@ -6438,29 +7129,40 @@ export class BookingsService implements OnApplicationBootstrap {
       note: note?.trim() || null,
     };
 
-    // 3. Cập nhật ĐÚNG item đó, TUYỆT ĐỐI KHÔNG dùng updateMany
-    await this.bookingItemModel.updateOne(
-      { _id: targetItem._id },
-      {
-        $set: {
-          'rentalFulfillment.status': RentalFulfillmentStatus.CustomerReturnRequested,
-          'rentalFulfillment.customerReturnEvidence': returnEvData,
-          'rentalFulfillment.inventoryStatus': RentalInventoryStatus.ReturnedPendingInspection,
-        },
-        $push: {
-          'rentalFulfillment.history': {
-            action: 'CUSTOMER_RETURN_REQUESTED',
-            fromStatus: RentalFulfillmentStatus.PickedUp,
-            toStatus: RentalFulfillmentStatus.CustomerReturnRequested,
-            actor: { id: userId, role: isAdmin ? 'ADMIN' : 'CUSTOMER' },
-            occurredAt: new Date(),
-            note: note?.trim() || 'Khách hàng gửi yêu cầu trả áo kèm ảnh đối soát',
+    // 2. Cập nhật các items hợp lệ
+    for (const tItem of targetItems) {
+      const currentItemStatus = tItem.rentalFulfillment?.status;
+      if (currentItemStatus !== RentalFulfillmentStatus.PickedUp) {
+        continue;
+      }
+
+      await this.bookingItemModel.updateOne(
+        { _id: tItem._id },
+        {
+          $set: {
+            'rentalFulfillment.status':
+              RentalFulfillmentStatus.CustomerReturnRequested,
+            'rentalFulfillment.customerReturnEvidence': returnEvData,
+            'rentalFulfillment.inventoryStatus':
+              RentalInventoryStatus.ReturnedPendingInspection,
+          },
+          $push: {
+            'rentalFulfillment.history': {
+              action: 'CUSTOMER_RETURN_REQUESTED',
+              fromStatus: RentalFulfillmentStatus.PickedUp,
+              toStatus: RentalFulfillmentStatus.CustomerReturnRequested,
+              actor: { id: userId, role: isAdmin ? 'ADMIN' : 'CUSTOMER' },
+              occurredAt: new Date(),
+              note:
+                note?.trim() ||
+                'Khách hàng gửi yêu cầu trả áo kèm ảnh đối soát',
+            },
           },
         },
-      },
-    );
+      );
+    }
 
-    // 4. Cập nhật booking status sang RETURN_PENDING nếu chưa ở RETURN_PENDING
+    // 3. Cập nhật booking status sang RETURN_PENDING nếu chưa ở RETURN_PENDING
     (booking as any).customerReturnEvidence = returnEvData;
     if (booking.status !== BookingStatus.ReturnPending) {
       booking.status = BookingStatus.ReturnPending;
@@ -6468,7 +7170,8 @@ export class BookingsService implements OnApplicationBootstrap {
         status: BookingStatus.ReturnPending,
         changedAt: new Date(),
         changedBy: new Types.ObjectId(userId),
-        note: note?.trim() || 'Khách hàng xác nhận đã mang áo đến trả tại cửa hàng',
+        note:
+          note?.trim() || 'Khách hàng xác nhận đã mang áo đến trả tại cửa hàng',
       });
     }
     await booking.save();
@@ -6499,18 +7202,27 @@ export class BookingsService implements OnApplicationBootstrap {
 
     const providerDocIds = new Set<string>();
     if (Array.isArray(booking?.providerIds)) {
-      booking.providerIds.forEach((pid: any) => providerDocIds.add((pid?._id || pid).toString()));
+      booking.providerIds.forEach((pid: any) =>
+        providerDocIds.add((pid?._id || pid).toString()),
+      );
     }
     if (Array.isArray(booking?.items)) {
       booking.items.forEach((it: any) => {
-        if (it?.providerId) providerDocIds.add((it.providerId?._id || it.providerId).toString());
+        if (it?.providerId)
+          providerDocIds.add((it.providerId?._id || it.providerId).toString());
       });
     }
 
     if (providerDocIds.size > 0) {
       try {
         const providers = await this.providerModel
-          .find({ _id: { $in: Array.from(providerDocIds).map((id) => new Types.ObjectId(id)) } })
+          .find({
+            _id: {
+              $in: Array.from(providerDocIds).map(
+                (id) => new Types.ObjectId(id),
+              ),
+            },
+          })
           .select({ userId: 1 })
           .lean()
           .exec();

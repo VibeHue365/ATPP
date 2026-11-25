@@ -81,7 +81,7 @@ export const ProviderContractStatusCard: React.FC = () => {
     setActionError(null);
     try {
       await contractService.acceptProviderMechanism(mechanism.hash);
-      setActionSuccess('Chấp thuận Quy chế sàn giao dịch VibeHue thành công!');
+      setActionSuccess('Chấp thuận Quy chế sàn giao dịch TàGo thành công!');
       setIsModalOpen(false);
       setAgreementChecked(false);
       await loadData();
@@ -136,7 +136,7 @@ export const ProviderContractStatusCard: React.FC = () => {
               Cơ chế Hợp đồng Điện tử & Cam kết Nền tảng
             </h3>
             <p className="text-xs text-stone-500">
-              Ràng buộc pháp lý theo Quy chế hoạt động sàn giao dịch thương mại điện tử VibeHue.
+              Ràng buộc pháp lý theo Quy chế hoạt động sàn giao dịch thương mại điện tử TàGo.
             </p>
           </div>
         </div>
@@ -226,7 +226,7 @@ export const ProviderContractStatusCard: React.FC = () => {
             <div className="bg-white p-3 rounded-lg border border-stone-200">
               <span className="text-stone-400 block mb-0.5">Mã quy chế áp dụng</span>
               <strong className="text-stone-800 font-mono">
-                {mechanism?.regulationCode || 'QC-VIBEHUE-2026-V1'}
+                {mechanism?.regulationCode || 'QC-TAGO-2026-V1'}
               </strong>
             </div>
 
@@ -263,7 +263,7 @@ export const ProviderContractStatusCard: React.FC = () => {
               <div>
                 <p className="font-semibold mb-0.5">Quy chế đang ở trạng thái DRAFT (Chưa phê duyệt pháp lý):</p>
                 <p>
-                  Quy chế sàn hiện đang trong quá trình thẩm định pháp lý và chưa có phê duyệt chính thức từ Ban Quản trị Sàn VibeHue.
+                  Quy chế sàn hiện đang trong quá trình thẩm định pháp lý và chưa có phê duyệt chính thức từ Ban Quản trị Sàn TàGo.
                   Theo nguyên tắc an toàn Fail-Closed, Nhà cung cấp chỉ có thể xem trước nội dung và <strong>chưa thể kích hoạt chấp thuận</strong> cho tới khi quy chế được phê duyệt chính thức.
                 </p>
               </div>
@@ -375,10 +375,10 @@ export const ProviderContractStatusCard: React.FC = () => {
                 </div>
                 <div>
                   <h4 className="text-base font-bold text-stone-900">
-                    QUY CHẾ HOẠT ĐỘNG SÀN GIAO DỊCH THƯƠNG MẠI ĐIỆN TỬ VIBEHUE
+                    QUY CHẾ HOẠT ĐỘNG SÀN GIAO DỊCH THƯƠNG MẠI ĐIỆN TỬ TÀGO
                   </h4>
                   <p className="text-xs text-stone-500 mt-0.5">
-                    Mã quy chế: <strong className="font-mono text-stone-700">{mechanism?.regulationCode || 'QC-VIBEHUE-2026-V1'}</strong> | Phiên bản:{' '}
+                    Mã quy chế: <strong className="font-mono text-stone-700">{mechanism?.regulationCode || 'QC-TAGO-2026-V1'}</strong> | Phiên bản:{' '}
                     <strong className="font-mono text-stone-700">{mechanism?.version || 'auto-acceptance-v1'}</strong>
                   </p>
                 </div>
@@ -437,10 +437,10 @@ export const ProviderContractStatusCard: React.FC = () => {
                   ĐIỀU 1: MỤC ĐÍCH VÀ PHẠM VI ÁP DỤNG
                 </h5>
                 <p>
-                  1.1. Quy chế này quy định quyền, trách nhiệm và nghĩa vụ pháp lý của Nhà cung cấp (sau đây gọi là "Shop") và Khách hàng khi tham gia giao kết Hợp đồng điện tử thuê trang phục áo dài trên sàn thương mại điện tử VibeHue.
+                  1.1. Quy chế này quy định quyền, trách nhiệm và nghĩa vụ pháp lý của Nhà cung cấp (sau đây gọi là "Shop") và Khách hàng khi tham gia giao kết Hợp đồng điện tử thuê trang phục áo dài trên sàn thương mại điện tử TàGo.
                 </p>
                 <p>
-                  1.2. Mọi giao dịch thuê trang phục áo dài và dịch vụ đi kèm trên VibeHue bắt buộc phải tuân thủ quy chuẩn Hợp đồng điện tử Contracts V2 nhằm bảo vệ quyền lợi hợp pháp của cả hai bên theo pháp luật Việt Nam.
+                  1.2. Mọi giao dịch thuê trang phục áo dài và dịch vụ đi kèm trên TàGo bắt buộc phải tuân thủ quy chuẩn Hợp đồng điện tử Contracts V2 nhằm bảo vệ quyền lợi hợp pháp của cả hai bên theo pháp luật Việt Nam.
                 </p>
               </section>
 
@@ -449,7 +449,7 @@ export const ProviderContractStatusCard: React.FC = () => {
                   ĐIỀU 2: CƠ CHẾ GIAO KẾT TỰ ĐỘNG (AUTO-ACCEPTANCE MECHANISM)
                 </h5>
                 <p>
-                  2.1. Bằng việc thực hiện hành vi chấp thuận Quy chế này, Shop đồng ý và ủy quyền trước cho hệ thống VibeHue tự động đối chiếu các thông tin đặt thuê thực tế (danh mục sản phẩm, kích thước, đơn giá thuê, số tiền đặt cọc, thời gian thuê) để lập và phát hành văn bản Hợp đồng điện tử theo mẫu chuẩn đã được duyệt.
+                  2.1. Bằng việc thực hiện hành vi chấp thuận Quy chế này, Shop đồng ý và ủy quyền trước cho hệ thống TàGo tự động đối chiếu các thông tin đặt thuê thực tế (danh mục sản phẩm, kích thước, đơn giá thuê, số tiền đặt cọc, thời gian thuê) để lập và phát hành văn bản Hợp đồng điện tử theo mẫu chuẩn đã được duyệt.
                 </p>
                 <p>
                   2.2. Khi khách hàng bấm "Chấp thuận hợp đồng" trên ứng dụng/website và hoàn tất xác nhận thanh toán, Hợp đồng điện tử giữa Shop và Khách hàng chính thức có hiệu lực ràng buộc pháp lý mà không yêu cầu Shop phải ký duyệt thủ công trên từng đơn hàng lẻ.
@@ -479,7 +479,7 @@ export const ProviderContractStatusCard: React.FC = () => {
                   4.1. Mọi bản Hợp đồng điện tử được lưu trữ bất biến dưới dạng mã băm SHA-256 (Content Hash và Booking Fingerprint).
                 </p>
                 <p>
-                  4.2. Việc xác thực chấp thuận của Shop được ghi nhận kèm mã tài khoản, thời điểm chấp thuận, phiên bản quy chế và phiên bản mẫu hợp đồng tại cơ sở dữ liệu VibeHue, phục vụ đối soát và xuất chứng cứ khi có tranh chấp.
+                  4.2. Việc xác thực chấp thuận của Shop được ghi nhận kèm mã tài khoản, thời điểm chấp thuận, phiên bản quy chế và phiên bản mẫu hợp đồng tại cơ sở dữ liệu TàGo, phục vụ đối soát và xuất chứng cứ khi có tranh chấp.
                 </p>
               </section>
 
@@ -519,7 +519,7 @@ export const ProviderContractStatusCard: React.FC = () => {
                     isDraftMechanism ? 'text-stone-400' : 'text-stone-800'
                   }`}
                 >
-                  Tôi là người đại diện hợp pháp của Nhà cung cấp, cam kết đã đọc, hiểu rõ toàn bộ nội dung Quy chế và tự nguyện chấp thuận cơ chế giao kết hợp đồng điện tử tự động trên sàn VibeHue.
+                  Tôi là người đại diện hợp pháp của Nhà cung cấp, cam kết đã đọc, hiểu rõ toàn bộ nội dung Quy chế và tự nguyện chấp thuận cơ chế giao kết hợp đồng điện tử tự động trên sàn TàGo.
                 </label>
               </div>
 

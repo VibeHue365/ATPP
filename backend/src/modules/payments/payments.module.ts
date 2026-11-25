@@ -2,7 +2,10 @@ import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule } from '@nestjs/config';
 import { Payment, PaymentSchema } from './schemas/payment.schema';
-import { PaymentRecovery, PaymentRecoverySchema } from './schemas/payment-recovery.schema';
+import {
+  PaymentRecovery,
+  PaymentRecoverySchema,
+} from './schemas/payment-recovery.schema';
 import {
   PaymentWebhookEvent,
   PaymentWebhookEventSchema,
@@ -11,9 +14,18 @@ import {
   RefundRequest,
   RefundRequestSchema,
 } from './schemas/refund-request.schema';
-import { RefundAttempt, RefundAttemptSchema } from './schemas/refund-attempt.schema';
-import { SettlementAdjustment, SettlementAdjustmentSchema } from '../settlements/schemas/settlement-adjustment.schema';
-import { Settlement, SettlementSchema } from '../settlements/schemas/settlement.schema';
+import {
+  RefundAttempt,
+  RefundAttemptSchema,
+} from './schemas/refund-attempt.schema';
+import {
+  SettlementAdjustment,
+  SettlementAdjustmentSchema,
+} from '../settlements/schemas/settlement-adjustment.schema';
+import {
+  Settlement,
+  SettlementSchema,
+} from '../settlements/schemas/settlement.schema';
 import {
   BookingSettlement,
   BookingSettlementSchema,
@@ -74,9 +86,9 @@ export const paymentModels = MongooseModule.forFeature([
   ],
   controllers: [PaymentsController, RefundsController],
   providers: [
-    PaymentsService, 
-    RefundWorkflowService, 
-    PayOSRefundService, 
+    PaymentsService,
+    RefundWorkflowService,
+    PayOSRefundService,
     MockBankingService,
     PaymentsRepository,
     EscrowRepository,

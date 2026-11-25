@@ -157,15 +157,21 @@ describe('size chart validation', () => {
     expect(() => validateSizeChart(chart, ['M'])).toThrow(BadRequestException);
     const garment = draft();
     garment.measurementType = MeasurementType.Garment;
-    garment.fitRules = [{ preference: FitPreference.Regular, chest: { min: 2, max: 2 } }];
-    expect(() => validateSizeChart(garment, ['M'])).toThrow(BadRequestException);
+    garment.fitRules = [
+      { preference: FitPreference.Regular, chest: { min: 2, max: 2 } },
+    ];
+    expect(() => validateSizeChart(garment, ['M'])).toThrow(
+      BadRequestException,
+    );
   });
   it('allows an exact garment length without treating other body measurements as exact', () => {
     const chart = draft();
     chart.rows[0].length = { min: 138, max: 138 };
     expect(() => validateSizeChart(chart, ['M'], true)).not.toThrow();
     chart.rows[0].height = { min: 160, max: 160 };
-    expect(() => validateSizeChart(chart, ['M'], true)).toThrow(BadRequestException);
+    expect(() => validateSizeChart(chart, ['M'], true)).toThrow(
+      BadRequestException,
+    );
   });
   it('allows an incomplete image draft but never confirms it', () => {
     const chart = {
@@ -345,32 +351,48 @@ describe('size chart ownership, revisions and confirmation', () => {
       imageUrl: 'https://example.com/old.png',
     };
     const { service, products } = setup(chart, 1);
-    await expect(service.saveDraft(userId, productId.toString(), {
-      ...draft(),
-      expectedVersion: 1,
-      source: ChartSource.Image,
-      imageUrl: 'https://example.com/new.png',
-    })).rejects.toThrow(ConflictException);
+    await expect(
+      service.saveDraft(userId, productId.toString(), {
+        ...draft(),
+        expectedVersion: 1,
+        source: ChartSource.Image,
+        imageUrl: 'https://example.com/new.png',
+      }),
+    ).rejects.toThrow(ConflictException);
     expect(products.findOneAndUpdate).not.toHaveBeenCalled();
   });
   it('rejects a client-supplied image URL on an empty chart', async () => {
     const { service, products } = setup();
-    await expect(service.saveDraft(userId, productId.toString(), {
-      ...draft(),
-      source: ChartSource.Image,
-      imageUrl: 'https://example.com/other-provider.png',
-    })).rejects.toThrow(ConflictException);
+    await expect(
+      service.saveDraft(userId, productId.toString(), {
+        ...draft(),
+        source: ChartSource.Image,
+        imageUrl: 'https://example.com/other-provider.png',
+      }),
+    ).rejects.toThrow(ConflictException);
     expect(products.findOneAndUpdate).not.toHaveBeenCalled();
   });
   it('allows editing rows on the current server-uploaded image but requires reconfirmation', async () => {
     const imageUrl = 'https://example.com/old.png';
-    const { service } = setup({
-      ...confirmed(), source: ChartSource.Image, imageUrl,
-    }, 1);
+    const { service } = setup(
+      {
+        ...confirmed(),
+        source: ChartSource.Image,
+        imageUrl,
+      },
+      1,
+    );
     const result = await service.saveDraft(userId, productId.toString(), {
-      ...draft(), expectedVersion: 1, source: ChartSource.Image, imageUrl,
+      ...draft(),
+      expectedVersion: 1,
+      source: ChartSource.Image,
+      imageUrl,
     });
-    expect(result.sizeChart).toMatchObject({ status: 'DRAFT', rows: draft().rows, sourceRevision: 1 });
+    expect(result.sizeChart).toMatchObject({
+      status: 'DRAFT',
+      rows: draft().rows,
+      sourceRevision: 1,
+    });
   });
   it('lets only the server OCR path replace an image and its verified rows together', async () => {
     const chart = {
@@ -379,12 +401,17 @@ describe('size chart ownership, revisions and confirmation', () => {
       imageUrl: 'https://example.com/old.png',
     };
     const { service } = setup(chart, 1);
-    const result = await service.saveDraft(userId, productId.toString(), {
-      ...draft(),
-      expectedVersion: 1,
-      source: ChartSource.Image,
-      imageUrl: 'https://example.com/new.png',
-    }, true);
+    const result = await service.saveDraft(
+      userId,
+      productId.toString(),
+      {
+        ...draft(),
+        expectedVersion: 1,
+        source: ChartSource.Image,
+        imageUrl: 'https://example.com/new.png',
+      },
+      true,
+    );
     expect(result.sizeChart).toMatchObject({
       rows: draft().rows,
       sourceRevision: 2,

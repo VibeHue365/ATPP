@@ -1,10 +1,19 @@
-import { ConflictException, NotFoundException, UnprocessableEntityException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  UnprocessableEntityException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Connection, Model, Types } from 'mongoose';
 import { ContractPreparationService } from '../contract-preparation.service';
 import { ContractPolicyService } from '../contract-policy.service';
 import { ContractSnapshotService } from '../contract-snapshot.service';
 import { ContractTemplateService } from '../contract-template';
-import { ContractMechanismService, AUTO_ACCEPTANCE_MECHANISM_V1, AUTO_ACCEPTANCE_MECHANISM_V2 } from '../contract-mechanism.service';
+import {
+  ContractMechanismService,
+  AUTO_ACCEPTANCE_MECHANISM_V1,
+  AUTO_ACCEPTANCE_MECHANISM_V2,
+} from '../contract-mechanism.service';
 import { ContractAccessService } from '../contract-access.service';
 import { ProviderContractApprovalService } from '../provider-contract-approval.service';
 import { ContractCheckoutGuard } from '../contract-checkout-guard.service';
@@ -86,7 +95,10 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
     };
   }
 
-  function mockItem(providerId: Types.ObjectId, overrides: Partial<RentalItemSource> = {}): RentalItemSource {
+  function mockItem(
+    providerId: Types.ObjectId,
+    overrides: Partial<RentalItemSource> = {},
+  ): RentalItemSource {
     return {
       _id: oid(),
       bookingId,
@@ -106,13 +118,15 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
     };
   }
 
-  function createMockDb(overrides: {
-    booking?: BookingSource;
-    items?: RentalItemSource[];
-    providerA?: any;
-    providerB?: any;
-    customCollections?: Record<string, any>;
-  } = {}) {
+  function createMockDb(
+    overrides: {
+      booking?: BookingSource;
+      items?: RentalItemSource[];
+      providerA?: any;
+      providerB?: any;
+      customCollections?: Record<string, any>;
+    } = {},
+  ) {
     const currentBooking = overrides.booking ?? mockBooking();
     const currentItems = overrides.items ?? [mockItem(providerAId)];
     const provA = overrides.providerA ?? {
@@ -141,10 +155,14 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
         }
         if (name === 'booking_items') {
           return {
-            find: () => ({ toArray: jest.fn().mockResolvedValue(currentItems) }),
+            find: () => ({
+              toArray: jest.fn().mockResolvedValue(currentItems),
+            }),
             findOne: jest.fn().mockImplementation((filter: any) => {
               if (filter._id) {
-                const found = currentItems.find((it) => it._id.equals(filter._id));
+                const found = currentItems.find((it) =>
+                  it._id.equals(filter._id),
+                );
                 return Promise.resolve(found ?? currentItems[0] ?? null);
               }
               return Promise.resolve(currentItems[0] ?? null);
@@ -154,8 +172,10 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
         if (name === 'providers') {
           return {
             findOne: jest.fn().mockImplementation((filter: any) => {
-              if (filter._id && filter._id.equals(providerAId)) return Promise.resolve(provA);
-              if (filter._id && filter._id.equals(providerBId)) return Promise.resolve(provB);
+              if (filter._id && filter._id.equals(providerAId))
+                return Promise.resolve(provA);
+              if (filter._id && filter._id.equals(providerBId))
+                return Promise.resolve(provB);
               return Promise.resolve(null);
             }),
           };
@@ -169,21 +189,30 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
         if (name === 'digital_contracts') {
           return {
             indexes: jest.fn().mockResolvedValue([
-              { key: { bookingId: 1, providerId: 1, scope: 1 }, unique: true },
+              {
+                key: { bookingId: 1, providerId: 1, scope: 1 },
+                unique: true,
+              },
             ]),
           };
         }
         if (name === 'contract_versions') {
           return {
-            indexes: jest.fn().mockResolvedValue([
-              { key: { contractId: 1, version: 1 }, unique: true },
-            ]),
+            indexes: jest
+              .fn()
+              .mockResolvedValue([
+                { key: { contractId: 1, version: 1 }, unique: true },
+              ]),
           };
         }
         if (name === 'provider_contract_acceptances') {
           return {
             indexes: jest.fn().mockResolvedValue([
-              { key: { providerId: 1, scope: 1 }, unique: true, partialFilterExpression: { status: 'ACTIVE' } },
+              {
+                key: { providerId: 1, scope: 1 },
+                unique: true,
+                partialFilterExpression: { status: 'ACTIVE' },
+              },
             ]),
             updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
             insertOne: jest.fn().mockResolvedValue({ insertedId: oid() }),
@@ -221,7 +250,10 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
         }),
       } as unknown as Model<ProviderContractAcceptance>;
 
-      const policyService = new ContractPolicyService(connection, acceptanceModel);
+      const policyService = new ContractPolicyService(
+        connection,
+        acceptanceModel,
+      );
       const snapshotService = {
         build: jest.fn(),
       } as unknown as ContractSnapshotService;
@@ -260,7 +292,10 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
         }),
       } as unknown as Model<ProviderContractAcceptance>;
 
-      const policyService = new ContractPolicyService(connection, acceptanceModel);
+      const policyService = new ContractPolicyService(
+        connection,
+        acceptanceModel,
+      );
       const prepService = new ContractPreparationService(
         true,
         connection,
@@ -268,12 +303,16 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
         {} as Model<ContractVersion>,
         policyService,
         {} as ContractSnapshotService,
-        { getApproved: () => approvedTemplate } as unknown as ContractTemplateService,
+        {
+          getApproved: () => approvedTemplate,
+        } as unknown as ContractTemplateService,
       );
 
       await expect(
         prepService.prepare(bookingId.toString(), providerAId.toString()),
-      ).rejects.toThrow(new UnprocessableEntityException('PROVIDER_AUTO_ACCEPTANCE_MISSING'));
+      ).rejects.toThrow(
+        new UnprocessableEntityException('PROVIDER_AUTO_ACCEPTANCE_MISSING'),
+      );
     });
 
     it('ContractReadService.readiness reports PROVIDER_ACCEPTANCE_MISSING blocker', async () => {
@@ -286,9 +325,18 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
         }),
       } as unknown as Model<ProviderContractAcceptance>;
 
-      const policyService = new ContractPolicyService(connection, acceptanceModel);
+      const policyService = new ContractPolicyService(
+        connection,
+        acceptanceModel,
+      );
       const prepService = {
-        prepare: jest.fn().mockRejectedValue(new UnprocessableEntityException('PROVIDER_AUTO_ACCEPTANCE_MISSING')),
+        prepare: jest
+          .fn()
+          .mockRejectedValue(
+            new UnprocessableEntityException(
+              'PROVIDER_AUTO_ACCEPTANCE_MISSING',
+            ),
+          ),
       } as unknown as ContractPreparationService;
 
       const contractModel = {
@@ -307,12 +355,20 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
         {} as Model<ContractConsent>,
         accessService,
         policyService,
-        { getApproved: () => approvedTemplate } as unknown as ContractTemplateService,
+        {
+          getApproved: () => approvedTemplate,
+        } as unknown as ContractTemplateService,
         {} as ContractSnapshotService,
         prepService,
       );
 
-      const user = { sub: customerId.toString(), roles: ['CUSTOMER'], permissions: [], email: '', sessionId: '' };
+      const user = {
+        sub: customerId.toString(),
+        roles: ['CUSTOMER'],
+        permissions: [],
+        email: '',
+        sessionId: '',
+      };
       const readiness = await readService.readiness(user, bookingId.toString());
 
       expect(readiness.providers[0].status).toBe('PROVIDER_ACCEPTANCE_MISSING');
@@ -328,7 +384,9 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
           hash: hashContract(AUTO_ACCEPTANCE_MECHANISM_V1),
         }),
         getApproved: jest.fn().mockImplementation(() => {
-          throw new UnprocessableEntityException('CONTRACT_MECHANISM_NOT_APPROVED');
+          throw new UnprocessableEntityException(
+            'CONTRACT_MECHANISM_NOT_APPROVED',
+          );
         }),
       } as unknown as ContractMechanismService;
 
@@ -343,18 +401,28 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
 
       const approvalService = new ProviderContractApprovalService(
         true,
-        { db: { collection: () => ({ indexes: () => Promise.resolve([]) }) } } as unknown as Connection,
+        {
+          db: { collection: () => ({ indexes: () => Promise.resolve([]) }) },
+        } as unknown as Connection,
         {} as Model<ProviderContractAcceptance>,
         accessService,
         draftMechanismService,
-        { getApproved: () => approvedTemplate } as unknown as ContractTemplateService,
+        {
+          getApproved: () => approvedTemplate,
+        } as unknown as ContractTemplateService,
         {} as ContractSnapshotService,
       );
 
-      const user = { sub: providerAUserId.toString(), roles: ['PROVIDER'], permissions: [], email: '', sessionId: '' };
-      await expect(
-        approvalService.accept(user, 'some-hash'),
-      ).rejects.toThrow('CONTRACT_MECHANISM_NOT_APPROVED');
+      const user = {
+        sub: providerAUserId.toString(),
+        roles: ['PROVIDER'],
+        permissions: [],
+        email: '',
+        sessionId: '',
+      };
+      await expect(approvalService.accept(user, 'some-hash')).rejects.toThrow(
+        'CONTRACT_MECHANISM_NOT_APPROVED',
+      );
     });
   });
 
@@ -375,15 +443,25 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
 
       const approvalService = new ProviderContractApprovalService(
         true,
-        { db: { collection: () => ({ indexes: () => Promise.resolve([]) }) } } as unknown as Connection,
+        {
+          db: { collection: () => ({ indexes: () => Promise.resolve([]) }) },
+        } as unknown as Connection,
         {} as Model<ProviderContractAcceptance>,
         accessService,
         mechanismService,
-        { getApproved: () => approvedTemplate } as unknown as ContractTemplateService,
+        {
+          getApproved: () => approvedTemplate,
+        } as unknown as ContractTemplateService,
         {} as ContractSnapshotService,
       );
 
-      const user = { sub: providerAUserId.toString(), roles: ['PROVIDER'], permissions: [], email: '', sessionId: '' };
+      const user = {
+        sub: providerAUserId.toString(),
+        roles: ['PROVIDER'],
+        permissions: [],
+        email: '',
+        sessionId: '',
+      };
       await expect(
         approvalService.accept(user, 'stale_hash_12345'),
       ).rejects.toThrow(new ConflictException('CONTRACT_MECHANISM_CHANGED'));
@@ -393,7 +471,9 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
   describe('Scenario 5: Different provider cannot accept/revoke on behalf of shop', () => {
     it('rejects accept/revoke when user does not own the provider', async () => {
       const accessService = {
-        ownProvider: jest.fn().mockRejectedValue(new NotFoundException('PROVIDER_NOT_FOUND')),
+        ownProvider: jest
+          .fn()
+          .mockRejectedValue(new NotFoundException('PROVIDER_NOT_FOUND')),
       } as unknown as ContractAccessService;
 
       const approvalService = new ProviderContractApprovalService(
@@ -406,14 +486,20 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
         {} as ContractSnapshotService,
       );
 
-      const imposterUser = { sub: oid().toString(), roles: ['PROVIDER'], permissions: [], email: '', sessionId: '' };
+      const imposterUser = {
+        sub: oid().toString(),
+        roles: ['PROVIDER'],
+        permissions: [],
+        email: '',
+        sessionId: '',
+      };
       await expect(
         approvalService.accept(imposterUser, approvedMechanism.hash),
       ).rejects.toThrow('PROVIDER_NOT_FOUND');
 
-      await expect(
-        approvalService.revoke(imposterUser),
-      ).rejects.toThrow('PROVIDER_NOT_FOUND');
+      await expect(approvalService.revoke(imposterUser)).rejects.toThrow(
+        'PROVIDER_NOT_FOUND',
+      );
     });
   });
 
@@ -432,7 +518,10 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
 
       const acceptanceModel = {
         findOne: jest.fn().mockImplementation((filter: any) => {
-          if (filter.status === ProviderAcceptanceStatus.Active && acceptanceStatus === ProviderAcceptanceStatus.Active) {
+          if (
+            filter.status === ProviderAcceptanceStatus.Active &&
+            acceptanceStatus === ProviderAcceptanceStatus.Active
+          ) {
             return {
               _id: activeAcceptanceId,
               status: ProviderAcceptanceStatus.Active,
@@ -442,16 +531,17 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
               templateVersion: approvedTemplate.version,
               acceptedAt: new Date(),
               acceptedByUserId: providerAUserId,
-              lean: () => Promise.resolve({
-                _id: activeAcceptanceId,
-                status: ProviderAcceptanceStatus.Active,
-                providerId: providerAId,
-                mechanismHash: approvedMechanism.hash,
-                policyFingerprint: hashContract(dummyPolicies),
-                templateVersion: approvedTemplate.version,
-                acceptedAt: new Date(),
-                acceptedByUserId: providerAUserId,
-              }),
+              lean: () =>
+                Promise.resolve({
+                  _id: activeAcceptanceId,
+                  status: ProviderAcceptanceStatus.Active,
+                  providerId: providerAId,
+                  mechanismHash: approvedMechanism.hash,
+                  policyFingerprint: hashContract(dummyPolicies),
+                  templateVersion: approvedTemplate.version,
+                  acceptedAt: new Date(),
+                  acceptedByUserId: providerAUserId,
+                }),
             };
           }
           return { lean: () => Promise.resolve(null) };
@@ -478,8 +568,14 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
         {} as ContractSnapshotService,
       );
 
-      const user = { sub: providerAUserId.toString(), roles: ['PROVIDER'], permissions: [], email: '', sessionId: '' };
-      
+      const user = {
+        sub: providerAUserId.toString(),
+        roles: ['PROVIDER'],
+        permissions: [],
+        email: '',
+        sessionId: '',
+      };
+
       // Revoke the active acceptance
       const revokeResult = await approvalService.revoke(user);
       expect(revokeResult.revoked).toBe(true);
@@ -487,7 +583,10 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
 
       // Now subsequent prepare attempt must fail closed!
       const database = createMockDb();
-      const policyService = new ContractPolicyService({ db: database } as unknown as Connection, acceptanceModel);
+      const policyService = new ContractPolicyService(
+        { db: database } as unknown as Connection,
+        acceptanceModel,
+      );
       const prepService = new ContractPreparationService(
         true,
         { db: database } as unknown as Connection,
@@ -495,7 +594,9 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
         {} as Model<ContractVersion>,
         policyService,
         {} as ContractSnapshotService,
-        { getApproved: () => approvedTemplate } as unknown as ContractTemplateService,
+        {
+          getApproved: () => approvedTemplate,
+        } as unknown as ContractTemplateService,
       );
 
       await expect(
@@ -563,7 +664,14 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
           return Promise.resolve(this);
         }
         static findById(id: Types.ObjectId) {
-          return { session: () => Promise.resolve(savedVersion && savedVersion._id.equals(id) ? savedVersion : null) };
+          return {
+            session: () =>
+              Promise.resolve(
+                savedVersion && savedVersion._id.equals(id)
+                  ? savedVersion
+                  : null,
+              ),
+          };
         }
       }
 
@@ -583,7 +691,10 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
         }),
       } as unknown as Model<ProviderContractAcceptance>;
 
-      const policyService = new ContractPolicyService(connection, acceptanceModel);
+      const policyService = new ContractPolicyService(
+        connection,
+        acceptanceModel,
+      );
       const snapshotService = {
         build: jest.fn().mockResolvedValue(mockSnapshot),
       } as unknown as ContractSnapshotService;
@@ -601,14 +712,19 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
         templateService,
       );
 
-      const outcome = await prepService.prepare(bookingId.toString(), providerAId.toString());
+      const outcome = await prepService.prepare(
+        bookingId.toString(),
+        providerAId.toString(),
+      );
 
       expect(outcome).toBeDefined();
       expect(outcome.version).toBe(1);
       expect(outcome.reused).toBe(false);
       expect(savedContract).toBeDefined();
       expect(savedVersion).toBeDefined();
-      expect(savedVersion.providerAcceptanceId.toString()).toBe(activeAcceptanceId.toString());
+      expect(savedVersion.providerAcceptanceId.toString()).toBe(
+        activeAcceptanceId.toString(),
+      );
       expect(savedVersion.state).toBe(ContractVersionState.Offered);
     });
   });
@@ -674,18 +790,26 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
         }
         static findById(id: Types.ObjectId) {
           return {
-            session: () => Promise.resolve(id.equals(acceptedVersionId) ? acceptedVersion : null),
+            session: () =>
+              Promise.resolve(
+                id.equals(acceptedVersionId) ? acceptedVersion : null,
+              ),
           };
         }
-        static updateOne = jest.fn().mockImplementation((filter: any, update: any) => {
-          // If the filter has state: { $ne: ContractVersionState.Accepted }, it will NOT match acceptedVersion!
-          if (filter.state && filter.state.$ne === ContractVersionState.Accepted) {
-            if (acceptedVersion.state === ContractVersionState.Accepted) {
-              return Promise.resolve({ modifiedCount: 0 }); // Was not modified because it's Accepted
+        static updateOne = jest
+          .fn()
+          .mockImplementation((filter: any, update: any) => {
+            // If the filter has state: { $ne: ContractVersionState.Accepted }, it will NOT match acceptedVersion!
+            if (
+              filter.state &&
+              filter.state.$ne === ContractVersionState.Accepted
+            ) {
+              if (acceptedVersion.state === ContractVersionState.Accepted) {
+                return Promise.resolve({ modifiedCount: 0 }); // Was not modified because it's Accepted
+              }
             }
-          }
-          return Promise.resolve({ modifiedCount: 1 });
-        });
+            return Promise.resolve({ modifiedCount: 1 });
+          });
       }
 
       const session = {
@@ -723,11 +847,18 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
         MockContractModel as any,
         MockVersionModel as any,
         new ContractPolicyService(connection, acceptanceModel),
-        { build: jest.fn().mockResolvedValue(newMockSnapshot) } as unknown as ContractSnapshotService,
-        { getApproved: () => approvedTemplate } as unknown as ContractTemplateService,
+        {
+          build: jest.fn().mockResolvedValue(newMockSnapshot),
+        } as unknown as ContractSnapshotService,
+        {
+          getApproved: () => approvedTemplate,
+        } as unknown as ContractTemplateService,
       );
 
-      const outcome = await prepService.prepare(bookingId.toString(), providerAId.toString());
+      const outcome = await prepService.prepare(
+        bookingId.toString(),
+        providerAId.toString(),
+      );
 
       // Version 2 is created
       expect(outcome.version).toBe(2);
@@ -736,7 +867,9 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
       // CRITICAL IMMUTABILITY ASSERTION: Original accepted version remains intact!
       expect(acceptedVersion.state).toBe(ContractVersionState.Accepted);
       expect(acceptedVersion.contentHash).toBe(originalContentHash);
-      expect(acceptedVersion.bookingFingerprint).toBe(originalBookingFingerprint);
+      expect(acceptedVersion.bookingFingerprint).toBe(
+        originalBookingFingerprint,
+      );
       expect(acceptedVersion.renderedText).toBe(originalRenderedText);
 
       // New version has its own distinct id and state Offered
@@ -765,8 +898,14 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
         policies: dummyPolicies,
         template: approvedTemplate,
       };
-      const renderedTextA = canonicalizeContract({ template: approvedTemplate, snapshot: snapshotA });
-      const contentHashA = hashContract({ template: approvedTemplate, snapshot: snapshotA });
+      const renderedTextA = canonicalizeContract({
+        template: approvedTemplate,
+        snapshot: snapshotA,
+      });
+      const contentHashA = hashContract({
+        template: approvedTemplate,
+        snapshot: snapshotA,
+      });
       const fingerprintA = hashContract({
         booking: snapshotA.booking,
         providerItems: snapshotA.providerItems,
@@ -850,17 +989,23 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
 
       const consentModel = {
         findOne: jest.fn().mockImplementation((filter: any) => {
-          if (filter.contractVersionId.equals(versionAId)) return lean(consentA);
+          if (filter.contractVersionId.equals(versionAId))
+            return lean(consentA);
           return lean(null);
         }),
       } as unknown as Model<ContractConsent>;
 
-      const policyService = new ContractPolicyService({ db: database } as unknown as Connection, acceptanceModel);
+      const policyService = new ContractPolicyService(
+        { db: database } as unknown as Connection,
+        acceptanceModel,
+      );
       const snapshotService = {
-        build: jest.fn().mockImplementation((_ctx: any, pId: Types.ObjectId) => {
-          if (pId.equals(providerAId)) return Promise.resolve(snapshotA);
-          return Promise.resolve(null);
-        }),
+        build: jest
+          .fn()
+          .mockImplementation((_ctx: any, pId: Types.ObjectId) => {
+            if (pId.equals(providerAId)) return Promise.resolve(snapshotA);
+            return Promise.resolve(null);
+          }),
       } as unknown as ContractSnapshotService;
 
       const prepService = {
@@ -875,13 +1020,21 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
         policyService,
         snapshotService,
         prepService,
-        { getApproved: () => approvedTemplate } as unknown as ContractTemplateService,
-        { getApproved: () => approvedMechanism } as unknown as ContractMechanismService,
+        {
+          getApproved: () => approvedTemplate,
+        } as unknown as ContractTemplateService,
+        {
+          getApproved: () => approvedMechanism,
+        } as unknown as ContractMechanismService,
       );
 
       // Provider B has NO contract and NO acceptance -> evaluate() MUST fail closed!
       await expect(
-        guard.evaluate(bookingId.toString(), 400000, PaymentPurpose.RentalInitial),
+        guard.evaluate(
+          bookingId.toString(),
+          400000,
+          PaymentPurpose.RentalInitial,
+        ),
       ).rejects.toThrow();
     });
   });
@@ -889,7 +1042,10 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
   describe('Scenario 10: Feature flag OFF -> legacy checkout and photography unaffected', () => {
     it('returns null binding and does not block checkout when CONTRACTS_V2_ENABLED is false', async () => {
       const database = createMockDb();
-      const policyService = new ContractPolicyService({ db: database } as unknown as Connection, {} as any);
+      const policyService = new ContractPolicyService(
+        { db: database } as unknown as Connection,
+        {} as any,
+      );
 
       // Flag disabled
       const guard = new ContractCheckoutGuard(
@@ -907,7 +1063,10 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
       // When booking is legacy (contractFlowVersion !== 2), it bypasses
       const legacyBooking = mockBooking({ contractFlowVersion: 1 });
       const legacyDb = createMockDb({ booking: legacyBooking });
-      const legacyPolicy = new ContractPolicyService({ db: legacyDb } as unknown as Connection, {} as any);
+      const legacyPolicy = new ContractPolicyService(
+        { db: legacyDb } as unknown as Connection,
+        {} as any,
+      );
       const legacyGuard = new ContractCheckoutGuard(
         true,
         {} as any,
@@ -920,7 +1079,11 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
         {} as any,
       );
 
-      const legacyDecision = await legacyGuard.evaluate(bookingId.toString(), 200000, PaymentPurpose.RentalInitial);
+      const legacyDecision = await legacyGuard.evaluate(
+        bookingId.toString(),
+        200000,
+        PaymentPurpose.RentalInitial,
+      );
       expect(legacyDecision).toEqual({ binding: null, context: null });
     });
 
@@ -929,7 +1092,10 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
         bookingType: 'PHOTOGRAPHY',
       });
       const database = createMockDb({ booking: photoBooking, items: [] });
-      const policyService = new ContractPolicyService({ db: database } as unknown as Connection, {} as any);
+      const policyService = new ContractPolicyService(
+        { db: database } as unknown as Connection,
+        {} as any,
+      );
 
       const guard = new ContractCheckoutGuard(
         true,
@@ -943,7 +1109,11 @@ describe('P0 — Provider Consent Authenticity & Fail-Closed Safety Gate', () =>
         {} as any,
       );
 
-      const photoDecision = await guard.evaluate(bookingId.toString(), 500000, PaymentPurpose.PhotographyInitial);
+      const photoDecision = await guard.evaluate(
+        bookingId.toString(),
+        500000,
+        PaymentPurpose.PhotographyInitial,
+      );
       expect(photoDecision).toEqual({ binding: null, context: null });
     });
   });

@@ -15,10 +15,21 @@ export class IncidentReport {
   @Prop({ type: Types.ObjectId, ref: 'Booking', required: true, index: true })
   bookingId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'BookingItem', required: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'BookingItem',
+    required: true,
+    index: true,
+  })
   bookingItemId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Product', required: false, default: null, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'Product',
+    required: false,
+    default: null,
+    index: true,
+  })
   productId?: Types.ObjectId | null;
 
   @Prop({ type: Types.ObjectId, ref: 'Provider', required: true, index: true })
@@ -27,7 +38,11 @@ export class IncidentReport {
   @Prop({ required: true, trim: true })
   description: string;
 
-  @Prop({ type: String, enum: ['CLEANING', 'MAINTENANCE', 'NO_SHOW', 'OTHER'], default: 'CLEANING' })
+  @Prop({
+    type: String,
+    enum: ['CLEANING', 'MAINTENANCE', 'NO_SHOW', 'OTHER'],
+    default: 'CLEANING',
+  })
   actionType: 'CLEANING' | 'MAINTENANCE' | 'NO_SHOW' | 'OTHER';
 
   @Prop({ type: [String], default: [] })
@@ -57,7 +72,8 @@ export class IncidentReport {
   resolvedAt?: Date | null;
 }
 
-export const IncidentReportSchema = SchemaFactory.createForClass(IncidentReport);
+export const IncidentReportSchema =
+  SchemaFactory.createForClass(IncidentReport);
 IncidentReportSchema.index(
   { bookingId: 1, bookingItemId: 1 },
   { unique: true },

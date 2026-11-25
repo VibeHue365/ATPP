@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Booking, BookingStatus } from '../../bookings/schemas/booking.schema';
@@ -58,7 +64,10 @@ export class SettlementQueryService {
 
     // Self-healing: auto-create settlement for any COMPLETED bookings of this provider that don't have one yet
     try {
-      const itemsForProvider = await this.bookingModel.db.model('BookingItem').find({ providerId }).distinct('bookingId');
+      const itemsForProvider = await this.bookingModel.db
+        .model('BookingItem')
+        .find({ providerId })
+        .distinct('bookingId');
       const completedBookings = await this.bookingModel
         .find({
           $or: [

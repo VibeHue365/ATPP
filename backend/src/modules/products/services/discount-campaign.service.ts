@@ -1,12 +1,21 @@
-import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { DiscountCampaign, DiscountCampaignDocument } from '../schemas/discount-campaign.schema';
+import {
+  DiscountCampaign,
+  DiscountCampaignDocument,
+} from '../schemas/discount-campaign.schema';
 import { UsersRepository } from '../../users/repositories/users.repository';
 import { CreateCampaignDto } from '../dto/create-campaign.dto';
 import {
   applyCampaignToRate,
   calculateDailyRentalTotal,
+  calculateHourlyRentalTotal,
   getStartOfVnDay,
   resolveHourlyRate,
   toVnDayKey,
@@ -21,14 +30,21 @@ export class DiscountCampaignService {
   ) {}
 
   private async getProviderId(userId: string): Promise<Types.ObjectId> {
-    const user = await this.usersRepository.findUserById(new Types.ObjectId(userId));
+    const user = await this.usersRepository.findUserById(
+      new Types.ObjectId(userId),
+    );
     if (!user || !user.provider || !user.provider.providerId) {
-      throw new ForbiddenException('Tài khoản không phải là đối tác hoặc không có ID đối tác.');
+      throw new ForbiddenException(
+        'Tài khoản không phải là đối tác hoặc không có ID đối tác.',
+      );
     }
     return new Types.ObjectId(user.provider.providerId.toString());
   }
 
-  async createCampaign(userId: string, dto: CreateCampaignDto): Promise<DiscountCampaign> {
+  async createCampaign(
+    userId: string,
+    dto: CreateCampaignDto,
+  ): Promise<DiscountCampaign> {
     const providerId = await this.getProviderId(userId);
     const type = dto.type ?? 'DISCOUNT';
 
@@ -41,7 +57,9 @@ export class DiscountCampaignService {
 
     // Ngày bắt đầu và kết thúc đều được tính, nên dịp lễ một ngày (14/2, 8/3, 20/10...) hợp lệ.
     if (toVnDayKey(end) < toVnDayKey(start)) {
-      throw new BadRequestException('Ngày kết thúc không được trước ngày bắt đầu.');
+      throw new BadRequestException(
+        'Ngày kết thúc không được trước ngày bắt đầu.',
+      );
     }
 
     if (toVnDayKey(end) < toVnDayKey(new Date())) {
@@ -70,25 +88,37 @@ export class DiscountCampaignService {
    * Chiến dịch đang chạy HOẶC sắp diễn ra (chưa qua ngày kết thúc). Chiến dịch áp theo ngày thuê,
    * nên khách đặt trước cần thấy nó ngay từ lúc tạo; ngày nào bị áp giá thì do ngày thuê quyết định.
    */
-  async getActiveCampaign(providerId: string | Types.ObjectId): Promise<DiscountCampaign | null> {
-    const pId = typeof providerId === 'string' ? new Types.ObjectId(providerId) : providerId;
+  async getActiveCampaign(
+    providerId: string | Types.ObjectId,
+  ): Promise<DiscountCampaign | null> {
+    const pId =
+      typeof providerId === 'string'
+        ? new Types.ObjectId(providerId)
+        : providerId;
 
-    return this.campaignModel.findOne({
-      providerId: pId,
-      isActive: true,
-      endDate: { $gte: getStartOfVnDay() },
-    }).sort({ createdAt: -1 });
+    return this.campaignModel
+      .findOne({
+        providerId: pId,
+        isActive: true,
+        endDate: { $gte: getStartOfVnDay() },
+      })
+      .sort({ createdAt: -1 });
   }
 
-  async getActiveCampaignsForProviders(providerIds: Types.ObjectId[]): Promise<Record<string, DiscountCampaign>> {
+  async getActiveCampaignsForProviders(
+    providerIds: Types.ObjectId[],
+  ): Promise<Record<string, DiscountCampaign>> {
     if (!providerIds.length) return {};
 
-    const campaigns = await this.campaignModel.find({
-      providerId: { $in: providerIds },
-      isActive: true,
-      endDate: { $gte: getStartOfVnDay() },
-    })
-      .select('providerId occasion type discountPercent startDate endDate createdAt')
+    const campaigns = await this.campaignModel
+      .find({
+        providerId: { $in: providerIds },
+        isActive: true,
+        endDate: { $gte: getStartOfVnDay() },
+      })
+      .select(
+        'providerId occasion type discountPercent startDate endDate createdAt',
+      )
       .sort({ createdAt: -1 })
       .lean()
       .exec();
@@ -115,7 +145,7 @@ export class DiscountCampaignService {
     return calculateDailyRentalTotal(basePrice, campaign, from, to);
   }
 
-  /** Giá một giờ thuê vào ngày `day`: 30% giá ngày, rồi áp chiến dịch nếu ngày đó thuộc chiến dịch. */
+  /** Giá một giờ thuê vào ngày `day`: mặc định 20% giá ngày, rồi áp chiến dịch nếu ngày đó thuộc chiến dịch. */
   async calculateHourlyRate(
     basePrice: number,
     hourlyPrice: number | null | undefined,
@@ -123,10 +153,34 @@ export class DiscountCampaignService {
     day: Date | string,
   ): Promise<number> {
     const campaign = await this.getActiveCampaign(providerId);
-    return applyCampaignToRate(resolveHourlyRate(basePrice, hourlyPrice), campaign, day);
+    return applyCampaignToRate(
+      resolveHourlyRate(basePrice, hourlyPrice),
+      campaign,
+      day,
+    );
   }
 
-  async getActiveCampaignForProviderUser(userId: string): Promise<DiscountCampaign | null> {
+  /** Tổng tiền thuê theo giờ cho 1 ngày, áp chiến dịch và trần tối đa bằng giá thuê trọn ngày. */
+  async calculateHourlyRental(
+    basePrice: number,
+    hourlyPrice: number | null | undefined,
+    providerId: string | Types.ObjectId,
+    day: Date | string,
+    durationHours: number,
+  ): Promise<{ total: number; hourlyRate: number; dailyCap: number; hours: number }> {
+    const campaign = await this.getActiveCampaign(providerId);
+    return calculateHourlyRentalTotal(
+      basePrice,
+      hourlyPrice,
+      campaign,
+      day,
+      durationHours,
+    );
+  }
+
+  async getActiveCampaignForProviderUser(
+    userId: string,
+  ): Promise<DiscountCampaign | null> {
     const providerId = await this.getProviderId(userId);
     return this.getActiveCampaign(providerId);
   }

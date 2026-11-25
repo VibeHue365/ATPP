@@ -44,6 +44,12 @@ import { adminDirectoryApi } from '../../../features/admin-directory/api/adminDi
 import { adminStatsApi, type CustomerDetailResponse } from '../../../features/admin-dashboard/api/adminStatsApi';
 import { useToast } from '../../../components/feedback/Toast';
 import { includesVietnamese } from '../../../utils/vietnameseUtils';
+import {
+  getBookingStatusLabel,
+  getDisputeStatusMeta,
+  getRefundStatusMeta,
+  getUserStatusMeta,
+} from '../../../utils/bookingStatus';
 import './customerManagementFigma.css';
 
 export interface CustomerDetailItem {
@@ -64,6 +70,9 @@ export interface CustomerDetailItem {
   isVerified: boolean;
   status: 'ACTIVE' | 'NEEDS_CHECK' | 'SUSPENDED';
   statusLabel: string;
+  isRestricted?: boolean;
+  restrictedReason?: string | null;
+  restrictedAt?: string | null;
   warning: 'NONE' | 'DISPUTE_2' | 'REQUEST_2' | 'DISPUTE_ACTIVE' | 'REQUEST_2_WARN';
   warningLabel: string;
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
@@ -241,7 +250,8 @@ export function CustomerManagementPanel() {
       if (resCust.status === 'fulfilled' && resCust.value?.items) {
         loadedCustomers = resCust.value.items.map((c, idx) => {
           const codeIndex = String(idx + 1).padStart(4, '0');
-          const isBanned = c.status === 'BANNED';
+          const rawUserStatus = (c.status || 'ACTIVE').toUpperCase();
+          const userStatusMeta = getUserStatusMeta(rawUserStatus);
           const safeAvatar =
             c.avatar && c.avatar.trim().length > 0 && !c.avatar.includes('unsplash.com') && !c.avatar.includes('example.com')
               ? c.avatar
@@ -262,12 +272,15 @@ export function CustomerManagementPanel() {
             refunds: 0,
             disputes: 0,
             isVerified: Boolean(c.email && c.phone && c.phone !== 'Chưa cập nhật'),
-            status: isBanned ? 'SUSPENDED' : 'ACTIVE',
-            statusLabel: isBanned ? 'Tạm ngưng' : 'Hoạt động',
+            status: rawUserStatus === 'BANNED' || rawUserStatus === 'SUSPENDED' ? 'SUSPENDED' : 'ACTIVE',
+            statusLabel: userStatusMeta.label,
+            isRestricted: Boolean(c.isRestricted),
+            restrictedReason: c.restrictedReason || null,
+            restrictedAt: c.restrictedAt || null,
             warning: 'NONE',
             warningLabel: 'Không có',
             riskLevel: 'LOW',
-            registrationSource: 'Website VibeHue',
+            registrationSource: 'Website TàGo',
             address: 'Việt Nam',
             language: 'Tiếng Việt',
             device: 'Trình duyệt Web / Di động',
@@ -445,6 +458,40 @@ export function CustomerManagementPanel() {
         }
       } catch {
         toast.show('Không thể mở khóa tài khoản, vui lòng thử lại', 'error');
+      }
+    }
+  };
+
+  const handleUnrestrictAccount = async (customer: CustomerDetailItem) => {
+    const result = await Swal.fire({
+      title: 'Gỡ hạn chế đặt đơn?',
+      text: `Khách hàng ${customer.fullName} sẽ được khôi phục quyền tạo đơn thuê mới trên sàn TàGo.`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#059669',
+      cancelButtonColor: '#6B7280',
+      confirmButtonText: 'Gỡ hạn chế',
+      cancelButtonText: 'Hủy bỏ',
+    });
+
+    if (result.isConfirmed) {
+      try {
+        await adminDirectoryApi.unrestrictCustomer(customer.id);
+        toast.show(`Đã gỡ hạn chế đặt đơn cho ${customer.fullName}`, 'success');
+        setCustomerList((prev) =>
+          prev.map((c) =>
+            c.id === customer.id
+              ? { ...c, isRestricted: false, restrictedReason: null, restrictedAt: null }
+              : c,
+          ),
+        );
+        if (selectedCustomer?.id === customer.id) {
+          setSelectedCustomer((prev) =>
+            prev ? { ...prev, isRestricted: false, restrictedReason: null, restrictedAt: null } : null,
+          );
+        }
+      } catch {
+        toast.show('Không thể gỡ hạn chế tài khoản, vui lòng thử lại', 'error');
       }
     }
   };
@@ -881,7 +928,15 @@ export function CustomerManagementPanel() {
 
                         {/* Cảnh báo */}
                         <td>
-                          {cust.warning === 'NONE' ? (
+                          {cust.isRestricted ? (
+                            <span
+                              className="lume-cust-warning-badge amber"
+                              title={cust.restrictedReason || 'Tài khoản bị hạn chế tạo đơn mới do trả đồ trễ hạn quá 2 giờ'}
+                            >
+                              <AlertTriangle size={12} />
+                              Hạn chế đặt đơn
+                            </span>
+                          ) : cust.warning === 'NONE' ? (
                             <span className="lume-cust-warning-text">Không có</span>
                           ) : cust.warning === 'DISPUTE_2' ? (
                             <span className="lume-cust-warning-badge red">
@@ -1102,6 +1157,51 @@ export function CustomerManagementPanel() {
                 </div>
               </div>
             </div>
+
+            {/* Restricted Banner (Overdue T+2h) */}
+            {selectedCustomer.isRestricted && (
+              <div
+                style={{
+                  margin: '10px 0 4px',
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  backgroundColor: '#FFFBEB',
+                  border: '1px solid #FCD34D',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#B45309', fontWeight: 700, fontSize: '12.5px' }}>
+                  <AlertTriangle size={14} />
+                  <span>Đang bị hạn chế quyền đặt đơn mới</span>
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#78350F', lineHeight: 1.45 }}>
+                  {selectedCustomer.restrictedReason || 'Khách hàng trễ hạn trả trang phục quá 2 giờ.'}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleUnrestrictAccount(selectedCustomer)}
+                  style={{
+                    alignSelf: 'flex-start',
+                    backgroundColor: '#059669',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: '7px',
+                    padding: '6px 12px',
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                  }}
+                >
+                  <CheckCircle size={13} />
+                  <span>Gỡ hạn chế đặt đơn</span>
+                </button>
+              </div>
+            )}
 
             {/* Contact Information */}
             <div className="lume-cust-panel-contacts">
@@ -1403,15 +1503,7 @@ export function CustomerManagementPanel() {
                           Đơn thuê {b.bookingCode}
                         </span>
                         <span className={`lume-cust-pill-${b.status === 'COMPLETED' ? 'verified' : 'unverified'}-modern`}>
-                          {b.status === 'COMPLETED'
-                            ? 'Hoàn thành'
-                            : b.status === 'PENDING'
-                            ? 'Chờ xác nhận'
-                            : b.status === 'CONFIRMED'
-                            ? 'Đã xác nhận'
-                            : b.status === 'CANCELLED'
-                            ? 'Đã hủy'
-                            : b.status}
+                          {getBookingStatusLabel(b.status)}
                         </span>
                       </div>
                       <div style={{ fontSize: 11, color: '#6B7280', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1452,7 +1544,7 @@ export function CustomerManagementPanel() {
                       <div className="lume-cust-tab-card-header">
                         <span className="lume-cust-tab-card-title">Yêu cầu hoàn cọc {r.refundCode}</span>
                         <span className="lume-cust-pill-unverified-modern">
-                          {r.status === 'SUCCESS' ? 'Thành công' : r.status === 'PENDING' ? 'Đang xử lý' : r.status}
+                          {getRefundStatusMeta(r.status === 'SUCCESS' ? 'COMPLETED' : r.status).label}
                         </span>
                       </div>
                       <div style={{ fontSize: 11, color: '#6B7280', display: 'flex', justifyContent: 'space-between' }}>
@@ -1486,7 +1578,7 @@ export function CustomerManagementPanel() {
                       <div className="lume-cust-tab-card-header">
                         <span className="lume-cust-tab-card-title">{d.title} ({d.disputeCode})</span>
                         <span className="lume-cust-status-pill suspended">
-                          {d.status === 'OPEN' ? 'Cần can thiệp' : d.status === 'RESOLVED' ? 'Đã giải quyết' : d.status}
+                          {getDisputeStatusMeta(d.status).label}
                         </span>
                       </div>
                       <p style={{ margin: '4px 0 0 0', fontSize: 11, color: '#4B5563' }}>

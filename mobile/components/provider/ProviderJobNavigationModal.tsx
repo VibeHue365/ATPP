@@ -33,9 +33,12 @@ interface ProviderJobNavigationModalProps {
   order?: any | null;
   providerProfile?: ProviderProfile | null;
   weatherAlert?: WeatherLocationChangeAlert | null;
+  requiresConfirmation?: boolean;
+  canStartSession?: boolean;
+  onConfirmBooking?: (bookingId?: string) => void;
   onStartSession?: (bookingId?: string) => void;
   onResolveLocationChange?: (approved: boolean) => void;
-  onOpenChat?: () => void;
+  onOpenChat?: (order?: any) => void;
 }
 
 export function ProviderJobNavigationModal({
@@ -45,6 +48,9 @@ export function ProviderJobNavigationModal({
   order,
   providerProfile,
   weatherAlert,
+  requiresConfirmation = false,
+  canStartSession = true,
+  onConfirmBooking,
   onStartSession,
   onResolveLocationChange,
   onOpenChat,
@@ -60,20 +66,21 @@ export function ProviderJobNavigationModal({
     order?.customerId?.profile?.fullName ||
     order?.contactInfo?.fullName ||
     session?.customer?.name ||
-    'Nguyễn Thảo Vy';
+    'Khách hàng TàGo';
 
-  const customerPhone =
+  const customerPhone = (
     order?.customerId?.auth?.phone ||
     order?.contactInfo?.phone ||
     session?.customer?.phone ||
-    '0912345678';
+    ''
+  ).trim();
 
   const packageTitle =
     order?.items?.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE')?.name ||
     order?.items?.[0]?.name ||
     session?.packageTitle ||
     session?.serviceName ||
-    'Gói Chụp Cổ Phục Di Sản';
+    'Lịch hẹn dịch vụ TàGo';
 
   const timeLabel =
     session?.timeLabel ||
@@ -83,12 +90,12 @@ export function ProviderJobNavigationModal({
           hour: '2-digit',
           minute: '2-digit',
         })
-      : '14:30 Hôm nay');
+      : 'Theo lịch hẹn');
 
   const shootConcept =
     order?.items?.find((i: any) => i.shootConcept)?.shootConcept ||
     order?.note ||
-    'Cổ phục truyền thống · Ánh sáng tự nhiên';
+    'Theo thông tin đơn hàng';
 
   // Provider starting coordinates (Studio / Shop)
   const providerOrigin = useMemo(() => {
@@ -255,13 +262,19 @@ export function ProviderJobNavigationModal({
                 Đi tới chỗ khách: {customerName}
               </Text>
             </View>
-            <Pressable
-              style={styles.iconBtn}
-              onPress={() =>
-                void Linking.openURL(`tel:${customerPhone.replace(/[^0-9+]/g, '')}`)
-              }>
-              <Ionicons name="call" size={18} color={Colors.primary} />
-            </Pressable>
+            {customerPhone ? (
+              <Pressable
+                style={styles.iconBtn}
+                onPress={() =>
+                  void Linking.openURL(`tel:${customerPhone.replace(/[^0-9+]/g, '')}`)
+                }>
+                <Ionicons name="call" size={18} color={Colors.primary} />
+              </Pressable>
+            ) : (
+              <View style={[styles.iconBtn, { opacity: 0.35 }]}>
+                <Ionicons name="call-outline" size={18} color="#94A3B8" />
+              </View>
+            )}
           </View>
 
           <ScrollView
@@ -417,21 +430,23 @@ export function ProviderJobNavigationModal({
 
               {/* Quick Contact + Navigation Actions */}
               <View style={styles.quickActionRow}>
-                <Pressable
-                  style={styles.secondaryBtn}
-                  onPress={() =>
-                    void Linking.openURL(`tel:${customerPhone.replace(/[^0-9+]/g, '')}`)
-                  }>
-                  <Ionicons name="call-outline" size={16} color="#1B1C1C" />
-                  <Text style={styles.secondaryBtnText}>Gọi khách</Text>
-                </Pressable>
+                {customerPhone ? (
+                  <Pressable
+                    style={styles.secondaryBtn}
+                    onPress={() =>
+                      void Linking.openURL(`tel:${customerPhone.replace(/[^0-9+]/g, '')}`)
+                    }>
+                    <Ionicons name="call-outline" size={16} color="#1B1C1C" />
+                    <Text style={styles.secondaryBtnText}>Gọi khách</Text>
+                  </Pressable>
+                ) : null}
 
                 {onOpenChat ? (
                   <Pressable
                     style={styles.secondaryBtn}
                     onPress={() => {
                       onClose();
-                      onOpenChat();
+                      onOpenChat(order);
                     }}>
                     <Ionicons name="chatbubble-ellipses-outline" size={16} color="#1B1C1C" />
                     <Text style={styles.secondaryBtnText}>Nhắn tin</Text>
@@ -454,7 +469,19 @@ export function ProviderJobNavigationModal({
                 </Pressable>
               </View>
 
-              {onStartSession ? (
+              {requiresConfirmation && onConfirmBooking ? (
+                <Pressable
+                  style={[styles.arrivedBtn, { backgroundColor: '#D97706' }]}
+                  onPress={() => {
+                    onClose();
+                    onConfirmBooking(bookingId);
+                  }}>
+                  <Ionicons name="checkmark-circle" size={19} color="#FFFFFF" />
+                  <Text style={styles.arrivedBtnText}>
+                    Xác nhận nhận lịch hẹn (Bắt buộc trước)
+                  </Text>
+                </Pressable>
+              ) : canStartSession && onStartSession ? (
                 <Pressable
                   style={styles.arrivedBtn}
                   onPress={() => {

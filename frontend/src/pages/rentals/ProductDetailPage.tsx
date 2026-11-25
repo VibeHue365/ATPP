@@ -39,12 +39,11 @@ import {
   getHourDuration,
 } from './product-detail/utils/timeSlotUtils';
 import {
-  applyCampaignToRate,
   calculateDailyRentalTotal,
+  calculateHourlyRentalTotal,
   formatCampaignRange,
   isCampaignDay,
   isSurchargeCampaign,
-  resolveHourlyRate,
 } from '../../shared/pricing/campaignPricing';
 
 import { ProductGallery } from './product-detail/components/ProductGallery';
@@ -61,6 +60,14 @@ import { ProductWriteReviewModal } from './product-detail/components/ProductWrit
 import { ProductMobileStickyBar } from './product-detail/components/ProductMobileStickyBar';
 
 import './product-detail/ProductDetailPage.css';
+
+const formatLocalDate = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+const dateFromKey = (dateStr: string) => {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
 
 export const ProductDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -103,7 +110,6 @@ export const ProductDetailPage: React.FC = () => {
   const [busySlots, setBusySlots] = useState<{ date: string; timeSlot: string }[]>([]);
   const [variantBookedDates, setVariantBookedDates] = useState<Record<string, string[]>>({});
   const [variantUnavailableDates, setVariantUnavailableDates] = useState<Record<string, string[]>>({});
-  const [locallyUnavailableDates, setLocallyUnavailableDates] = useState<string[]>([]);
   const [variantBookedSlots, setVariantBookedSlots] = useState<
     Record<string, Array<{ date: string; timeSlot: string; purpose?: 'RENTAL' | 'TURNAROUND' }>>
   >({});
@@ -246,7 +252,8 @@ export const ProductDetailPage: React.FC = () => {
           }
         }
 
-        // Search first available 3-day range (excluding days with full-day or hourly bookings)
+        // Search first available 3-day range. This must use the same calendar
+        // constraints as a customer click, including provider working/off days.
         const initialBusyDates = new Set<string>(loadedBookedDates);
         (loadedBusyData?.bookedSlots || []).forEach((s) => {
           if (s.date) initialBusyDates.add(s.date);
@@ -269,6 +276,25 @@ export const ProductDetailPage: React.FC = () => {
           });
         }
 
+        const initialSchedule = loadedBusyData?.hasSchedule === undefined
+          ? null
+          : {
+              hasSchedule: loadedBusyData.hasSchedule,
+              workingDays: loadedBusyData.workingDays || [],
+              offDays: loadedBusyData.offDays || [],
+            };
+        const isInitiallyUnavailable = (dateStr: string) => {
+          if (initialBusyDates.has(dateStr)) return true;
+          if (!initialSchedule) return false;
+          if (!initialSchedule.hasSchedule) return true;
+          const weekday = dateFromKey(dateStr).getDay();
+          return (
+            (initialSchedule.workingDays.length > 0 &&
+              !initialSchedule.workingDays.includes(weekday)) ||
+            initialSchedule.offDays.includes(dateStr)
+          );
+        };
+
         let foundRange = false;
         let startDateVal = '';
         let endDateVal = '';
@@ -277,17 +303,17 @@ export const ProductDetailPage: React.FC = () => {
         for (let offset = 0; offset < maxSearchDays; offset++) {
           const checkStart = new Date();
           checkStart.setDate(checkStart.getDate() + 1 + offset);
-          const startStr = checkStart.toISOString().split('T')[0];
+          const startStr = formatLocalDate(checkStart);
 
           const checkEnd = new Date(checkStart);
           checkEnd.setDate(checkEnd.getDate() + 2);
-          const endStr = checkEnd.toISOString().split('T')[0];
+          const endStr = formatLocalDate(checkEnd);
 
           let hasBusy = false;
           const temp = new Date(checkStart);
           while (temp <= checkEnd) {
-            const tempStr = temp.toISOString().split('T')[0];
-            if (initialBusyDates.has(tempStr)) {
+            const tempStr = formatLocalDate(temp);
+            if (isInitiallyUnavailable(tempStr)) {
               hasBusy = true;
               break;
             }
@@ -311,9 +337,9 @@ export const ProductDetailPage: React.FC = () => {
           tomorrow.setDate(tomorrow.getDate() + 1);
           const nextDay = new Date();
           nextDay.setDate(nextDay.getDate() + 3);
-          setStartDate(tomorrow.toISOString().split('T')[0]);
-          setEndDate(nextDay.toISOString().split('T')[0]);
-          setSingleDate(tomorrow.toISOString().split('T')[0]);
+          setStartDate(formatLocalDate(tomorrow));
+          setEndDate(formatLocalDate(nextDay));
+          setSingleDate(formatLocalDate(tomorrow));
         }
       } catch (err: any) {
         console.error('Lỗi lấy chi tiết sản phẩm:', err);
@@ -555,7 +581,7 @@ export const ProductDetailPage: React.FC = () => {
 
   // Busy Dates calculation
   const activeBusyDates = useMemo(() => {
-    let combined = [...busyDates, ...locallyUnavailableDates];
+    let combined = [...busyDates];
     if (selectedSize && selectedColor) {
       const key = `${selectedSize.trim().toUpperCase()}_${normalizeCol(selectedColor)}`;
       if (variantBookedDates[key]) {
@@ -566,7 +592,7 @@ export const ProductDetailPage: React.FC = () => {
       }
     }
     return combined;
-  }, [selectedSize, selectedColor, variantBookedDates, variantUnavailableDates, busyDates, locallyUnavailableDates]);
+  }, [selectedSize, selectedColor, variantBookedDates, variantUnavailableDates, busyDates]);
 
   // Set of dates that have ANY hourly booking for the active variant (or product)
   const hourlyBookedDates = useMemo(() => {
@@ -614,15 +640,34 @@ export const ProductDetailPage: React.FC = () => {
     return activeBusyDates;
   }, [rentalMode, activeBusyDates, hourlyBookedDates]);
 
+  // calendarDays only contains the month currently on screen.  Range
+  // selection must nevertheless validate every date between the first and
+  // second click, including dates in another month; otherwise a busy date can
+  // be skipped and only be rejected later at checkout.
+  const isDailyDateUnavailable = (dateStr: string) => {
+    if (effectiveBusyDates.includes(dateStr)) return true;
+
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    if (dateStr < todayStr) return true;
+
+    if (!providerScheduleInfo) return false;
+    if (!providerScheduleInfo.hasSchedule) return true;
+
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const weekday = new Date(year, month - 1, day).getDay();
+    return (
+      (providerScheduleInfo.workingDays.length > 0 &&
+        !providerScheduleInfo.workingDays.includes(weekday)) ||
+      providerScheduleInfo.offDays.includes(dateStr)
+    );
+  };
+
   const isVariantUnavailable = (size: string, color: string) => {
     const key = `${size.trim().toUpperCase()}_${normalizeCol(color)}`;
     const dates = variantUnavailableDates[key];
     return Array.isArray(dates) && dates.length > 0;
   };
-
-  useEffect(() => {
-    setLocallyUnavailableDates([]);
-  }, [selectedSize, selectedColor, bookingQty, rentalMode]);
 
   const bookedSlotsOnSelectedDate = useMemo(() => {
     if (!singleDate) return [];
@@ -723,23 +768,11 @@ export const ProductDetailPage: React.FC = () => {
   // quantity. If that authoritative check says the current selection is no
   // longer possible (for example another booking just took the last item),
   // clear the stale selection immediately instead of leaving actionable
-  // buttons visible with an invalid range.
+  // buttons visible with an invalid range. Do not mark the *entire* range as
+  // busy here: the API result does not identify one exact date, and doing so
+  // previously greyed out dates that were actually still rentable.
   useEffect(() => {
     if (availability.state !== 'unavailable') return;
-    const blocked: string[] = [];
-    if (rentalMode === 'DAILY' && startDate && endDate) {
-      const cursor = new Date(`${startDate}T00:00:00`);
-      const end = new Date(`${endDate}T00:00:00`);
-      while (cursor <= end) {
-        blocked.push(cursor.toISOString().slice(0, 10));
-        cursor.setDate(cursor.getDate() + 1);
-      }
-    } else if (rentalMode === 'HOURLY' && singleDate) {
-      blocked.push(singleDate);
-    }
-    if (blocked.length > 0) {
-      setLocallyUnavailableDates((previous) => Array.from(new Set([...previous, ...blocked])));
-    }
     if (rentalMode === 'DAILY') {
       setStartDate('');
       setEndDate('');
@@ -873,12 +906,12 @@ export const ProductDetailPage: React.FC = () => {
     if (rentalMode !== 'DAILY' || !startDate) return;
 
     let hasConflict = false;
-    const start = new Date(startDate);
-    const end = endDate ? new Date(endDate) : new Date(startDate);
+    const start = dateFromKey(startDate);
+    const end = endDate ? dateFromKey(endDate) : dateFromKey(startDate);
     const cur = new Date(start);
     while (cur <= end) {
-      const curStr = cur.toISOString().split('T')[0];
-      if (effectiveBusyDates.includes(curStr)) {
+      const curStr = formatLocalDate(cur);
+      if (isDailyDateUnavailable(curStr)) {
         hasConflict = true;
         break;
       }
@@ -891,17 +924,17 @@ export const ProductDetailPage: React.FC = () => {
       for (let offset = 0; offset < 60; offset++) {
         const checkStart = new Date(today);
         checkStart.setDate(today.getDate() + 1 + offset);
-        const startStr = checkStart.toISOString().split('T')[0];
+        const startStr = formatLocalDate(checkStart);
 
         const checkEnd = new Date(checkStart);
         checkEnd.setDate(checkEnd.getDate() + 2);
-        const endStr = checkEnd.toISOString().split('T')[0];
+        const endStr = formatLocalDate(checkEnd);
 
         let hasBusy = false;
         const temp = new Date(checkStart);
         while (temp <= checkEnd) {
-          const tempStr = temp.toISOString().split('T')[0];
-          if (effectiveBusyDates.includes(tempStr)) {
+          const tempStr = formatLocalDate(temp);
+          if (isDailyDateUnavailable(tempStr)) {
             hasBusy = true;
             break;
           }
@@ -921,7 +954,7 @@ export const ProductDetailPage: React.FC = () => {
         setEndDate('');
       }
     }
-  }, [rentalMode, effectiveBusyDates, startDate, endDate]);
+  }, [rentalMode, effectiveBusyDates, providerScheduleInfo, startDate, endDate]);
 
   const handleCalendarDayClick = (dateStr: string) => {
     const selectedDay = calendarDays.find((day) => day.dateStr === dateStr);
@@ -945,15 +978,21 @@ export const ProductDetailPage: React.FC = () => {
           setStartDate(dateStr);
           setEndDate('');
         } else {
-          const hasUnavailable = calendarDays.some(
-            (d) =>
-              !d.isEmpty &&
-              !d.isAvailable &&
-              d.dateStr >= startDate &&
-              d.dateStr <= dateStr,
-          );
-          if (hasUnavailable) {
-            toast.error('Khoảng thời gian chọn chứa ngày đã bị đặt!');
+          const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+          const [endYear, endMonth, endDay] = dateStr.split('-').map(Number);
+          const cursor = new Date(startYear, startMonth - 1, startDay);
+          const end = new Date(endYear, endMonth - 1, endDay);
+          let unavailableDate = '';
+          while (cursor <= end) {
+            const current = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`;
+            if (isDailyDateUnavailable(current)) {
+              unavailableDate = current;
+              break;
+            }
+            cursor.setDate(cursor.getDate() + 1);
+          }
+          if (unavailableDate) {
+            toast.error(`Khoảng thời gian chọn có ngày không khả dụng (${unavailableDate}).`);
             return;
           }
           setEndDate(dateStr);
@@ -973,11 +1012,13 @@ export const ProductDetailPage: React.FC = () => {
       return calculateDailyRentalTotal(product.basePrice, campaign, startDate, endDate).total;
     } else {
       const hours = getHourDuration(startTime, endTime);
-      const baseHourlyRate = resolveHourlyRate(product.basePrice, product.hourlyPrice);
-      const hourlyRate = singleDate
-        ? applyCampaignToRate(baseHourlyRate, campaign, singleDate)
-        : baseHourlyRate;
-      return hourlyRate * hours;
+      return calculateHourlyRentalTotal(
+        product.basePrice,
+        product.hourlyPrice,
+        singleDate ? campaign : null,
+        singleDate || new Date(),
+        hours,
+      ).total;
     }
   }, [product, rentalMode, startDate, endDate, singleDate, startTime, endTime]);
 
@@ -1253,13 +1294,13 @@ export const ProductDetailPage: React.FC = () => {
         toast.error('Ngày trả đồ không thể trước ngày nhận đồ.');
         return false;
       }
-      const start = new Date(startDate);
-      const end = new Date(endDate);
+      const start = dateFromKey(startDate);
+      const end = dateFromKey(endDate);
       const cur = new Date(start);
       while (cur <= end) {
-        const curStr = cur.toISOString().split('T')[0];
-        if (effectiveBusyDates.includes(curStr)) {
-          toast.error(`Ngày ${curStr} đã có lịch thuê. Vui lòng chọn khoảng thời gian khác.`);
+        const curStr = formatLocalDate(cur);
+        if (isDailyDateUnavailable(curStr)) {
+          toast.error(`Ngày ${curStr} không khả dụng. Vui lòng chọn khoảng thời gian khác.`);
           return false;
         }
         cur.setDate(cur.getDate() + 1);

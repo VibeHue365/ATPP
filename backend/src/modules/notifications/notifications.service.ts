@@ -178,16 +178,16 @@ export class NotificationsService {
       if (recipient?.auth?.email && (!isMarketing || marketingEmailEnabled)) {
         const emailHtml = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e8e2d5; border-radius: 8px;">
-            <h2 style="color: #4a0e17; border-bottom: 2px solid #4a0e17; padding-bottom: 10px;">Thông báo từ VibeHue</h2>
+            <h2 style="color: #4a0e17; border-bottom: 2px solid #4a0e17; padding-bottom: 10px;">Thông báo từ TàGo</h2>
             <h3 style="color: #2a2a2a; margin-top: 20px;">${title}</h3>
             <p style="color: #4a4a4a; line-height: 1.6; font-size: 14px;">${content}</p>
             <hr style="border: 0; border-top: 1px solid #e8e2d5; margin: 20px 0;">
-            <p style="color: #7a7a7a; font-size: 11px;">Đây là thông báo tự động từ hệ thống VibeHue. Vui lòng không trả lời email này.</p>
+            <p style="color: #7a7a7a; font-size: 11px;">Đây là thông báo tự động từ hệ thống TàGo. Vui lòng không trả lời email này.</p>
           </div>
         `;
         await this.mailService.sendMail(
           recipient.auth.email,
-          `[VibeHue] Thông báo: ${title}`,
+          `[TàGo] Thông báo: ${title}`,
           emailHtml,
         );
       }
@@ -249,7 +249,9 @@ export class NotificationsService {
 
       // Emit strictly to the involved customer and provider user rooms (avoid double emit to socketId)
       for (const userId of uniqueUserIds) {
-        this.chatGateway.server.to(`user:${userId}`).emit('booking_updated', payload);
+        this.chatGateway.server
+          .to(`user:${userId}`)
+          .emit('booking_updated', payload);
       }
 
       // Also emit strictly to connected Admins

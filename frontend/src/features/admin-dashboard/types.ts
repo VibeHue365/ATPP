@@ -33,7 +33,10 @@ export interface AdminMetric {
 
 export interface OverviewChartPoint {
   day: string;
+  label?: string;
+  fullLabel?: string;
   bookings: number;
+  gmv?: number;
   gmvMillions: number;
 }
 
@@ -104,8 +107,11 @@ export interface AdminStats {
   kpis?: AdminOverviewKPIs;
   chart?: {
     period: "day" | "week" | "month";
+    periodLabel?: string;
     summaryBookings: number;
     summaryGmv: number;
+    bookingGrowthPct?: number;
+    gmvGrowthPct?: number;
     points: OverviewChartPoint[];
   };
   services?: {

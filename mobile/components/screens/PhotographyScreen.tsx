@@ -60,6 +60,8 @@ export default function PhotographyScreen() {
   const [sort, setSort] = useState<PhotographerSort>('rating_desc');
   const [minRating, setMinRating] = useState<number | undefined>();
   const [maxPrice, setMaxPrice] = useState<number | undefined>();
+  const [minPhotographers, setMinPhotographers] = useState<number | undefined>();
+  const [requiredSlots, setRequiredSlots] = useState<number | undefined>();
   const [page, setPage] = useState(1);
   const [filterOpen, setFilterOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -106,11 +108,24 @@ export default function PhotographyScreen() {
       concept: concept || undefined,
       minRating,
       maxPrice,
+      minPhotographers,
+      requiredSlots,
       sort,
       page,
       limit: 8,
     }),
-    [search, location, categoryId, concept, minRating, maxPrice, sort, page]
+    [
+      search,
+      location,
+      categoryId,
+      concept,
+      minRating,
+      maxPrice,
+      minPhotographers,
+      requiredSlots,
+      sort,
+      page,
+    ]
   );
 
   const { items, loading, error, total, totalPages, reload } = usePhotographers(filters);
@@ -176,6 +191,8 @@ export default function PhotographyScreen() {
     setConcept('');
     setMinRating(undefined);
     setMaxPrice(undefined);
+    setMinPhotographers(undefined);
+    setRequiredSlots(undefined);
     setSort('rating_desc');
     setPage(1);
   };
@@ -187,6 +204,8 @@ export default function PhotographyScreen() {
       concept ||
       minRating ||
       maxPrice ||
+      minPhotographers ||
+      requiredSlots ||
       sort !== 'rating_desc'
   );
 
@@ -641,6 +660,70 @@ export default function PhotographyScreen() {
               label="Từ 4.5 ★"
               active={minRating === 4.5}
               onPress={() => setMinRating(4.5)}
+            />
+          </View>
+
+          <FilterTitle label="Quy mô đội ngũ Studio" />
+          <View style={styles.modalChips}>
+            <Chip
+              label="Tất cả"
+              active={!minPhotographers}
+              onPress={() => {
+                setMinPhotographers(undefined);
+                setPage(1);
+              }}
+            />
+            <Chip
+              label="Từ 2 thợ"
+              active={minPhotographers === 2}
+              onPress={() => {
+                setMinPhotographers(2);
+                setPage(1);
+              }}
+            />
+            <Chip
+              label="Từ 3 thợ"
+              active={minPhotographers === 3}
+              onPress={() => {
+                setMinPhotographers(3);
+                setPage(1);
+              }}
+            />
+            <Chip
+              label="Từ 5 thợ"
+              active={minPhotographers === 5}
+              onPress={() => {
+                setMinPhotographers(5);
+                setPage(1);
+              }}
+            />
+          </View>
+
+          <FilterTitle label="Số ca chụp cùng khung giờ" />
+          <View style={styles.modalChips}>
+            <Chip
+              label="1 ca"
+              active={!requiredSlots}
+              onPress={() => {
+                setRequiredSlots(undefined);
+                setPage(1);
+              }}
+            />
+            <Chip
+              label="2 ca song song"
+              active={requiredSlots === 2}
+              onPress={() => {
+                setRequiredSlots(2);
+                setPage(1);
+              }}
+            />
+            <Chip
+              label="3 ca song song"
+              active={requiredSlots === 3}
+              onPress={() => {
+                setRequiredSlots(3);
+                setPage(1);
+              }}
             />
           </View>
 

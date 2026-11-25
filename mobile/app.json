@@ -1,16 +1,22 @@
 {
   "expo": {
-    "name": "LUMÉ",
+    "name": "TàGo",
     "slug": "vibehue-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "vibehue",
+    "scheme": [
+      "tago",
+      "vibehue"
+    ],
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true
     },
     "android": {
+      "permissions": [
+        "POST_NOTIFICATIONS"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -41,8 +47,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Cho phép LUMÉ truy cập ảnh để bạn đổi ảnh đại diện, gửi ảnh và tìm áo dài bằng hình ảnh.",
-          "cameraPermission": "Cho phép LUMÉ dùng camera để chụp áo dài và tìm mẫu tương tự.",
+          "photosPermission": "Cho phép TàGo truy cập ảnh để bạn đổi ảnh đại diện, gửi ảnh và tìm áo dài bằng hình ảnh.",
+          "cameraPermission": "Cho phép TàGo dùng camera để chụp áo dài và tìm mẫu tương tự.",
           "microphonePermission": false
         }
       ],
@@ -50,7 +56,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Cho phép LUMÉ dùng vị trí của bạn để tìm tiệm áo dài, studio gần nhất và chỉ đường chính xác.",
+          "locationWhenInUsePermission": "Cho phép TàGo dùng vị trí của bạn để tìm tiệm áo dài, studio gần nhất và chỉ đường chính xác.",
           "isAndroidBackgroundLocationEnabled": false,
           "isIosBackgroundLocationEnabled": false
         }

@@ -49,6 +49,10 @@ export interface ProviderRentalSettings {
 export interface ProviderPhotographySettings {
   /** Maximum straight-line distance from the provider base location in kilometres. */
   serviceRadiusKm?: number | null;
+  /** Maximum concurrent photography sessions allowed in the same time window (<= active staff count). */
+  maxConcurrentSessions?: number | null;
+  /** Optional cap on total photography sessions accepted in one local day. */
+  maxDailySessions?: number | null;
 }
 
 export interface ProviderAddress {
@@ -127,7 +131,14 @@ export class Provider {
   })
   address: ProviderAddress;
 
-  @Prop({ type: Object, default: { useBusinessAddressForPickup: true, pickupLocation: null, turnaroundSlots: 1 } })
+  @Prop({
+    type: Object,
+    default: {
+      useBusinessAddressForPickup: true,
+      pickupLocation: null,
+      turnaroundSlots: 1,
+    },
+  })
   rentalSettings: ProviderRentalSettings;
 
   @Prop({ type: Boolean, default: false })
@@ -218,19 +229,24 @@ export class Provider {
    */
   @Prop({
     type: {
-      pendingBalance:   { type: Number, default: 0, min: 0 },
+      pendingBalance: { type: Number, default: 0, min: 0 },
       availableBalance: { type: Number, default: 0, min: 0 },
-      totalEarned:      { type: Number, default: 0, min: 0 },
-      lastUpdatedAt:    { type: Date,   default: null },
+      totalEarned: { type: Number, default: 0, min: 0 },
+      lastUpdatedAt: { type: Date, default: null },
     },
-    default: { pendingBalance: 0, availableBalance: 0, totalEarned: 0, lastUpdatedAt: null },
+    default: {
+      pendingBalance: 0,
+      availableBalance: 0,
+      totalEarned: 0,
+      lastUpdatedAt: null,
+    },
     select: false,
   })
   wallet: {
-    pendingBalance:   number;
+    pendingBalance: number;
     availableBalance: number;
-    totalEarned:      number;
-    lastUpdatedAt:    Date | null;
+    totalEarned: number;
+    lastUpdatedAt: Date | null;
   };
 }
 

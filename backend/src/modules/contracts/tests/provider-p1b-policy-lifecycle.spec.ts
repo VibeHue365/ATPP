@@ -51,7 +51,8 @@ const oid = () => new Types.ObjectId();
         minorDamageFee: 50000,
         moderateDamagePercent: 20,
         severeDamageOrLossPercent: 100,
-        disputeResolutionNotes: 'Khi phát sinh tranh chấp, hai bên tự thương lượng hòa giải trên tinh thần hợp tác.',
+        disputeResolutionNotes:
+          'Khi phát sinh tranh chấp, hai bên tự thương lượng hòa giải trên tinh thần hợp tác.',
       },
       cancellationPolicy: {
         refundRules: [
@@ -59,14 +60,16 @@ const oid = () => new Types.ObjectId();
           { daysBeforeRental: 1, refundPercentage: 50 },
           { daysBeforeRental: 0, refundPercentage: 0 },
         ],
-        cancellationNotes: 'Tiền cọc luôn hoàn 100% nếu hủy trước ngày nhận đồ.',
+        cancellationNotes:
+          'Tiền cọc luôn hoàn 100% nếu hủy trước ngày nhận đồ.',
       },
       supportContact: {
         hotline: '0901234567',
         supportWorkingHours: '08:00 - 21:00',
         contactNote: 'Hỗ trợ đổi size trong vòng 2 giờ sau nhận.',
       },
-      customTermsText: 'Khách hàng vui lòng đồng kiểm trang phục khi nhận hàng.',
+      customTermsText:
+        'Khách hàng vui lòng đồng kiểm trang phục khi nhận hàng.',
     };
 
     beforeAll(async () => {
@@ -124,7 +127,9 @@ const oid = () => new Types.ObjectId();
       const { providerUserId, providerId } = await seedProvider();
 
       const accessService = {
-        ownProvider: jest.fn().mockResolvedValue({ _id: providerId, userId: providerUserId }),
+        ownProvider: jest
+          .fn()
+          .mockResolvedValue({ _id: providerId, userId: providerUserId }),
       } as unknown as ContractAccessService;
 
       const policyService = new ProviderContractPolicyService(
@@ -158,7 +163,9 @@ const oid = () => new Types.ObjectId();
       const { providerUserId, providerId } = await seedProvider();
 
       const accessService = {
-        ownProvider: jest.fn().mockResolvedValue({ _id: providerId, userId: providerUserId }),
+        ownProvider: jest
+          .fn()
+          .mockResolvedValue({ _id: providerId, userId: providerUserId }),
       } as unknown as ContractAccessService;
 
       const policyService = new ProviderContractPolicyService(
@@ -181,34 +188,43 @@ const oid = () => new Types.ObjectId();
         ...validPolicyDto,
         lateReturn: { ...validPolicyDto.lateReturn, dailyLateFee: -25000 },
       };
-      await expect(policyService.saveDraft(user, invalidLateFee)).rejects.toThrow(
-        UnprocessableEntityException,
-      );
+      await expect(
+        policyService.saveDraft(user, invalidLateFee),
+      ).rejects.toThrow(UnprocessableEntityException);
 
       // Negative minor damage fee (< 0)
       const invalidMinorDamage = {
         ...validPolicyDto,
-        damageCompensation: { ...validPolicyDto.damageCompensation, minorDamageFee: -10000 },
+        damageCompensation: {
+          ...validPolicyDto.damageCompensation,
+          minorDamageFee: -10000,
+        },
       };
-      await expect(policyService.saveDraft(user, invalidMinorDamage)).rejects.toThrow(
-        UnprocessableEntityException,
-      );
+      await expect(
+        policyService.saveDraft(user, invalidMinorDamage),
+      ).rejects.toThrow(UnprocessableEntityException);
 
       // Severe damage percent > 100%
       const invalidSeverePercent = {
         ...validPolicyDto,
-        damageCompensation: { ...validPolicyDto.damageCompensation, severeDamageOrLossPercent: 120 },
+        damageCompensation: {
+          ...validPolicyDto.damageCompensation,
+          severeDamageOrLossPercent: 120,
+        },
       };
-      await expect(policyService.saveDraft(user, invalidSeverePercent)).rejects.toThrow(
-        UnprocessableEntityException,
-      );
+      await expect(
+        policyService.saveDraft(user, invalidSeverePercent),
+      ).rejects.toThrow(UnprocessableEntityException);
 
       // Business guidance check: values above platform reference guidelines set businessApprovalRequired = true
       const guidelineExceeded = {
         ...validPolicyDto,
         lateReturn: { ...validPolicyDto.lateReturn, dailyLateFee: 250000 },
       };
-      const savedGuideline = await policyService.saveDraft(user, guidelineExceeded);
+      const savedGuideline = await policyService.saveDraft(
+        user,
+        guidelineExceeded,
+      );
       expect(savedGuideline.businessApprovalRequired).toBe(true);
     });
 
@@ -216,7 +232,9 @@ const oid = () => new Types.ObjectId();
       const { providerUserId, providerId } = await seedProvider();
 
       const accessService = {
-        ownProvider: jest.fn().mockResolvedValue({ _id: providerId, userId: providerUserId }),
+        ownProvider: jest
+          .fn()
+          .mockResolvedValue({ _id: providerId, userId: providerUserId }),
       } as unknown as ContractAccessService;
 
       const policyService = new ProviderContractPolicyService(
@@ -247,7 +265,9 @@ const oid = () => new Types.ObjectId();
       const { providerUserId, providerId } = await seedProvider();
 
       const accessService = {
-        ownProvider: jest.fn().mockResolvedValue({ _id: providerId, userId: providerUserId }),
+        ownProvider: jest
+          .fn()
+          .mockResolvedValue({ _id: providerId, userId: providerUserId }),
       } as unknown as ContractAccessService;
 
       const policyService = new ProviderContractPolicyService(
@@ -276,10 +296,14 @@ const oid = () => new Types.ObjectId();
         sessionId: 'admin_sess',
       };
 
-      const approved = await policyService.adminReview(adminUser, submitted._id.toString(), {
-        action: 'APPROVE',
-        reviewNote: 'Chính sách đạt chuẩn VibeHue.',
-      });
+      const approved = await policyService.adminReview(
+        adminUser,
+        submitted._id.toString(),
+        {
+          action: 'APPROVE',
+          reviewNote: 'Chính sách đạt chuẩn VibeHue.',
+        },
+      );
 
       expect(approved.status).toBe(ProviderPolicyReviewStatus.Approved);
       expect(approved.approvedAt).toBeDefined();
@@ -290,7 +314,9 @@ const oid = () => new Types.ObjectId();
       const { providerUserId, providerId } = await seedProvider();
 
       const accessService = {
-        ownProvider: jest.fn().mockResolvedValue({ _id: providerId, userId: providerUserId }),
+        ownProvider: jest
+          .fn()
+          .mockResolvedValue({ _id: providerId, userId: providerUserId }),
       } as unknown as ContractAccessService;
 
       const policyService = new ProviderContractPolicyService(
@@ -319,7 +345,9 @@ const oid = () => new Types.ObjectId();
       // 1. Version 1 Approved
       await policyService.saveDraft(user, validPolicyDto);
       const sub1 = await policyService.submitForReview(user);
-      await policyService.adminReview(adminUser, sub1._id.toString(), { action: 'APPROVE' });
+      await policyService.adminReview(adminUser, sub1._id.toString(), {
+        action: 'APPROVE',
+      });
 
       // 2. Provider creates Version 2
       const updatedDto = {
@@ -335,7 +363,9 @@ const oid = () => new Types.ObjectId();
       expect(sub2.versionNumber).toBe(2);
 
       // 4. Admin Approves Version 2
-      await policyService.adminReview(adminUser, sub2._id.toString(), { action: 'APPROVE' });
+      await policyService.adminReview(adminUser, sub2._id.toString(), {
+        action: 'APPROVE',
+      });
 
       // 5. Verify Version 1 is now SUPERSEDED
       const v1 = await policyModel.findById(sub1._id).lean();
@@ -349,7 +379,9 @@ const oid = () => new Types.ObjectId();
       const { providerUserId, providerId } = await seedProvider();
 
       const accessService = {
-        ownProvider: jest.fn().mockResolvedValue({ _id: providerId, userId: providerUserId }),
+        ownProvider: jest
+          .fn()
+          .mockResolvedValue({ _id: providerId, userId: providerUserId }),
       } as unknown as ContractAccessService;
 
       const policyService = new ProviderContractPolicyService(
@@ -378,10 +410,14 @@ const oid = () => new Types.ObjectId();
       await policyService.saveDraft(user, validPolicyDto);
       const sub = await policyService.submitForReview(user);
 
-      const rejected = await policyService.adminReview(adminUser, sub._id.toString(), {
-        action: 'REJECT',
-        reviewNote: 'Mô tả ghi chú chất liệu chưa rõ ràng.',
-      });
+      const rejected = await policyService.adminReview(
+        adminUser,
+        sub._id.toString(),
+        {
+          action: 'REJECT',
+          reviewNote: 'Mô tả ghi chú chất liệu chưa rõ ràng.',
+        },
+      );
 
       expect(rejected.status).toBe(ProviderPolicyReviewStatus.Rejected);
       expect(rejected.reviewNote).toBe('Mô tả ghi chú chất liệu chưa rõ ràng.');
@@ -391,7 +427,9 @@ const oid = () => new Types.ObjectId();
       const { providerUserId, providerId } = await seedProvider();
 
       const accessService = {
-        ownProvider: jest.fn().mockResolvedValue({ _id: providerId, userId: providerUserId }),
+        ownProvider: jest
+          .fn()
+          .mockResolvedValue({ _id: providerId, userId: providerUserId }),
       } as unknown as ContractAccessService;
 
       const policyService = new ProviderContractPolicyService(
@@ -419,18 +457,26 @@ const oid = () => new Types.ObjectId();
 
       await policyService.saveDraft(user, validPolicyDto);
       const sub = await policyService.submitForReview(user);
-      await policyService.adminReview(adminUser, sub._id.toString(), { action: 'APPROVE' });
+      await policyService.adminReview(adminUser, sub._id.toString(), {
+        action: 'APPROVE',
+      });
 
       // Test ContractSnapshotService resolution
       const policyResolver = {
         clearCache: jest.fn(),
-        getActivePolicyByCode: jest.fn().mockImplementation((code: PolicyCode) =>
-          Promise.resolve({ code, version: 1, value: 'System policy' }),
-        ),
+        getActivePolicyByCode: jest
+          .fn()
+          .mockImplementation((code: PolicyCode) =>
+            Promise.resolve({ code, version: 1, value: 'System policy' }),
+          ),
       } as unknown as PolicyResolverService;
 
-      const snapshotService = new ContractSnapshotService(connection, policyResolver);
-      const resolvedPolicies = await snapshotService.currentPoliciesForProvider(providerId);
+      const snapshotService = new ContractSnapshotService(
+        connection,
+        policyResolver,
+      );
+      const resolvedPolicies =
+        await snapshotService.currentPoliciesForProvider(providerId);
 
       expect(resolvedPolicies.providerPolicyVersion).toBe(1);
       expect(resolvedPolicies.providerGarmentCare).toBeDefined();

@@ -71,7 +71,7 @@ export function validateDisputeResolutionClause(
       if (pat.test(segment)) {
         if (!hasNegation) {
           violations.push(
-            `Điều khoản không được gán quyền 'trọng tài' hoặc 'phán quyết bắt buộc' cho Sàn VibeHue: "${segment}".`,
+            `Điều khoản không được gán quyền 'trọng tài' hoặc 'phán quyết bắt buộc' cho Sàn TàGo: "${segment}".`,
           );
         }
       }
@@ -81,7 +81,7 @@ export function validateDisputeResolutionClause(
       if (pat.test(segment)) {
         if (!hasNegation) {
           violations.push(
-            `Điều khoản không được trao quyền tự ý giữ, bảo lưu, phong tỏa cọc hoặc tự động khấu trừ cho Sàn VibeHue: "${segment}".`,
+            `Điều khoản không được trao quyền tự ý giữ, bảo lưu, phong tỏa cọc hoặc tự động khấu trừ cho Sàn TàGo: "${segment}".`,
           );
         }
       }

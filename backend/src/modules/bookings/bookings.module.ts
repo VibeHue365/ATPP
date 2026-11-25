@@ -19,9 +19,12 @@ import {
 import { BookingsController } from './controllers/bookings.controller';
 import { PublicBookingAvailabilityController } from './controllers/public-booking-availability.controller';
 import { PhotographyHoldsController } from './controllers/photography-holds.controller';
+import { StaffSchedulesController } from './controllers/staff-schedules.controller';
 import { BookingsService } from './services/bookings.service';
 import { BookingsSchedulerService } from './services/bookings-scheduler.service';
 import { PhotographyHoldService } from './services/photography-hold.service';
+import { StaffAvailabilityService } from './services/staff-availability.service';
+import { StaffSchedulesService } from './services/staff-schedules.service';
 import { RentalFulfillmentService } from './services/rental-fulfillment.service';
 import { RentalFulfillmentWorkflowService } from './services/rental-fulfillment-workflow.service';
 import { RentalDepositRefundCoordinatorService } from './services/rental-deposit-refund-coordinator.service';
@@ -52,6 +55,7 @@ import { TimeSlotEngineService } from './services/time-slot-engine.service';
 import { InventorySlotLeaseService } from './services/inventory-slot-lease.service';
 import { ProductBusyCacheService } from './services/product-busy-cache.service';
 import { RentalEvidenceCleanupService } from './services/rental-evidence-cleanup.service';
+import { RentalOverdueDominoService } from './services/rental-overdue-domino.service';
 
 export const bookingModels = MongooseModule.forFeature([
   { name: Cart.name, schema: CartSchema },
@@ -80,6 +84,7 @@ export const bookingModels = MongooseModule.forFeature([
     BookingsController,
     PublicBookingAvailabilityController,
     PhotographyHoldsController,
+    StaffSchedulesController,
     RentalFulfillmentController,
     AdminRentalMigrationController,
   ],
@@ -89,6 +94,8 @@ export const bookingModels = MongooseModule.forFeature([
     BookingStatusService,
     BookingCreationService,
     BookingsSchedulerService,
+    StaffAvailabilityService,
+    StaffSchedulesService,
     PhotographyQuoteService,
     PhotographyHoldService,
     RentalFulfillmentService,
@@ -98,11 +105,14 @@ export const bookingModels = MongooseModule.forFeature([
     InventorySlotLeaseService,
     ProductBusyCacheService,
     RentalEvidenceCleanupService,
+    RentalOverdueDominoService,
   ],
   exports: [
     bookingModels,
     BookingsService,
     BookingStatusService,
+    StaffAvailabilityService,
+    StaffSchedulesService,
     PhotographyQuoteService,
     PhotographyHoldService,
     RentalFulfillmentService,
@@ -111,6 +121,7 @@ export const bookingModels = MongooseModule.forFeature([
     TimeSlotEngineService,
     InventorySlotLeaseService,
     ProductBusyCacheService,
+    RentalOverdueDominoService,
   ],
 })
 export class BookingsModule {}

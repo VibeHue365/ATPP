@@ -16,6 +16,17 @@ import {
 import { RentalFulfillmentStatus } from '../schemas/rental-fulfillment.types';
 
 describe('Production Slot Lease Workflows Integration', () => {
+  // The scenarios use fixed dates in November 2026: freeze the clock (Date only) before them so the
+  // "reschedule at least 24 hours before" rule does not depend on the day the suite runs.
+  beforeAll(() => {
+    jest.useFakeTimers({
+      now: new Date('2026-11-10T01:00:00.000Z'),
+      doNotFake: ['nextTick', 'setImmediate', 'clearImmediate', 'setTimeout', 'clearTimeout', 'setInterval',
+        'clearInterval', 'queueMicrotask', 'hrtime', 'performance'],
+    });
+  });
+  afterAll(() => jest.useRealTimers());
+
   let cacheService: ProductBusyCacheService;
   let timeEngine: TimeSlotEngineService;
   let slotLeaseService: InventorySlotLeaseService;
@@ -40,7 +51,8 @@ describe('Production Slot Lease Workflows Integration', () => {
           }
           if (query.bookingItemId) {
             filtered = filtered.filter(
-              (l) => l.bookingItemId.toString() === query.bookingItemId.toString(),
+              (l) =>
+                l.bookingItemId.toString() === query.bookingItemId.toString(),
             );
           }
           if (query.purpose) {
@@ -48,7 +60,9 @@ describe('Production Slot Lease Workflows Integration', () => {
           }
           if (query.status) {
             if (typeof query.status === 'object' && query.status.$in) {
-              filtered = filtered.filter((l) => query.status.$in.includes(l.status));
+              filtered = filtered.filter((l) =>
+                query.status.$in.includes(l.status),
+              );
             } else {
               filtered = filtered.filter((l) => l.status === query.status);
             }
@@ -65,20 +79,39 @@ describe('Production Slot Lease Workflows Integration', () => {
         const exec = () => {
           const now = new Date();
           const match = inMemoryLeases.find((l) => {
-            if (query.inventoryItemId && l.inventoryItemId.toString() !== query.inventoryItemId.toString()) return false;
-            if (query.bookingItemId?.$ne && l.bookingItemId && l.bookingItemId.toString() === query.bookingItemId.$ne.toString()) return false;
+            if (
+              query.inventoryItemId &&
+              l.inventoryItemId.toString() !== query.inventoryItemId.toString()
+            )
+              return false;
+            if (
+              query.bookingItemId?.$ne &&
+              l.bookingItemId &&
+              l.bookingItemId.toString() === query.bookingItemId.$ne.toString()
+            )
+              return false;
             if (query.dateStr && l.dateStr !== query.dateStr) return false;
-            if (query.slotIndex !== undefined && l.slotIndex !== query.slotIndex) return false;
+            if (
+              query.slotIndex !== undefined &&
+              l.slotIndex !== query.slotIndex
+            )
+              return false;
             if (query.$or && Array.isArray(query.$or)) {
               const matchesOr = query.$or.some(
                 (cond: any) =>
                   (!cond.dateStr || cond.dateStr === l.dateStr) &&
-                  (cond.slotIndex === undefined || cond.slotIndex === l.slotIndex),
+                  (cond.slotIndex === undefined ||
+                    cond.slotIndex === l.slotIndex),
               );
               if (!matchesOr) return false;
             }
             if (l.status === SlotLeaseStatus.Released) return false;
-            if (l.status === SlotLeaseStatus.Temp && l.expiresAt && l.expiresAt <= now) return false;
+            if (
+              l.status === SlotLeaseStatus.Temp &&
+              l.expiresAt &&
+              l.expiresAt <= now
+            )
+              return false;
             return true;
           });
           return Promise.resolve(match || null);
@@ -96,8 +129,16 @@ describe('Production Slot Lease Workflows Integration', () => {
           let count = 0;
           for (const lease of inMemoryLeases) {
             let match = true;
-            if (filter.bookingId && lease.bookingId.toString() !== filter.bookingId.toString()) match = false;
-            if (filter.bookingItemId && lease.bookingItemId.toString() !== filter.bookingItemId.toString()) match = false;
+            if (
+              filter.bookingId &&
+              lease.bookingId.toString() !== filter.bookingId.toString()
+            )
+              match = false;
+            if (
+              filter.bookingItemId &&
+              lease.bookingItemId.toString() !== filter.bookingItemId.toString()
+            )
+              match = false;
             if (filter._id?.$in) {
               const ids = filter._id.$in.map((id: any) => id.toString());
               if (!ids.includes(lease._id.toString())) match = false;
@@ -110,7 +151,8 @@ describe('Production Slot Lease Workflows Integration', () => {
               }
             }
             if (filter.expiresAt?.$lte) {
-              if (!lease.expiresAt || lease.expiresAt > filter.expiresAt.$lte) match = false;
+              if (!lease.expiresAt || lease.expiresAt > filter.expiresAt.$lte)
+                match = false;
             }
 
             if (match) {
@@ -139,10 +181,14 @@ describe('Production Slot Lease Workflows Integration', () => {
               l.inventoryItemId.toString() === doc.inventoryItemId.toString() &&
               l.dateStr === doc.dateStr &&
               l.slotIndex === doc.slotIndex &&
-              [SlotLeaseStatus.Temp, SlotLeaseStatus.Confirmed].includes(l.status),
+              [SlotLeaseStatus.Temp, SlotLeaseStatus.Confirmed].includes(
+                l.status,
+              ),
           );
           if (collision) {
-            const err: any = new Error('E11000 duplicate key error collection: inventory_slot_leases index: inventory_slot_leases_item_date_slot_unique');
+            const err: any = new Error(
+              'E11000 duplicate key error collection: inventory_slot_leases index: inventory_slot_leases_item_date_slot_unique',
+            );
             err.code = 11000;
             err.keyPattern = { inventoryItemId: 1, dateStr: 1, slotIndex: 1 };
             throw err;
@@ -221,9 +267,9 @@ describe('Production Slot Lease Workflows Integration', () => {
       };
 
       const mockBookingItemModel = {
-        find: jest.fn().mockResolvedValue([
-          { _id: itemId, productId, bookingId },
-        ]),
+        find: jest
+          .fn()
+          .mockResolvedValue([{ _id: itemId, productId, bookingId }]),
       };
 
       const mockInventoryReservationModel = {
@@ -248,14 +294,20 @@ describe('Production Slot Lease Workflows Integration', () => {
         {} as any,
         mockInventoryReservationModel as any,
         {} as any,
-        { cancelSettlementsForBooking: jest.fn().mockResolvedValue(null) } as any,
+        {
+          cancelSettlementsForBooking: jest.fn().mockResolvedValue(null),
+        } as any,
         {} as any,
         {} as any,
         {} as any,
         mockNotificationsService as any,
         { find: jest.fn().mockResolvedValue([]) } as any,
         {} as any,
-        { getCancellationPolicy: jest.fn().mockResolvedValue({ productLateCancelPenaltyRate: 0.2 }) } as any,
+        {
+          getCancellationPolicy: jest
+            .fn()
+            .mockResolvedValue({ productLateCancelPenaltyRate: 0.2 }),
+        } as any,
         {} as any,
         undefined,
         undefined,
@@ -310,7 +362,11 @@ describe('Production Slot Lease Workflows Integration', () => {
           endSession: jest.fn(),
         }),
         findBookings: jest.fn().mockResolvedValue([
-          { _id: bookingId, contractFlowVersion: 2, status: BookingStatus.PendingPayment },
+          {
+            _id: bookingId,
+            contractFlowVersion: 2,
+            status: BookingStatus.PendingPayment,
+          },
         ]),
         hasSuccessfulPayment: jest.fn().mockResolvedValue(false),
         updateManyBookings: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
@@ -335,7 +391,7 @@ describe('Production Slot Lease Workflows Integration', () => {
         {} as any,
         mockPromotionsService as any,
         {} as any,
-        mockLeaseModel as any,
+        mockLeaseModel,
         slotLeaseService,
       );
 
@@ -445,13 +501,21 @@ describe('Production Slot Lease Workflows Integration', () => {
         bookingStatus: BookingStatus.Confirmed,
       });
 
-      await workflow.markReady(bookingId.toString(), itemId.toString(), mockUser);
+      await workflow.markReady(
+        bookingId.toString(),
+        itemId.toString(),
+        mockUser,
+      );
 
       // Verify that markReady before pickup does NOT release turnaround lease
-      const turnaroundLease = inMemoryLeases.find((l) => l.purpose === SlotLeasePurpose.Turnaround);
+      const turnaroundLease = inMemoryLeases.find(
+        (l) => l.purpose === SlotLeasePurpose.Turnaround,
+      );
       expect(turnaroundLease.status).toBe(SlotLeaseStatus.Confirmed);
 
-      const rentalLease = inMemoryLeases.find((l) => l.purpose === SlotLeasePurpose.Rental);
+      const rentalLease = inMemoryLeases.find(
+        (l) => l.purpose === SlotLeasePurpose.Rental,
+      );
       expect(rentalLease.status).toBe(SlotLeaseStatus.Confirmed);
 
       // Cache is NOT invalidated
@@ -500,7 +564,11 @@ describe('Production Slot Lease Workflows Integration', () => {
         find: jest.fn().mockReturnValue({
           lean: jest.fn().mockReturnValue({
             exec: jest.fn().mockResolvedValue([
-              { _id: inventoryItemId, status: 'CLEANING', conditionStatus: 'GOOD' },
+              {
+                _id: inventoryItemId,
+                status: 'CLEANING',
+                conditionStatus: 'GOOD',
+              },
             ]),
           }),
         }),
@@ -528,6 +596,10 @@ describe('Production Slot Lease Workflows Integration', () => {
       };
 
       const mockBookingItemModel = {
+        // markCleaningCompleted (code of 24/11/2026) reads the item: no open incident here
+        findById: jest.fn().mockReturnValue({
+          lean: () => ({ exec: () => Promise.resolve({ rentalFulfillment: {} }) }),
+        }),
         db: {
           model: jest.fn().mockImplementation((name) => {
             if (name === 'InventoryItem') return mockInventoryModel;
@@ -566,10 +638,16 @@ describe('Production Slot Lease Workflows Integration', () => {
         bookingStatus: BookingStatus.Returned,
       });
 
-      await workflow.markCleaningCompleted(bookingId.toString(), itemId.toString(), mockUser);
+      await workflow.markCleaningCompleted(
+        bookingId.toString(),
+        itemId.toString(),
+        mockUser,
+      );
 
       // Verify turnaround lease is released with RETURN_RESTRUCTURED
-      const turnaroundLease = inMemoryLeases.find((l) => l.purpose === SlotLeasePurpose.Turnaround);
+      const turnaroundLease = inMemoryLeases.find(
+        (l) => l.purpose === SlotLeasePurpose.Turnaround,
+      );
       expect(turnaroundLease.status).toBe(SlotLeaseStatus.Released);
       expect(turnaroundLease.releaseReason).toBe('RETURN_RESTRUCTURED');
 
@@ -728,6 +806,7 @@ describe('Production Slot Lease Workflows Integration', () => {
       };
 
       const mockScheduleModel = {
+        create: jest.fn().mockResolvedValue([]), // schedules recreated by the approved reschedule (code of 24/11/2026)
         updateMany: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
       };
 
@@ -762,7 +841,9 @@ describe('Production Slot Lease Workflows Integration', () => {
       );
 
       // Reschedule from 07:00-09:00 (slot 1) to 11:00-13:00 (slot 3)
-      const res = await bookingsService.rescheduleBooking(
+      // Since the code of 24/11/2026 the customer only sends a reschedule request (rescheduleBooking); the leases
+      // move when the provider approves it, so the approval step (applyApprovedReschedule) is called here.
+      const res = await (bookingsService as any).applyApprovedReschedule(
         bookingId.toString(),
         customerId.toString(),
         {
@@ -772,19 +853,33 @@ describe('Production Slot Lease Workflows Integration', () => {
         },
       );
 
-      expect(res.status).toBe('APPROVED');
+      expect(res.message).toBe('Đổi lịch thành công');
 
       // Verify old leases were released with RESCHEDULED
-      const oldRental = inMemoryLeases.find((l) => l.dateStr === '2026-11-20' && l.slotIndex === 1);
-      const oldTurnaround = inMemoryLeases.find((l) => l.dateStr === '2026-11-20' && l.slotIndex === 2);
+      const oldRental = inMemoryLeases.find(
+        (l) => l.dateStr === '2026-11-20' && l.slotIndex === 1,
+      );
+      const oldTurnaround = inMemoryLeases.find(
+        (l) => l.dateStr === '2026-11-20' && l.slotIndex === 2,
+      );
       expect(oldRental.status).toBe(SlotLeaseStatus.Released);
       expect(oldRental.releaseReason).toBe('RESCHEDULED');
       expect(oldTurnaround.status).toBe(SlotLeaseStatus.Released);
       expect(oldTurnaround.releaseReason).toBe('RESCHEDULED');
 
       // Verify new leases were created with CONFIRMED: slot 3 (RENTAL) and slot 4 (TURNAROUND)
-      const newRental = inMemoryLeases.find((l) => l.dateStr === '2026-11-20' && l.slotIndex === 3 && l.status === SlotLeaseStatus.Confirmed);
-      const newTurnaround = inMemoryLeases.find((l) => l.dateStr === '2026-11-20' && l.slotIndex === 4 && l.status === SlotLeaseStatus.Confirmed);
+      const newRental = inMemoryLeases.find(
+        (l) =>
+          l.dateStr === '2026-11-20' &&
+          l.slotIndex === 3 &&
+          l.status === SlotLeaseStatus.Confirmed,
+      );
+      const newTurnaround = inMemoryLeases.find(
+        (l) =>
+          l.dateStr === '2026-11-20' &&
+          l.slotIndex === 4 &&
+          l.status === SlotLeaseStatus.Confirmed,
+      );
       expect(newRental).toBeDefined();
       expect(newRental.purpose).toBe(SlotLeasePurpose.Rental);
       expect(newTurnaround).toBeDefined();
@@ -943,8 +1038,10 @@ describe('Production Slot Lease Workflows Integration', () => {
       expect(cacheService.has(productId.toString())).toBe(true);
 
       // Attempt to reschedule Booking A to 11:00-13:00 (which conflicts with Booking B)
+      // Since the code of 24/11/2026 the customer only sends a reschedule request (rescheduleBooking); the leases
+      // move when the provider approves it, so the approval step (applyApprovedReschedule) is called here.
       await expect(
-        bookingsService.rescheduleBooking(
+        (bookingsService as any).applyApprovedReschedule(
           bookingAId.toString(),
           customerAId.toString(),
           {
@@ -956,13 +1053,19 @@ describe('Production Slot Lease Workflows Integration', () => {
       ).rejects.toThrow(ConflictException);
 
       // Verify Booking A's old leases remain CONFIRMED
-      const lease1 = inMemoryLeases.find((l) => l.bookingId === bookingAId && l.slotIndex === 1);
-      const lease2 = inMemoryLeases.find((l) => l.bookingId === bookingAId && l.slotIndex === 2);
+      const lease1 = inMemoryLeases.find(
+        (l) => l.bookingId === bookingAId && l.slotIndex === 1,
+      );
+      const lease2 = inMemoryLeases.find(
+        (l) => l.bookingId === bookingAId && l.slotIndex === 2,
+      );
       expect(lease1.status).toBe(SlotLeaseStatus.Confirmed);
       expect(lease2.status).toBe(SlotLeaseStatus.Confirmed);
 
       // Verify no new leases created for Booking A on slot 3 or 4
-      const newLeaseA = inMemoryLeases.find((l) => l.bookingId === bookingAId && l.slotIndex === 3);
+      const newLeaseA = inMemoryLeases.find(
+        (l) => l.bookingId === bookingAId && l.slotIndex === 3,
+      );
       expect(newLeaseA).toBeUndefined();
 
       // Verify bookingItem was NOT modified
@@ -1027,7 +1130,9 @@ describe('Production Slot Lease Workflows Integration', () => {
       const mockBookingModel = {
         findById: jest.fn().mockResolvedValue(bookingMock),
         db: {
-          startSession: jest.fn().mockRejectedValue(new Error('MongoNetworkTimeout')),
+          startSession: jest
+            .fn()
+            .mockRejectedValue(new Error('MongoNetworkTimeout')),
           collection: jest.fn().mockReturnValue({}),
         },
       };
@@ -1044,7 +1149,10 @@ describe('Production Slot Lease Workflows Integration', () => {
 
       const bookingsService = new BookingsService(
         mockBookingModel as any,
-        { findOne: jest.fn().mockResolvedValue(bookingItemMock), updateOne: mockBookingItemUpdate } as any,
+        {
+          findOne: jest.fn().mockResolvedValue(bookingItemMock),
+          updateOne: mockBookingItemUpdate,
+        } as any,
         {} as any,
         {} as any,
         {} as any,
@@ -1068,12 +1176,18 @@ describe('Production Slot Lease Workflows Integration', () => {
         timeEngine,
       );
 
+      // Since the code of 24/11/2026 the customer only sends a reschedule request (rescheduleBooking); the leases
+      // move when the provider approves it, so the approval step (applyApprovedReschedule) is called here.
       await expect(
-        bookingsService.rescheduleBooking(bookingId.toString(), customerId.toString(), {
-          itemId: itemId.toString(),
-          newShootDate: '2026-11-20',
-          newShootTimeSlot: '11:00-13:00',
-        }),
+        (bookingsService as any).applyApprovedReschedule(
+          bookingId.toString(),
+          customerId.toString(),
+          {
+            itemId: itemId.toString(),
+            newShootDate: '2026-11-20',
+            newShootTimeSlot: '11:00-13:00',
+          },
+        ),
       ).rejects.toThrow(ServiceUnavailableException);
 
       // Verify zero writes
@@ -1160,7 +1274,10 @@ describe('Production Slot Lease Workflows Integration', () => {
 
       const bookingsService = new BookingsService(
         mockBookingModel as any,
-        { findOne: jest.fn().mockResolvedValue(bookingItemMock), updateOne: mockBookingItemUpdate } as any,
+        {
+          findOne: jest.fn().mockResolvedValue(bookingItemMock),
+          updateOne: mockBookingItemUpdate,
+        } as any,
         {} as any,
         {} as any,
         {} as any,
@@ -1184,12 +1301,18 @@ describe('Production Slot Lease Workflows Integration', () => {
         timeEngine,
       );
 
+      // Since the code of 24/11/2026 the customer only sends a reschedule request (rescheduleBooking); the leases
+      // move when the provider approves it, so the approval step (applyApprovedReschedule) is called here.
       await expect(
-        bookingsService.rescheduleBooking(bookingId.toString(), customerId.toString(), {
-          itemId: itemId.toString(),
-          newShootDate: '2026-11-20',
-          newShootTimeSlot: '11:00-13:00',
-        }),
+        (bookingsService as any).applyApprovedReschedule(
+          bookingId.toString(),
+          customerId.toString(),
+          {
+            itemId: itemId.toString(),
+            newShootDate: '2026-11-20',
+            newShootTimeSlot: '11:00-13:00',
+          },
+        ),
       ).rejects.toThrow(ServiceUnavailableException);
 
       // Verify session endSession called and zero writes

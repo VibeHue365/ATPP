@@ -1,4 +1,11 @@
-import { IsBoolean, IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { BannerPlacement } from '../schemas/banner.schema';
 
 export class UpdateBannerDto {

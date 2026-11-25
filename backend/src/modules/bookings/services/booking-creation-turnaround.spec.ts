@@ -7,9 +7,23 @@ import { SlotLeaseStatus } from '../schemas/inventory-slot-lease.schema';
 import { TurnaroundStatus } from '../schemas/rental-fulfillment.types';
 import { TimeSlotEngineService } from './time-slot-engine.service';
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import { ScheduleCapability, ScheduleType } from '../../products/schemas/provider-schedule.schema';
+import {
+  ScheduleCapability,
+  ScheduleType,
+} from '../../products/schemas/provider-schedule.schema';
 
 describe('BookingCreationService - Turnaround Integration (Phase 1)', () => {
+  // The scenarios use fixed dates in November 2026: freeze the clock (Date only) before them so the
+  // "date in the past" rules do not depend on the day the suite runs.
+  beforeAll(() => {
+    jest.useFakeTimers({
+      now: new Date('2026-11-10T01:00:00.000Z'),
+      doNotFake: ['nextTick', 'setImmediate', 'clearImmediate', 'setTimeout', 'clearTimeout', 'setInterval',
+        'clearInterval', 'queueMicrotask', 'hrtime', 'performance'],
+    });
+  });
+  afterAll(() => jest.useRealTimers());
+
   let service: BookingCreationService;
   let mockBookingsRepo: any;
   let mockProductModel: any;
@@ -81,7 +95,7 @@ describe('BookingCreationService - Turnaround Integration (Phase 1)', () => {
       save: jest.fn().mockResolvedValue(this),
       ...doc,
     }));
-    (mockInventoryItemModel as any).find = jest.fn();
+    mockInventoryItemModel.find = jest.fn();
 
     mockInventoryReservationModel = jest.fn().mockImplementation((doc) => ({
       _id: new Types.ObjectId(),
@@ -90,10 +104,10 @@ describe('BookingCreationService - Turnaround Integration (Phase 1)', () => {
     }));
     const queryMock = Promise.resolve([]) as any;
     queryMock.sort = jest.fn().mockResolvedValue([]);
-    (mockInventoryReservationModel as any).find = jest.fn().mockReturnValue({
+    mockInventoryReservationModel.find = jest.fn().mockReturnValue({
       session: jest.fn().mockReturnValue(queryMock),
     });
-    (mockInventoryReservationModel as any).deleteOne = jest.fn().mockResolvedValue({});
+    mockInventoryReservationModel.deleteOne = jest.fn().mockResolvedValue({});
 
     mockBookingItemModel = {
       findOne: jest.fn().mockResolvedValue(null),
@@ -132,17 +146,17 @@ describe('BookingCreationService - Turnaround Integration (Phase 1)', () => {
 
     service = createBookingCreationServiceForTest({
       bookingsRepository: mockBookingsRepo,
-      bookingModel: mockBookingModel as any,
-      productModel: mockProductModel as any,
+      bookingModel: mockBookingModel,
+      productModel: mockProductModel,
       photoPackageModel: {} as any,
       priceVersionModel: {} as any,
-      inventoryItemModel: mockInventoryItemModel as any,
-      inventoryReservationModel: mockInventoryReservationModel as any,
+      inventoryItemModel: mockInventoryItemModel,
+      inventoryReservationModel: mockInventoryReservationModel,
       promotionsService: { reserveVoucher: jest.fn() } as any,
       paymentsService: {} as any,
       productsService: {} as any,
       notificationsService: { createNotification: jest.fn() } as any,
-      providerModel: mockProviderModel as any,
+      providerModel: mockProviderModel,
       voucherPricingService: mockVoucherPricingService,
       leaseModel: mockLeaseModel as any,
       slotLeaseService: mockSlotLeaseService,
@@ -174,7 +188,7 @@ describe('BookingCreationService - Turnaround Integration (Phase 1)', () => {
       }),
     });
 
-    (mockInventoryItemModel as any).find.mockReturnValue({
+    mockInventoryItemModel.find.mockReturnValue({
       session: jest.fn().mockResolvedValue([
         {
           _id: invItemId,
@@ -219,7 +233,9 @@ describe('BookingCreationService - Turnaround Integration (Phase 1)', () => {
     expect(contractualTo.toISOString()).toContain('2026-11-21');
 
     // 3. Verify slot lease service was NOT called for DAILY
-    expect(mockSlotLeaseService.acquireUpfrontBlockLease).not.toHaveBeenCalled();
+    expect(
+      mockSlotLeaseService.acquireUpfrontBlockLease,
+    ).not.toHaveBeenCalled();
   });
 
   it('HOURLY rental with useSlotLeases = true: acquires upfront block lease and populates turnaround snapshot', async () => {
@@ -247,7 +263,7 @@ describe('BookingCreationService - Turnaround Integration (Phase 1)', () => {
       }),
     });
 
-    (mockInventoryItemModel as any).find.mockReturnValue({
+    mockInventoryItemModel.find.mockReturnValue({
       session: jest.fn().mockResolvedValue([
         {
           _id: invItemId,
@@ -278,8 +294,11 @@ describe('BookingCreationService - Turnaround Integration (Phase 1)', () => {
     });
 
     // 1. Verify upfront block lease was acquired
-    expect(mockSlotLeaseService.acquireUpfrontBlockLease).toHaveBeenCalledTimes(1);
-    const leaseCall = mockSlotLeaseService.acquireUpfrontBlockLease.mock.calls[0][0];
+    expect(mockSlotLeaseService.acquireUpfrontBlockLease).toHaveBeenCalledTimes(
+      1,
+    );
+    const leaseCall =
+      mockSlotLeaseService.acquireUpfrontBlockLease.mock.calls[0][0];
 
     expect(leaseCall.inventoryItemId.toString()).toBe(invItemId.toString());
     expect(leaseCall.providerId.toString()).toBe(providerId.toString());
@@ -291,9 +310,12 @@ describe('BookingCreationService - Turnaround Integration (Phase 1)', () => {
     expect(leaseCall.status).toBe(SlotLeaseStatus.Temp);
 
     // 2. Verify snapshot fields saved to BookingItem.rentalFulfillment
-    const createdItem = mockBookingsRepo.createBookingItem.mock.results[0].value;
+    const createdItem =
+      mockBookingsRepo.createBookingItem.mock.results[0].value;
     expect(createdItem.rentalFulfillment).toBeDefined();
-    expect(createdItem.rentalFulfillment.turnaroundStatus).toBe(TurnaroundStatus.Scheduled);
+    expect(createdItem.rentalFulfillment.turnaroundStatus).toBe(
+      TurnaroundStatus.Scheduled,
+    );
     expect(createdItem.rentalFulfillment.turnaroundSlotsSnapshot).toBe(2);
     expect(createdItem.rentalFulfillment.availableFrom).toBeDefined();
   });
@@ -323,7 +345,7 @@ describe('BookingCreationService - Turnaround Integration (Phase 1)', () => {
       }),
     });
 
-    (mockInventoryItemModel as any).find.mockReturnValue({
+    mockInventoryItemModel.find.mockReturnValue({
       session: jest.fn().mockResolvedValue([
         {
           _id: invItemId,
@@ -336,7 +358,9 @@ describe('BookingCreationService - Turnaround Integration (Phase 1)', () => {
     });
 
     mockSlotLeaseService.acquireUpfrontBlockLease.mockRejectedValueOnce(
-      new ConflictException('Một hoặc nhiều khung giờ đã được giữ chỗ bởi khách hàng khác.'),
+      new ConflictException(
+        'Một hoặc nhiều khung giờ đã được giữ chỗ bởi khách hàng khác.',
+      ),
     );
 
     await expect(
@@ -382,7 +406,7 @@ describe('BookingCreationService - Turnaround Integration (Phase 1)', () => {
       }),
     });
 
-    (mockInventoryItemModel as any).find.mockReturnValue({
+    mockInventoryItemModel.find.mockReturnValue({
       session: jest.fn().mockResolvedValue([
         {
           _id: invItemId,
@@ -409,8 +433,11 @@ describe('BookingCreationService - Turnaround Integration (Phase 1)', () => {
       ],
     });
 
-    expect(mockSlotLeaseService.acquireUpfrontBlockLease).toHaveBeenCalledTimes(1);
-    const leaseCall = mockSlotLeaseService.acquireUpfrontBlockLease.mock.calls[0][0];
+    expect(mockSlotLeaseService.acquireUpfrontBlockLease).toHaveBeenCalledTimes(
+      1,
+    );
+    const leaseCall =
+      mockSlotLeaseService.acquireUpfrontBlockLease.mock.calls[0][0];
 
     // Must have 2 RENTAL slots
     expect(leaseCall.rentalSlots).toHaveLength(2);
@@ -448,7 +475,7 @@ describe('BookingCreationService - Turnaround Integration (Phase 1)', () => {
 
     // Item in CLEANING status with operationalAvailableFrom finishing at 12:00 VN
     // Customer requests rental starting at 11:00 VN -> candidate query excludes this item!
-    (mockInventoryItemModel as any).find.mockImplementation((query: any) => {
+    mockInventoryItemModel.find.mockImplementation((query: any) => {
       const item = {
         _id: new Types.ObjectId(),
         productId,
@@ -458,7 +485,8 @@ describe('BookingCreationService - Turnaround Integration (Phase 1)', () => {
         operationalAvailableFrom: new Date('2026-11-20T05:00:00.000Z'), // 12:00 VN
       };
       const maxAllowed = query?.$or?.[1]?.operationalAvailableFrom?.$lte;
-      const resultItems = (maxAllowed && item.operationalAvailableFrom > maxAllowed) ? [] : [item];
+      const resultItems =
+        maxAllowed && item.operationalAvailableFrom > maxAllowed ? [] : [item];
       return {
         session: jest.fn().mockResolvedValue(resultItems),
       };
@@ -523,7 +551,7 @@ describe('BookingCreationService - Turnaround Integration (Phase 1)', () => {
       }),
     });
 
-    (mockInventoryItemModel as any).find.mockReturnValue({
+    mockInventoryItemModel.find.mockReturnValue({
       session: jest.fn().mockResolvedValue([
         {
           _id: invItemId,
@@ -551,8 +579,11 @@ describe('BookingCreationService - Turnaround Integration (Phase 1)', () => {
       ],
     });
 
-    expect(mockSlotLeaseService.acquireUpfrontBlockLease).toHaveBeenCalledTimes(1);
-    const leaseCall = mockSlotLeaseService.acquireUpfrontBlockLease.mock.calls[0][0];
+    expect(mockSlotLeaseService.acquireUpfrontBlockLease).toHaveBeenCalledTimes(
+      1,
+    );
+    const leaseCall =
+      mockSlotLeaseService.acquireUpfrontBlockLease.mock.calls[0][0];
 
     // Rental slot is on 2026-11-20 slot 7
     expect(leaseCall.rentalSlots).toHaveLength(1);

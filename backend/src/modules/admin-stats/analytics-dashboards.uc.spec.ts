@@ -42,11 +42,9 @@ function createProviderAnalytics(
         }
       : options.provider;
   const counts = options.counts ?? { all: 0, completed: 0, cancelled: 0 };
-  const inventoryAggregate = jest
-    .fn()
-    .mockReturnValue({
-      then: (fn: (rows: Row[]) => unknown) => Promise.resolve(fn([])),
-    });
+  const inventoryAggregate = jest.fn().mockReturnValue({
+    then: (fn: (rows: Row[]) => unknown) => Promise.resolve(fn([])),
+  });
   const bookingModel = {
     find: jest.fn().mockResolvedValue(options.bookings ?? []),
     countDocuments: jest.fn(async (filter: Row) =>
@@ -76,9 +74,24 @@ function createProviderAnalytics(
       .mockResolvedValueOnce(options.popular ?? [])
       .mockResolvedValueOnce(options.packages ?? []),
   };
+  const productRows = Object.entries(options.products ?? {})
+    .filter(([, row]) => row)
+    .map(([id, row]) => ({ _id: new Types.ObjectId(id), ...row }));
   const productModel = {
     findById: jest.fn(
       async (id: Types.ObjectId) => options.products?.[id.toString()] ?? null,
+    ),
+    // Popular products are now loaded in one batch: find({ _id: { $in } }).
+    find: jest.fn((filter: Row) =>
+      lean(
+        filter._id?.$in
+          ? productRows.filter((row) =>
+              filter._id.$in.some(
+                (id: Types.ObjectId) => id.toString() === row._id.toString(),
+              ),
+            )
+          : [],
+      ),
     ),
     countDocuments: jest.fn().mockResolvedValue(3),
   };
@@ -203,8 +216,12 @@ describe('UC-61 View Product / Popular Concept (DatTT)', () => {
       await service.getProviderAnalytics(providerUser);
 
     expect(popularProducts).toEqual([
-      { name: 'Áo đỏ', image: 'red.jpg', count: 5 },
-      { name: 'Áo trắng', image: '/hong_lien_hoa.png', count: 2 },
+      expect.objectContaining({ name: 'Áo đỏ', image: 'red.jpg', count: 5 }),
+      expect.objectContaining({
+        name: 'Áo trắng',
+        image: '/hong_lien_hoa.png',
+        count: 2,
+      }),
     ]);
   });
 
@@ -290,14 +307,12 @@ function createAdminStats(options: Row = {}) {
     ),
     aggregate: jest.fn().mockResolvedValue(options.bookingAggregate ?? []),
     db: {
-      model: jest
-        .fn()
-        .mockReturnValue({
-          countDocuments: jest
-            .fn()
-            .mockResolvedValue((options.transfers ?? []).length),
-          find: () => lean(options.transfers ?? []),
-        }),
+      model: jest.fn().mockReturnValue({
+        countDocuments: jest
+          .fn()
+          .mockResolvedValue((options.transfers ?? []).length),
+        find: () => lean(options.transfers ?? []),
+      }),
     },
   };
   const service = Object.create(
@@ -332,6 +347,7 @@ function createAdminStats(options: Row = {}) {
     reviewModel: { find: () => lean([]) },
     analyticsService: {
       getTopSearches: jest.fn().mockResolvedValue([]),
+      getHighViewZeroBookingProducts: jest.fn().mockResolvedValue([]),
       getViewCountMap: jest.fn().mockResolvedValue(new Map()),
     },
     overviewStatsCache: new Map(),
@@ -347,7 +363,9 @@ function createAdminStats(options: Row = {}) {
   jest
     .spyOn(service as any, 'getRevenueGrowth')
     .mockResolvedValue(options.revenueGrowth ?? growth);
-  jest.spyOn(service as any, 'getOverviewChartPoints').mockResolvedValue([]);
+  jest
+    .spyOn(service as any, 'getOverviewChartPoints')
+    .mockResolvedValue(options.chartPoints ?? []);
   jest.spyOn(service as any, 'getServiceShare').mockResolvedValue([]);
   jest.spyOn(service as any, 'getTopPartners').mockResolvedValue([]);
   jest.spyOn(service as any, 'getRecentActivities').mockResolvedValue([]);
@@ -440,7 +458,7 @@ describe('UC-68 Customer Analysis (DatTT)', () => {
   it('UT-68 UTCID07 forbids a non-admin from reading customer analytics', async () => {
     const controller = new AdminStatsController({
       getAllCustomers: jest.fn(),
-    } as any);
+    } as any, {} as any);
 
     await expect(
       controller.getCustomers({ sub: 'u1', roles: ['PROVIDER'] } as any, 1, 10),
@@ -567,7 +585,7 @@ describe('UC-69 Shop Analysis (DatTT)', () => {
   it('UT-69 UTCID08 forbids a non-admin from reading shop analytics', async () => {
     const controller = new AdminStatsController({
       getAllProviders: jest.fn(),
-    } as any);
+    } as any, {} as any);
 
     await expect(
       controller.getProviders({ sub: 'u1', roles: ['CUSTOMER'] } as any, 1, 10),
@@ -635,18 +653,16 @@ describe('UC-71 Revenue Analysis (DatTT)', () => {
     });
   });
 
-  it('UT-71 UTCID05 calculates revenue growth from the last two periods', async () => {
+  // Since the code of 24/11/2026 the GMV growth compares the selected period (sum of the chart points)
+  // with the previous period (successful payments of that period), no longer the last two growth buckets.
+  it('UT-71 UTCID05 calculates revenue growth against the previous period', async () => {
     const grown = createAdminStats({
-      revenueGrowth: [
-        { label: 'T9', value: 100 },
-        { label: 'T10', value: 150 },
-      ],
+      chartPoints: [{ label: 'T11', gmv: 150, bookings: 0 }],
+      revenue: [{ total: 100 }],
     });
     const fromZero = createAdminStats({
-      revenueGrowth: [
-        { label: 'T9', value: 0 },
-        { label: 'T10', value: 80 },
-      ],
+      chartPoints: [{ label: 'T11', gmv: 80, bookings: 0 }],
+      revenue: [],
     });
 
     await expect(grown.service.getAdminStats('month')).resolves.toMatchObject({

@@ -8,18 +8,24 @@ import {
   Shirt,
   Camera,
   Check,
-  AlertCircle,
   ExternalLink,
   Download,
   CheckCircle2,
   Star,
   XCircle,
-  Image as ImageIcon
+  Image as ImageIcon,
+  RotateCcw,
+  Package,
+  Clock
 } from 'lucide-react';
 import { ImageWithFallback } from '../../../../shared/media/ImageWithFallback';
 import { downloadPhotosAsZip } from '../../../../utils/downloadUtils';
 import { httpClient } from '../../../../services/httpClient';
 import { useToast } from '../../../../components/feedback/Toast';
+import { RentalReturnModal } from '../rental-detail/RentalReturnModal';
+import { AssignedStaffContactCard } from '../photoshoot-detail/AssignedStaffContactCard';
+import { formatLocationAddress } from '../../../../utils/addressFormat';
+import { getBookingStatusLabel } from '../../../../utils/bookingStatus';
 import Swal from 'sweetalert2';
 
 interface ProfileComboDetailPageProps {
@@ -43,6 +49,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
 }) => {
   const toast = useToast();
   const [isConfirming, setIsConfirming] = useState(false);
+  const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [activeTabSection, setActiveTabSection] = useState<'ALL' | 'AODAI' | 'PHOTOSHOOT'>('ALL');
 
   React.useEffect(() => {
@@ -60,7 +67,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
   const rentalProvider = (rawProviders[0] && typeof rawProviders[0] === 'object' ? rawProviders[0] : null) || {};
   const photoProvider = (rawProviders[1] && typeof rawProviders[1] === 'object' ? rawProviders[1] : null) || rentalProvider;
 
-  const comboCode = booking?.bookingCode || (booking?._id ? 'CB-' + booking._id.slice(-4) : 'CB-LUME');
+  const comboCode = booking?.bookingCode || (booking?._id ? 'CB-' + booking._id.slice(-4) : 'CB-TAGO');
   const comboTitle = booking?.packageSnapshot?.name || 'Combo Trọn Gói Áo Dài & Chụp Ảnh Ngoại Cảnh';
 
   // Dates
@@ -111,9 +118,9 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
   let activeStep = 2;
   if (['COMPLETED'].includes(rawStatus)) {
     activeStep = 6;
-  } else if (['RETURNED', 'RETURN_PENDING'].includes(rawStatus)) {
+  } else if (['RETURNED', 'RETURN_PENDING', 'COMBO_PHOTOS_APPROVED'].includes(rawStatus)) {
     activeStep = 5;
-  } else if (['AWAITING_REVIEW', 'COMBO_PHOTOS_APPROVED'].includes(rawStatus)) {
+  } else if (['AWAITING_REVIEW'].includes(rawStatus)) {
     activeStep = 4;
   } else if (['IN_PROGRESS', 'PICKED_UP'].includes(rawStatus)) {
     activeStep = 3;
@@ -137,40 +144,21 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
       ? '20%'
       : '0%';
 
-  const statusLabels: Record<string, string> = {
-    DEPOSIT_PAID: 'CHỜ DUYỆT',
-    CONFIRMED: 'ĐÃ XÁC NHẬN',
-    PICKUP_PENDING: 'SẴN SÀNG NHẬN ÁO',
-    READY_FOR_PICKUP: 'SẴN SÀNG NHẬN ÁO',
-    IN_PROGRESS: 'ĐANG TRẢI NGHIỆM',
-    PICKED_UP: 'ĐANG THUÊ & CHỤP',
-    AWAITING_REVIEW: 'CHỜ DUYỆT ẢNH',
-    COMBO_PHOTOS_APPROVED: 'ẢNH ĐÃ ĐƯỢC DUYỆT',
-    RETURNED: 'ĐÃ TRẢ ÁO',
-    RETURN_PENDING: 'CHỜ KIỂM TRA ÁO',
-    COMPLETED: 'HOÀN TẤT',
-    CANCELLED: 'ĐÃ HỦY',
-    PENDING_PAYMENT: 'CHỜ CỌC',
-    DISPUTED: 'TRANH CHẤP',
-    REFUNDED: 'ĐÃ HOÀN TIỀN',
-    PARTIALLY_REFUNDED: 'HOÀN TIỀN MỘT PHẦN'
-  };
-
-  const statusLabel = statusLabels[rawStatus] || rawStatus;
+  const statusLabel = getBookingStatusLabel(rawStatus, { uppercase: true });
 
   // Support hotline
   const handleSupport = () => {
     Swal.fire({
-      title: 'Trung tâm Hỗ trợ Combo LUMÉ',
+      title: 'Trung tâm Hỗ trợ Combo TàGo',
       html: `
         <div style="text-align: left; font-size: 14px; color: #4A3F35; line-height: 1.6;">
-          <p>Đội ngũ LUMÉ & Đối tác đồng hành cùng bạn:</p>
+          <p>Đội ngũ TàGo & Đối tác đồng hành cùng bạn:</p>
           <div style="background: #FDF2F4; padding: 12px 16px; border-radius: 10px; border: 1px solid #F7D5DA; margin: 12px 0;">
             <p style="margin: 0; font-weight: 700; color: #8E1B2E; font-size: 16px;">📞 Hotline: 1900 9999</p>
             <p style="margin: 4px 0 0 0; color: #7D736B; font-size: 12px;">Hỗ trợ Combo 24/7 toàn quốc</p>
           </div>
-          <p style="margin: 0;">🏢 Tiệm áo dài: <strong>${rentalProvider?.businessName || 'LUMÉ Huế'}</strong></p>
-          <p style="margin: 4px 0 0 0;">📸 Nhiếp ảnh gia: <strong>${photoProvider?.businessName || 'Studio Nhiếp ảnh LUMÉ'}</strong></p>
+          <p style="margin: 0;">🏢 Tiệm áo dài: <strong>${rentalProvider?.businessName || 'Cửa hàng đối tác TàGo'}</strong></p>
+          <p style="margin: 4px 0 0 0;">📸 Nhiếp ảnh gia: <strong>${photoProvider?.businessName || 'Studio Nhiếp ảnh đối tác'}</strong></p>
         </div>
       `,
       confirmButtonText: 'Đã hiểu',
@@ -343,11 +331,24 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
       await httpClient.post(`/bookings/${booking._id}/confirm-complete`, {});
       toast.success('Đã duyệt ảnh thành công! Cảm ơn bạn đã trải nghiệm dịch vụ.');
       if (onRefreshBooking) await onRefreshBooking();
-      if (onOpenReview) onOpenReview({ ...photoItem, bookingId: booking?._id, booking });
+      // For combo, do not auto-open review modal here because customer still needs to return áo dài and complete the order.
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err?.message || 'Có lỗi xảy ra khi xác nhận.');
     } finally {
       setIsConfirming(false);
+    }
+  };
+
+  // Customer Return Ao Dai Submit Handler
+  const handleReturnSubmit = async (data: { evidencePhotos: string[]; note?: string }) => {
+    if (!booking?._id) return;
+    try {
+      await httpClient.post(`/bookings/${booking._id}/customer-return`, data);
+      toast.success('Đã gửi yêu cầu trả áo dài thành công! Vui lòng chờ cửa hàng kiểm tra.');
+      setIsReturnModalOpen(false);
+      if (onRefreshBooking) await onRefreshBooking();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Không thể gửi yêu cầu trả áo.');
     }
   };
 
@@ -518,33 +519,10 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
                 Áo dài đã sẵn sàng tại cửa hàng!
               </div>
               <div style={{ fontSize: '12.5px', color: '#7D3C98', marginTop: '3px' }}>
-                Cửa hàng <strong>{rentalProvider?.businessName || 'tiệm áo dài'}</strong> đã kiểm tra và chuẩn bị xong trang phục cho bạn. Vui lòng đến nhận đồ và bấm nút xác nhận.
+                Cửa hàng <strong>{rentalProvider?.businessName || 'tiệm áo dài'}</strong> đã kiểm tra và chuẩn bị xong trang phục cho bạn. Vui lòng đến nhận đồ và xác nhận ở góc dưới.
               </div>
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={handleConfirmPickup}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '10px 20px',
-              borderRadius: '10px',
-              backgroundColor: '#8E44AD',
-              color: '#FFFFFF',
-              border: 'none',
-              fontSize: '13.5px',
-              fontWeight: 800,
-              cursor: 'pointer',
-              boxShadow: '0 4px 14px rgba(142, 68, 173, 0.28)',
-              transition: 'transform 0.15s ease'
-            }}
-          >
-            <CheckCircle2 size={16} />
-            <span>Xác nhận đã nhận áo dài</span>
-          </button>
         </div>
       )}
 
@@ -585,13 +563,13 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
                 Bộ ảnh Combo đã sẵn sàng để bạn duyệt!
               </div>
               <div style={{ fontSize: '12.5px', color: '#78350F', marginTop: '3px' }}>
-                Nhiếp ảnh gia <strong>{photoProvider?.businessName || photoProvider?.fullName || 'LUMÉ'}</strong> đã bàn giao ảnh. Hãy kiểm tra và xác nhận duyệt ảnh combo.
+                Nhiếp ảnh gia <strong>{photoProvider?.businessName || photoProvider?.fullName || 'Đối tác TàGo'}</strong> đã bàn giao ảnh. Hãy kiểm tra và xác nhận duyệt ảnh combo ở góc dưới.
               </div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            {driveUrl && (
+          {driveUrl && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <a
                 href={driveUrl}
                 target="_blank"
@@ -613,29 +591,51 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
                 <ExternalLink size={14} />
                 <span>Xem link Drive</span>
               </a>
-            )}
-            <button
-              type="button"
-              onClick={handleConfirmComplete}
-              disabled={isConfirming}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Action Banner: COMBO_PHOTOS_APPROVED - Hướng dẫn hoàn trả áo dài */}
+      {rawStatus === 'COMBO_PHOTOS_APPROVED' && (
+        <div
+          style={{
+            backgroundColor: '#EFF6FF',
+            border: '1.5px solid #93C5FD',
+            borderRadius: '16px',
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            flexWrap: 'wrap',
+            boxShadow: '0 4px 12px rgba(29, 78, 216, 0.08)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 20px',
-                borderRadius: '10px',
-                backgroundColor: '#047857',
+                width: '44px',
+                height: '44px',
+                borderRadius: '12px',
+                backgroundColor: '#1D4ED8',
                 color: '#FFFFFF',
-                border: 'none',
-                fontSize: '13.5px',
-                fontWeight: 800,
-                cursor: isConfirming ? 'not-allowed' : 'pointer',
-                boxShadow: '0 4px 14px rgba(4, 120, 87, 0.28)'
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
               }}
             >
-              <CheckCircle2 size={16} />
-              <span>{isConfirming ? 'Đang duyệt...' : 'Duyệt ảnh Combo'}</span>
-            </button>
+              <Package size={22} />
+            </div>
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: 800, color: '#1E40AF' }}>
+                Ảnh đã được duyệt thành công! Vui lòng hoàn trả áo dài
+              </div>
+              <div style={{ fontSize: '12.5px', color: '#1E3A8A', marginTop: '3px' }}>
+                Bộ ảnh của bạn đã được xác nhận. Hãy gửi yêu cầu trả áo dài ở góc dưới hoặc mang đồ đến cửa hàng để được hoàn trả <strong>100% tiền cọc tài sản</strong>.
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -681,29 +681,6 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
               </div>
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={handleConfirmComplete}
-            disabled={isConfirming}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '10px 20px',
-              borderRadius: '10px',
-              backgroundColor: '#047857',
-              color: '#FFFFFF',
-              border: 'none',
-              fontSize: '13px',
-              fontWeight: 800,
-              cursor: isConfirming ? 'not-allowed' : 'pointer',
-              boxShadow: '0 4px 14px rgba(4, 120, 87, 0.28)'
-            }}
-          >
-            <CheckCircle2 size={16} />
-            <span>{isConfirming ? 'Đang hoàn tất...' : 'Xác nhận hoàn tất đơn & Nhận cọc'}</span>
-          </button>
         </div>
       )}
 
@@ -744,7 +721,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
                 Đơn hàng Combo đã hoàn tất thành công!
               </div>
               <div style={{ fontSize: '12.5px', color: '#047857', marginTop: '3px' }}>
-                Bạn đã hoàn thành trải nghiệm trọn gói áo dài & chụp ảnh. Cảm ơn bạn đã đồng hành cùng LUMÉ!
+                Bạn đã hoàn thành trải nghiệm trọn gói áo dài & chụp ảnh. Cảm ơn bạn đã đồng hành cùng TàGo!
               </div>
             </div>
           </div>
@@ -1079,7 +1056,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
                   Size: <strong>{rentalItem.selectedSize || rentalItem.size || 'M'}</strong> • Màu: <strong>{rentalItem.selectedColor || rentalItem.color || 'Đa sắc'}</strong>
                 </span>
                 <span style={{ color: '#7D736B' }}>
-                  Điểm nhận áo: <strong>{rentalProvider?.businessName || 'LUMÉ Huế'}</strong>
+                  Điểm nhận áo: <strong>{rentalProvider?.businessName || 'Cửa hàng đối tác'}</strong>
                 </span>
                 <span style={{ color: '#7D736B' }}>
                   Hạn trả đồ: <strong>{rentalEnd ? new Date(rentalEnd).toLocaleDateString('vi-VN') : 'Theo thỏa thuận'}</strong>
@@ -1087,44 +1064,51 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
               </div>
             </div>
 
-            {['PICKUP_PENDING', 'READY_FOR_PICKUP'].includes(rawStatus) && (
+            {rawStatus === 'COMBO_PHOTOS_APPROVED' && (
               <div
                 style={{
-                  backgroundColor: '#F5EEF8',
+                  backgroundColor: '#EFF6FF',
                   borderRadius: '10px',
-                  border: '1px solid #D7BDE2',
+                  border: '1px solid #BFDBFE',
                   padding: '10px 14px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '10px',
-                  flexWrap: 'wrap'
+                  fontSize: '12px',
+                  color: '#1E40AF',
+                  fontWeight: 600
                 }}
               >
-                <div style={{ fontSize: '12px', color: '#5B2C6F', fontWeight: 600 }}>
-                  👕 Áo dài đã sẵn sàng tại tiệm. Vui lòng nhận áo và xác nhận.
-                </div>
-                <button
-                  type="button"
-                  onClick={handleConfirmPickup}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '7px 14px',
-                    borderRadius: '8px',
-                    backgroundColor: '#8E44AD',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    fontSize: '12px',
-                    fontWeight: 750,
-                    cursor: 'pointer',
-                    boxShadow: '0 2px 6px rgba(142, 68, 173, 0.2)'
-                  }}
-                >
-                  <CheckCircle2 size={14} />
-                  <span>Xác nhận nhận áo</span>
-                </button>
+                👕 Ảnh đã duyệt xong. Bạn có thể bấm nút yêu cầu trả áo dài ở góc dưới để nhận lại cọc.
+              </div>
+            )}
+
+            {rawStatus === 'RETURN_PENDING' && (
+              <div
+                style={{
+                  backgroundColor: '#FFFBEB',
+                  borderRadius: '10px',
+                  border: '1px solid #FDE68A',
+                  padding: '10px 14px',
+                  fontSize: '12px',
+                  color: '#92400E',
+                  fontWeight: 600
+                }}
+              >
+                ⏳ Đã gửi yêu cầu trả áo. Cửa hàng đang tiếp nhận và kiểm tra hiện trạng.
+              </div>
+            )}
+
+            {rawStatus === 'RETURNED' && (
+              <div
+                style={{
+                  backgroundColor: '#ECFDF5',
+                  borderRadius: '10px',
+                  border: '1px solid #A7F3D0',
+                  padding: '10px 14px',
+                  fontSize: '12px',
+                  color: '#065F46',
+                  fontWeight: 600
+                }}
+              >
+                ✓ Shop đã nhận lại áo dài. Tiền cọc đang được xử lý hoàn trả.
               </div>
             )}
           </div>
@@ -1170,7 +1154,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
                   {photoPkg?.name || photoItem.name || 'Gói Chụp Ảnh Ngoại Cảnh Cố Đô'}
                 </h4>
                 <span style={{ color: '#7D736B' }}>
-                  Nhiếp ảnh gia: <strong>{photoProvider?.businessName || photoProvider?.fullName || 'Nhiếp ảnh gia LUMÉ'}</strong>
+                  Nhiếp ảnh gia: <strong>{photoProvider?.businessName || photoProvider?.fullName || 'Nhiếp ảnh gia đối tác'}</strong>
                 </span>
                 <span style={{ color: '#7D736B' }}>
                   Thời gian: <strong>{shootDate ? new Date(shootDate).toLocaleDateString('vi-VN') : 'Theo lịch'} ({shootTime})</strong>
@@ -1181,47 +1165,10 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
               </div>
             </div>
 
-            {rawStatus === 'AWAITING_REVIEW' && (
-              <div
-                style={{
-                  backgroundColor: '#FEF3C7',
-                  borderRadius: '10px',
-                  border: '1px solid #FCD34D',
-                  padding: '10px 14px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '10px',
-                  flexWrap: 'wrap'
-                }}
-              >
-                <div style={{ fontSize: '12px', color: '#92400E', fontWeight: 600 }}>
-                  📸 Đã có ảnh chụp. Bạn vui lòng duyệt ảnh sau khi kiểm tra.
-                </div>
-                <button
-                  type="button"
-                  onClick={handleConfirmComplete}
-                  disabled={isConfirming}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '7px 14px',
-                    borderRadius: '8px',
-                    backgroundColor: '#047857',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    fontSize: '12px',
-                    fontWeight: 750,
-                    cursor: isConfirming ? 'not-allowed' : 'pointer',
-                    boxShadow: '0 2px 6px rgba(4, 120, 87, 0.2)'
-                  }}
-                >
-                  <CheckCircle2 size={14} />
-                  <span>{isConfirming ? 'Đang duyệt...' : 'Duyệt ảnh'}</span>
-                </button>
-              </div>
-            )}
+            <AssignedStaffContactCard
+              booking={booking}
+              studioName={photoProvider?.businessName || photoProvider?.fullName}
+            />
           </div>
         )}
       </div>
@@ -1307,57 +1254,6 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
             </div>
           )}
         </div>
-
-        {/* Awaiting review action banner */}
-        {rawStatus === 'AWAITING_REVIEW' && (
-          <div
-            style={{
-              backgroundColor: '#FFFBEB',
-              borderRadius: '12px',
-              border: '1px solid #FCD34D',
-              padding: '16px 20px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '16px',
-              flexWrap: 'wrap'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-              <AlertCircle size={20} color="#B45309" style={{ marginTop: '2px', flexShrink: 0 }} />
-              <div>
-                <h4 style={{ margin: '0 0 2px 0', fontSize: '13.5px', fontWeight: 800, color: '#92400E' }}>
-                  Xác nhận kết quả buổi chụp Combo
-                </h4>
-                <p style={{ margin: 0, fontSize: '12px', color: '#78350F' }}>
-                  Vui lòng kiểm tra ảnh trong link Google Drive. Nếu hài lòng, bấm <strong>Duyệt ảnh</strong> để nghiệm thu gói chụp.
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              disabled={isConfirming}
-              onClick={handleConfirmComplete}
-              style={{
-                padding: '9px 18px',
-                borderRadius: '8px',
-                backgroundColor: '#047857',
-                color: '#FFFFFF',
-                border: 'none',
-                fontSize: '12.5px',
-                fontWeight: 800,
-                cursor: isConfirming ? 'not-allowed' : 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-            >
-              <CheckCircle2 size={15} />
-              <span>{isConfirming ? 'Đang xử lý...' : '✓ Duyệt ảnh Combo'}</span>
-            </button>
-          </div>
-        )}
 
         {/* Photo Gallery Grid */}
         {deliveredPhotos.length > 0 ? (
@@ -1517,6 +1413,70 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
             </button>
           )}
 
+          {rawStatus === 'COMBO_PHOTOS_APPROVED' && (
+            <button
+              type="button"
+              onClick={() => setIsReturnModalOpen(true)}
+              style={{
+                padding: '9px 18px',
+                borderRadius: '10px',
+                backgroundColor: '#8E1B2E',
+                color: '#FFFFFF',
+                border: 'none',
+                fontSize: '13px',
+                fontWeight: 750,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 2px 8px rgba(142, 27, 46, 0.25)'
+              }}
+            >
+              <RotateCcw size={15} />
+              <span>Yêu cầu trả áo dài</span>
+            </button>
+          )}
+
+          {rawStatus === 'RETURN_PENDING' && (
+            <span
+              style={{
+                padding: '8px 14px',
+                borderRadius: '8px',
+                backgroundColor: '#FFFBEB',
+                border: '1px solid #FDE68A',
+                color: '#B45309',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <Clock size={14} />
+              <span>Đang chờ tiệm kiểm tra áo</span>
+            </span>
+          )}
+
+          {rawStatus === 'RETURNED' && (
+            <span
+              style={{
+                padding: '8px 14px',
+                borderRadius: '8px',
+                backgroundColor: '#ECFDF5',
+                border: '1px solid #A7F3D0',
+                color: '#047857',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <CheckCircle2 size={14} />
+              <span>Đã trả áo — Đang xử lý hoàn cọc</span>
+            </span>
+          )}
+
           {rawStatus === 'COMPLETED' && onOpenReview && (
             <button
               type="button"
@@ -1564,6 +1524,22 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
           )}
         </div>
       </div>
+
+      {/* Modal Hoàn trả áo dài */}
+      <RentalReturnModal
+        isOpen={isReturnModalOpen}
+        bookingCode={comboCode}
+        storeName={rentalProvider?.businessName || 'Cửa hàng đối tác'}
+        storeAddress={
+          formatLocationAddress(rentalProvider?.rentalSettings?.useBusinessAddressForPickup === false ? rentalProvider?.rentalSettings?.pickupLocation : null) ||
+          formatLocationAddress(rentalProvider?.businessAddress) ||
+          formatLocationAddress(rentalProvider?.address) ||
+          'Cửa hàng đối tác'
+        }
+        depositAmount={depositTotal}
+        onClose={() => setIsReturnModalOpen(false)}
+        onSubmit={handleReturnSubmit}
+      />
     </div>
   );
 };

@@ -17,6 +17,7 @@ function createController() {
     {} as any,
     {} as any,
     {} as any,
+    { trackSearch: jest.fn().mockResolvedValue(undefined) } as any,
   );
   return { controller, service };
 }
@@ -38,6 +39,9 @@ function queryArgs(
       | 'providerId'
       | 'providerLocation'
       | 'types'
+      | 'startDate'
+      | 'endDate'
+      | 'rentalType'
       | 'page'
       | 'limit'
       | 'sort',
@@ -59,6 +63,9 @@ function queryArgs(
     values.providerId,
     values.providerLocation,
     values.types,
+    values.startDate,
+    values.endDate,
+    values.rentalType,
     values.page,
     values.limit,
     values.sort as any,
@@ -306,15 +313,11 @@ describe('UC-22 Search AoDai (DaiBLL)', () => {
     expect(productsRepository.findActivePage).toHaveBeenCalledTimes(1);
   });
 
-  // Known defect UT-DEF-22-01: special characters in the location filter are not escaped.
-  it.failing(
-    'UT-22 UTCID13 accepts a location containing regular-expression characters',
-    async () => {
-      const { repository } = createRepository([]);
+  it('UT-22 UTCID13 accepts a location containing regular-expression characters', async () => {
+    const { repository } = createRepository([]);
 
-      await expect(
-        repository.findAllActive({ providerLocation: 'Huế (' }),
-      ).resolves.toEqual([]);
-    },
-  );
+    await expect(
+      repository.findAllActive({ providerLocation: 'Huế (' }),
+    ).resolves.toEqual([]);
+  });
 });

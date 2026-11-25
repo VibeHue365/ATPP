@@ -43,6 +43,9 @@ export const PublicRoute: React.FC = () => {
     if (user?.roles?.includes("PROVIDER")) {
       return <Navigate to={ROUTES.PROVIDER_DASHBOARD} replace />;
     }
+    if (user?.roles?.includes("STAFF")) {
+      return <Navigate to={ROUTES.STAFF_PORTAL} replace />;
+    }
     const destination = getValidRedirectPath((location.state as any)?.from);
     return <Navigate to={destination} replace />;
   }

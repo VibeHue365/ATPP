@@ -28,10 +28,21 @@ export const photographerApi = {
   concepts: () => httpClient.get<never, { data: PhotographerConcept[] }>('/api/photographers/concepts'),
   categories: () => httpClient.get<never, { data: PhotographerPackageCategory[] }>('/api/photographers/package-categories'),
   reviews: (id: string) => httpClient.get<never, PhotographerReview[]>(`/reviews/provider/${id}`),
-  monthAvailability: (id: string, month: string, packageId: string) =>
-    httpClient.get<never, MonthlyPhotographyAvailability>(`/api/photographers/${id}/availability/month${query({ month, packageId })}`),
+  monthAvailability: (id: string, month: string, packageId: string, staffId?: string) =>
+    httpClient.get<never, MonthlyPhotographyAvailability>(
+      `/api/photographers/${id}/availability/month${query({ month, packageId, staffId })}`,
+    ),
   timeRanges: (id: string, date: string) =>
     httpClient.get<never, PhotographyTimeRanges>(`/api/photographers/${id}/availability${query({ date })}`),
-  quote: (id: string, packageId: string, sessions: PhotographySessionPayload[]) =>
-    httpClient.post<never, PhotographyQuote>(`/api/photographers/${id}/quote`, { packageId, sessions }),
+  quote: (
+    id: string,
+    packageId: string,
+    sessions: PhotographySessionPayload[],
+    preferredStaffId?: string,
+  ) =>
+    httpClient.post<never, PhotographyQuote>(`/api/photographers/${id}/quote`, {
+      packageId,
+      sessions,
+      ...(preferredStaffId ? { preferredStaffId } : {}),
+    }),
 };

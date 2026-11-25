@@ -72,7 +72,9 @@ export function validateSizeChart(
   )
     fail('Bảng size phải có số đo cho mọi size đang bán của sản phẩm.');
   if (!chart.requiredMeasurements.length)
-    fail('Hãy chọn số đo bắt buộc khi tư vấn rồi lưu bảng nháp trước khi xác nhận.');
+    fail(
+      'Hãy chọn số đo bắt buộc khi tư vấn rồi lưu bảng nháp trước khi xác nhận.',
+    );
   const detailed = chart.requiredMeasurements.some((key) =>
     (CIRCUMFERENCES as readonly string[]).includes(key),
   );
@@ -83,23 +85,30 @@ export function validateSizeChart(
       chart.requiredMeasurements.includes('weight')
     )
   )
-    fail('Hãy chọn ít nhất một vòng Ngực/Eo/Mông hoặc cả Chiều cao và Cân nặng.');
+    fail(
+      'Hãy chọn ít nhất một vòng Ngực/Eo/Mông hoặc cả Chiều cao và Cân nặng.',
+    );
   for (const row of chart.rows) {
     for (const key of chart.requiredMeasurements) {
-      if (!row[key]) fail(`Size ${row.size} còn thiếu số đo ${key} đã chọn để tư vấn.`);
+      if (!row[key])
+        fail(`Size ${row.size} còn thiếu số đo ${key} đã chọn để tư vấn.`);
     }
   }
   if (chart.measurementType === MeasurementType.Garment) {
     const dimensions = FIT_DIMENSIONS.filter((key) =>
       chart.rows.some((row) => row[key]),
     );
-    if (!CIRCUMFERENCES.some((key) => chart.rows.some((row) => row[key])) || !chart.fitRules?.length)
+    if (
+      !CIRCUMFERENCES.some((key) => chart.rows.some((row) => row[key])) ||
+      !chart.fitRules?.length
+    )
       fail(
         'Bảng số đo áo cần ít nhất một vòng đo và quy tắc độ cử động do cửa hàng khai báo.',
       );
     for (const rule of chart.fitRules ?? []) {
       for (const key of dimensions)
-        if (!rule[key]) fail(`Kiểu mặc ${rule.preference} còn thiếu độ cử động cho ${key}.`);
+        if (!rule[key])
+          fail(`Kiểu mặc ${rule.preference} còn thiếu độ cử động cho ${key}.`);
     }
   }
 }

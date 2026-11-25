@@ -187,6 +187,16 @@ export class User {
   })
   accountStatus: UserStatus;
 
+  /** Cờ hạn chế tài khoản khi có đơn thuê quá hạn (T+2h) */
+  @Prop({ type: Boolean, default: false, index: true })
+  isRestricted: boolean;
+
+  @Prop({ type: String, default: null })
+  restrictedReason?: string | null;
+
+  @Prop({ type: Date, default: null })
+  restrictedAt?: Date | null;
+
   @Prop({ type: Boolean, default: false })
   hasCompletedOnboarding: boolean;
 

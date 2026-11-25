@@ -36,9 +36,13 @@ describe('SystemPoliciesService', () => {
     });
 
     await expect(
-      service.updatePolicy(new Types.ObjectId().toString(), new Types.ObjectId().toString(), {
-        name: 'New commission policy',
-      }),
+      service.updatePolicy(
+        new Types.ObjectId().toString(),
+        new Types.ObjectId().toString(),
+        {
+          name: 'New commission policy',
+        },
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -84,9 +88,13 @@ describe('SystemPoliciesService', () => {
       { recordAdminAudit: jest.fn() } as any,
     );
 
-    const result = await service.activatePolicy(actorId, target._id.toString(), {
-      reason: 'Apply new commission rate',
-    });
+    const result = await service.activatePolicy(
+      actorId,
+      target._id.toString(),
+      {
+        reason: 'Apply new commission rate',
+      },
+    );
 
     expect(result.status).toBe(PolicyStatus.Active);
     expect(oldActive.status).toBe(PolicyStatus.Inactive);
@@ -110,9 +118,11 @@ describe('SystemPoliciesService', () => {
         }),
       })),
       {
-        exists: jest.fn().mockImplementation(({ code }: { code: PolicyCode }) =>
-          Promise.resolve(existingCodes.has(code)),
-        ),
+        exists: jest
+          .fn()
+          .mockImplementation(({ code }: { code: PolicyCode }) =>
+            Promise.resolve(existingCodes.has(code)),
+          ),
       },
     );
     const service = new SystemPoliciesService(

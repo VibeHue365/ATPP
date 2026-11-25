@@ -24,7 +24,9 @@ export class SettlementCodeService {
         '0',
       );
       const code = `STL-${datePart}-${randomPart}`;
-      const exists = await this.settlementModel.exists({ settlementCode: code });
+      const exists = await this.settlementModel.exists({
+        settlementCode: code,
+      });
 
       if (!exists) {
         return code;

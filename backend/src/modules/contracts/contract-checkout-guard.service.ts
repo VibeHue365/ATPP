@@ -80,10 +80,12 @@ export class ContractCheckoutGuard {
       const holdWindowMs = 15 * 60 * 1000;
       if (now.getTime() - createdAtTime <= holdWindowMs) {
         booking.holdExpiresAt = new Date(createdAtTime + holdWindowMs);
-        await this.contracts.db.collection('bookings').updateOne(
-          { _id: booking._id },
-          { $set: { holdExpiresAt: booking.holdExpiresAt } },
-        );
+        await this.contracts.db
+          .collection('bookings')
+          .updateOne(
+            { _id: booking._id },
+            { $set: { holdExpiresAt: booking.holdExpiresAt } },
+          );
       }
     }
     if (

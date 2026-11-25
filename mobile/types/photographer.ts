@@ -63,6 +63,10 @@ export interface Photographer {
   serviceRadiusKm?: number | null;
   fullName?: string | null;
   photographySettings?: { serviceRadiusKm?: number | null } | null;
+  activeStaffCount?: number;
+  effectiveCapacity?: number;
+  maxConcurrentSessions?: number | null;
+  maxDailySessions?: number | null;
 }
 
 export type PhotographerSort = 'rating_desc' | 'reviews_desc' | 'price_asc' | 'price_desc';
@@ -77,6 +81,10 @@ export interface PhotographerFilters {
   minPrice?: number;
   maxPrice?: number;
   minRating?: number;
+  minPhotographers?: number;
+  requiredSlots?: number;
+  date?: string;
+  timeSlot?: string;
   sort?: PhotographerSort;
   page?: number;
   limit?: number;
@@ -113,5 +121,13 @@ export interface PhotographyQuote {
   totals: { baseAmount: number; overtimeAmount: number; surchargeAmount: number; totalAmount: number } | null;
 }
 
-export interface MonthlyPhotographyAvailability { month: string; days: Array<{ date: string; status: 'AVAILABLE' | 'FULLY_BOOKED' | 'OFF_DAY' | 'NO_SCHEDULE' }> }
+export interface MonthlyPhotographyAvailability {
+  month: string;
+  days: Array<{
+    date: string;
+    status: 'AVAILABLE' | 'FULLY_BOOKED' | 'OFF_DAY' | 'NO_SCHEDULE';
+    remainingCapacity?: number;
+    totalCapacity?: number;
+  }>;
+}
 export interface PhotographyTimeRanges { date?: string; timeRanges: Array<{ start: string; end: string }> }

@@ -210,7 +210,7 @@ export const VoucherPickerModal: React.FC<VoucherPickerModalProps> = ({
                   fontFamily: 'Playfair Display, Georgia, serif',
                 }}
               >
-                VibeHue Ưu Đãi
+                TàGo Ưu Đãi
               </h3>
               <p style={{ margin: 0, fontSize: '12px', color: '#8C7E74' }}>
                 Chọn mã voucher tốt nhất cho đơn hàng của bạn

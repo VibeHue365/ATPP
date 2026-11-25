@@ -84,11 +84,16 @@ export class PhotographyPackagesService {
     dto: UpdatePhotographyPackageDto,
   ): Promise<PhotographyPackageDocument> {
     const provider = await this.getProvider(userId);
-    const photographyPackage = await this.findOwnedPackage(provider._id, packageId);
+    const photographyPackage = await this.findOwnedPackage(
+      provider._id,
+      packageId,
+    );
     await this.validateCategoryInputs(dto);
     const update: Record<string, unknown> = { ...dto };
     if (dto.categoryId !== undefined) {
-      update.categoryId = dto.categoryId ? new Types.ObjectId(dto.categoryId) : null;
+      update.categoryId = dto.categoryId
+        ? new Types.ObjectId(dto.categoryId)
+        : null;
     }
     if (dto.conceptCategoryIds !== undefined) {
       update.conceptCategoryIds = this.toObjectIds(dto.conceptCategoryIds);
@@ -113,17 +118,22 @@ export class PhotographyPackagesService {
       ...update,
     };
     this.assertSchedulingPolicy(nextSchedulingPolicy);
-    const nextStatus = (update.status as PackageStatus | undefined) ?? photographyPackage.status;
+    const nextStatus =
+      (update.status as PackageStatus | undefined) ?? photographyPackage.status;
     if (nextStatus === PackageStatus.Active) {
       this.assertCanPublish(provider);
       this.assertPackageReady({
         ...photographyPackage.toObject(),
         ...update,
-        images: (update.images as string[] | undefined) ?? photographyPackage.images,
+        images:
+          (update.images as string[] | undefined) ?? photographyPackage.images,
       });
     }
     if (dto.name && dto.name !== photographyPackage.name) {
-      update.slug = await this.createUniqueSlug(dto.name, photographyPackage._id);
+      update.slug = await this.createUniqueSlug(
+        dto.name,
+        photographyPackage._id,
+      );
     }
 
     const updated = await this.packageModel.findByIdAndUpdate(
@@ -137,21 +147,32 @@ export class PhotographyPackagesService {
     return updated;
   }
 
-  async publish(userId: string, packageId: string): Promise<PhotographyPackageDocument> {
+  async publish(
+    userId: string,
+    packageId: string,
+  ): Promise<PhotographyPackageDocument> {
     return this.update(userId, packageId, { status: PackageStatus.Active });
   }
 
-  async unpublish(userId: string, packageId: string): Promise<PhotographyPackageDocument> {
+  async unpublish(
+    userId: string,
+    packageId: string,
+  ): Promise<PhotographyPackageDocument> {
     return this.update(userId, packageId, { status: PackageStatus.Inactive });
   }
 
-  async delete(userId: string, packageId: string): Promise<{ success: boolean }> {
+  async delete(
+    userId: string,
+    packageId: string,
+  ): Promise<{ success: boolean }> {
     const provider = await this.getProvider(userId);
-    const photographyPackage = await this.findOwnedPackage(provider._id, packageId);
+    const photographyPackage = await this.findOwnedPackage(
+      provider._id,
+      packageId,
+    );
     await this.packageModel.deleteOne({ _id: photographyPackage._id });
     return { success: true };
   }
-
 
   private assertSchedulingPolicy(input: {
     durationHours?: number;
@@ -160,22 +181,34 @@ export class PhotographyPackagesService {
     maxOvertimeMinutes?: number;
   }): void {
     const durationHours = Number(input.durationHours);
-    const includedDurationMinutes = input.includedDurationMinutes ??
-      Math.round(durationHours * 60);
+    const includedDurationMinutes =
+      input.includedDurationMinutes ?? Math.round(durationHours * 60);
     const overtimeIncrementMinutes = input.overtimeIncrementMinutes ?? 30;
     const maxOvertimeMinutes = input.maxOvertimeMinutes ?? 240;
 
-    if (!Number.isFinite(includedDurationMinutes) || includedDurationMinutes < 30) {
-      throw new BadRequestException('Thời lượng bao gồm phải từ 30 phút trở lên.');
+    if (
+      !Number.isFinite(includedDurationMinutes) ||
+      includedDurationMinutes < 30
+    ) {
+      throw new BadRequestException(
+        'Thời lượng bao gồm phải từ 30 phút trở lên.',
+      );
     }
-    if (!Number.isInteger(overtimeIncrementMinutes) || overtimeIncrementMinutes < 30) {
-      throw new BadRequestException('Bước tăng giờ phải là số phút nguyên, từ 30 phút trở lên.');
+    if (
+      !Number.isInteger(overtimeIncrementMinutes) ||
+      overtimeIncrementMinutes < 30
+    ) {
+      throw new BadRequestException(
+        'Bước tăng giờ phải là số phút nguyên, từ 30 phút trở lên.',
+      );
     }
     if (!Number.isInteger(maxOvertimeMinutes) || maxOvertimeMinutes < 0) {
       throw new BadRequestException('Giới hạn tăng giờ không hợp lệ.');
     }
     if (maxOvertimeMinutes % overtimeIncrementMinutes !== 0) {
-      throw new BadRequestException('Giới hạn tăng giờ phải chia hết cho bước tăng giờ.');
+      throw new BadRequestException(
+        'Giới hạn tăng giờ phải chia hết cho bước tăng giờ.',
+      );
     }
   }
   private async validateCategoryInputs(input: {
@@ -207,7 +240,9 @@ export class PhotographyPackagesService {
   private toObjectIds(ids?: string[]): Types.ObjectId[] {
     return (ids ?? []).map((id) => new Types.ObjectId(id));
   }
-  private async getProvider(userId: string): Promise<Provider & { _id: Types.ObjectId }> {
+  private async getProvider(
+    userId: string,
+  ): Promise<Provider & { _id: Types.ObjectId }> {
     if (!Types.ObjectId.isValid(userId)) {
       throw new NotFoundException('Không tìm thấy hồ sơ đối tác');
     }
@@ -217,7 +252,7 @@ export class PhotographyPackagesService {
     if (!provider) {
       throw new NotFoundException('Không tìm thấy hồ sơ đối tác');
     }
-    return provider as Provider & { _id: Types.ObjectId };
+    return provider;
   }
 
   private async findOwnedPackage(
@@ -246,14 +281,21 @@ export class PhotographyPackagesService {
   }
   private assertCanPublish(provider: Provider): void {
     if (provider.status !== ProviderStatus.Active) {
-      throw new ForbiddenException('Chỉ đối tác đang hoạt động mới có thể đăng bán gói chụp ảnh');
+      throw new ForbiddenException(
+        'Chỉ đối tác đang hoạt động mới có thể đăng bán gói chụp ảnh',
+      );
     }
     if (!provider.capabilities.includes(ProviderCapability.Photography)) {
-      throw new ForbiddenException('Hồ sơ đối tác chưa được phê duyệt dịch vụ chụp ảnh');
+      throw new ForbiddenException(
+        'Hồ sơ đối tác chưa được phê duyệt dịch vụ chụp ảnh',
+      );
     }
   }
 
-  private async createUniqueSlug(name: string, excludeId?: Types.ObjectId): Promise<string> {
+  private async createUniqueSlug(
+    name: string,
+    excludeId?: Types.ObjectId,
+  ): Promise<string> {
     const base = this.slugify(name) || 'goi-chup-anh';
     let candidate = base;
     let suffix = 2;

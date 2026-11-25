@@ -106,6 +106,7 @@ export const PhotographersListingPage: React.FC = () => {
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     type: true,
+    team: true,
     location: true,
     style: true,
     event: true,
@@ -172,6 +173,8 @@ export const PhotographersListingPage: React.FC = () => {
       latitude: customerLocation?.latitude,
       longitude: customerLocation?.longitude,
       searchRadiusKm: customerLocation ? searchRadiusKm : undefined,
+      minPhotographers: readNumber(params.get('minPhotographers')),
+      requiredSlots: readNumber(params.get('requiredSlots')),
       sort: (sortOptions.some((option) => option.value === sort)
         ? sort
         : 'rating_desc') as PhotographerDiscoverySort,
@@ -332,7 +335,7 @@ export const PhotographersListingPage: React.FC = () => {
     updateQuery({ q: searchInput.trim() || undefined });
   };
   const hasActiveFilters = Boolean(
-    discoveryParams.q || selectedPackageCategory || selectedConceptCategory || selectedStyleCategory || selectedEventCategory || discoveryParams.location || discoveryParams.minPrice !== undefined || discoveryParams.minRating !== undefined || Boolean(customerLocation),
+    discoveryParams.q || selectedPackageCategory || selectedConceptCategory || selectedStyleCategory || selectedEventCategory || discoveryParams.location || discoveryParams.minPrice !== undefined || discoveryParams.minRating !== undefined || discoveryParams.minPhotographers !== undefined || discoveryParams.requiredSlots !== undefined || Boolean(customerLocation),
   );
 
   const photoSearchFields: SearchFieldConfig[] = [
@@ -597,6 +600,102 @@ export const PhotographersListingPage: React.FC = () => {
                         </div>
                       </label>
                     ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Accordion 1b: Quy mô đội ngũ & Slot chụp */}
+            <div className="photo-accordion-section">
+              <button
+                type="button"
+                className="photo-accordion-trigger"
+                onClick={() => toggleSection('team')}
+              >
+                <span className="photo-accordion-title">Quy mô đội ngũ &amp; Slot</span>
+                <ChevronDown
+                  size={15}
+                  className={`photo-accordion-chevron ${openSections.team ? "is-open" : ""}`}
+                />
+              </button>
+              {openSections.team && (
+                <div className="photo-accordion-content" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#4A3F35', marginBottom: '6px' }}>
+                      Số thợ chụp của Studio
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {[
+                        { value: undefined, label: 'Tất cả' },
+                        { value: '2', label: 'Từ 2 thợ' },
+                        { value: '3', label: 'Từ 3 thợ' },
+                        { value: '5', label: 'Từ 5 thợ' },
+                      ].map((opt) => {
+                        const isActive =
+                          (opt.value === undefined && discoveryParams.minPhotographers === undefined) ||
+                          (opt.value !== undefined && String(discoveryParams.minPhotographers) === opt.value);
+                        return (
+                          <button
+                            key={opt.label}
+                            type="button"
+                            onClick={() => updateQuery({ minPhotographers: opt.value })}
+                            style={{
+                              borderRadius: '999px',
+                              padding: '5px 11px',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              border: isActive ? '1px solid #8E1B2E' : '1px solid #D8CAB9',
+                              background: isActive ? '#8E1B2E' : '#FFFFFF',
+                              color: isActive ? '#FFFFFF' : '#3F362F',
+                            }}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#4A3F35', marginBottom: '6px' }}>
+                      Số ca trống cùng lúc
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {[
+                        { value: undefined, label: '1 ca' },
+                        { value: '2', label: '2 ca đồng thời' },
+                        { value: '3', label: '3 ca đồng thời' },
+                      ].map((opt) => {
+                        const isActive =
+                          (opt.value === undefined && discoveryParams.requiredSlots === undefined) ||
+                          (opt.value !== undefined && String(discoveryParams.requiredSlots) === opt.value);
+                        return (
+                          <button
+                            key={opt.label}
+                            type="button"
+                            onClick={() => updateQuery({ requiredSlots: opt.value })}
+                            style={{
+                              borderRadius: '999px',
+                              padding: '5px 11px',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              border: isActive ? '1px solid #8E1B2E' : '1px solid #D8CAB9',
+                              background: isActive ? '#8E1B2E' : '#FFFFFF',
+                              color: isActive ? '#FFFFFF' : '#3F362F',
+                            }}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {discoveryParams.requiredSlots && (!discoveryParams.date || !discoveryParams.timeSlot) && (
+                      <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#92400E', lineHeight: 1.4 }}>
+                        Chọn thêm <strong>Ngày &amp; Ca chụp</strong> ở thanh tìm kiếm trên để lọc chính xác slot trống theo giờ.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}

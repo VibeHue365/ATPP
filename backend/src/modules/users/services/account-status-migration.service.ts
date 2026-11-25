@@ -7,7 +7,9 @@ import { User, UserStatus } from '../schemas/user.schema';
 export class AccountStatusMigrationService implements OnModuleInit {
   private readonly logger = new Logger(AccountStatusMigrationService.name);
 
-  constructor(@InjectModel(User.name) private readonly userModel: Model<User>) {}
+  constructor(
+    @InjectModel(User.name) private readonly userModel: Model<User>,
+  ) {}
 
   async onModuleInit(): Promise<void> {
     const farFutureLock = new Date('9999-01-01T00:00:00.000Z');

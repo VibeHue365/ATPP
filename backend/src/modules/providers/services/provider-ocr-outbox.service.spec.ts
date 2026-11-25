@@ -10,8 +10,12 @@ describe('ProviderOcrOutboxService delivery retry policy', () => {
   let service: ProviderOcrOutboxService;
 
   beforeEach(() => {
-    verificationModel = { updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }) };
-    outboxModel = { updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }) };
+    verificationModel = {
+      updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    };
+    outboxModel = {
+      updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    };
     service = new ProviderOcrOutboxService(
       verificationModel as any,
       outboxModel as any,

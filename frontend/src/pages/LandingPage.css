@@ -148,14 +148,18 @@
   opacity: 1;
 }
 
+/* ==========================================================================
+   LUMÉ Landing - Premium Service Finder Bar (Pixel-Perfect & Balanced)
+   ========================================================================== */
 .lume-landing #service-finder {
   position: relative;
   z-index: 30;
-  margin-top: -11px;
+  margin-top: -14px;
   padding: 10px;
   border: 1px solid var(--lume-line);
-  border-radius: 18px;
-  background: #fff;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 4px 24px rgba(142, 27, 46, 0.06), 0 1px 3px rgba(0, 0, 0, 0.02);
 }
 
 .lume-landing #service-finder form {
@@ -163,26 +167,124 @@
   border: 0;
   background: transparent;
   box-shadow: none;
-  gap: 12px;
+  gap: 10px;
+  align-items: stretch;
 }
 
-.lume-landing #service-finder form>div {
-  min-height: 56px;
-  padding: 9px 14px;
-  background: var(--lume-soft);
-  border: 0;
+.lume-landing #service-finder form > div {
+  height: 62px;
+  min-height: 62px;
+  padding: 8px 14px;
+  background: #FDF2F4;
+  border: 1px solid transparent;
+  border-radius: 14px;
   box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+.lume-landing #service-finder form > div:hover {
+  background: #FCEDF0;
+  border-color: rgba(142, 27, 46, 0.2);
+}
+
+.lume-landing #service-finder form > div:focus-within {
+  background: #ffffff;
+  border-color: #8E1B2E;
+  box-shadow: 0 0 0 3px rgba(142, 27, 46, 0.08);
 }
 
 .lume-landing #service-finder label {
-  color: var(--lume-muted);
-  font-size: 7px;
+  color: #8E1B2E !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  line-height: 1 !important;
+  margin: 0 0 4px 0 !important;
+  display: block;
+  user-select: none;
 }
 
-.lume-landing #service-finder button {
-  min-height: 56px;
-  border-radius: 12px;
-  box-shadow: none;
+.lume-landing #service-finder input {
+  height: 24px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #231F20;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 0;
+  width: 100%;
+  line-height: 24px;
+}
+
+.lume-landing #service-finder input::placeholder {
+  color: #9CA3AF;
+  font-weight: 400;
+}
+
+.lume-landing #service-finder .custom-select-trigger,
+.lume-landing #service-finder .sdp-trigger {
+  height: 24px;
+  padding: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #231F20;
+  line-height: 24px;
+}
+
+.lume-landing #service-finder .custom-select-value {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.lume-landing #service-finder .sdp-trigger-main {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #231F20;
+  line-height: 24px;
+}
+
+.lume-landing #service-finder .sdp-trigger-placeholder {
+  font-size: 13.5px;
+  font-weight: 400;
+  color: #9CA3AF;
+  line-height: 24px;
+}
+
+.lume-landing #service-finder button[type="submit"] {
+  height: 62px;
+  min-height: 62px;
+  border-radius: 14px;
+  background: #8E1B2E;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 22px;
+  box-shadow: 0 4px 14px rgba(142, 27, 46, 0.25);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+.lume-landing #service-finder button[type="submit"]:hover:not(:disabled) {
+  background: #741524;
+  box-shadow: 0 6px 18px rgba(142, 27, 46, 0.32);
+  transform: translateY(-1px);
+  animation: none;
+}
+
+.lume-landing #service-finder button[type="submit"]:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 .lume-landing>section:not(.lume-hero):not(.lume-promotions):not(#service-finder) {
@@ -1107,9 +1209,6 @@
   background: #8E1B2E !important;
 }
 
-.lume-landing #service-finder form>div {
-  background: #FDF2F4;
-}
 
 .lume-footer {
   background: #8E1B2E !important;
@@ -1204,9 +1303,6 @@
   transform: translateY(-1px);
 }
 
-.lume-landing #service-finder button:hover:not(:disabled) {
-  animation: lume-soft-pulse 1.5s ease-in-out infinite;
-}
 
 .lume-landing .lume-promotions>.grid>div,
 .lume-landing #locations>.grid>a,

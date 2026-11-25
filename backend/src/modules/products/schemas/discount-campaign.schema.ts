@@ -30,4 +30,5 @@ export class DiscountCampaign {
   isActive: boolean;
 }
 
-export const DiscountCampaignSchema = SchemaFactory.createForClass(DiscountCampaign);
+export const DiscountCampaignSchema =
+  SchemaFactory.createForClass(DiscountCampaign);

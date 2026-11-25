@@ -10,8 +10,29 @@ import { ProviderContractApprovalService } from '../provider-contract-approval.s
 import { ContractCheckoutGuard } from '../contract-checkout-guard.service';
 import { ContractMechanismService } from '../contract-mechanism.service';
 import { CONTRACTS_V2_ENABLED } from '../contracts.constants';
+import { Global, Module } from '@nestjs/common';
+import { RedisService } from '../../../common/redis/redis.service';
+import { contractTestTarget } from '../contract-test-target';
 
-describe('P0.1 — NestJS Startup & Dependency Injection Verification', () => {
+// Since the code of 24/11/2026 AuthModule's SessionService needs RedisService (provided by the global RedisModule
+// of the application). The test provides a stand-in so the module graph compiles without a Redis server.
+@Global()
+@Module({
+  providers: [
+    {
+      provide: RedisService,
+      useValue: { get: jest.fn(), set: jest.fn(), del: jest.fn(), getClient: jest.fn() },
+    },
+  ],
+  exports: [RedisService],
+})
+class TestRedisModule {}
+
+// Like the other contract integration suites, this one needs the isolated contract replica set
+// (CONTRACT_TEST_MONGODB_URI / CONTRACT_TEST_DB_NAME on port 27028); it is skipped when that is not configured.
+const target = contractTestTarget();
+
+(target ? describe : describe.skip)('P0.1 — NestJS Startup & Dependency Injection Verification', () => {
   jest.setTimeout(30000);
   let moduleRef: TestingModule;
   let connection: Connection;
@@ -20,6 +41,7 @@ describe('P0.1 — NestJS Startup & Dependency Injection Verification', () => {
     moduleRef = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({ isGlobal: true }),
+        TestRedisModule,
         MongooseModule.forRoot(
           'mongodb://127.0.0.1:27028/contract_startup_test?replicaSet=rsContractTest&directConnection=true',
         ),
@@ -64,11 +86,19 @@ describe('P0.1 — NestJS Startup & Dependency Injection Verification', () => {
   });
 
   it('3. Successfully resolves all core contract domain services', () => {
-    const prepService = moduleRef.get<ContractPreparationService>(ContractPreparationService);
+    const prepService = moduleRef.get<ContractPreparationService>(
+      ContractPreparationService,
+    );
     const readService = moduleRef.get<ContractReadService>(ContractReadService);
-    const approvalService = moduleRef.get<ProviderContractApprovalService>(ProviderContractApprovalService);
-    const guardService = moduleRef.get<ContractCheckoutGuard>(ContractCheckoutGuard);
-    const mechanismService = moduleRef.get<ContractMechanismService>(ContractMechanismService);
+    const approvalService = moduleRef.get<ProviderContractApprovalService>(
+      ProviderContractApprovalService,
+    );
+    const guardService = moduleRef.get<ContractCheckoutGuard>(
+      ContractCheckoutGuard,
+    );
+    const mechanismService = moduleRef.get<ContractMechanismService>(
+      ContractMechanismService,
+    );
 
     expect(prepService).toBeDefined();
     expect(readService).toBeDefined();
@@ -82,7 +112,8 @@ describe('P0.1 — NestJS Startup & Dependency Injection Verification', () => {
     const mockUnconfiguredConfig = {
       get: jest.fn((_key: string, defaultValue?: string) => defaultValue),
     };
-    const defaultVal = mockUnconfiguredConfig.get(CONTRACTS_V2_ENABLED, 'false') === 'true';
+    const defaultVal =
+      mockUnconfiguredConfig.get(CONTRACTS_V2_ENABLED, 'false') === 'true';
     expect(defaultVal).toBe(false);
 
     // Current module resolves flag as boolean (not string or undefined)

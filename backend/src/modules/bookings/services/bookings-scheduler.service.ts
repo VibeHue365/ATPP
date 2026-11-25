@@ -36,6 +36,8 @@ import {
 import { NotificationsService } from '../../notifications/notifications.service';
 import { PhotographyHoldService } from './photography-hold.service';
 import { BookingStatusService } from './booking-status.service';
+import { RentalOverdueDominoService } from './rental-overdue-domino.service';
+import { PrivateStorageService } from '../../storage/services/private-storage.service';
 
 @Injectable()
 export class BookingsSchedulerService {
@@ -57,7 +59,101 @@ export class BookingsSchedulerService {
     private readonly bookingStatusService: BookingStatusService,
     @Optional()
     private readonly slotLeaseService?: InventorySlotLeaseService,
+    @Optional()
+    private readonly overdueDominoService?: RentalOverdueDominoService,
+    @Optional()
+    private readonly privateStorage?: PrivateStorageService,
   ) {}
+
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async processOverdueAndDomino() {
+    try {
+      if (this.overdueDominoService) {
+        const count =
+          await this.overdueDominoService.scanAndProcessOverdueBookings();
+        if (count > 0) {
+          this.logger.log(`Đã xử lý ${count} đơn thuê quá hạn.`);
+        }
+        await this.overdueDominoService.processDominoAutoRefunds();
+      }
+    } catch (err) {
+      this.logger.error('Lỗi khi quét đơn quá hạn & Domino trong scheduler:', err);
+    }
+  }
+
+  /**
+   * Tự động xóa file ảnh CCCD sau 1 ngày (24h) kể từ lúc đơn chuyển COMPLETED / CANCELLED
+   * và không có tranh chấp (giữ lại vĩnh viễn cho DISPUTED hoặc LOST_ITEM).
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  async cleanupExpiredCustomerIdentityCards() {
+    try {
+      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const candidates = await this.bookingModel
+        .find({
+          status: { $in: [BookingStatus.Completed, BookingStatus.Cancelled] },
+          updatedAt: { $lte: cutoff },
+          $or: [
+            { 'customerIdentityCard.frontImage': { $exists: true, $ne: null } },
+            { 'customerIdentityCard.backImage': { $exists: true, $ne: null } },
+          ],
+        })
+        .select('_id bookingCode status customerIdentityCard')
+        .lean()
+        .exec();
+
+      if (!candidates.length) return;
+
+      const bucket = 'rental-fulfillment-private';
+      let purgedCount = 0;
+
+      for (const booking of candidates) {
+        const statusUpper = String(booking.status || '').toUpperCase();
+        if (statusUpper === 'DISPUTED' || statusUpper === 'LOST_ITEM') continue;
+
+        const card = (booking as any).customerIdentityCard;
+        if (!card) continue;
+
+        const keys = [card.frontImage, card.backImage].filter(
+          (k): k is string => typeof k === 'string' && k.trim().length > 0,
+        );
+
+        for (const key of keys) {
+          try {
+            await this.privateStorage?.deletePrivateFile(bucket, key);
+          } catch (delErr) {
+            this.logger.warn(
+              `Không thể xóa file CCCD ${key} của đơn ${booking.bookingCode}:`,
+              delErr,
+            );
+          }
+        }
+
+        await this.bookingModel.updateOne(
+          { _id: booking._id },
+          {
+            $set: {
+              'customerIdentityCard.frontImage': null,
+              'customerIdentityCard.backImage': null,
+              'customerIdentityCard.idNumber': null,
+              'customerIdentityCard.purgedAt': new Date(),
+              'customerIdentityCard.purgeReason':
+                'AUTO_PURGE_1_DAY_AFTER_COMPLETION',
+            },
+          },
+        );
+        purgedCount++;
+      }
+
+      if (purgedCount > 0) {
+        this.logger.log(
+          `Đã tự động xóa ảnh CCCD cho ${purgedCount} đơn đã hoàn tất/hủy quá 1 ngày.`,
+        );
+      }
+    } catch (err) {
+      this.logger.error('Lỗi khi chạy cronjob xóa ảnh CCCD tự động:', err);
+    }
+  }
 
   @Cron(CronExpression.EVERY_MINUTE)
   async expireHoldLeases() {
@@ -151,7 +247,9 @@ export class BookingsSchedulerService {
    */
   @Cron(CronExpression.EVERY_HOUR)
   async autoCompleteReturnedRentals() {
-    this.logger.log('Skipping auto-complete for rental bookings (requires manual handover & deposit settlement inspection).');
+    this.logger.log(
+      'Skipping auto-complete for rental bookings (requires manual handover & deposit settlement inspection).',
+    );
   }
 
   /**
@@ -231,7 +329,9 @@ export class BookingsSchedulerService {
    */
   @Cron(CronExpression.EVERY_HOUR)
   async autoUnlockMaintenanceItems() {
-    this.logger.log('Skipping auto-unlock for LOCKED items: unlocking requires provider/admin action with audit note.');
+    this.logger.log(
+      'Skipping auto-unlock for LOCKED items: unlocking requires provider/admin action with audit note.',
+    );
   }
 
   @Cron(CronExpression.EVERY_5_MINUTES)
@@ -259,7 +359,9 @@ export class BookingsSchedulerService {
           status: { $in: [BookingStatus.Completed, BookingStatus.Returned] },
           statusTimeline: {
             $elemMatch: {
-              status: { $in: [BookingStatus.Completed, BookingStatus.Returned] },
+              status: {
+                $in: [BookingStatus.Completed, BookingStatus.Returned],
+              },
               changedAt: { $gte: oldestEligible, $lte: reminderCutoff },
             },
           },
@@ -287,7 +389,7 @@ export class BookingsSchedulerService {
         await this.notificationsService.createNotification(
           customerId,
           'Chia sẻ trải nghiệm của bạn',
-          `Đơn hàng ${booking.bookingCode} đã hoàn thành. Hãy dành ít phút đánh giá sản phẩm và dịch vụ để giúp VibeHue phục vụ bạn tốt hơn!`,
+          `Đơn hàng ${booking.bookingCode} đã hoàn thành. Hãy dành ít phút đánh giá sản phẩm và dịch vụ để giúp TàGo phục vụ bạn tốt hơn!`,
           NotificationType.Booking,
           {
             bookingId: booking._id,
@@ -342,7 +444,9 @@ export class BookingsSchedulerService {
 
     try {
       const scheduleIds = schedules.map((s) => s._id);
-      const bookingIds = [...new Set(schedules.map((s) => s.bookingId.toString()))];
+      const bookingIds = [
+        ...new Set(schedules.map((s) => s.bookingId.toString())),
+      ];
 
       // Batch query 1: Fetch all bookings for these schedules in 1 query
       const bookings = await this.bookingModel
@@ -434,7 +538,10 @@ export class BookingsSchedulerService {
         }
       }
     } catch (batchErr) {
-      this.logger.error(`Error in batch reminder processing (${reminderType}):`, batchErr);
+      this.logger.error(
+        `Error in batch reminder processing (${reminderType}):`,
+        batchErr,
+      );
     }
   }
 
@@ -802,10 +909,23 @@ export class BookingsSchedulerService {
         .find({
           status: { $in: [BookingStatus.Confirmed, BookingStatus.DepositPaid] },
         })
-        .select('_id bookingCode customerId providerIds status statusTimeline')
+        .select(
+          '_id bookingCode customerId providerIds status statusTimeline hasPendingWeatherAction disputeDeferredUntil',
+        )
         .lean();
 
       for (const booking of pendingBookings) {
+        // PR 3 Financial Guard: Hoãn auto-dispute nếu đơn có cờ thời tiết hoặc đang trong thời gian hoãn
+        if (
+          booking.hasPendingWeatherAction ||
+          (booking.disputeDeferredUntil &&
+            now < new Date(booking.disputeDeferredUntil))
+        ) {
+          this.logger.log(
+            `Skipping auto-dispute for booking ${booking.bookingCode} due to active weather action or dispute deferral.`,
+          );
+          continue;
+        }
         const photoItem = await this.bookingItemModel.findOne({
           bookingId: booking._id,
           itemType: BookingItemType.PhotographyPackage,
@@ -833,7 +953,10 @@ export class BookingsSchedulerService {
         } else if (photoItem.shootDate) {
           let endHour = 23;
           let endMin = 59;
-          if (photoItem.shootTimeSlot && photoItem.shootTimeSlot.includes('-')) {
+          if (
+            photoItem.shootTimeSlot &&
+            photoItem.shootTimeSlot.includes('-')
+          ) {
             const parts = photoItem.shootTimeSlot.split('-');
             if (parts.length >= 2) {
               const [h, m] = parts[1].trim().split(':').map(Number);

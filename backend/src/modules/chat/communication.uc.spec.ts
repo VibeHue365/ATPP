@@ -37,6 +37,8 @@ function createChat(room: Row | null = { participants: [userId, partnerId] }) {
     })),
     find: jest.fn().mockReturnValue(query([])),
     updateMany: jest.fn().mockResolvedValue(undefined),
+    // getRooms now counts unread messages per room.
+    aggregate: jest.fn().mockResolvedValue([]),
   };
   const userModel = {
     findById: jest.fn().mockReturnValue(query({ _id: partnerId })),
@@ -239,12 +241,10 @@ function createNotifications(
   sockets: string[] = [],
 ) {
   const saved: Row = { _id: new Types.ObjectId() };
-  const NotificationModel: any = jest
-    .fn()
-    .mockImplementation((data: Row) => ({
-      ...data,
-      save: jest.fn().mockResolvedValue({ ...saved, ...data }),
-    }));
+  const NotificationModel: any = jest.fn().mockImplementation((data: Row) => ({
+    ...data,
+    save: jest.fn().mockResolvedValue({ ...saved, ...data }),
+  }));
   NotificationModel.findOneAndUpdate = jest
     .fn()
     .mockReturnValue({ exec: () => Promise.resolve(null) });

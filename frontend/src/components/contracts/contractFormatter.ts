@@ -64,11 +64,11 @@ export function formatContractTerms(renderedText: string | null | undefined): st
       if (booking.bookingCode) {
         doc += `Mã giao dịch đơn: ${booking.bookingCode}\n`;
       }
-      doc += 'Căn cứ Luật Giao dịch Điện tử và Quy chế hoạt động Nền tảng VibeHue,\n';
+      doc += 'Căn cứ Luật Giao dịch Điện tử và Quy chế hoạt động Nền tảng TàGo,\n';
       doc += 'Hai bên thống nhất giao kết hợp đồng dịch vụ thuê trang phục điện tử với các điều khoản sau:\n\n';
 
       doc += 'BÊN CHO THUÊ (BÊN A):\n';
-      doc += `- Đơn vị / Thương hiệu: ${provider.businessName || 'Nhà cung cấp đối tác VibeHue'}\n`;
+      doc += `- Đơn vị / Thương hiệu: ${provider.businessName || 'Nhà cung cấp đối tác TàGo'}\n`;
       doc += `- Địa chỉ cơ sở: ${provAddr}\n`;
       if (provider.contact?.phone) {
         doc += `- Điện thoại liên hệ: ${provider.contact.phone}\n`;
@@ -129,7 +129,7 @@ export function formatContractTerms(renderedText: string | null | undefined): st
         doc += `- Quy định hoàn cọc từ Bên A: ${policies.providerCancellation}\n`;
       }
       if (policies.cancellation?.value?.freeCancelBeforeHours) {
-        doc += `- Quy định bảo vệ từ Sàn VibeHue: Miễn phí hủy trước ${policies.cancellation.value.freeCancelBeforeHours} giờ so với giờ nhận đồ.\n`;
+        doc += `- Quy định bảo vệ từ Sàn TàGo: Miễn phí hủy trước ${policies.cancellation.value.freeCancelBeforeHours} giờ so với giờ nhận đồ.\n`;
       }
       doc += '\n';
 
@@ -138,7 +138,7 @@ export function formatContractTerms(renderedText: string | null | undefined): st
         doc += `- Quy định thuê đồ từ Bên A: ${policies.providerRental}\n`;
       }
       doc += '- Bên B có trách nhiệm bảo quản trang phục cẩn thận, không tự ý sửa đổi kích thước, cắt may, làm rách hoặc vấy bẩn không thể phục hồi.\n';
-      doc += '- Trường hợp trang phục bị hư hại hoặc mất mát, Bên B có trách nhiệm bồi thường thiệt hại theo bảng giá niêm yết hoặc thỏa thuận với Bên A dưới sự giám sát của Sàn VibeHue.\n\n';
+      doc += '- Trường hợp trang phục bị hư hại hoặc mất mát, Bên B có trách nhiệm bồi thường thiệt hại theo bảng giá niêm yết hoặc thỏa thuận với Bên A dưới sự giám sát của Sàn TàGo.\n\n';
 
       doc += 'ĐIỀU 5: HIỆU LỰC HỢP ĐỒNG & CHỨNG THỰC ĐIỆN TỬ\n';
       doc += '- Hợp đồng điện tử này có giá trị pháp lý ràng buộc hai bên kể từ thời điểm Bên B bấm "Chấp thuận điều khoản" trên hệ thống.\n';

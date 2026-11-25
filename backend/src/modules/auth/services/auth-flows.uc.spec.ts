@@ -85,21 +85,17 @@ function createAuth(
   };
   const limiter = rateLimiter(options.counts);
   const rolesService = {
-    getRoleCodesAndPermissionsForRoles: jest
-      .fn()
-      .mockResolvedValue({
-        roles: ['CUSTOMER'],
-        permissions: ['profile:read'],
-      }),
+    getRoleCodesAndPermissionsForRoles: jest.fn().mockResolvedValue({
+      roles: ['CUSTOMER'],
+      permissions: ['profile:read'],
+    }),
   };
   const tokenService = {
-    issueTokens: jest
-      .fn()
-      .mockResolvedValue({
-        accessToken: 'access',
-        refreshToken: 'refresh',
-        expiresIn: 900,
-      }),
+    issueTokens: jest.fn().mockResolvedValue({
+      accessToken: 'access',
+      refreshToken: 'refresh',
+      expiresIn: 900,
+    }),
   };
   const otpService = {
     createAndSendEmailVerificationOtp: jest.fn().mockResolvedValue('123456'),
@@ -118,13 +114,13 @@ function createAuth(
     rolesService as never,
     { toMeResponse: jest.fn().mockReturnValue({ id: 'me' }) } as never,
     securityLogService as never,
-    limiter.service as never,
+    limiter.service,
     tokenService as never,
     otpService as never,
     {} as never,
     {} as never,
     {} as never,
-    passwordPolicy as never,
+    passwordPolicy,
   );
   return {
     service,
@@ -268,52 +264,52 @@ async function createSession(
   const tokenId = new Types.ObjectId();
   const refreshToken = `${tokenId.toString()}.${'a'.repeat(96)}`;
   const authRepository = {
-    findRefreshTokenById: jest
-      .fn()
-      .mockResolvedValue(
-        options.token === undefined
-          ? {
-              userId: new Types.ObjectId(),
-              tokenHash: await hash(refreshToken),
-              expiresAt: new Date(Date.now() + 60_000),
-              familyId: 'family-1',
-            }
-          : options.token,
-      ),
+    findRefreshTokenById: jest.fn().mockResolvedValue(
+      options.token === undefined
+        ? {
+            userId: new Types.ObjectId(),
+            tokenHash: await hash(refreshToken),
+            expiresAt: new Date(Date.now() + 60_000),
+            familyId: 'family-1',
+          }
+        : options.token,
+    ),
     revokeRefreshTokenIfActive: jest
       .fn()
       .mockResolvedValue(options.rotated ?? true),
     revokeRefreshToken: jest.fn().mockResolvedValue(undefined),
   };
   const usersRepository = {
-    findUserById: jest
-      .fn()
-      .mockResolvedValue(
-        options.user === undefined
-          ? {
-              _id: new Types.ObjectId(),
-              accountStatus: UserStatus.Active,
-              auth: { emailNormalized: 'customer@example.com' },
-            }
-          : options.user,
-      ),
+    findUserById: jest.fn().mockResolvedValue(
+      options.user === undefined
+        ? {
+            _id: new Types.ObjectId(),
+            accountStatus: UserStatus.Active,
+            auth: { emailNormalized: 'customer@example.com' },
+          }
+        : options.user,
+    ),
   };
   const securityLogService = {
     recordSecurityEvent: jest.fn().mockResolvedValue(undefined),
   };
   const tokenService = new TokenService({} as any, {} as any, {} as any);
-  jest
-    .spyOn(tokenService, 'issueTokens')
-    .mockResolvedValue({
-      accessToken: 'a2',
-      refreshToken: 'r2',
-      expiresIn: 900,
-    });
+  jest.spyOn(tokenService, 'issueTokens').mockResolvedValue({
+    accessToken: 'a2',
+    refreshToken: 'r2',
+    expiresIn: 900,
+  });
+  const redisService = {
+    get: jest.fn().mockResolvedValue(null),
+    set: jest.fn().mockResolvedValue(undefined),
+    del: jest.fn().mockResolvedValue(undefined),
+  };
   const service = new SessionService(
     authRepository as any,
     usersRepository as any,
     securityLogService as any,
     tokenService,
+    redisService as any,
   );
   return {
     service,
@@ -633,11 +629,19 @@ async function createReset(
   const securityLogService = {
     recordSecurityEvent: jest.fn().mockResolvedValue(undefined),
   };
+  // Reset links now go through the email queue; this one hands them straight to the mailer.
+  const emailQueueService = {
+    enqueuePasswordReset: jest.fn(async (email: string, token: string) => {
+      await mailService.sendPasswordResetLink(email, token);
+      return 'job-1';
+    }),
+  };
   const service = new PasswordResetService(
     authRepository as any,
     usersRepository as any,
     config(),
     mailService as any,
+    emailQueueService as any,
     rateLimiter(options.counts).service,
     securityLogService as any,
     new PasswordPolicyService(config({ BCRYPT_SALT_ROUNDS: '10' })),
@@ -1201,32 +1205,28 @@ async function createOAuth(
   const userId = new Types.ObjectId();
   const authRepository = {
     createOAuthState: jest.fn().mockResolvedValue(undefined),
-    findOAuthStateById: jest
-      .fn()
-      .mockResolvedValue(
-        options.state === undefined
-          ? {
-              stateHash: await hash(rawState),
-              expiresAt: new Date(Date.now() + 60_000),
-            }
-          : options.state,
-      ),
+    findOAuthStateById: jest.fn().mockResolvedValue(
+      options.state === undefined
+        ? {
+            stateHash: await hash(rawState),
+            expiresAt: new Date(Date.now() + 60_000),
+          }
+        : options.state,
+    ),
     markOAuthStateUsedIfActive: jest
       .fn()
       .mockResolvedValue(options.marked ?? true),
     createVerificationToken: jest.fn().mockResolvedValue(undefined),
-    findVerificationTokenById: jest
-      .fn()
-      .mockResolvedValue(
-        options.token === undefined
-          ? {
-              userId,
-              purpose: VerificationPurpose.OAuthLogin,
-              codeHash: await hash(rawCode),
-              expiresAt: new Date(Date.now() + 60_000),
-            }
-          : options.token,
-      ),
+    findVerificationTokenById: jest.fn().mockResolvedValue(
+      options.token === undefined
+        ? {
+            userId,
+            purpose: VerificationPurpose.OAuthLogin,
+            codeHash: await hash(rawCode),
+            expiresAt: new Date(Date.now() + 60_000),
+          }
+        : options.token,
+    ),
     markVerificationTokenVerifiedIfActive: jest.fn().mockResolvedValue(true),
     recordLogin: jest.fn().mockResolvedValue(undefined),
   };
@@ -1241,28 +1241,24 @@ async function createOAuth(
     restoreExpiredSuspension: jest.fn(),
     addAuthProvider: jest.fn().mockResolvedValue(undefined),
     activateEmail: jest.fn().mockResolvedValue(undefined),
-    findUserById: jest
-      .fn()
-      .mockResolvedValue(
-        options.user === undefined
-          ? {
-              _id: userId,
-              accountStatus: UserStatus.Active,
-              roles: ['CUSTOMER'],
-              auth: { emailNormalized: 'google@example.com' },
-            }
-          : options.user,
-      ),
+    findUserById: jest.fn().mockResolvedValue(
+      options.user === undefined
+        ? {
+            _id: userId,
+            accountStatus: UserStatus.Active,
+            roles: ['CUSTOMER'],
+            auth: { emailNormalized: 'google@example.com' },
+          }
+        : options.user,
+    ),
     markLoggedIn: jest.fn().mockResolvedValue(undefined),
   };
   const tokenService = new TokenService({} as any, {} as any, {} as any);
-  jest
-    .spyOn(tokenService, 'issueTokens')
-    .mockResolvedValue({
-      accessToken: 'g-access',
-      refreshToken: 'g-refresh',
-      expiresIn: 900,
-    });
+  jest.spyOn(tokenService, 'issueTokens').mockResolvedValue({
+    accessToken: 'g-access',
+    refreshToken: 'g-refresh',
+    expiresIn: 900,
+  });
   const service = new OAuthService(
     authRepository as any,
     usersRepository as any,
@@ -1331,12 +1327,12 @@ describe('UC-02 Login Google (HuyLDN)', () => {
     ).rejects.toThrow('OAuth state is expired or invalid');
   });
 
-  it('UT-02 UTCID05 accepts a valid state exactly once', async () => {
+  it('UT-02 UTCID05 accepts a valid state exactly once and returns its record', async () => {
     const { service, rawState, authRepository } = await createOAuth();
 
     await expect(
       service.validateGoogleOAuthState(rawState),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({ stateHash: expect.any(String) });
     expect(authRepository.markOAuthStateUsedIfActive).toHaveBeenCalledTimes(1);
   });
 

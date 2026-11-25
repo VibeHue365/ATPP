@@ -48,7 +48,7 @@ const DEFAULT_FALLBACK_PACKAGE: TopPhotoshootData = {
   id: 'pkg-default-1',
   providerId: '',
   name: 'Gói Chụp Ảnh Nghệ Thuật',
-  providerName: 'LUMÉ Heritage Photography',
+  providerName: 'TàGo Heritage Photography',
   price: 1500000,
   image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=600&auto=format&fit=crop',
   rating: 4.9,
@@ -111,7 +111,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             id: pkg?._id || item._id,
             providerId: item._id || item.providerId,
             name: pkg?.name || item.businessName || 'Gói chụp nghệ thuật',
-            providerName: item.businessName || item.providerName || 'LUMÉ Studio',
+            providerName: item.businessName || item.providerName || 'TàGo Studio',
             price: pkg?.price || 1500000,
             image: getMediaUrl(rawImg) || rawImg,
             rating: item.rating?.averageRating || 4.9,
@@ -337,7 +337,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 >
                   <img
                     src={banner.imageUrl}
-                    alt={banner.title || 'LUMÉ Hero Banner'}
+                    alt={banner.title || 'TàGo Hero Banner'}
                     className="absolute inset-0 h-full w-full object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/40" />

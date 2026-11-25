@@ -1,19 +1,22 @@
 import React from 'react';
-import { Bell, CheckCheck, Clock, Calendar, CreditCard, Truck, RefreshCw, AlertTriangle, ShieldCheck, Sparkles } from 'lucide-react';
+import { Bell, CheckCheck, Clock, Calendar, CreditCard, Truck, RefreshCw, AlertTriangle, ShieldCheck, Sparkles, CloudRain } from 'lucide-react';
 import { useNotifications, getTimeAgo } from '../../../notifications/hooks/useNotifications';
+import { getNotificationTypeMeta } from '../../../../utils/bookingStatus';
 
 export const ProfileNotificationsTab: React.FC = () => {
   const { notifications, loading, markAsRead, markAllAsRead, unreadCount } = useNotifications();
 
   const getVisual = (type: string) => {
     const t = (type || '').toUpperCase();
-    if (t === 'BOOKING') return { label: 'Đơn hàng', icon: <Calendar size={14} color="#8E1B2E" />, bg: '#FDF2F4', color: '#8E1B2E' };
-    if (t === 'PAYMENT') return { label: 'Thanh toán', icon: <CreditCard size={14} color="#059669" />, bg: '#ECFDF5', color: '#059669' };
-    if (t === 'HANDOVER') return { label: 'Giao nhận', icon: <Truck size={14} color="#2563EB" />, bg: '#EFF6FF', color: '#2563EB' };
-    if (t === 'REFUND') return { label: 'Hoàn tiền', icon: <RefreshCw size={14} color="#0284C7" />, bg: '#E0F2FE', color: '#0284C7' };
-    if (t === 'DISPUTE') return { label: 'Tranh chấp', icon: <AlertTriangle size={14} color="#D97706" />, bg: '#FEF3C7', color: '#D97706' };
-    if (t === 'VERIFICATION') return { label: 'Xác thực', icon: <ShieldCheck size={14} color="#7C3AED" />, bg: '#F3E8FF', color: '#7C3AED' };
-    return { label: 'Hệ thống', icon: <Sparkles size={14} color="#8E1B2E" />, bg: '#FDF2F4', color: '#8E1B2E' };
+    const meta = getNotificationTypeMeta(t);
+    if (t === 'BOOKING') return { label: meta.label, icon: <Calendar size={14} color="#8E1B2E" />, bg: '#FDF2F4', color: '#8E1B2E' };
+    if (t === 'PAYMENT') return { label: meta.label, icon: <CreditCard size={14} color="#059669" />, bg: '#ECFDF5', color: '#059669' };
+    if (t === 'HANDOVER') return { label: meta.label, icon: <Truck size={14} color="#2563EB" />, bg: '#EFF6FF', color: '#2563EB' };
+    if (t === 'REFUND') return { label: meta.label, icon: <RefreshCw size={14} color="#0284C7" />, bg: '#E0F2FE', color: '#0284C7' };
+    if (t === 'DISPUTE') return { label: meta.label, icon: <AlertTriangle size={14} color="#D97706" />, bg: '#FEF3C7', color: '#D97706' };
+    if (t === 'WEATHER') return { label: meta.label, icon: <CloudRain size={14} color="#0284C7" />, bg: '#EFF6FF', color: '#0284C7' };
+    if (t === 'VERIFICATION') return { label: 'Xác thực hồ sơ', icon: <ShieldCheck size={14} color="#7C3AED" />, bg: '#F3E8FF', color: '#7C3AED' };
+    return { label: meta.label, icon: <Sparkles size={14} color="#8E1B2E" />, bg: '#FDF2F4', color: '#8E1B2E' };
   };
 
   return (

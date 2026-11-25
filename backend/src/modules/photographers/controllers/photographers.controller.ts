@@ -1,5 +1,15 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../../common/guards/roles.guard';
+import { Roles } from '../../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
 import { ProvidersService } from '../../providers/services/providers.service';
@@ -22,20 +32,29 @@ export class PhotographersController {
   ) {}
 
   @Get('earnings')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('PROVIDER', 'ADMIN')
   async getEarnings(@CurrentUser() user: AuthUser) {
     return this.providersService.getEarnings(user.sub);
   }
 
   @Get('schedules/calendar')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('PROVIDER', 'ADMIN')
   async getCalendar(
     @CurrentUser() user: AuthUser,
     @Query('month') month?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('staffId') staffId?: string,
   ) {
-    return this.providersService.getPhotographerCalendar(user.sub, month, from, to);
+    return this.providersService.getPhotographerCalendar(
+      user.sub,
+      month,
+      from,
+      to,
+      staffId,
+    );
   }
 
   @Get()
@@ -65,25 +84,31 @@ export class PhotographersController {
     @Param('id') id: string,
     @Query('month') month: string,
     @Query('packageId') packageId?: string,
+    @Query('staffId') staffId?: string,
   ) {
-    return this.monthlyAvailabilityService.findForMonth(id, month, packageId);
+    return this.monthlyAvailabilityService.findForMonth(
+      id,
+      month,
+      packageId,
+      staffId,
+    );
   }
 
   /**
    * Read-only price/availability preview. It never creates a booking or hold.
    */
   @Post(':id/quote')
-  async quote(
-    @Param('id') id: string,
-    @Body() dto: CreatePhotographyQuoteDto,
-  ) {
+  async quote(@Param('id') id: string, @Body() dto: CreatePhotographyQuoteDto) {
     return this.photographyQuoteService.quote(id, dto);
   }
   @Get(':id/availability')
   async findAvailability(
     @Param('id') id: string,
     @Query('date') date: string,
-  ): Promise<{ date: string; timeRanges: Array<{ start: string; end: string }> }> {
+  ): Promise<{
+    date: string;
+    timeRanges: Array<{ start: string; end: string }>;
+  }> {
     return this.photographersService.findAvailability(id, date);
   }
 

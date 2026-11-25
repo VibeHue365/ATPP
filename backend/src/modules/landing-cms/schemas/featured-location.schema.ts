@@ -10,7 +10,13 @@ export enum FeaturedLocationStatus {
 
 @Schema({ collection: 'featured_locations', timestamps: true })
 export class FeaturedLocation {
-  @Prop({ required: true, unique: true, trim: true, lowercase: true, index: true })
+  @Prop({
+    required: true,
+    unique: true,
+    trim: true,
+    lowercase: true,
+    index: true,
+  })
   code: string;
 
   @Prop({ required: true, trim: true })
@@ -37,5 +43,6 @@ export class FeaturedLocation {
   status: FeaturedLocationStatus;
 }
 
-export const FeaturedLocationSchema = SchemaFactory.createForClass(FeaturedLocation);
+export const FeaturedLocationSchema =
+  SchemaFactory.createForClass(FeaturedLocation);
 FeaturedLocationSchema.index({ status: 1, displayOrder: 1 });

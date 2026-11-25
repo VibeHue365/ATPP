@@ -5,7 +5,10 @@ import { ReservationStatus } from '../../products/schemas/inventory-reservation.
 import { ProductBusyCacheService } from './product-busy-cache.service';
 import { InventorySlotLeaseService } from './inventory-slot-lease.service';
 import { TimeSlotEngineService } from './time-slot-engine.service';
-import { SlotLeasePurpose, SlotLeaseStatus } from '../schemas/inventory-slot-lease.schema';
+import {
+  SlotLeasePurpose,
+  SlotLeaseStatus,
+} from '../schemas/inventory-slot-lease.schema';
 import { BookingStatus } from '../schemas/booking.schema';
 import { BookingItemType } from '../schemas/booking-item.schema';
 
@@ -66,11 +69,14 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
             const now = new Date();
             const filtered = mockSlotLeases.filter((l) => {
               if (query?.inventoryItemId?.$in) {
-                const ids = query.inventoryItemId.$in.map((id: any) => id.toString());
+                const ids = query.inventoryItemId.$in.map((id: any) =>
+                  id.toString(),
+                );
                 if (!ids.includes(l.inventoryItemId.toString())) return false;
               }
               if (l.status === 'CONFIRMED') return true;
-              if (l.status === 'TEMP' && l.expiresAt && l.expiresAt > now) return true;
+              if (l.status === 'TEMP' && l.expiresAt && l.expiresAt > now)
+                return true;
               return false;
             });
             return Promise.resolve(filtered);
@@ -85,6 +91,7 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
     };
 
     mockBookingScheduleModel = {
+      create: jest.fn().mockResolvedValue([]), // schedules recreated by the approved reschedule (code of 24/11/2026)
       updateMany: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
     };
 
@@ -133,13 +140,17 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
     it('propagates database error when querying inventory_slot_leases and does NOT return empty schedule', async () => {
       leaseCollectionMock.find = jest.fn().mockReturnValue({
         project: jest.fn().mockReturnValue({
-          toArray: jest.fn().mockRejectedValue(new Error('MongoNetworkTimeoutException: connection lost')),
+          toArray: jest
+            .fn()
+            .mockRejectedValue(
+              new Error('MongoNetworkTimeoutException: connection lost'),
+            ),
         }),
       });
 
-      await expect(service.getBusySchedulesForProduct(productId.toString())).rejects.toThrow(
-        'MongoNetworkTimeoutException: connection lost',
-      );
+      await expect(
+        service.getBusySchedulesForProduct(productId.toString()),
+      ).rejects.toThrow('MongoNetworkTimeoutException: connection lost');
     });
   });
 
@@ -153,7 +164,7 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
               {
                 inventoryItemId: item1Id,
                 reservedFrom: new Date('2026-11-15T00:00:00.000Z'), // 07:00 VN
-                reservedTo: new Date('2026-11-15T02:00:00.000Z'),   // 09:00 VN
+                reservedTo: new Date('2026-11-15T02:00:00.000Z'), // 09:00 VN
                 status: ReservationStatus.Confirmed,
               },
             ]),
@@ -161,10 +172,16 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
         }),
       });
 
-      const result = await service.getBusySchedulesForProduct(productId.toString());
+      const result = await service.getBusySchedulesForProduct(
+        productId.toString(),
+      );
       expect(result.variantBookedSlots!['XL_RED']).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ date: '2026-11-15', timeSlot: '07:00-09:00', purpose: 'RENTAL' }),
+          expect.objectContaining({
+            date: '2026-11-15',
+            timeSlot: '07:00-09:00',
+            purpose: 'RENTAL',
+          }),
         ]),
       );
     });
@@ -177,7 +194,7 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
               {
                 inventoryItemId: item1Id,
                 reservedFrom: new Date('2026-11-15T00:00:00.000Z'), // 07:00 VN
-                reservedTo: new Date('2026-11-15T02:00:00.000Z'),   // 09:00 VN
+                reservedTo: new Date('2026-11-15T02:00:00.000Z'), // 09:00 VN
                 status: ReservationStatus.TempReserved,
                 expiresAt: new Date(Date.now() + 600_000), // in 10 minutes
               },
@@ -186,10 +203,16 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
         }),
       });
 
-      const result = await service.getBusySchedulesForProduct(productId.toString());
+      const result = await service.getBusySchedulesForProduct(
+        productId.toString(),
+      );
       expect(result.variantBookedSlots!['XL_RED']).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ date: '2026-11-15', timeSlot: '07:00-09:00', purpose: 'RENTAL' }),
+          expect.objectContaining({
+            date: '2026-11-15',
+            timeSlot: '07:00-09:00',
+            purpose: 'RENTAL',
+          }),
         ]),
       );
     });
@@ -202,7 +225,7 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
               {
                 inventoryItemId: item1Id,
                 reservedFrom: new Date('2026-11-15T00:00:00.000Z'), // 07:00 VN
-                reservedTo: new Date('2026-11-15T02:00:00.000Z'),   // 09:00 VN
+                reservedTo: new Date('2026-11-15T02:00:00.000Z'), // 09:00 VN
                 status: ReservationStatus.TempReserved,
                 expiresAt: new Date(Date.now() - 30_000), // expired 30s ago (TTL index has not deleted it yet)
               },
@@ -211,7 +234,9 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
         }),
       });
 
-      const result = await service.getBusySchedulesForProduct(productId.toString());
+      const result = await service.getBusySchedulesForProduct(
+        productId.toString(),
+      );
       expect(result.variantBookedSlots!['XL_RED']).toEqual([]);
     });
   });
@@ -231,24 +256,26 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
         dayOfWeek,
       }));
 
-      mockBookingModel.db.collection = jest.fn().mockImplementation((name: string) => {
-        if (name === 'inventory_slot_leases') return leaseCollectionMock;
-        if (name === 'providers') {
-          return {
-            findOne: jest.fn().mockResolvedValue({
-              rentalSettings: { turnaroundSlots: 1 },
-            }),
-          };
-        }
-        if (name === 'provider_schedules') {
-          return {
-            find: jest.fn().mockReturnValue({
-              toArray: jest.fn().mockResolvedValue(recurringSchedules),
-            }),
-          };
-        }
-        return null;
-      });
+      mockBookingModel.db.collection = jest
+        .fn()
+        .mockImplementation((name: string) => {
+          if (name === 'inventory_slot_leases') return leaseCollectionMock;
+          if (name === 'providers') {
+            return {
+              findOne: jest.fn().mockResolvedValue({
+                rentalSettings: { turnaroundSlots: 1 },
+              }),
+            };
+          }
+          if (name === 'provider_schedules') {
+            return {
+              find: jest.fn().mockReturnValue({
+                toArray: jest.fn().mockResolvedValue(recurringSchedules),
+              }),
+            };
+          }
+          return null;
+        });
 
       // Saturday 2026-11-21: slot 7 is 19:00-21:00 VN (12:00-14:00 UTC)
       mockInventoryReservationModel.find.mockReturnValue({
@@ -266,13 +293,23 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
         }),
       });
 
-      const result = await service.getBusySchedulesForProduct(productId.toString());
+      const result = await service.getBusySchedulesForProduct(
+        productId.toString(),
+      );
       // RENTAL on Saturday 19:00-21:00
       expect(result.variantBookedSlots!['XL_RED']).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ date: '2026-11-21', timeSlot: '19:00-21:00', purpose: 'RENTAL' }),
+          expect.objectContaining({
+            date: '2026-11-21',
+            timeSlot: '19:00-21:00',
+            purpose: 'RENTAL',
+          }),
           // Rollover Sunday (closed) -> Monday 2026-11-23 at 07:00-09:00
-          expect.objectContaining({ date: '2026-11-23', timeSlot: '07:00-09:00', purpose: 'TURNAROUND' }),
+          expect.objectContaining({
+            date: '2026-11-23',
+            timeSlot: '07:00-09:00',
+            purpose: 'TURNAROUND',
+          }),
         ]),
       );
     });
@@ -297,24 +334,26 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
         },
       ];
 
-      mockBookingModel.db.collection = jest.fn().mockImplementation((name: string) => {
-        if (name === 'inventory_slot_leases') return leaseCollectionMock;
-        if (name === 'providers') {
-          return {
-            findOne: jest.fn().mockResolvedValue({
-              rentalSettings: { turnaroundSlots: 1 },
-            }),
-          };
-        }
-        if (name === 'provider_schedules') {
-          return {
-            find: jest.fn().mockReturnValue({
-              toArray: jest.fn().mockResolvedValue(schedules),
-            }),
-          };
-        }
-        return null;
-      });
+      mockBookingModel.db.collection = jest
+        .fn()
+        .mockImplementation((name: string) => {
+          if (name === 'inventory_slot_leases') return leaseCollectionMock;
+          if (name === 'providers') {
+            return {
+              findOne: jest.fn().mockResolvedValue({
+                rentalSettings: { turnaroundSlots: 1 },
+              }),
+            };
+          }
+          if (name === 'provider_schedules') {
+            return {
+              find: jest.fn().mockReturnValue({
+                toArray: jest.fn().mockResolvedValue(schedules),
+              }),
+            };
+          }
+          return null;
+        });
 
       // Sunday 2026-11-15: slot 7 (19:00-21:00 VN)
       mockInventoryReservationModel.find.mockReturnValue({
@@ -332,13 +371,23 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
         }),
       });
 
-      const result = await service.getBusySchedulesForProduct(productId.toString());
+      const result = await service.getBusySchedulesForProduct(
+        productId.toString(),
+      );
       // RENTAL on Sunday 19:00-21:00
       // Rollover Monday 2026-11-16 (holiday) -> Tuesday 2026-11-17 at 07:00-09:00
       expect(result.variantBookedSlots!['XL_RED']).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ date: '2026-11-15', timeSlot: '19:00-21:00', purpose: 'RENTAL' }),
-          expect.objectContaining({ date: '2026-11-17', timeSlot: '07:00-09:00', purpose: 'TURNAROUND' }),
+          expect.objectContaining({
+            date: '2026-11-15',
+            timeSlot: '19:00-21:00',
+            purpose: 'RENTAL',
+          }),
+          expect.objectContaining({
+            date: '2026-11-17',
+            timeSlot: '07:00-09:00',
+            purpose: 'TURNAROUND',
+          }),
         ]),
       );
     });
@@ -357,7 +406,9 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
           status: 'CONFIRMED',
         },
       ];
-      const initial = await service.getBusySchedulesForProduct(productId.toString());
+      const initial = await service.getBusySchedulesForProduct(
+        productId.toString(),
+      );
       expect(initial.variantBookedSlots!['XL_RED']).toHaveLength(1);
       expect(cacheService.has(productId.toString())).toBe(true);
 
@@ -374,14 +425,19 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
       );
 
       // 3. Release leases for a booking
-      await slotLeaseService.releaseBookingLeases(new Types.ObjectId(), 'CANCELLED');
+      await slotLeaseService.releaseBookingLeases(
+        new Types.ObjectId(),
+        'CANCELLED',
+      );
 
       // 4. Assert cache was invalidated
       expect(cacheService.has(productId.toString())).toBe(false);
 
       // 5. Next read queries DB again
       mockSlotLeases = []; // lease is gone
-      const fresh = await service.getBusySchedulesForProduct(productId.toString());
+      const fresh = await service.getBusySchedulesForProduct(
+        productId.toString(),
+      );
       expect(fresh.variantBookedSlots!['XL_RED']).toHaveLength(0);
     });
 
@@ -403,9 +459,11 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
       const mockLeaseModel = {
         find: jest.fn().mockReturnValue({
           session: jest.fn().mockReturnValue({
-            exec: jest.fn().mockResolvedValue([
-              { _id: leaseId, dateStr: '2026-11-15', slotIndex: 2 },
-            ]),
+            exec: jest
+              .fn()
+              .mockResolvedValue([
+                { _id: leaseId, dateStr: '2026-11-15', slotIndex: 2 },
+              ]),
           }),
         }),
         updateMany: jest.fn().mockReturnValue({
@@ -419,7 +477,10 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
       );
 
       // Early ready at 08:30 (before 09:00 leaseStart)
-      await slotLeaseService.reconcileTurnaroundLeases(new Types.ObjectId(), new Date('2026-11-15T01:30:00.000Z'));
+      await slotLeaseService.reconcileTurnaroundLeases(
+        new Types.ObjectId(),
+        new Date('2026-11-15T01:30:00.000Z'),
+      );
 
       expect(cacheService.has(productId.toString())).toBe(false);
     });
@@ -475,17 +536,31 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
       };
 
       mockBookingModel.findById = jest.fn().mockResolvedValue(bookingMock);
-      mockBookingItemModel.findOne = jest.fn().mockResolvedValue(bookingItemMock);
-      mockBookingItemModel.updateOne = jest.fn().mockResolvedValue({ modifiedCount: 1 });
-      mockBookingScheduleModel.updateMany = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+      mockBookingItemModel.findOne = jest
+        .fn()
+        .mockResolvedValue(bookingItemMock);
+      mockBookingItemModel.updateOne = jest
+        .fn()
+        .mockResolvedValue({ modifiedCount: 1 });
+      mockBookingScheduleModel.updateMany = jest
+        .fn()
+        .mockResolvedValue({ modifiedCount: 1 });
       mockInventoryReservationModel.findOne = jest.fn().mockResolvedValue(null);
-      mockInventoryReservationModel.updateOne = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+      mockInventoryReservationModel.updateOne = jest
+        .fn()
+        .mockResolvedValue({ modifiedCount: 1 });
 
-      const newFrom = new Date(Date.now() + 10 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-      const newTo = new Date(Date.now() + 12 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+      const newFrom = new Date(Date.now() + 10 * 24 * 3600 * 1000)
+        .toISOString()
+        .slice(0, 10);
+      const newTo = new Date(Date.now() + 12 * 24 * 3600 * 1000)
+        .toISOString()
+        .slice(0, 10);
 
       // 2. Call public reschedule workflow which executes applyApprovedReschedule
-      const result = await service.rescheduleBooking(
+      // Since the code of 24/11/2026 the customer only sends a reschedule request (rescheduleBooking); the leases
+      // move when the provider approves it, so the approval step (applyApprovedReschedule) is called here.
+      const result = await (service as any).applyApprovedReschedule(
         bookingId.toString(),
         customerId.toString(),
         {
@@ -496,13 +571,15 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
       );
 
       expect(result).toBeDefined();
-      expect(result.status).toBe('APPROVED');
+      expect(result.message).toBe('Đổi lịch thành công');
 
       // 3. Prove cache was invalidated by applyApprovedReschedule
       expect(cacheService.has(productId.toString())).toBe(false);
 
       // 4. Prove next read re-queries DB and re-populates cache
-      const freshSchedule = await service.getBusySchedulesForProduct(productId.toString());
+      const freshSchedule = await service.getBusySchedulesForProduct(
+        productId.toString(),
+      );
       expect(freshSchedule).toBeDefined();
       expect(cacheService.has(productId.toString())).toBe(true);
     });
@@ -527,7 +604,9 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
       },
     ];
 
-    const result = await service.getBusySchedulesForProduct(productId.toString());
+    const result = await service.getBusySchedulesForProduct(
+      productId.toString(),
+    );
 
     expect(result.variantBookedSlots).toBeDefined();
     expect(result.variantBookedSlots!['XL_RED']).toEqual([
@@ -553,7 +632,9 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
       }),
     });
 
-    const result = await service.getBusySchedulesForProduct(productId.toString());
+    const result = await service.getBusySchedulesForProduct(
+      productId.toString(),
+    );
 
     expect(result.variantBookedSlots).toBeDefined();
     expect(result.variantBookedSlots!['XL_RED']).toEqual([
@@ -580,7 +661,9 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
       },
     ];
 
-    const result = await service.getBusySchedulesForProduct(productId.toString());
+    const result = await service.getBusySchedulesForProduct(
+      productId.toString(),
+    );
     const slots = result.variantBookedSlots!['XL_RED'];
     const slot3 = slots.find((s) => s.timeSlot === '11:00-13:00');
     expect(slot3).toBeUndefined();
@@ -609,7 +692,9 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
       },
     ];
 
-    const result = await service.getBusySchedulesForProduct(productId.toString());
+    const result = await service.getBusySchedulesForProduct(
+      productId.toString(),
+    );
     expect(result.variantBookedSlots!['XL_RED']).toEqual([
       { date: '2026-11-15', timeSlot: '07:00-09:00', purpose: 'RENTAL' },
     ]);
@@ -633,7 +718,9 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
       },
     ];
 
-    const result = await service.getBusySchedulesForProduct(productId.toString());
+    const result = await service.getBusySchedulesForProduct(
+      productId.toString(),
+    );
     expect(result.variantBookedSlots!['XL_RED']).toHaveLength(1);
     expect(result.variantBookedSlots!['XL_RED'][0]).toEqual({
       date: '2026-11-15',
@@ -686,14 +773,24 @@ describe('BookingsService - getBusySchedulesForProduct with variantBookedSlots',
 
   describe('Defensive ID validation for getBusySchedulesForProduct', () => {
     it('throws BadRequestException when productId is an invalid string, not BSON/Cast error', async () => {
-      await expect(service.getBusySchedulesForProduct('invalid')).rejects.toThrow(BadRequestException);
-      await expect(service.getBusySchedulesForProduct('invalid')).rejects.toThrow('ID sản phẩm không hợp lệ');
+      await expect(
+        service.getBusySchedulesForProduct('invalid'),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.getBusySchedulesForProduct('invalid'),
+      ).rejects.toThrow('ID sản phẩm không hợp lệ');
     });
 
     it('throws BadRequestException when productId is empty or malformed', async () => {
-      await expect(service.getBusySchedulesForProduct('')).rejects.toThrow(BadRequestException);
-      await expect(service.getBusySchedulesForProduct('123456789012')).rejects.toThrow(BadRequestException);
-      await expect(service.getBusySchedulesForProduct(null as any)).rejects.toThrow(BadRequestException);
+      await expect(service.getBusySchedulesForProduct('')).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(
+        service.getBusySchedulesForProduct('123456789012'),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.getBusySchedulesForProduct(null as any),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('successfully processes valid ObjectId without throwing', async () => {

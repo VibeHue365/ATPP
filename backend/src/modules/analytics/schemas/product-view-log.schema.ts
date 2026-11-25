@@ -5,7 +5,13 @@ export type ProductViewLogDocument = HydratedDocument<ProductViewLog>;
 
 @Schema({ collection: 'product_view_logs', timestamps: true })
 export class ProductViewLog {
-  @Prop({ type: Types.ObjectId, ref: 'Product', required: true, unique: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'Product',
+    required: true,
+    unique: true,
+    index: true,
+  })
   productId: Types.ObjectId;
 
   @Prop({ type: Number, default: 1 })
@@ -15,4 +21,5 @@ export class ProductViewLog {
   lastViewedAt: Date;
 }
 
-export const ProductViewLogSchema = SchemaFactory.createForClass(ProductViewLog);
+export const ProductViewLogSchema =
+  SchemaFactory.createForClass(ProductViewLog);

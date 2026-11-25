@@ -50,7 +50,12 @@ export const ACTIVE_BOOKING_STATUSES = [
 ];
 
 const TERMINAL_FULFILLMENT_STATUSES = ['COMPLETED', 'CANCELLED'];
-const ACTIVE_TURNAROUND_STATUSES = ['SCHEDULED', 'IN_PROGRESS', 'RELEASING', 'BLOCKED'];
+const ACTIVE_TURNAROUND_STATUSES = [
+  'SCHEDULED',
+  'IN_PROGRESS',
+  'RELEASING',
+  'BLOCKED',
+];
 
 const timeSlotEngine = new TimeSlotEngineService();
 
@@ -86,7 +91,10 @@ export async function runBackfillSlotLeases(
     providerFilter._id = new Types.ObjectId(options.providerId);
   }
 
-  const providers = await db.collection('providers').find(providerFilter).toArray();
+  const providers = await db
+    .collection('providers')
+    .find(providerFilter)
+    .toArray();
   result.providersScanned = providers.length;
 
   for (const provider of providers) {
@@ -106,12 +114,17 @@ export async function runBackfillSlotLeases(
 
       if (schedules && schedules.length > 0) {
         const recurringSchedules = schedules.filter(
-          (s: any) => s.scheduleType === 'RECURRING' && typeof s.dayOfWeek === 'number',
+          (s: any) =>
+            s.scheduleType === 'RECURRING' && typeof s.dayOfWeek === 'number',
         );
         let weeklyOffDays: number[] | undefined = undefined;
         if (recurringSchedules.length > 0) {
-          const workingDays = new Set(recurringSchedules.map((s: any) => s.dayOfWeek));
-          weeklyOffDays = [0, 1, 2, 3, 4, 5, 6].filter((d) => !workingDays.has(d));
+          const workingDays = new Set(
+            recurringSchedules.map((s: any) => s.dayOfWeek),
+          );
+          weeklyOffDays = [0, 1, 2, 3, 4, 5, 6].filter(
+            (d) => !workingDays.has(d),
+          );
         }
 
         const offDays: string[] = [];
@@ -148,7 +161,9 @@ export async function runBackfillSlotLeases(
     for (const item of candidateBookingItems) {
       let booking = activeBookingMap.get(item.bookingId.toString());
       if (!booking) {
-        booking = await db.collection('bookings').findOne({ _id: item.bookingId });
+        booking = await db
+          .collection('bookings')
+          .findOne({ _id: item.bookingId });
         if (booking) {
           activeBookingMap.set(item.bookingId.toString(), booking);
         }
@@ -187,7 +202,9 @@ export async function runBackfillSlotLeases(
           // COMBO_PHOTOS_APPROVED: if product rental is not completed, it is active
           if (booking.status === 'COMBO_PHOTOS_APPROVED') {
             isActive = true;
-          } else if (!['COMPLETED', 'CANCELLED', 'REFUNDED'].includes(booking.status)) {
+          } else if (
+            !['COMPLETED', 'CANCELLED', 'REFUNDED'].includes(booking.status)
+          ) {
             isActive = true;
           }
         }
@@ -228,16 +245,20 @@ export async function runBackfillSlotLeases(
       if (!isDryRun && !provider.useSlotLeases) {
         const session = await startApplySession();
         try {
-          await db.collection('providers').updateOne(
-            { _id: provider._id },
-            { $set: { useSlotLeases: true } },
-            { session },
-          );
+          await db
+            .collection('providers')
+            .updateOne(
+              { _id: provider._id },
+              { $set: { useSlotLeases: true } },
+              { session },
+            );
           await session.commitTransaction();
           result.providersMigrated++;
         } catch (err: any) {
           await session.abortTransaction();
-          logger.error(`[Backfill] Failed to enable useSlotLeases for provider ${provIdStr}: ${err.message}`);
+          logger.error(
+            `[Backfill] Failed to enable useSlotLeases for provider ${provIdStr}: ${err.message}`,
+          );
           throw err;
         } finally {
           await session.endSession();
@@ -276,7 +297,9 @@ export async function runBackfillSlotLeases(
 
     // Preload any existing leases in inventory_slot_leases for these inventory items to detect conflicts with DB
     const distinctItemIds: Types.ObjectId[] = Array.from(
-      new Set<string>(activeBookingItems.map((i: any) => i.inventoryItemId.toString())),
+      new Set<string>(
+        activeBookingItems.map((i: any) => i.inventoryItemId.toString()),
+      ),
     ).map((id: string) => new Types.ObjectId(id));
 
     let existingLeasesInDb: any[] = [];
@@ -321,12 +344,17 @@ export async function runBackfillSlotLeases(
       const shootDate = item.shootDate ? new Date(item.shootDate) : new Date();
       const dateStr = toVnDateStr(shootDate);
       const booking = activeBookingMap.get(item.bookingId.toString());
-      const leaseStatus = booking?.status === 'PENDING_PAYMENT' ? 'TEMP' : 'CONFIRMED';
+      const leaseStatus =
+        booking?.status === 'PENDING_PAYMENT' ? 'TEMP' : 'CONFIRMED';
 
       // Parse time slot and duration (multiple of 2 hours, boundary hours 07, 09, 11, etc.)
       let startSlot = 1;
       let rentalSlotCount = 1;
-      const rawSlot = item.shootTimeSlot || (item.startTime && item.endTime ? `${item.startTime}-${item.endTime}` : '07:00-09:00');
+      const rawSlot =
+        item.shootTimeSlot ||
+        (item.startTime && item.endTime
+          ? `${item.startTime}-${item.endTime}`
+          : '07:00-09:00');
       try {
         const parsed = timeSlotEngine.parseAndValidateTimeSlot(rawSlot);
         startSlot = parsed.startSlotIndex;
@@ -352,7 +380,10 @@ export async function runBackfillSlotLeases(
       for (const rSlot of upfrontBlock.rentalSlots) {
         const rKey = `${item.inventoryItemId.toString()}:${rSlot.dateStr}:${rSlot.slotIndex}`;
         const existingUsers = slotUsageMap.get(rKey) || [];
-        if (existingUsers.length > 0 && !existingUsers.includes(item._id.toString())) {
+        if (
+          existingUsers.length > 0 &&
+          !existingUsers.includes(item._id.toString())
+        ) {
           providerHasConflict = true;
           result.conflicts.push({
             providerId: provIdStr,
@@ -382,7 +413,10 @@ export async function runBackfillSlotLeases(
       for (const tSlot of upfrontBlock.turnaroundSlots) {
         const tKey = `${item.inventoryItemId.toString()}:${tSlot.dateStr}:${tSlot.slotIndex}`;
         const existingUsers = slotUsageMap.get(tKey) || [];
-        if (existingUsers.length > 0 && !existingUsers.includes(item._id.toString())) {
+        if (
+          existingUsers.length > 0 &&
+          !existingUsers.includes(item._id.toString())
+        ) {
           providerHasConflict = true;
           result.conflicts.push({
             providerId: provIdStr,
@@ -424,32 +458,36 @@ export async function runBackfillSlotLeases(
       try {
         let insertedInThisBatch = 0;
         for (const lease of plannedLeases) {
-          const updateRes = await db.collection('inventory_slot_leases').updateOne(
-            {
-              inventoryItemId: lease.inventoryItemId,
-              bookingItemId: lease.bookingItemId,
-              dateStr: lease.dateStr,
-              slotIndex: lease.slotIndex,
-              purpose: lease.purpose,
-            },
-            {
-              $setOnInsert: {
-                providerId: provider._id,
-                bookingId: lease.bookingId,
-                status: lease.status,
-                createdAt: new Date(),
-                updatedAt: new Date(),
+          const updateRes = await db
+            .collection('inventory_slot_leases')
+            .updateOne(
+              {
+                inventoryItemId: lease.inventoryItemId,
+                bookingItemId: lease.bookingItemId,
+                dateStr: lease.dateStr,
+                slotIndex: lease.slotIndex,
+                purpose: lease.purpose,
               },
-            },
-            { upsert: true, session },
-          );
+              {
+                $setOnInsert: {
+                  providerId: provider._id,
+                  bookingId: lease.bookingId,
+                  status: lease.status,
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                },
+              },
+              { upsert: true, session },
+            );
           if (updateRes.upsertedCount > 0) {
             insertedInThisBatch++;
           }
         }
 
         const migratedBookingItemIds = Array.from(
-          new Set<string>(plannedLeases.map((l: any) => l.bookingItemId.toString())),
+          new Set<string>(
+            plannedLeases.map((l: any) => l.bookingItemId.toString()),
+          ),
         ).map((id: string) => new Types.ObjectId(id));
 
         // 1. Always set top-level slotLeaseRequired = true for all migrated booking items
@@ -477,25 +515,33 @@ export async function runBackfillSlotLeases(
           { session },
         );
 
-        await db.collection('providers').updateOne(
-          { _id: provider._id },
-          { $set: { useSlotLeases: true } },
-          { session },
-        );
+        await db
+          .collection('providers')
+          .updateOne(
+            { _id: provider._id },
+            { $set: { useSlotLeases: true } },
+            { session },
+          );
 
         await session.commitTransaction();
         result.leasesInserted += insertedInThisBatch;
         result.providersMigrated++;
-        logger.log(`[Backfill] Provider ${provIdStr} migrated successfully with ${plannedLeases.length} leases.`);
+        logger.log(
+          `[Backfill] Provider ${provIdStr} migrated successfully with ${plannedLeases.length} leases.`,
+        );
       } catch (err: any) {
         await session.abortTransaction();
-        logger.error(`[Backfill] Error during provider ${provIdStr} migration, rolled back: ${err.message}`);
+        logger.error(
+          `[Backfill] Error during provider ${provIdStr} migration, rolled back: ${err.message}`,
+        );
         throw err;
       } finally {
         await session.endSession();
       }
     } else {
-      logger.log(`[Backfill Dry-Run] Provider ${provIdStr} would be migrated with ${plannedLeases.length} leases.`);
+      logger.log(
+        `[Backfill Dry-Run] Provider ${provIdStr} would be migrated with ${plannedLeases.length} leases.`,
+      );
     }
   }
 
@@ -506,14 +552,17 @@ export async function runBackfillSlotLeases(
 if (require.main === module) {
   (async () => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      require('dotenv').config({ path: require('path').resolve(__dirname, '../../../../.env') });
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      require('dotenv').config({
+        path: require('path').resolve(__dirname, '../../../../.env'),
+      });
+
       require('dotenv').config();
     } catch {}
 
     const args = process.argv.slice(2);
-    const isApply = args.some((a) => a.includes('apply') || a.includes('commit'));
+    const isApply = args.some(
+      (a) => a.includes('apply') || a.includes('commit'),
+    );
     const providerArg = args.find((a) => a.includes('providerId'));
     let providerId: string | undefined = undefined;
     if (providerArg) {
@@ -527,15 +576,20 @@ if (require.main === module) {
       }
     }
 
-    console.log(`[Backfill CLI] Starting slot leases backfill. Mode: ${isApply ? 'APPLY (LIVE)' : 'DRY RUN (DEFAULT)'}`);
+    console.log(
+      `[Backfill CLI] Starting slot leases backfill. Mode: ${isApply ? 'APPLY (LIVE)' : 'DRY RUN (DEFAULT)'}`,
+    );
     if (providerId) {
       console.log(`[Backfill CLI] Target providerId: ${providerId}`);
     }
 
     const mongooseModule = await import('mongoose');
     const mongoose = (mongooseModule as any).default || mongooseModule;
-    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/vibehue';
-    console.log(`[Backfill CLI] Connecting to MongoDB: ${mongoUri.replace(/:([^:@]{3,})@/, ':****@')}`);
+    const mongoUri =
+      process.env.MONGODB_URI || 'mongodb://localhost:27017/vibehue';
+    console.log(
+      `[Backfill CLI] Connecting to MongoDB: ${mongoUri.replace(/:([^:@]{3,})@/, ':****@')}`,
+    );
 
     await mongoose.connect(mongoUri);
     const db = mongoose.connection.db;
@@ -545,7 +599,10 @@ if (require.main === module) {
         dryRun: !isApply,
         providerId,
       });
-      console.log('[Backfill CLI] Finished. Summary:', JSON.stringify(res, null, 2));
+      console.log(
+        '[Backfill CLI] Finished. Summary:',
+        JSON.stringify(res, null, 2),
+      );
     } catch (err) {
       console.error('[Backfill CLI] Fatal error:', err);
       process.exitCode = 1;

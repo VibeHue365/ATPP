@@ -64,7 +64,8 @@ export class ProviderRentalContractConfig {
   updatedByUserId: Types.ObjectId;
 }
 
-export const ProviderRentalContractConfigSchema =
-  SchemaFactory.createForClass(ProviderRentalContractConfig);
+export const ProviderRentalContractConfigSchema = SchemaFactory.createForClass(
+  ProviderRentalContractConfig,
+);
 
 ProviderRentalContractConfigSchema.index({ providerId: 1 }, { unique: true });

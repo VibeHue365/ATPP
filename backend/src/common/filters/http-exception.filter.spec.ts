@@ -49,10 +49,7 @@ describe('HttpExceptionFilter', () => {
   });
 });
 
-function createHost(
-  status: jest.Mock,
-  originalUrl: string,
-): ArgumentsHost {
+function createHost(status: jest.Mock, originalUrl: string): ArgumentsHost {
   return {
     switchToHttp: () => ({
       getResponse: () => ({ status }),

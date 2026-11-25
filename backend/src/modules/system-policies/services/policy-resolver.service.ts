@@ -35,9 +35,7 @@ export class PolicyResolverService {
     private readonly validationService: PolicyValidationService,
   ) {}
 
-  async getActivePolicyByCode(
-    code: PolicyCode,
-  ): Promise<SystemPolicyDocument> {
+  async getActivePolicyByCode(code: PolicyCode): Promise<SystemPolicyDocument> {
     const cached = this.cache.get(code);
     const now = Date.now();
 

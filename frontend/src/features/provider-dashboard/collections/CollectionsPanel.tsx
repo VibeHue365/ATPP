@@ -645,7 +645,7 @@ export function CollectionsPanel({
                               {(p.basePrice ?? (p as any).price ?? 500000).toLocaleString('vi-VN')}đ <span>/ ngày</span>
                             </div>
                             <div className="ps-card-deposit">
-                              Cọc: {(p.depositAmount ?? 1000000).toLocaleString('vi-VN')}đ
+                              Cọc: {(p.depositAmount ?? 200000).toLocaleString('vi-VN')}đ
                             </div>
                             <div className="ps-card-deposit" style={{ color: p.replacementValue ? '#047857' : '#9CA3AF', fontSize: '11px', fontWeight: 600 }}>
                               Bồi hoàn HĐ: {p.replacementValue ? `${p.replacementValue.toLocaleString('vi-VN')}đ` : 'Chưa có'}
@@ -758,7 +758,7 @@ export function CollectionsPanel({
                           </td>
 
                           <td className="ps-td" style={{ color: '#6B7280' }}>
-                            {(p.depositAmount ?? 1000000).toLocaleString('vi-VN')}đ
+                            {(p.depositAmount ?? 200000).toLocaleString('vi-VN')}đ
                           </td>
 
                           <td className="ps-td">
@@ -1104,7 +1104,7 @@ export function CollectionsPanel({
                     <div className="ps-info-row">
                       <span className="ps-info-label">Tiền đặt cọc</span>
                       <span className="ps-info-value" style={{ fontWeight: 750, color: '#111827', fontSize: '13.5px' }}>
-                        {(selectedProduct.depositAmount ?? 1000000).toLocaleString('vi-VN')}đ
+                        {(selectedProduct.depositAmount ?? 200000).toLocaleString('vi-VN')}đ
                       </span>
                     </div>
 

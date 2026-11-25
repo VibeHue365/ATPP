@@ -22,7 +22,7 @@ export const DEFAULT_BANNERS: Record<BannerPlacement, {
   },
   HOME: {
     imageUrl: '/images/location-hue-v2.webp',
-    defaultTitle: 'VibeHue - Di sản & Văn hóa Miền Trung',
+    defaultTitle: 'TàGo - Di sản & Văn hóa Miền Trung',
     defaultSubtitle: 'Trải nghiệm thuê áo dài, chụp ảnh nghệ thuật và khám phá danh thắng.',
   },
 };

@@ -304,9 +304,9 @@ export class ContractEvidenceService {
     // Check if it was generated before customer consented (i.e. was a draft that needs upgrading to signed evidence)
     const isStaleDraft = Boolean(
       customerConsent &&
-        version.document?.generatedAt &&
-        customerConsent.occurredAt &&
-        version.document.generatedAt < customerConsent.occurredAt,
+      version.document?.generatedAt &&
+      customerConsent.occurredAt &&
+      version.document.generatedAt < customerConsent.occurredAt,
     );
 
     if (

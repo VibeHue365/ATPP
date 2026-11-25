@@ -13,6 +13,7 @@ export const ROUTES = {
   SETTINGS: '/dashboard/settings',
   PROVIDER_DASHBOARD: '/provider/dashboard',
   PROVIDER_REGISTER: '/provider/register',
+  STAFF_PORTAL: '/staff',
   OAUTH_CALLBACK: '/oauth/callback',
   PRODUCT_DETAIL: '/rentals/:id',
   PHOTOGRAPHER_DETAIL: '/photographers/:id',

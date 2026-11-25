@@ -1,5 +1,7 @@
 export type PhotographyQuotePricingUnit =
-  'PER_SESSION' | 'PER_DAY' | 'PER_BOOKING';
+  | 'PER_SESSION'
+  | 'PER_DAY'
+  | 'PER_BOOKING';
 
 export interface PhotographyQuotePricingPolicy {
   name: string;

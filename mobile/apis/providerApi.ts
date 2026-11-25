@@ -105,11 +105,23 @@ export const providerApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
 
+  /** Tải lên ảnh nhận diện cửa hàng (logo / ảnh bìa) */
+  uploadCoverImage: (formData: FormData) =>
+    httpClient.post<never, { url: string; key: string }>(
+      '/providers/me/cover-image',
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    ),
+
   /** Lấy danh sách danh mục sản phẩm */
   getCategories: () => httpClient.get<never, any[]>('/products/categories'),
 
   /** Danh sách booking của đối tác (kèm thông tin khách hàng, lịch, địa điểm) */
   getBookings: () => httpClient.get<never, any[]>('/bookings/provider'),
+
+  /** Chi tiết 1 đơn hàng (bao gồm đầy đủ inventoryItem SKU & timeline) */
+  getBookingDetail: (bookingId: string) =>
+    httpClient.get<never, any>(`/api/bookings/${bookingId}`),
 
   /** Cập nhật trạng thái đơn hàng (chuẩn Web: hỗ trợ handoverPhotos, deliveredPhotos, deliveryDriveUrl) */
   updateBookingStatus: (
@@ -153,20 +165,17 @@ export const providerApi = {
   /** Duyệt hoặc từ chối yêu cầu dời lịch thuê của khách hàng */
   resolveReschedule: (
     bookingId: string,
-    itemIdOrApproved: string | boolean,
+    itemId: string,
     payload?: { approved: boolean; note?: string },
-  ) => {
-    if (typeof itemIdOrApproved === 'boolean') {
-      return httpClient.patch<never, any>(
-        `/bookings/${bookingId}/reschedule/resolve`,
-        { approved: itemIdOrApproved },
-      );
-    }
-    return httpClient.patch<never, any>(
-      `/bookings/${bookingId}/items/${itemIdOrApproved}/reschedule-requests/resolve`,
+  ) =>
+    httpClient.patch<never, any>(
+      `/bookings/${bookingId}/items/${itemId}/reschedule-requests/resolve`,
       payload ?? { approved: true },
-    );
-  },
+    ),
+
+  /** Lấy biên bản sự cố của đơn hàng (nếu có) */
+  getBookingIncident: (bookingId: string) =>
+    httpClient.get<never, any>(`/api/disputes/incidents/booking/${bookingId}`),
 
   /** Tải ảnh bằng chứng sự cố / hư hỏng trang phục */
   uploadIncidentEvidence: (formData: FormData) =>
@@ -320,26 +329,66 @@ export const providerApi = {
       status: 'IN_PROGRESS',
     }),
 
-  /** Xác nhận giao đồ trực tiếp cho khách */
-  markPickedUp: (bookingId: string, itemId: string, evidence?: any) =>
+  /** Bước 1 thuê đồ: Xác nhận đã soạn xong áo dài (PENDING -> READY_FOR_PICKUP / booking -> PICKUP_PENDING) */
+  markRentalReady: (bookingId: string, itemId: string, note?: string) =>
     httpClient.post<never, any>(
-      `/bookings/${bookingId}/items/${itemId}/rental/picked-up`,
-      evidence ?? {},
+      `/bookings/${bookingId}/items/${itemId}/rental/ready`,
+      note ? { note } : {},
     ),
 
-  /** Xác nhận khách đã trả đồ */
-  markReturned: (bookingId: string, itemId: string, evidence?: any) =>
+  /** Tải ảnh hiện trạng bàn giao / nhận trả private lên MinIO/S3 (field 'images', tối đa 5 ảnh) */
+  uploadRentalEvidence: (bookingId: string, itemId: string, formData: FormData) =>
+    httpClient.post<never, { files: Array<{ fileId: string; type: 'IMAGE' }> }>(
+      `/bookings/${bookingId}/items/${itemId}/rental/evidence`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    ),
+
+  /** Bước 2 thuê đồ: Gửi ảnh bằng chứng bàn giao để khách kiểm tra & xác nhận nhận đồ */
+  markPickedUp: (
+    bookingId: string,
+    itemId: string,
+    evidence: { fileIds: string[]; note?: string; conditionNote?: string },
+  ) =>
+    httpClient.post<never, any>(
+      `/bookings/${bookingId}/items/${itemId}/rental/picked-up`,
+      evidence,
+    ),
+
+  /** Bước 3 thuê đồ: Shop xác nhận đã nhận lại áo dài khách mang trả */
+  markReturned: (
+    bookingId: string,
+    itemId: string,
+    evidence?: { fileIds?: string[]; note?: string; conditionNote?: string },
+  ) =>
     httpClient.post<never, any>(
       `/bookings/${bookingId}/items/${itemId}/rental/returned`,
       evidence ?? {},
     ),
 
-  /** Hoàn trả hoặc đối soát tiền cọc */
-  settleDeposit: (bookingId: string, itemId: string, data?: any) =>
+  /** Bước 4a thuê đồ: Xác nhận không có sự cố -> hoàn cọc Escrow & chuyển áo sang CLEANING */
+  confirmNoIncident: (bookingId: string, itemId: string, note?: string) =>
     httpClient.post<never, any>(
-      `/bookings/${bookingId}/items/${itemId}/rental/deposit/settle`,
-      data ?? {},
+      `/bookings/${bookingId}/items/${itemId}/rental/confirm-no-incident`,
+      note ? { note } : {},
     ),
+
+  /** Bước 4b thuê đồ: Hoàn tất giặt ủi -> mở khóa kho & chuyển đơn sang COMPLETED */
+  markCleaningCompleted: (bookingId: string, itemId: string, note?: string) =>
+    httpClient.post<never, any>(
+      `/bookings/${bookingId}/items/${itemId}/rental/cleaning-completed`,
+      note ? { note } : {},
+    ),
+
+  /** Lấy danh sách metadata ảnh evidence của 1 item thuê đồ */
+  getRentalEvidenceSummary: (bookingId: string, itemId: string) =>
+    httpClient.get<
+      never,
+      {
+        pickup: Array<{ fileId: string; type: string; uploadedAt: string }>;
+        return: Array<{ fileId: string; type: string; uploadedAt: string }>;
+      }
+    >(`/bookings/${bookingId}/items/${itemId}/rental/evidence`),
 
   /** Lấy hồ sơ KYC Đối tác hiện tại */
   getCurrentVerification: () =>

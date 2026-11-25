@@ -4,7 +4,10 @@ import { ContractPolicyService } from '../contract-policy.service';
 import { ContractReadService } from '../contract-read.service';
 import { ContractScope } from '../../bookings/schemas/digital-contract.schema';
 import { ProviderAcceptanceStatus } from '../schemas/provider-contract-acceptance.schema';
-import { BookingStatus, BookingType } from '../../bookings/schemas/booking.schema';
+import {
+  BookingStatus,
+  BookingType,
+} from '../../bookings/schemas/booking.schema';
 import { hashContract } from '../canonical-contract';
 
 describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', () => {
@@ -24,7 +27,8 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
         mockAcceptanceModel,
       );
 
-      const statusRes = await policyService.getProviderContractParticipationStatus(oid());
+      const statusRes =
+        await policyService.getProviderContractParticipationStatus(oid());
       expect(statusRes.status).toBe('LEGACY');
       expect(statusRes.acceptance).toBeUndefined();
     });
@@ -64,7 +68,9 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
       const mockConn = { db: mockDb } as any;
 
       const mockSnapshots = {
-        currentPoliciesForProvider: jest.fn().mockResolvedValue({ rentalPolicy: 'standard' }),
+        currentPoliciesForProvider: jest
+          .fn()
+          .mockResolvedValue({ rentalPolicy: 'standard' }),
       } as any;
       const mockMechanism = {
         getApproved: jest.fn().mockReturnValue({
@@ -84,7 +90,8 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
         mockTemplates,
       );
 
-      const statusRes = await policyService.getProviderContractParticipationStatus(provId);
+      const statusRes =
+        await policyService.getProviderContractParticipationStatus(provId);
       expect(statusRes.status).toBe('CONTRACT_ACTIVE');
       expect(statusRes.acceptance).toBeDefined();
     });
@@ -111,7 +118,8 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
         mockAcceptanceModel,
       );
 
-      const statusRes = await policyService.getProviderContractParticipationStatus(provId);
+      const statusRes =
+        await policyService.getProviderContractParticipationStatus(provId);
       expect(statusRes.status).toBe('CONTRACT_SUSPENDED');
       expect(statusRes.reason).toBe('REVOKED');
     });
@@ -150,7 +158,9 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
       };
 
       const mockSnapshots = {
-        currentPoliciesForProvider: jest.fn().mockResolvedValue({ rentalPolicy: 'NEW_POLICY_UPDATED' }),
+        currentPoliciesForProvider: jest
+          .fn()
+          .mockResolvedValue({ rentalPolicy: 'NEW_POLICY_UPDATED' }),
       } as any;
       const mockMechanism = {
         getApproved: jest.fn().mockReturnValue({
@@ -170,7 +180,8 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
         mockTemplates,
       );
 
-      const statusRes = await policyService.getProviderContractParticipationStatus(provId);
+      const statusRes =
+        await policyService.getProviderContractParticipationStatus(provId);
       expect(statusRes.status).toBe('CONTRACT_SUSPENDED');
       expect(statusRes.reason).toBe('POLICY_STALE');
     });
@@ -192,19 +203,51 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
           findOne: jest.fn(async (q: any) => {
             if (name === 'products') {
               if (q._id.equals(prodLegacy)) {
-                return { _id: prodLegacy, providerId: provLegacy, name: 'Áo dài Legacy' };
+                return {
+                  _id: prodLegacy,
+                  providerId: provLegacy,
+                  name: 'Áo dài Legacy',
+                };
               }
               if (q._id.equals(prodActive)) {
-                return { _id: prodActive, providerId: provActive, name: 'Áo dài V2', replacementValue: 1500000, moderationStatus: 'APPROVED' };
+                return {
+                  _id: prodActive,
+                  providerId: provActive,
+                  name: 'Áo dài V2',
+                  replacementValue: 1500000,
+                  moderationStatus: 'APPROVED',
+                };
               }
               if (q._id.equals(prodSuspended)) {
-                return { _id: prodSuspended, providerId: provSuspended, name: 'Áo dài Suspended' };
+                return {
+                  _id: prodSuspended,
+                  providerId: provSuspended,
+                  name: 'Áo dài Suspended',
+                };
               }
             }
             if (name === 'providers') {
-              if (q._id.equals(provLegacy)) return { _id: provLegacy, businessName: 'Shop Legacy', status: 'ACTIVE', capabilities: ['AODAI_RENTAL'] };
-              if (q._id.equals(provActive)) return { _id: provActive, businessName: 'Shop V2 Active', status: 'ACTIVE', capabilities: ['AODAI_RENTAL'] };
-              if (q._id.equals(provSuspended)) return { _id: provSuspended, businessName: 'Shop Suspended', status: 'ACTIVE', capabilities: ['AODAI_RENTAL'] };
+              if (q._id.equals(provLegacy))
+                return {
+                  _id: provLegacy,
+                  businessName: 'Shop Legacy',
+                  status: 'ACTIVE',
+                  capabilities: ['AODAI_RENTAL'],
+                };
+              if (q._id.equals(provActive))
+                return {
+                  _id: provActive,
+                  businessName: 'Shop V2 Active',
+                  status: 'ACTIVE',
+                  capabilities: ['AODAI_RENTAL'],
+                };
+              if (q._id.equals(provSuspended))
+                return {
+                  _id: provSuspended,
+                  businessName: 'Shop Suspended',
+                  status: 'ACTIVE',
+                  capabilities: ['AODAI_RENTAL'],
+                };
             }
             return null;
           }),
@@ -212,12 +255,15 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
       };
 
       const mockPolicy = {
-        getProviderContractParticipationStatus: jest.fn(async (pId: Types.ObjectId) => {
-          if (pId.equals(provLegacy)) return { status: 'LEGACY' };
-          if (pId.equals(provActive)) return { status: 'CONTRACT_ACTIVE' };
-          if (pId.equals(provSuspended)) return { status: 'CONTRACT_SUSPENDED', reason: 'REVOKED' };
-          return { status: 'LEGACY' };
-        }),
+        getProviderContractParticipationStatus: jest.fn(
+          async (pId: Types.ObjectId) => {
+            if (pId.equals(provLegacy)) return { status: 'LEGACY' };
+            if (pId.equals(provActive)) return { status: 'CONTRACT_ACTIVE' };
+            if (pId.equals(provSuspended))
+              return { status: 'CONTRACT_SUSPENDED', reason: 'REVOKED' };
+            return { status: 'LEGACY' };
+          },
+        ),
       } as any;
 
       const mockSnapshots = {
@@ -248,7 +294,9 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
 
     it('Scenario 1: Shop chưa từng ký acceptance (LEGACY) -> Eligible với flow LEGACY, không đòi replacement value', async () => {
       const service = createReadService();
-      const res = await service.checkEligibility([{ productId: prodLegacy.toString() }]);
+      const res = await service.checkEligibility([
+        { productId: prodLegacy.toString() },
+      ]);
       expect(res.eligible).toBe(true);
       expect(res.ineligibleItems).toHaveLength(0);
       expect(res.flow).toBe('LEGACY');
@@ -256,7 +304,9 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
 
     it('Scenario 2: Shop có acceptance ACTIVE (CONTRACT_ACTIVE) -> Eligible với flow CONTRACT_V2', async () => {
       const service = createReadService();
-      const res = await service.checkEligibility([{ productId: prodActive.toString() }]);
+      const res = await service.checkEligibility([
+        { productId: prodActive.toString() },
+      ]);
       expect(res.eligible).toBe(true);
       expect(res.ineligibleItems).toHaveLength(0);
       expect(res.flow).toBe('CONTRACT_V2');
@@ -264,10 +314,14 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
 
     it('Scenario 3: Shop có acceptance REVOKED hoặc STALE -> Ineligible với reason PROVIDER_ACCEPTANCE_SUSPENDED', async () => {
       const service = createReadService();
-      const res = await service.checkEligibility([{ productId: prodSuspended.toString() }]);
+      const res = await service.checkEligibility([
+        { productId: prodSuspended.toString() },
+      ]);
       expect(res.eligible).toBe(false);
       expect(res.ineligibleItems).toHaveLength(1);
-      expect(res.ineligibleItems[0].reason).toBe('PROVIDER_ACCEPTANCE_SUSPENDED');
+      expect(res.ineligibleItems[0].reason).toBe(
+        'PROVIDER_ACCEPTANCE_SUSPENDED',
+      );
       expect(res.flow).toBe('BLOCKED');
     });
 
@@ -279,7 +333,9 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
       ]);
       expect(res.eligible).toBe(false);
       expect(res.ineligibleItems).toHaveLength(1);
-      expect(res.ineligibleItems[0].reason).toBe('MIXED_CONTRACT_FLOW_UNSUPPORTED');
+      expect(res.ineligibleItems[0].reason).toBe(
+        'MIXED_CONTRACT_FLOW_UNSUPPORTED',
+      );
       expect(res.flow).toBe('MIXED');
     });
   });
@@ -296,7 +352,9 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
 
       const mockAccess = {
         booking: jest.fn().mockResolvedValue(legacyBooking),
-        assertBookingReader: jest.fn().mockResolvedValue({ kind: 'CUSTOMER', userId: oid() }),
+        assertBookingReader: jest
+          .fn()
+          .mockResolvedValue({ kind: 'CUSTOMER', userId: oid() }),
         markContractFlowVersion: jest.fn(),
       } as any;
 
@@ -313,7 +371,10 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
         { db: {} } as any,
       );
 
-      const res = await service.readiness({ sub: 'user_1' } as any, bookingId.toString());
+      const res = await service.readiness(
+        { sub: 'user_1' } as any,
+        bookingId.toString(),
+      );
       expect(res.requirement).toBe('NOT_REQUIRED');
       expect(res.ready).toBe(true);
       expect(res.flow).toBe('LEGACY');
@@ -333,7 +394,9 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
 
       const mockAccess = {
         booking: jest.fn().mockResolvedValue(oldLegacyBooking),
-        assertBookingReader: jest.fn().mockResolvedValue({ kind: 'CUSTOMER', userId: oid() }),
+        assertBookingReader: jest
+          .fn()
+          .mockResolvedValue({ kind: 'CUSTOMER', userId: oid() }),
         markContractFlowVersion: jest.fn(),
       } as any;
 
@@ -350,7 +413,10 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
         { db: {} } as any,
       );
 
-      const res = await service.readiness({ sub: 'user_1' } as any, bookingId.toString());
+      const res = await service.readiness(
+        { sub: 'user_1' } as any,
+        bookingId.toString(),
+      );
       expect(res.flow).toBe('LEGACY');
       expect(res.requirement).toBe('NOT_REQUIRED');
       expect(oldLegacyBooking.contractFlowVersion).toBeNull();
@@ -358,7 +424,8 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
   });
 
   describe('4. Real MongoDB Docker Verification (Port 27028)', () => {
-    const mongoUri = 'mongodb://127.0.0.1:27028/?replicaSet=rsContractTest&directConnection=true';
+    const mongoUri =
+      'mongodb://127.0.0.1:27028/?replicaSet=rsContractTest&directConnection=true';
     let connection: Connection | null = null;
     let scratchDbName: string;
 
@@ -409,7 +476,9 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
       });
 
       // No acceptance in provider_contract_acceptances!
-      const acceptanceCount = await db.collection('provider_contract_acceptances').countDocuments({ providerId: provId });
+      const acceptanceCount = await db
+        .collection('provider_contract_acceptances')
+        .countDocuments({ providerId: provId });
       expect(acceptanceCount).toBe(0);
 
       // Create booking in MongoDB with contractFlowVersion: null
@@ -424,13 +493,17 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
       });
 
       // Verify contractFlowVersion in DB is null
-      const createdBooking = await db.collection('bookings').findOne({ _id: bookingId });
+      const createdBooking = await db
+        .collection('bookings')
+        .findOne({ _id: bookingId });
       expect(createdBooking?.contractFlowVersion).toBeNull();
 
       // Run ContractReadService over real MongoDB connection
       const mockAccess = {
         booking: jest.fn().mockResolvedValue(createdBooking),
-        assertBookingReader: jest.fn().mockResolvedValue({ kind: 'CUSTOMER', userId: custId }),
+        assertBookingReader: jest
+          .fn()
+          .mockResolvedValue({ kind: 'CUSTOMER', userId: custId }),
         markContractFlowVersion: jest.fn(),
       } as any;
 
@@ -444,16 +517,21 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
         {} as any,
         {} as any,
         {} as any,
-        connection as any,
+        connection,
       );
 
-      const readinessRes = await readService.readiness({ sub: custId.toString() } as any, bookingId.toString());
+      const readinessRes = await readService.readiness(
+        { sub: custId.toString() } as any,
+        bookingId.toString(),
+      );
       expect(readinessRes.requirement).toBe('NOT_REQUIRED');
       expect(readinessRes.flow).toBe('LEGACY');
       expect(readinessRes.ready).toBe(true);
 
       // DB remains untouched: contractFlowVersion is still null!
-      const bookingAfter = await db.collection('bookings').findOne({ _id: bookingId });
+      const bookingAfter = await db
+        .collection('bookings')
+        .findOne({ _id: bookingId });
       expect(bookingAfter?.contractFlowVersion).toBeNull();
     });
 
@@ -496,12 +574,16 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
         contractFlowVersion: 2,
       });
 
-      const v2Booking = await db.collection('bookings').findOne({ _id: bookingId });
+      const v2Booking = await db
+        .collection('bookings')
+        .findOne({ _id: bookingId });
       expect(v2Booking?.contractFlowVersion).toBe(2);
 
       const mockAccess = {
         booking: jest.fn().mockResolvedValue(v2Booking),
-        assertBookingReader: jest.fn().mockResolvedValue({ kind: 'CUSTOMER', userId: custId }),
+        assertBookingReader: jest
+          .fn()
+          .mockResolvedValue({ kind: 'CUSTOMER', userId: custId }),
       } as any;
 
       const mockPolicy = {
@@ -531,11 +613,16 @@ describe('Dual-Mode Contract Architecture: LEGACY & CONTRACT_V2 Coexistence', ()
         mockPolicy,
         mockTemplates,
         {} as any,
-        { prepare: jest.fn().mockRejectedValue(new Error('NOT_PREPARED')) } as any,
-        connection as any,
+        {
+          prepare: jest.fn().mockRejectedValue(new Error('NOT_PREPARED')),
+        } as any,
+        connection,
       );
 
-      const readinessRes = await readService.readiness({ sub: custId.toString() } as any, bookingId.toString());
+      const readinessRes = await readService.readiness(
+        { sub: custId.toString() } as any,
+        bookingId.toString(),
+      );
       expect(readinessRes.requirement).toBe('REQUIRED');
       expect(readinessRes.ready).toBe(false);
       expect(readinessRes.flow).toBe('CONTRACT_V2');

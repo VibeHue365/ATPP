@@ -78,10 +78,10 @@ export function useProviderOverview(): UseProviderOverviewResult {
 
   const fetchOverview = useCallback(
     async (silent = false) => {
-      // Socket, focus and visibility events can arrive together. Avoid starting
-      // another identical request during the same short window.
+      // Only throttle background / silent events (visibility, polling, socket) to prevent thundering herd.
+      // Explicit initial load or user actions should always execute immediately.
       const now = Date.now();
-      if (now - requestStartedAtRef.current < 750) return;
+      if (silent && now - requestStartedAtRef.current < 750) return;
       requestStartedAtRef.current = now;
 
       // Cancel previous in-flight request if any
@@ -109,18 +109,26 @@ export function useProviderOverview(): UseProviderOverviewResult {
           month: selectedMonth,
           signal: controller.signal,
         });
-        if (res) {
+        if (res && abortControllerRef.current === controller) {
           setData(res);
         }
       } catch (err: any) {
-        if (err.name === 'AbortError' || err.code === 'ERR_CANCELED') {
+        if (
+          err?.name === 'AbortError' ||
+          err?.code === 'ERR_CANCELED' ||
+          err?.cause?.name === 'AbortError' ||
+          err?.message?.includes('hủy') ||
+          err?.message?.includes('aborted')
+        ) {
           return;
         }
         console.error('Lỗi khi tải dữ liệu tổng quan đối tác:', err);
         setError(err.message || 'Không thể tải dữ liệu tổng quan');
       } finally {
-        setIsLoading(false);
-        setIsRefreshing(false);
+        if (abortControllerRef.current === controller) {
+          setIsLoading(false);
+          setIsRefreshing(false);
+        }
       }
     },
     [period, service, selectedMonth],

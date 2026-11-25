@@ -143,7 +143,8 @@ export class AiService {
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(10000),
       });
-      if (!response.ok) throw new Error(`AI Damage Inspection returned ${response.status}`);
+      if (!response.ok)
+        throw new Error(`AI Damage Inspection returned ${response.status}`);
       return await response.json();
     } catch (error: any) {
       this.logger.error(`Damage inspection AI error: ${error.message}`);
@@ -171,7 +172,8 @@ export class AiService {
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(10000),
       });
-      if (!response.ok) throw new Error(`AI Context Recommend returned ${response.status}`);
+      if (!response.ok)
+        throw new Error(`AI Context Recommend returned ${response.status}`);
       return await response.json();
     } catch (error: any) {
       this.logger.error(`Context recommend AI error: ${error.message}`);
@@ -196,7 +198,8 @@ export class AiService {
         // The AI service warms CLIP up at start; a hung call must not hold the request.
         signal: AbortSignal.timeout(VISUAL_MATCH_TIMEOUT_MS),
       });
-      if (!response.ok) throw new Error(`Visual Match returned ${response.status}`);
+      if (!response.ok)
+        throw new Error(`Visual Match returned ${response.status}`);
       return await response.json();
     } catch (error: any) {
       this.logger.error(`Visual match AI error: ${error.message}`);
@@ -213,7 +216,8 @@ export class AiService {
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(10000),
       });
-      if (!response.ok) throw new Error(`Culling analyze returned ${response.status}`);
+      if (!response.ok)
+        throw new Error(`Culling analyze returned ${response.status}`);
       return await response.json();
     } catch (error: any) {
       this.logger.error(`Culling analyze AI error: ${error.message}`);
@@ -237,7 +241,8 @@ export class AiService {
         body: JSON.stringify(photos),
         signal: AbortSignal.timeout(15000),
       });
-      if (!response.ok) throw new Error(`Anti fraud returned ${response.status}`);
+      if (!response.ok)
+        throw new Error(`Anti fraud returned ${response.status}`);
       return await response.json();
     } catch (error: any) {
       this.logger.error(`Anti fraud AI error: ${error.message}`);
@@ -314,45 +319,105 @@ export class AiService {
     const pkgPrice = Number(dto.photography_package?.price || 0);
     const totalOriginal = aoDaiPrice + pkgPrice;
     const discountPct = 15;
-    let suggestedPrice = Math.round((totalOriginal * (1 - discountPct / 100)) / 10000) * 10000;
-    if (suggestedPrice <= 0 && totalOriginal > 0) suggestedPrice = Math.round(totalOriginal * 0.85);
+    let suggestedPrice =
+      Math.round((totalOriginal * (1 - discountPct / 100)) / 10000) * 10000;
+    if (suggestedPrice <= 0 && totalOriginal > 0)
+      suggestedPrice = Math.round(totalOriginal * 0.85);
 
-    const corpus = `${prodName} ${prodDesc} ${pkgName} ${pkgDesc} ${vibe}`.toLowerCase();
+    const corpus =
+      `${prodName} ${prodDesc} ${pkgName} ${pkgDesc} ${vibe}`.toLowerCase();
 
     let conceptTheme = 'Nàng Thơ Dạo Phố - Thanh Lịch Hiện Đại';
     let name = `Combo Nàng Thơ Trọn Gói - ${prodName} & ${pkgName}`;
     let desc = `Gói dịch vụ hoàn hảo kết hợp ${prodName} tôn dáng và ${pkgName} tận tâm. Mang đến bộ ảnh kỷ niệm nghệ thuật, vừa tôn nét duyên truyền thống vừa hiện đại.`;
-    let locations = ['Phố Cổ', 'Không gian cafe Indochine', 'Cảnh sắc thiên nhiên thơ mộng'];
-    let styling = ['Nón lá / Quạt lụa', 'Khuyên tai bạc nhẹ nhàng', 'Makeup tự nhiên tôn da'];
-    let audience = 'Khách hàng muốn có bộ ảnh kỷ niệm đẹp, nhanh chóng, trọn gói';
+    let locations = [
+      'Phố Cổ',
+      'Không gian cafe Indochine',
+      'Cảnh sắc thiên nhiên thơ mộng',
+    ];
+    let styling = [
+      'Nón lá / Quạt lụa',
+      'Khuyên tai bạc nhẹ nhàng',
+      'Makeup tự nhiên tôn da',
+    ];
+    let audience =
+      'Khách hàng muốn có bộ ảnh kỷ niệm đẹp, nhanh chóng, trọn gói';
 
-    if (corpus.includes('tết') || corpus.includes('xuân') || corpus.includes('đào') || corpus.includes('mai')) {
+    if (
+      corpus.includes('tết') ||
+      corpus.includes('xuân') ||
+      corpus.includes('đào') ||
+      corpus.includes('mai')
+    ) {
       conceptTheme = 'Sắc Xuân Hoan Hỉ - Tết Cổ Truyền';
       name = `Combo Đón Tết An Khang - ${prodName} & ${pkgName}`;
       desc = `Trọn gói du xuân với ${prodName} rạng ngời kết hợp cùng ${pkgName}. Lưu giữ khoảnh khắc sum vầy, tươi vui đầu năm với tone màu ấm áp và góc máy chuyên nghiệp.`;
-      locations = ['Chợ Hoa Xuân', 'Phố Cổ / Cầu Trường Tiền', 'Chùa Cổ / Đình Làng'];
-      styling = ['Cành đào / mai cầm tay', 'Bao lì xì đỏ may mắn', 'Guốc mộc truyền thống'];
+      locations = [
+        'Chợ Hoa Xuân',
+        'Phố Cổ / Cầu Trường Tiền',
+        'Chùa Cổ / Đình Làng',
+      ];
+      styling = [
+        'Cành đào / mai cầm tay',
+        'Bao lì xì đỏ may mắn',
+        'Guốc mộc truyền thống',
+      ];
       audience = 'Gia đình, bạn trẻ muốn lưu giữ ảnh Tết trọn vẹn';
-    } else if (corpus.includes('cố đô') || corpus.includes('hoàng cung') || corpus.includes('đại nội') || corpus.includes('gấm') || corpus.includes('nhung')) {
+    } else if (
+      corpus.includes('cố đô') ||
+      corpus.includes('hoàng cung') ||
+      corpus.includes('đại nội') ||
+      corpus.includes('gấm') ||
+      corpus.includes('nhung')
+    ) {
       conceptTheme = 'Dấu Ấn Hoàng Cung - Cổ Điển Quý Phái';
       name = `Combo Cố Đô Nghệ Thuật - ${prodName} & ${pkgName}`;
       desc = `Trải nghiệm hóa thân tuyệt mỹ với ${prodName} sang trọng và ${pkgName}. Bắt trọn nét thâm trầm, đài các của kinh kỳ qua từng khung hình giàu chất thơ.`;
-      locations = ['Đại Nội Huế / Hoàng Thành', 'Lăng Khải Định / Tự Đức', 'Cầu Trường Tiền lúc hoàng hôn'];
-      styling = ['Quạt trầm hương / Quạt lụa thêu tay', 'Vấn tóc cổ điển / Mấn đính ngọc', 'Trang sức ngọc trai thanh lịch'];
+      locations = [
+        'Đại Nội Huế / Hoàng Thành',
+        'Lăng Khải Định / Tự Đức',
+        'Cầu Trường Tiền lúc hoàng hôn',
+      ];
+      styling = [
+        'Quạt trầm hương / Quạt lụa thêu tay',
+        'Vấn tóc cổ điển / Mấn đính ngọc',
+        'Trang sức ngọc trai thanh lịch',
+      ];
       audience = 'Nữ giới yêu nét đẹp hoài cổ, du khách check-in cố đô';
     } else if (corpus.includes('sen') || corpus.includes('hồ sen')) {
       conceptTheme = 'Hương Sắc Hồ Sen - Dáng Ngọc Duyên Dáng';
       name = `Combo Hương Sen Đầu Mùa - ${prodName} & ${pkgName}`;
       desc = `Hòa mình vào thiên nhiên thanh thuần với ${prodName} thướt tha và ${pkgName}. Tôn vinh vẻ đẹp thuần khiết, dịu dàng của người phụ nữ Việt bên đóa sen ngát hương.`;
-      locations = ['Đầm sen Tịnh Tâm', 'Hồ sen ngoại ô', 'Bờ sông Hương sớm mai'];
-      styling = ['Bó sen tươi cầm tay', 'Nón lá bài thơ mộc mạc', 'Trang điểm trong trẻo tone hồng phấn'];
+      locations = [
+        'Đầm sen Tịnh Tâm',
+        'Hồ sen ngoại ô',
+        'Bờ sông Hương sớm mai',
+      ];
+      styling = [
+        'Bó sen tươi cầm tay',
+        'Nón lá bài thơ mộc mạc',
+        'Trang điểm trong trẻo tone hồng phấn',
+      ];
       audience = 'Các nàng thơ yêu thích phong cách dịu dàng, trong trẻo';
-    } else if (corpus.includes('kỷ yếu') || corpus.includes('học sinh') || corpus.includes('thanh xuân') || corpus.includes('trắng')) {
+    } else if (
+      corpus.includes('kỷ yếu') ||
+      corpus.includes('học sinh') ||
+      corpus.includes('thanh xuân') ||
+      corpus.includes('trắng')
+    ) {
       conceptTheme = 'Thanh Xuân Nắng Hạ - Kỷ Niệm Tinh Khôi';
       name = `Combo Kỷ Niệm Thanh Xuân - ${prodName} & ${pkgName}`;
       desc = `Lưu giữ những tháng năm đẹp nhất cùng ${prodName} tinh khôi và ${pkgName}. Từng góc chụp tự nhiên, bắt trọn nụ cười rạng rỡ và sự hồn nhiên tuổi trẻ.`;
-      locations = ['Trường Quốc Học Huế', 'Con đường rợp bóng cây xanh', 'Cầu đi bộ gỗ lim'];
-      styling = ['Cặp sách da vintage', 'Bó hoa baby / cúc họa mi', 'Tóc buông tự nhiên'];
+      locations = [
+        'Trường Quốc Học Huế',
+        'Con đường rợp bóng cây xanh',
+        'Cầu đi bộ gỗ lim',
+      ];
+      styling = [
+        'Cặp sách da vintage',
+        'Bó hoa baby / cúc họa mi',
+        'Tóc buông tự nhiên',
+      ];
       audience = 'Học sinh, sinh viên, hội bạn thân chụp ảnh kỷ yếu';
     }
 
@@ -385,15 +450,27 @@ export class AiService {
     let category = 'general';
     let matchedQuestion = 'Tư vấn chung';
 
-    if (normalized.includes('size') || normalized.includes('chiều cao') || normalized.includes('chieu cao') || normalized.includes('cân nặng') || normalized.includes('can nang') || normalized.includes('eo')) {
-      const heightMatch = normalized.match(/chiều cao\s*(\d+)/i) || normalized.match(/cao\s*(\d+)/i);
-      const weightMatch = normalized.match(/cân nặng\s*(\d+)/i) || normalized.match(/nặng\s*(\d+)/i);
-      const waistMatch = normalized.match(/vòng eo\s*(\d+)/i) || normalized.match(/eo\s*(\d+)/i);
-      
+    if (
+      normalized.includes('size') ||
+      normalized.includes('chiều cao') ||
+      normalized.includes('chieu cao') ||
+      normalized.includes('cân nặng') ||
+      normalized.includes('can nang') ||
+      normalized.includes('eo')
+    ) {
+      const heightMatch =
+        normalized.match(/chiều cao\s*(\d+)/i) ||
+        normalized.match(/cao\s*(\d+)/i);
+      const weightMatch =
+        normalized.match(/cân nặng\s*(\d+)/i) ||
+        normalized.match(/nặng\s*(\d+)/i);
+      const waistMatch =
+        normalized.match(/vòng eo\s*(\d+)/i) || normalized.match(/eo\s*(\d+)/i);
+
       const height = heightMatch ? parseInt(heightMatch[1]) : 160;
       const weight = weightMatch ? parseInt(weightMatch[1]) : 50;
       const waist = waistMatch ? parseInt(waistMatch[1]) : 66;
-      
+
       let sizeH = 'XS';
       if (height < 150) sizeH = 'XS';
       else if (height < 155) sizeH = 'S';
@@ -422,12 +499,12 @@ export class AiService {
       const idxH = sizeOrder.indexOf(sizeH);
       const idxW = sizeOrder.indexOf(sizeW);
       const idxE = sizeOrder.indexOf(sizeE);
-      
+
       const maxIdx = Math.max(idxH, idxW, idxE);
       const recommendedSize = sizeOrder[maxIdx];
-      
+
       if (weight > 85 || waist > 95) {
-        answer = `Số đo bạn nhập (cân nặng ${weight}kg, vòng eo ${waist}cm) vượt quá bảng size may sẵn tiêu chuẩn của áo dài (lớn nhất là XXL). Chúng tôi khuyên bạn nên liên hệ trực tiếp với VibeHue để đặt may hoặc chỉnh sửa số đo riêng nhằm đảm bảo sự vừa vặn và thoải mái cao nhất.`;
+        answer = `Số đo bạn nhập (cân nặng ${weight}kg, vòng eo ${waist}cm) vượt quá bảng size may sẵn tiêu chuẩn của áo dài (lớn nhất là XXL). Chúng tôi khuyên bạn nên liên hệ trực tiếp với TàGo để đặt may hoặc chỉnh sửa số đo riêng nhằm đảm bảo sự vừa vặn và thoải mái cao nhất.`;
       } else {
         answer = `Dựa trên số đo chiều cao ${height}cm, cân nặng ${weight}kg và vòng eo ${waist}cm bạn cung cấp, kích cỡ tối ưu cho bạn là Size ${recommendedSize}. Kích cỡ này giúp ôm vừa vặn cơ thể mà vẫn thoải mái khi bạn đi đứng, ngồi hay tạo dáng chụp hình ngoại cảnh Đại Nội.`;
       }

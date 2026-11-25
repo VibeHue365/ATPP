@@ -50,11 +50,17 @@ import { PromotionsService } from '../../products/services/promotions.service';
 import { getPrimaryFrontendUrl } from '../../../common/config/frontend-url.util';
 import { ContractCheckoutGuard } from '../../contracts/contract-checkout-guard.service';
 import { CONTRACTS_V2_ENABLED } from '../../contracts/contracts.constants';
-import { contractIntentKey, paymentMatchesBinding } from './contract-payment-binding';
+import {
+  contractIntentKey,
+  paymentMatchesBinding,
+} from './contract-payment-binding';
 import { PaymentExpiryClaimService } from './payment-expiry-claim.service';
 import { PaymentRecoveryService } from './payment-recovery.service';
 import { hashContract } from '../../contracts/canonical-contract';
-import { freePaymentClaimBranches, newPaymentClaim } from '../../bookings/services/payment-expiry-claim';
+import {
+  freePaymentClaimBranches,
+  newPaymentClaim,
+} from '../../bookings/services/payment-expiry-claim';
 import { V2PaymentFinalizationService } from './v2-payment-finalization.service';
 import { WebhookEventRepository } from '../repositories/webhook-event.repository';
 
@@ -127,7 +133,11 @@ export class PaymentsService {
     await this.bookingModel.db.collection('inventory_slot_leases').updateMany(
       { bookingId, status: { $in: ['TEMP', 'CONFIRMED'] } },
       {
-        $set: { status: 'RELEASED', releasedAt: new Date(), releaseReason: reason },
+        $set: {
+          status: 'RELEASED',
+          releasedAt: new Date(),
+          releaseReason: reason,
+        },
         $unset: { expiresAt: '' },
       },
       { session },
@@ -138,25 +148,55 @@ export class PaymentsService {
     bookingIdStr: string,
     purpose: PaymentPurpose,
     userIdStr?: string,
+    allBookingIdsStr?: string[],
   ): Promise<PaymentDocument> {
-    const bookingId = new Types.ObjectId(bookingIdStr);
-    const booking = await this.bookingModel.findById(bookingId);
-    if (!booking) {
+    const allIds = (
+      allBookingIdsStr && allBookingIdsStr.length > 0
+        ? allBookingIdsStr
+        : [bookingIdStr]
+    ).filter(Boolean);
+
+    const bookingId = new Types.ObjectId(allIds[0]);
+    const relatedBookingIds = allIds
+      .slice(1)
+      .map((id) => new Types.ObjectId(id));
+
+    const bookings = await this.bookingModel.find({
+      _id: { $in: allIds.map((id) => new Types.ObjectId(id)) },
+    });
+    if (bookings.length === 0) {
       throw new NotFoundException('Booking not found');
     }
-    if (userIdStr && booking.customerId.toString() !== userIdStr) {
-      throw new ForbiddenException('Bạn không có quyền thanh toán đơn này.');
+    const booking = bookings.find(
+      (b) => b._id.toString() === bookingId.toString(),
+    );
+    if (!booking) {
+      throw new NotFoundException('Primary booking not found');
     }
-    if (
-      purpose !== PaymentPurpose.RemainingPayment &&
-      booking.status !== BookingStatus.PendingPayment
-    ) {
-      throw new BadRequestException(
-        'Đơn không còn ở trạng thái chờ thanh toán.',
-      );
+
+    if (userIdStr) {
+      for (const b of bookings) {
+        if (b.customerId.toString() !== userIdStr) {
+          throw new ForbiddenException(
+            'Bạn không có quyền thanh toán đơn này.',
+          );
+        }
+      }
+    }
+
+    for (const b of bookings) {
+      if (
+        purpose !== PaymentPurpose.RemainingPayment &&
+        b.status !== BookingStatus.PendingPayment
+      ) {
+        throw new BadRequestException(
+          `Đơn ${b.bookingCode || b._id} không còn ở trạng thái chờ thanh toán.`,
+        );
+      }
     }
 
     if (
+      bookings.length === 1 &&
       booking.contractFlowVersion === 2 &&
       booking.bookingType !== BookingType.Photography
     ) {
@@ -177,7 +217,11 @@ export class PaymentsService {
       return existingPendingPayment;
     }
 
-    const amount = await this.calculatePaymentAmount(booking, purpose);
+    // Calculate total amount across all bookings
+    let amount = 0;
+    for (const b of bookings) {
+      amount += await this.calculatePaymentAmount(b, purpose);
+    }
 
     const frontendBase = getPrimaryFrontendUrl(process.env.FRONTEND_URL);
 
@@ -189,6 +233,7 @@ export class PaymentsService {
 
       const zeroPayment = await this.paymentsRepository.createPayment({
         bookingId,
+        relatedBookingIds,
         paymentCode,
         amount: 0,
         purpose,
@@ -199,7 +244,7 @@ export class PaymentsService {
           paymentLinkId: `zero_${paymentCode}`,
           checkoutUrl,
           qrCode: `zero_${paymentCode}`,
-          description: `Don hang 0 dong ${booking.bookingCode}`,
+          description: `Don hang 0 dong ${bookings.map((b) => b.bookingCode).join(', ')}`,
         },
       });
 
@@ -211,8 +256,14 @@ export class PaymentsService {
     const orderCode = Math.floor(100000 + Math.random() * 900000);
     const checkoutUrl = this.getSimulatorCheckoutUrl(paymentCode);
 
+    const description =
+      bookings.length > 1
+        ? `Thanh toan ${bookings.length} don (${bookings.map((b) => b.bookingCode).join(', ')})`
+        : `Thanh toan don hang ${booking.bookingCode}`;
+
     const payment = await this.paymentsRepository.createPayment({
       bookingId,
+      relatedBookingIds,
       paymentCode,
       amount,
       purpose,
@@ -223,7 +274,7 @@ export class PaymentsService {
         paymentLinkId: `link_${paymentCode}`,
         checkoutUrl,
         qrCode: `mock_qr_${paymentCode}`,
-        description: `Thanh toan don hang ${booking.bookingCode}`,
+        description,
       },
     });
 
@@ -269,7 +320,9 @@ export class PaymentsService {
         const items = await this.bookingModel.db
           .model('BookingItem')
           .find({ bookingId: booking._id });
-        const prodItems = items.filter((item: any) => item.itemType === 'PRODUCT');
+        const prodItems = items.filter(
+          (item: any) => item.itemType === 'PRODUCT',
+        );
         const photoItems = items.filter(
           (item: any) => item.itemType === 'PHOTOGRAPHY_PACKAGE',
         );
@@ -295,10 +348,13 @@ export class PaymentsService {
       }
       return booking.bookingType === BookingType.Photography
         ? booking.pricingSummary.grandTotal || booking.pricingSummary.subTotal
-        : booking.pricingSummary.depositTotal || booking.pricingSummary.grandTotal;
+        : booking.pricingSummary.depositTotal ||
+            booking.pricingSummary.grandTotal;
     }
     if (purpose === PaymentPurpose.RemainingPayment)
-      return booking.pricingSummary.grandTotal - booking.paymentSummary.totalPaid;
+      return (
+        booking.pricingSummary.grandTotal - booking.paymentSummary.totalPaid
+      );
     return booking.pricingSummary.grandTotal || booking.pricingSummary.subTotal;
   }
 
@@ -317,7 +373,9 @@ export class PaymentsService {
     const binding = decision.binding;
     if (!binding) throw new ConflictException('CONTRACT_BINDING_REQUIRED');
     await this.assertV2IntentIndex();
-    const pending = await this.paymentsRepository.findPendingPaymentByBooking(booking._id);
+    const pending = await this.paymentsRepository.findPendingPaymentByBooking(
+      booking._id,
+    );
     if (pending && paymentMatchesBinding(pending, binding)) {
       if (pending.payos) {
         pending.payos.checkoutUrl = this.resolvePendingCheckoutUrl(pending);
@@ -349,11 +407,13 @@ export class PaymentsService {
     try {
       await session.withTransaction(async () => {
         await this.contractCheckoutGuard.assertCurrent(decision, session);
-        const concurrent = await this.paymentsRepository.model.findOne({
-          bookingId: booking._id,
-          status: PaymentStatus.Pending,
-          purpose: { $ne: PaymentPurpose.DepositRefund },
-        }).session(session);
+        const concurrent = await this.paymentsRepository.model
+          .findOne({
+            bookingId: booking._id,
+            status: PaymentStatus.Pending,
+            purpose: { $ne: PaymentPurpose.DepositRefund },
+          })
+          .session(session);
         if (concurrent) {
           if (paymentMatchesBinding(concurrent, binding)) {
             created = concurrent;
@@ -375,32 +435,41 @@ export class PaymentsService {
           );
           // Free the booking claim if held by concurrent so that claimIntent can atomically claim for paymentId
           await this.bookingModel.updateOne(
-            { _id: booking._id, 'paymentExpiryClaim.paymentId': concurrent._id },
+            {
+              _id: booking._id,
+              'paymentExpiryClaim.paymentId': concurrent._id,
+            },
             { $set: { paymentExpiryClaim: null } },
             { session },
           );
         }
-        await this.paymentExpiryClaim.claimIntent(booking._id, paymentId, session);
+        await this.paymentExpiryClaim.claimIntent(
+          booking._id,
+          paymentId,
+          session,
+        );
         const rows = await this.paymentsRepository.model.create(
-          [{
-            _id: paymentId,
-            bookingId: booking._id,
-            paymentCode,
-            amount,
-            purpose,
-            paymentMethod: 'PAYOS_SIMULATOR',
-            status: zero ? PaymentStatus.Success : PaymentStatus.Pending,
-            paidAt: zero ? new Date() : null,
-            contractBinding: binding,
-            contractIntentKey: key,
-            payos: {
-              orderCode,
-              paymentLinkId: `${zero ? 'zero' : 'link'}_${paymentCode}`,
-              checkoutUrl,
-              qrCode: `${zero ? 'zero' : 'mock_qr'}_${paymentCode}`,
-              description: `Thanh toan don hang ${booking.bookingCode}`,
+          [
+            {
+              _id: paymentId,
+              bookingId: booking._id,
+              paymentCode,
+              amount,
+              purpose,
+              paymentMethod: 'PAYOS_SIMULATOR',
+              status: zero ? PaymentStatus.Success : PaymentStatus.Pending,
+              paidAt: zero ? new Date() : null,
+              contractBinding: binding,
+              contractIntentKey: key,
+              payos: {
+                orderCode,
+                paymentLinkId: `${zero ? 'zero' : 'link'}_${paymentCode}`,
+                checkoutUrl,
+                qrCode: `${zero ? 'zero' : 'mock_qr'}_${paymentCode}`,
+                description: `Thanh toan don hang ${booking.bookingCode}`,
+              },
             },
-          }],
+          ],
           { session },
         );
         created = rows[0];
@@ -451,8 +520,7 @@ export class PaymentsService {
     const hasIndex = indexes.some(
       (index) =>
         index.unique &&
-        JSON.stringify(index.key) ===
-          JSON.stringify({ contractIntentKey: 1 }),
+        JSON.stringify(index.key) === JSON.stringify({ contractIntentKey: 1 }),
     );
     if (!hasIndex) {
       try {
@@ -474,10 +542,14 @@ export class PaymentsService {
                 JSON.stringify({ contractIntentKey: 1 }),
           );
           if (!ok) {
-            throw new ServiceUnavailableException('PAYMENT_INTENT_INDEX_REQUIRED');
+            throw new ServiceUnavailableException(
+              'PAYMENT_INTENT_INDEX_REQUIRED',
+            );
           }
         } catch {
-          throw new ServiceUnavailableException('PAYMENT_INTENT_INDEX_REQUIRED');
+          throw new ServiceUnavailableException(
+            'PAYMENT_INTENT_INDEX_REQUIRED',
+          );
         }
       }
     }
@@ -545,13 +617,22 @@ export class PaymentsService {
         query && typeof (query as any).lean === 'function'
           ? await (query as any).lean()
           : await query;
-      if (booking?.contractFlowVersion === 2 && booking.bookingType !== BookingType.Photography) {
+      if (
+        booking?.contractFlowVersion === 2 &&
+        booking.bookingType !== BookingType.Photography
+      ) {
         if (!this.contractsV2Enabled || !payment.contractBinding) continue;
         try {
           const decision = await this.contractCheckoutGuard.evaluate(
-            booking._id.toString(), payment.amount, payment.purpose,
+            booking._id.toString(),
+            payment.amount,
+            payment.purpose,
           );
-          if (!decision.binding || !paymentMatchesBinding(payment, decision.binding)) continue;
+          if (
+            !decision.binding ||
+            !paymentMatchesBinding(payment, decision.binding)
+          )
+            continue;
         } catch {
           continue;
         }
@@ -871,17 +952,24 @@ export class PaymentsService {
           event.signature ?? null,
         );
         if (claim.state !== 'claimed') continue;
-        const { orderCode, status, amount } = (event.payload || {}) as Record<string, any>;
+        const { orderCode, status, amount } = event.payload || {};
         if (status === 'PAID' && typeof orderCode === 'number') {
-          const payment = await this.paymentsRepository.findByOrderCode(orderCode);
+          const payment =
+            await this.paymentsRepository.findByOrderCode(orderCode);
           if (payment && payment.status === PaymentStatus.Pending) {
             if (typeof amount === 'number' && amount !== payment.amount) {
-              await this.webhookEventRepository.markError(event.webhookId, 'AMOUNT_MISMATCH');
+              await this.webhookEventRepository.markError(
+                event.webhookId,
+                'AMOUNT_MISMATCH',
+              );
               continue;
             }
             const isV2 = payment.contractBinding?.flowVersion === 2;
             if (isV2) {
-              await this.confirmPayment(payment.paymentCode, { source: 'WEBHOOK', orderCode });
+              await this.confirmPayment(payment.paymentCode, {
+                source: 'WEBHOOK',
+                orderCode,
+              });
             } else {
               await this.confirmPayment(payment.paymentCode);
             }
@@ -1026,7 +1114,9 @@ export class PaymentsService {
       return candidate;
     }
     let ready = false;
-    let decision: Awaited<ReturnType<ContractCheckoutGuard['evaluate']>> | null = null;
+    let decision: Awaited<
+      ReturnType<ContractCheckoutGuard['evaluate']>
+    > | null = null;
     if (binding && key) {
       try {
         decision = await this.contractCheckoutGuard.evaluate(
@@ -1035,20 +1125,25 @@ export class PaymentsService {
           candidate.purpose,
         );
         ready =
-          !!decision.binding && paymentMatchesBinding(candidate, decision.binding);
+          !!decision.binding &&
+          paymentMatchesBinding(candidate, decision.binding);
       } catch {
         ready = false;
       }
     }
     if (!ready || !decision) {
-      return this.acknowledgeV2ForReview(candidate, booking, 'CONTRACT_BINDING_STALE');
+      return this.acknowledgeV2ForReview(
+        candidate,
+        booking,
+        'CONTRACT_BINDING_STALE',
+      );
     }
 
     const session = await this.bookingModel.db.startSession();
     let acknowledged: PaymentDocument | null = null;
     try {
       await session.withTransaction(async () => {
-        await this.contractCheckoutGuard.assertCurrent(decision!, session);
+        await this.contractCheckoutGuard.assertCurrent(decision, session);
         await this.paymentExpiryClaim.claimFinalization(
           booking._id,
           candidate._id,
@@ -1072,7 +1167,8 @@ export class PaymentsService {
       const currentPayment = await this.paymentsRepository.findPaymentByCode(
         candidate.paymentCode,
       );
-      if (currentPayment?.status === PaymentStatus.Success) return currentPayment;
+      if (currentPayment?.status === PaymentStatus.Success)
+        return currentPayment;
       const currentBooking = await this.bookingModel.findById(booking._id);
       if (
         currentBooking?.status !== BookingStatus.PendingPayment ||
@@ -1114,7 +1210,11 @@ export class PaymentsService {
           {
             _id: candidate._id,
             status: {
-              $in: [PaymentStatus.Pending, PaymentStatus.Failed, PaymentStatus.Cancelled],
+              $in: [
+                PaymentStatus.Pending,
+                PaymentStatus.Failed,
+                PaymentStatus.Cancelled,
+              ],
             },
           },
           {
@@ -1127,7 +1227,9 @@ export class PaymentsService {
           { new: true, session },
         );
         if (!payment) {
-          payment = await this.paymentsRepository.model.findById(candidate._id).session(session);
+          payment = await this.paymentsRepository.model
+            .findById(candidate._id)
+            .session(session);
           if (payment?.status !== PaymentStatus.Success)
             throw new ConflictException('PAYMENT_STATUS_CHANGED');
         }
@@ -1137,7 +1239,11 @@ export class PaymentsService {
           key,
           session,
         );
-        await this.paymentRecovery.requireReview(candidate._id, reason, session);
+        await this.paymentRecovery.requireReview(
+          candidate._id,
+          reason,
+          session,
+        );
         await this.bookingModel.updateOne(
           { _id: booking._id },
           {
@@ -1255,7 +1361,8 @@ export class PaymentsService {
         let rentalSlotCount = 1;
         if (item.rentalFrom && item.rentalTo) {
           const diffMs =
-            new Date(item.rentalTo).getTime() - new Date(item.rentalFrom).getTime();
+            new Date(item.rentalTo).getTime() -
+            new Date(item.rentalFrom).getTime();
           const hours = Math.round(diffMs / (1000 * 60 * 60));
           rentalSlotCount = Math.max(1, Math.round(hours / 2));
         }
@@ -1303,7 +1410,8 @@ export class PaymentsService {
           (l: any) =>
             l.status === 'CONFIRMED' ||
             (l.status === 'TEMP' &&
-              (!l.expiresAt || new Date(l.expiresAt).getTime() > now.getTime())),
+              (!l.expiresAt ||
+                new Date(l.expiresAt).getTime() > now.getTime())),
         );
         if (activeLeases.length < expectedItemLeases) {
           slotLeasesValid = false;
@@ -1448,7 +1556,9 @@ export class PaymentsService {
       // Redeem voucher
       const r = await this.promotionsService.redeemVoucher(payment.bookingId);
       if (!r) {
-        const redemption = await this.promotionsService.findRedemptionByBooking(payment.bookingId);
+        const redemption = await this.promotionsService.findRedemptionByBooking(
+          payment.bookingId,
+        );
         if (redemption?.status === 'RELEASED') {
           await this.bookingModel.updateOne(
             { _id: payment.bookingId },
@@ -1464,13 +1574,12 @@ export class PaymentsService {
       }
     } else {
       // cannot confirm: e.g. holds expired, leases missing/expired/released
-      const reviewReason =
-        !holdConfirmation.confirmed
-          ? 'Lịch giữ chỗ hoặc trang phục đã hết hạn trước khi thanh toán hoàn tất.'
-          : !reservationsValid
-            ? 'Tồn kho trang phục không còn khả dụng hoặc đã hết hạn giữ chỗ.'
-            : slotLeaseFailReason ||
-              'Đơn hàng không đủ điều kiện xác nhận sau thanh toán.';
+      const reviewReason = !holdConfirmation.confirmed
+        ? 'Lịch giữ chỗ hoặc trang phục đã hết hạn trước khi thanh toán hoàn tất.'
+        : !reservationsValid
+          ? 'Tồn kho trang phục không còn khả dụng hoặc đã hết hạn giữ chỗ.'
+          : slotLeaseFailReason ||
+            'Đơn hàng không đủ điều kiện xác nhận sau thanh toán.';
 
       await this.bookingModel.updateOne(
         { _id: payment.bookingId },
@@ -1517,7 +1626,9 @@ export class PaymentsService {
             .select('userId')
             .lean();
 
-          for (const provider of providers as Array<{ userId?: Types.ObjectId }>) {
+          for (const provider of providers as Array<{
+            userId?: Types.ObjectId;
+          }>) {
             if (!provider.userId) continue;
             await this.notificationsService.createNotification(
               provider.userId.toString(),
@@ -1539,6 +1650,45 @@ export class PaymentsService {
       updatedBooking.pricingSummary.grandTotal,
       updatedBooking.pricingSummary.depositTotal,
     );
+
+    // Tự động kích hoạt các đơn hàng con trong cùng gói thanh toán gộp 1 lần
+    if (payment.relatedBookingIds && payment.relatedBookingIds.length > 0) {
+      for (const relId of payment.relatedBookingIds) {
+        try {
+          const relBooking = await this.bookingModel.findById(relId);
+          if (!relBooking) continue;
+          if (
+            relBooking.status === BookingStatus.Confirmed ||
+            relBooking.status === BookingStatus.DepositPaid
+          ) {
+            continue;
+          }
+
+          const relAmount = relBooking.pricingSummary?.grandTotal || 0;
+
+          const childPayment = await this.paymentsRepository.createPayment({
+            bookingId: relId,
+            paymentCode: `SUB_${payment.paymentCode}_${relId.toString().slice(-4)}`,
+            amount: relAmount,
+            purpose: payment.purpose,
+            paymentMethod: payment.paymentMethod,
+            status: PaymentStatus.Success,
+            paidAt: payment.paidAt || new Date(),
+            payos: {
+              orderCode: Math.floor(100000 + Math.random() * 900000),
+              description: `Thanh toan don hang ${relBooking.bookingCode} (gop theo ${payment.paymentCode})`,
+            },
+          });
+
+          await this.finalizeAfterPayment(childPayment);
+        } catch (err) {
+          this.logger.error(
+            `Lỗi khi tự động kích hoạt đơn hàng liên quan ${relId}:`,
+            err,
+          );
+        }
+      }
+    }
   }
 
   async handlePaymentOnClosedBooking(bookingId: Types.ObjectId): Promise<void> {
@@ -1565,12 +1715,19 @@ export class PaymentsService {
   async failPayment(
     paymentCode: string,
     status:
-      PaymentStatus.Failed | PaymentStatus.Cancelled = PaymentStatus.Failed,
+      | PaymentStatus.Failed
+      | PaymentStatus.Cancelled = PaymentStatus.Failed,
   ): Promise<PaymentDocument> {
-    const candidate = await this.paymentsRepository.findPaymentByCode(paymentCode);
+    const candidate =
+      await this.paymentsRepository.findPaymentByCode(paymentCode);
     if (!candidate) throw new NotFoundException('Payment not found');
-    const candidateBooking = await this.bookingModel.findById(candidate.bookingId).lean();
-    if (candidateBooking?.contractFlowVersion === 2 && candidateBooking.bookingType !== BookingType.Photography) {
+    const candidateBooking = await this.bookingModel
+      .findById(candidate.bookingId)
+      .lean();
+    if (
+      candidateBooking?.contractFlowVersion === 2 &&
+      candidateBooking.bookingType !== BookingType.Photography
+    ) {
       if (!this.contractsV2Enabled)
         throw new ServiceUnavailableException('CONTRACTS_V2_DISABLED');
       return this.failV2Payment(candidate, status);
@@ -1650,8 +1807,9 @@ export class PaymentsService {
           .select('customerId bookingCode')
           .lean();
         if (booking) {
-          const customerId =
-            ((booking.customerId as any)?._id || booking.customerId).toString();
+          const customerId = (
+            (booking.customerId as any)?._id || booking.customerId
+          ).toString();
           await this.notificationsService.createNotification(
             customerId,
             status === PaymentStatus.Cancelled
@@ -1683,34 +1841,60 @@ export class PaymentsService {
     try {
       await session.withTransaction(async () => {
         const now = new Date();
-        const booking = await this.bookingModel.findById(candidate.bookingId).session(session).lean();
+        const booking = await this.bookingModel
+          .findById(candidate.bookingId)
+          .session(session)
+          .lean();
         if (!booking) throw new NotFoundException('Booking not found');
         if (booking.status === BookingStatus.PendingPayment) {
-          const moved = await this.bookingModel.updateOne({
-            _id: booking._id,
-            contractFlowVersion: 2,
-            status: BookingStatus.PendingPayment,
-            $or: [
-              ...freePaymentClaimBranches(now),
-              { 'paymentExpiryClaim.phase': 'INTENT', 'paymentExpiryClaim.paymentId': candidate._id },
-            ],
-          }, {
-            $set: {
-              status: BookingStatus.Cancelled,
-              paymentExpiryClaim: newPaymentClaim('EXPIRY', now, new Date(now.getTime() + 60_000)),
+          const moved = await this.bookingModel.updateOne(
+            {
+              _id: booking._id,
+              contractFlowVersion: 2,
+              status: BookingStatus.PendingPayment,
+              $or: [
+                ...freePaymentClaimBranches(now),
+                {
+                  'paymentExpiryClaim.phase': 'INTENT',
+                  'paymentExpiryClaim.paymentId': candidate._id,
+                },
+              ],
             },
-            $push: { statusTimeline: { status: BookingStatus.Cancelled, changedAt: now, note: 'V2_PAYMENT_FAILED' } },
-          }, { session });
+            {
+              $set: {
+                status: BookingStatus.Cancelled,
+                paymentExpiryClaim: newPaymentClaim(
+                  'EXPIRY',
+                  now,
+                  new Date(now.getTime() + 60_000),
+                ),
+              },
+              $push: {
+                statusTimeline: {
+                  status: BookingStatus.Cancelled,
+                  changedAt: now,
+                  note: 'V2_PAYMENT_FAILED',
+                },
+              },
+            },
+            { session },
+          );
           if (moved.modifiedCount !== 1)
             throw new ConflictException('PAYMENT_EXPIRY_CLAIM_BUSY');
-          await this.bookingModel.db.model('BookingSchedule').updateMany(
-            { bookingId: booking._id, status: 'HELD' },
-            { $set: { status: 'CANCELLED' } }, { session },
-          );
-          await this.bookingModel.db.model('InventoryReservation').updateMany(
-            { bookingId: booking._id, status: 'TEMP_RESERVED' },
-            { $set: { status: 'CANCELLED' }, $unset: { expiresAt: 1 } }, { session },
-          );
+          await this.bookingModel.db
+            .model('BookingSchedule')
+            .updateMany(
+              { bookingId: booking._id, status: 'HELD' },
+              { $set: { status: 'CANCELLED' } },
+              { session },
+            );
+          await this.bookingModel.db
+            .model('InventoryReservation')
+            .updateMany(
+              { bookingId: booking._id, status: 'TEMP_RESERVED' },
+              { $set: { status: 'CANCELLED' }, $unset: { expiresAt: 1 } },
+              { session },
+            );
           await this.releaseBookingSlotLeases(
             booking._id,
             session,
@@ -1722,7 +1906,8 @@ export class PaymentsService {
         }
         result = await this.paymentsRepository.model.findOneAndUpdate(
           { _id: candidate._id, status: PaymentStatus.Pending },
-          { $set: { status } }, { new: true, session },
+          { $set: { status } },
+          { new: true, session },
         );
         if (!result) throw new ConflictException('PAYMENT_STATUS_CHANGED');
       });
@@ -1783,6 +1968,7 @@ export class PaymentsService {
       providerId: Types.ObjectId;
       payableAmount?: number;
       netAmount?: number;
+      compensationAmount?: number;
       settlementCode?: string;
     }>;
 
@@ -1795,7 +1981,7 @@ export class PaymentsService {
 
     for (const s of settlements) {
       const payableAmt = s.payableAmount || 0;
-      const netAmt = s.netAmount || 0;
+      const netAmt = (s.netAmount || 0) + (s.compensationAmount || 0);
 
       const updated = await settlementModel.findOneAndUpdate(
         { _id: s._id, walletCreditedAt: null },
@@ -1860,10 +2046,12 @@ export class PaymentsService {
             .exec();
           const rentalItems = items.filter(
             (i: any) =>
-              i.itemType === 'PRODUCT' || i.itemType === BookingItemType.Product,
+              i.itemType === 'PRODUCT' ||
+              i.itemType === BookingItemType.Product,
           );
           const rentalDepositTotal = rentalItems.reduce(
-            (sum: number, i: any) => sum + (i.depositAmount || 0),
+            (sum: number, i: any) =>
+              sum + (i.depositAmount || 0) * (i.quantity || 1),
             0,
           );
           const depositAmt =
@@ -1892,7 +2080,6 @@ export class PaymentsService {
 
       // 4. Cộng ví chuẩn xác cho từng Provider theo từng Settlement (thay thế khối cũ L836)
       await this.creditWalletsForBooking(bookingId);
-
     } catch (err) {
       // Revert lại trạng thái Held nếu gặp lỗi để có thể retry
       await this.escrowRepository.updateEscrowStatus(

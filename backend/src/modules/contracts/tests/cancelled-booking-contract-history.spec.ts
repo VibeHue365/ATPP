@@ -4,7 +4,10 @@ import { ContractReadService } from '../contract-read.service';
 import { ContractAccessService } from '../contract-access.service';
 import { ContractConsentService } from '../contract-consent.service';
 import { AuthUser } from '../../../common/decorators/current-user.decorator';
-import { ContractVersionState, ContractDocumentStatus } from '../schemas/contract-version.schema';
+import {
+  ContractVersionState,
+  ContractDocumentStatus,
+} from '../schemas/contract-version.schema';
 import { ContractConsentAction } from '../schemas/contract-consent.schema';
 
 describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC-01 -> TC-13)', () => {
@@ -57,7 +60,11 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
           findOne: async (query: any) => {
             if (name === 'providers') {
               if (query.userId?.toString() === provider_UserId.toString()) {
-                return { _id: provider_Id, userId: provider_UserId, status: 'ACTIVE' };
+                return {
+                  _id: provider_Id,
+                  userId: provider_UserId,
+                  status: 'ACTIVE',
+                };
               }
             }
             return null;
@@ -71,7 +78,7 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
       },
     };
 
-    accessService = new ContractAccessService(mockConnection as any);
+    accessService = new ContractAccessService(mockConnection);
 
     mockContractsModel = {
       find: jest.fn(),
@@ -89,15 +96,15 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
 
     readService = new ContractReadService(
       true, // enabled
-      mockContractsModel as any,
-      mockVersionsModel as any,
-      mockConsentsModel as any,
+      mockContractsModel,
+      mockVersionsModel,
+      mockConsentsModel,
       accessService,
       {} as any, // policy
       {} as any, // templates
       {} as any, // snapshots
       {} as any, // preparation
-      mockConnection as any,
+      mockConnection,
     );
   });
 
@@ -137,7 +144,10 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
 
     mockConsentsModel.exists.mockResolvedValue(false);
 
-    const result = await readService.listForBooking(userCustomerA, bookingId.toString());
+    const result = await readService.listForBooking(
+      userCustomerA,
+      bookingId.toString(),
+    );
     expect(result).toHaveLength(0);
   });
 
@@ -177,7 +187,10 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
 
     mockConsentsModel.exists.mockResolvedValue(false);
 
-    const result = await readService.listForBooking(userCustomerA, bookingId.toString());
+    const result = await readService.listForBooking(
+      userCustomerA,
+      bookingId.toString(),
+    );
     expect(result).toHaveLength(0);
   });
 
@@ -219,7 +232,10 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
 
     mockConsentsModel.exists.mockResolvedValue(true);
 
-    const result = await readService.listForBooking(userCustomerA, bookingId.toString());
+    const result = await readService.listForBooking(
+      userCustomerA,
+      bookingId.toString(),
+    );
     expect(result).toHaveLength(1);
     expect(result[0].isSigned).toBe(true);
     expect(result[0].hasPdf).toBe(true);
@@ -262,7 +278,10 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
 
     mockConsentsModel.exists.mockResolvedValue(true);
 
-    const result = await readService.listForBooking(userCustomerA, bookingId.toString());
+    const result = await readService.listForBooking(
+      userCustomerA,
+      bookingId.toString(),
+    );
     expect(result).toHaveLength(1);
     expect(result[0].isSigned).toBe(true);
     expect(result[0].state).toBe(ContractVersionState.Effective);
@@ -305,7 +324,10 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
 
     mockConsentsModel.exists.mockResolvedValue(true);
 
-    const result = await readService.listForBooking(userCustomerA, bookingId.toString());
+    const result = await readService.listForBooking(
+      userCustomerA,
+      bookingId.toString(),
+    );
     expect(result).toHaveLength(1);
     expect(result[0].isSigned).toBe(true);
     expect(result[0].state).toBe(ContractVersionState.Terminated);
@@ -348,7 +370,10 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
 
     mockConsentsModel.exists.mockResolvedValue(true);
 
-    const result = await readService.listForBooking(userCustomerA, bookingId.toString());
+    const result = await readService.listForBooking(
+      userCustomerA,
+      bookingId.toString(),
+    );
     expect(result).toHaveLength(1);
     expect(result[0].isSigned).toBe(true);
     expect(result[0].state).toBe(ContractVersionState.Accepted);
@@ -391,7 +416,10 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
 
     mockConsentsModel.exists.mockResolvedValue(true);
 
-    const result = await readService.listForBooking(userCustomerA, bookingId.toString());
+    const result = await readService.listForBooking(
+      userCustomerA,
+      bookingId.toString(),
+    );
     expect(result).toHaveLength(1);
     expect(result[0].isSigned).toBe(true);
   });
@@ -411,17 +439,25 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
       lean: () => [],
     });
 
-    const result = await readService.listForBooking(userCustomerA, bookingId.toString());
+    const result = await readService.listForBooking(
+      userCustomerA,
+      bookingId.toString(),
+    );
     expect(result).toHaveLength(0);
   });
 
   // TC-09: API lỗi → ném lỗi chính xác, không nuốt lỗi
   it('TC-09: Propagates error when booking lookup fails', async () => {
-    jest.spyOn(accessService, 'booking').mockRejectedValue(new NotFoundException('CONTRACT_BOOKING_NOT_FOUND'));
+    jest
+      .spyOn(accessService, 'booking')
+      .mockRejectedValue(new NotFoundException('CONTRACT_BOOKING_NOT_FOUND'));
 
-    await expect(readService.listForBooking(userCustomerA, new Types.ObjectId().toString())).rejects.toThrow(
-      NotFoundException,
-    );
+    await expect(
+      readService.listForBooking(
+        userCustomerA,
+        new Types.ObjectId().toString(),
+      ),
+    ).rejects.toThrow(NotFoundException);
   });
 
   // TC-10: Customer A không xem được hợp đồng của Customer B
@@ -436,9 +472,9 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
       contractFlowVersion: 2,
     } as any);
 
-    await expect(readService.listForBooking(userCustomerA, bookingId.toString())).rejects.toThrow(
-      NotFoundException,
-    );
+    await expect(
+      readService.listForBooking(userCustomerA, bookingId.toString()),
+    ).rejects.toThrow(NotFoundException);
   });
 
   // TC-11: Provider/Admin vẫn tra cứu được tài liệu theo quyền hiện có kể cả khi booking CANCELLED
@@ -479,7 +515,10 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
     mockConsentsModel.exists.mockResolvedValue(false);
 
     // Admin should see the unaccepted draft for audit
-    const adminResult = await readService.listForBooking(userAdmin, bookingId.toString());
+    const adminResult = await readService.listForBooking(
+      userAdmin,
+      bookingId.toString(),
+    );
     expect(adminResult).toHaveLength(1);
     expect(adminResult[0].contractId).toBe(contractId.toString());
   });
@@ -488,7 +527,8 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
   it('TC-12: Preserves contentHash and snapshot immutability on accepted contracts', async () => {
     const contractId = new Types.ObjectId();
     const versionId = new Types.ObjectId();
-    const immutableHash = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+    const immutableHash =
+      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 
     mockContractsModel.findById.mockReturnValue({
       lean: () => ({
@@ -518,7 +558,10 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
       }),
     });
 
-    const contractDetail = await readService.get(userCustomerA, contractId.toString());
+    const contractDetail = await readService.get(
+      userCustomerA,
+      contractId.toString(),
+    );
     expect(contractDetail.contentHash).toBe(immutableHash);
     expect(contractDetail.renderedText).toBe('BẢN THỎA THUẬN ĐIỆN TỬ BẤT BIẾN');
   });
@@ -544,10 +587,10 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
 
     const mockConsentService = new ContractConsentService(
       true,
-      mockConnection as any,
-      mockContractsModel as any,
-      mockVersionsModel as any,
-      mockConsentsModel as any,
+      mockConnection,
+      mockContractsModel,
+      mockVersionsModel,
+      mockConsentsModel,
       accessService,
       {} as any,
       {} as any,
@@ -564,17 +607,13 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
     } as any);
 
     await expect(
-      mockConsentService.decide(
-        userCustomerA,
-        contractId.toString(),
-        {
-          contractVersionId: versionId.toString(),
-          action: ContractConsentAction.Accept,
-          contentHash: 'some_hash',
-          bookingFingerprint: 'some_bfp',
-          idempotencyKey: 'idem_key_1',
-        },
-      ),
+      mockConsentService.decide(userCustomerA, contractId.toString(), {
+        contractVersionId: versionId.toString(),
+        action: ContractConsentAction.Accept,
+        contentHash: 'some_hash',
+        bookingFingerprint: 'some_bfp',
+        idempotencyKey: 'idem_key_1',
+      }),
     ).rejects.toThrow(ConflictException);
   });
 
@@ -591,11 +630,19 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
       contractFlowVersion: 2,
     } as any);
 
-    const mockPrep = { prepare: jest.fn().mockResolvedValue({ contractId: 'c1', versionId: 'v2', version: 2 }) };
+    const mockPrep = {
+      prepare: jest
+        .fn()
+        .mockResolvedValue({ contractId: 'c1', versionId: 'v2', version: 2 }),
+    };
     (readService as any).policy = {
       getContext: jest.fn().mockResolvedValue({
         rentalProviderIds: [providerId],
-        booking: { _id: bookingId, customerId: customerA_Id, status: 'PENDING_PAYMENT' },
+        booking: {
+          _id: bookingId,
+          customerId: customerA_Id,
+          status: 'PENDING_PAYMENT',
+        },
       }),
     };
     (readService as any).preparation = mockPrep;
@@ -617,9 +664,15 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
       ready: false,
     } as any);
 
-    const result = await readService.refreshContractsForBooking(userCustomerA, bookingId.toString());
+    const result = await readService.refreshContractsForBooking(
+      userCustomerA,
+      bookingId.toString(),
+    );
 
-    expect(mockPrep.prepare).toHaveBeenCalledWith(bookingId.toString(), providerId.toString());
+    expect(mockPrep.prepare).toHaveBeenCalledWith(
+      bookingId.toString(),
+      providerId.toString(),
+    );
     expect(result.ready).toBe(false);
     expect(result.providers[0].version).toBe(2);
   });
@@ -637,7 +690,10 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
     } as any);
 
     await expect(
-      readService.refreshContractsForBooking(userCustomerA, bookingId.toString()),
+      readService.refreshContractsForBooking(
+        userCustomerA,
+        bookingId.toString(),
+      ),
     ).rejects.toThrow();
   });
 
@@ -653,7 +709,10 @@ describe('Regression Tests: Customer Contract History & Cancelled Booking UX (TC
     } as any);
 
     await expect(
-      readService.refreshContractsForBooking(userCustomerA, bookingId.toString()),
+      readService.refreshContractsForBooking(
+        userCustomerA,
+        bookingId.toString(),
+      ),
     ).rejects.toThrow(ConflictException);
   });
 });

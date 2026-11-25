@@ -3,6 +3,7 @@ import Swal from 'sweetalert2';
 import type { useToast } from '../../../components/feedback/Toast';
 import { inventoryApi, productsApi } from '../api/providerDashboardApi';
 import { sizeChartApi } from '../size-chart/sizeChartApi';
+import { ConfirmModal } from '../../../utils/confirmModal';
 import { colorLabels, DEFAULT_PRODUCT_IMAGE, TAG_TO_EVENT_SLUG, TAG_TO_OCCASION, TAG_TO_STYLE, TAG_TO_STYLE_SLUG } from '../constants';
 import type { Product, VariantRow } from '../types';
 import { emptyVariant, normalizeCategoryIds, normalizeVariants } from './productHelpers';
@@ -297,7 +298,7 @@ export function createProductWizardActions({
       eventCategoryIds: prodEventCategoryIds,
       customTags: prodCustomTags,
     };
-    if (prodReplacementValue.trim() !== '') {
+    if (String(prodReplacementValue ?? '').trim() !== '') {
       payload.replacementValue = Math.round(Number(prodReplacementValue));
     } else if (editingProduct && editingProduct.replacementValue != null) {
       payload.replacementValue = null;
@@ -306,20 +307,38 @@ export function createProductWizardActions({
   };
 
   const validateWizardStep1 = () => {
-    if (!prodName || !prodCategoryId || !prodBasePrice || !prodDepositAmount) {
+    if (!prodName || !prodCategoryId || prodBasePrice === '' || prodDepositAmount === '') {
       toast.error('Vui lòng điền đầy đủ thông tin bắt buộc ở bước 1');
+      return false;
+    }
+    const base = Number(prodBasePrice);
+    const deposit = Number(prodDepositAmount);
+    if (!Number.isInteger(base) || base < 50000 || base > 10000000 || base % 1000 !== 0) {
+      toast.error('Giá thuê/ngày phải từ 50.000đ đến 10.000.000đ và là bội số 1.000đ');
+      return false;
+    }
+    if (!Number.isInteger(deposit) || deposit < 0 || deposit > 5000000 || deposit % 1000 !== 0) {
+      toast.error('Tiền đặt cọc phải là bội số 1.000đ (0đ hoặc tối đa 5.000.000đ)');
+      return false;
+    }
+    if (deposit > 0 && deposit < 20000) {
+      toast.error('Tiền đặt cọc nếu thu phải từ 20.000đ trở lên (hoặc 0đ)');
       return false;
     }
     // Phải dùng >= cho khớp với backend (products.service.ts), nếu chỉ chặn > thì
     // trường hợp cọc BẰNG giá thuê sẽ lọt qua bước 1 rồi mới bị từ chối ở bước 2.
-    if (Number(prodDepositAmount) >= Number(prodBasePrice)) {
+    if (deposit >= base) {
       toast.error('Giá cọc phải nhỏ hơn giá thuê');
       return false;
     }
-    if (prodReplacementValue.trim() !== '') {
+    if (String(prodReplacementValue ?? '').trim() !== '') {
       const repVal = Number(prodReplacementValue);
-      if (isNaN(repVal) || repVal <= 0) {
-        toast.error('Giá trị bồi hoàn phải là số dương lớn hơn 0');
+      if (!Number.isInteger(repVal) || repVal < 100000 || repVal > 50000000) {
+        toast.error('Giá trị bồi hoàn phải từ 100.000đ đến 50.000.000đ');
+        return false;
+      }
+      if (repVal < base || repVal < deposit) {
+        toast.error('Giá trị bồi hoàn phải lớn hơn hoặc bằng giá thuê và tiền cọc');
         return false;
       }
     }
@@ -356,6 +375,45 @@ export function createProductWizardActions({
     }
   };
 
+  /**
+   * Edit mode: step 3 generates smart tags from the SAVED name/description, so new text from
+   * step 1 (typed, or suggested by UC-C10) has to be saved first or the tags describe the old
+   * listing. Every product update sends the listing back to moderation, so ask before saving.
+   * Returns false when the provider wants to stay on step 2.
+   */
+  const saveListingTextBeforeTagging = async (): Promise<boolean> => {
+    if (!editingProduct) return true;
+    const unchanged =
+      prodName === (editingProduct.name ?? '') && prodDescription === (editingProduct.description ?? '');
+    if (unchanged) return true;
+    if (!prodName.trim()) {
+      toast.error('Vui lòng nhập tên áo dài ở bước 1 trước khi gắn thẻ.');
+      return false;
+    }
+    const result = await ConfirmModal.pause(
+      'Lưu tên và mô tả mới?',
+      'Thẻ thông minh ở bước tiếp theo được gợi ý từ tên và mô tả đã lưu. Lưu ngay để thẻ khớp với nội dung mới? Áo sẽ chờ duyệt lại như mọi lần cập nhật.',
+      { confirmButtonText: 'Lưu và tiếp tục', cancelButtonText: 'Bỏ qua, chưa lưu' },
+    );
+    if (!result.isConfirmed) {
+      // "Bỏ qua" continues without saving; closing the dialog stays on step 2.
+      return result.dismiss === Swal.DismissReason.cancel;
+    }
+    setSavingDraft(true);
+    try {
+      await productsApi.update(editingProduct._id, { name: prodName, description: prodDescription });
+      // Later checks compare against what is saved now.
+      setEditingProduct({ ...editingProduct, name: prodName, description: prodDescription });
+      toast.success('Đã lưu tên và mô tả mới.');
+      return true;
+    } catch (err: any) {
+      toast.error(err.message || 'Lưu tên và mô tả thất bại. Vui lòng thử lại.');
+      return false;
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
   const handleWizardNext = async () => {
     if (wizardStep === 1) {
       if (!validateWizardStep1()) return;
@@ -364,7 +422,10 @@ export function createProductWizardActions({
     }
     if (wizardStep === 2) {
       // Edit mode: biến thể được quản lý ở tab Tồn kho, chỉ cần sang bước gắn thẻ.
-      if (editingProduct) { setWizardStep(3); return; }
+      if (editingProduct) {
+        if (await saveListingTextBeforeTagging()) setWizardStep(3);
+        return;
+      }
       if (!createdDraftId) {
         await handlePrepareSizeChart();
         return;
@@ -387,6 +448,13 @@ export function createProductWizardActions({
   };
 
   const handleWizardBack = () => setWizardStep(step => Math.max(1, step - 1));
+
+  /** Edit-mode stepper: jumping into step 3 goes through the same save check as "Tiếp tục". */
+  const handleWizardGoTo = async (step: number) => {
+    if (!editingProduct || step === wizardStep) return;
+    if (step === 3 && !(await saveListingTextBeforeTagging())) return;
+    setWizardStep(step);
+  };
 
   const handleWizardFinish = async () => {
     if (!editingProduct && activeTagCodes.length < 1) {
@@ -476,6 +544,6 @@ export function createProductWizardActions({
     loadEditInvSummary, openAddModal, openEditModal, handleDuplicateProduct, handleWizardCancel,
     handleImageChange, removeImage, handleVideoChange, removeVideo, updateVariantRow, removeVariantRow,
     addVariantRow, colorsNeedingImages, handleColorImageChange, removeColorImage, handleWizardFinish,
-    handleWizardBack, handleWizardNext, handlePrepareSizeChart,
+    handleWizardBack, handleWizardNext, handleWizardGoTo, handlePrepareSizeChart,
   };
 }

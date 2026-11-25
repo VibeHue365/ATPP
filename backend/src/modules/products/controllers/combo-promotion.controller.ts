@@ -81,7 +81,8 @@ export class ComboPromotionController {
     @Query('providerId') providerId?: string,
     @Query('priceRange') priceRange?: string,
   ) {
-    if (!user.roles?.some((role) => role.toUpperCase() === 'ADMIN')) throw new ForbiddenException('Admin only');
+    if (!user.roles?.some((role) => role.toUpperCase() === 'ADMIN'))
+      throw new ForbiddenException('Admin only');
     return this.comboService.findAllForAdmin({
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
@@ -99,7 +100,8 @@ export class ComboPromotionController {
     @Param('id') id: string,
     @Body() body: { status: ComboPromotionStatus; reason?: string },
   ) {
-    if (!user.roles?.some((role) => role.toUpperCase() === 'ADMIN')) throw new ForbiddenException('Admin only');
+    if (!user.roles?.some((role) => role.toUpperCase() === 'ADMIN'))
+      throw new ForbiddenException('Admin only');
     return this.comboService.moderate(id, body.status, body.reason, user.sub);
   }
 
@@ -121,10 +123,7 @@ export class ComboPromotionController {
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
-  async delete(
-    @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
-  ) {
+  async delete(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     const provider = await this.getProviderForUser(user.sub, user.email);
     await this.comboService.delete(id, provider._id.toString());
     return { success: true };

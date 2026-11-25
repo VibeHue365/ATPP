@@ -64,22 +64,34 @@ export class ProviderContractApprovalService {
     let staleReason: string | null = null;
     if (active) {
       try {
-        const currentPolicies = await this.snapshots.currentPoliciesForProvider(provider._id);
-        const currentPolicyFingerprint = hashContract(currentPolicies);
-        if (active.policyFingerprint !== currentPolicyFingerprint) {
+        const approvedMech = this.mechanism.getApproved();
+        if (active.mechanismHash !== approvedMech.hash) {
           isStale = true;
-          staleReason = 'POLICY_CHANGED';
+          staleReason = 'MECHANISM_CHANGED';
         }
       } catch {}
+
+      if (!isStale) {
+        try {
+          const currentPolicies =
+            await this.snapshots.currentPoliciesForProvider(provider._id);
+          const currentPolicyFingerprint = hashContract(currentPolicies);
+          if (active.policyFingerprint !== currentPolicyFingerprint) {
+            isStale = true;
+            staleReason = 'POLICY_CHANGED';
+          }
+        } catch {}
+      }
     }
 
-    const calculatedStatus: 'ACTIVE' | 'REVOKED' | 'STALE' | 'NOT_ACCEPTED' = active
-      ? isStale
-        ? 'STALE'
-        : 'ACTIVE'
-      : latestRevoked
-      ? 'REVOKED'
-      : 'NOT_ACCEPTED';
+    const calculatedStatus: 'ACTIVE' | 'REVOKED' | 'STALE' | 'NOT_ACCEPTED' =
+      active
+        ? isStale
+          ? 'STALE'
+          : 'ACTIVE'
+        : latestRevoked
+          ? 'REVOKED'
+          : 'NOT_ACCEPTED';
 
     return {
       providerId: provider._id.toString(),
@@ -208,7 +220,9 @@ export class ProviderContractApprovalService {
   }
 
   private async requireAcceptanceIndex() {
-    const col = contractDb(this.connection).collection('provider_contract_acceptances');
+    const col = contractDb(this.connection).collection(
+      'provider_contract_acceptances',
+    );
     let indexes = await col.indexes();
     let ready = indexes.some(
       (index) =>

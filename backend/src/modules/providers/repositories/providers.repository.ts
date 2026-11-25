@@ -21,7 +21,9 @@ export class ProvidersRepository {
     return this.providerModel.findOne({ userId });
   }
 
-  async findByUserIdWithWallet(userId: Types.ObjectId): Promise<ProviderDocument | null> {
+  async findByUserIdWithWallet(
+    userId: Types.ObjectId,
+  ): Promise<ProviderDocument | null> {
     return this.providerModel
       .findOne({ userId })
       .select('+wallet +paymentAccounts');
@@ -83,7 +85,12 @@ export class ProvidersRepository {
   ): Promise<ProviderScheduleDocument> {
     const result = await this.scheduleModel
       .findOneAndUpdate(
-        { providerId, dayOfWeek, scheduleType: ScheduleType.Recurring, capability: capability ?? null },
+        {
+          providerId,
+          dayOfWeek,
+          scheduleType: ScheduleType.Recurring,
+          capability: capability ?? null,
+        },
         { $set: { workingHours, offDays: [], capability: capability ?? null } },
         { upsert: true, new: true },
       )

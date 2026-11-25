@@ -22,7 +22,12 @@ import type { AuthUser } from '../../common/decorators/current-user.decorator';
 import { AdminStatsService } from './admin-stats.service';
 import { AdminAiAnalyticsService } from './admin-ai-analytics.service';
 
-@Controller(['admin/stats', 'admin-stats', 'api/v1/admin-stats', 'api/v1/admin'])
+@Controller([
+  'admin/stats',
+  'admin-stats',
+  'api/v1/admin-stats',
+  'api/v1/admin',
+])
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 export class AdminStatsController {
   constructor(
@@ -272,6 +277,17 @@ export class AdminStatsController {
   async unbanCustomer(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     this.checkAdminRole(user);
     return this.adminStatsService.unbanCustomer(id);
+  }
+
+  @Patch('customers/:id/unrestrict')
+  @Roles('ADMIN')
+  @Permissions('user:manage')
+  async unrestrictCustomer(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    this.checkAdminRole(user);
+    return this.adminStatsService.unrestrictCustomer(id);
   }
 
   @Patch('bookings/:id/status')

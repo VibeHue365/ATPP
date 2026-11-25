@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  X, Sparkles, Upload, RefreshCw, Download, Settings, Camera, Check, 
+  X, Sparkles, Upload, RefreshCw, Download, Camera, Check,
   Layers, ShieldCheck 
 } from 'lucide-react';
 import { virtualTryOn2DService } from '../../../services/virtualTryOn2DService';
@@ -24,38 +24,28 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
   const [personPreview, setPersonPreview] = useState<string | null>(null);
   const [clothFile, setClothFile] = useState<File | null>(null);
   const [clothPreview, setClothPreview] = useState<string | null>(productImage || null);
-  const [category, setCategory] = useState<'one-pieces' | 'tops' | 'bottoms'>('one-pieces');
+  const category = 'one-pieces';
   
   const [loading, setLoading] = useState(false);
   const [stepMessage, setStepMessage] = useState('');
   const [progressPercent, setProgressPercent] = useState(0);
   
   const [resultImageUrl, setResultImageUrl] = useState<string | null>(null);
-  
   const [processTime, setProcessTime] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'result' | 'original'>('result');
-  
-  // Settings API
-  const [showSettings, setShowSettings] = useState(false);
-  const [apiUrl, setApiUrl] = useState(virtualTryOn2DService.getApiUrl());
-  const [testingConnection, setTestingConnection] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<string | null>(null);
 
   // Danh sach mau anh chan dung mau de test nhanh
   const sampleModels = [
-    { name: 'Mẫu Nữ 1', url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500' },
-    { name: 'Mẫu Nữ 2', url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500' },
-    { name: 'Mẫu Nữ 3', url: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500' },
+    { name: 'Mẫu 1', url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500' },
+    { name: 'Mẫu 2', url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=500' },
+    { name: 'Mẫu 3', url: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500' },
   ];
 
   useEffect(() => {
     if (productImage) {
       setClothPreview(productImage);
-      virtualTryOn2DService.convertUrlToFile(productImage, 'aodai_product.jpg')
-        .then(file => setClothFile(file))
-        .catch(err => console.warn('Could not convert product image to file', err));
     }
-  }, [productImage, isOpen]);
+  }, [productImage]);
 
   if (!isOpen) return null;
 
@@ -81,29 +71,11 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
     setPersonPreview(url);
     setResultImageUrl(null);
     try {
-      const file = await virtualTryOn2DService.convertUrlToFile(url, 'sample_model.jpg');
+      const file = await virtualTryOn2DService.convertUrlToFile(url, 'sample_person.jpg');
       setPersonFile(file);
     } catch (e) {
       console.warn('Could not convert sample model url to file', e);
     }
-  };
-
-  const handleTestConnection = async () => {
-    setTestingConnection(true);
-    setConnectionStatus(null);
-    const res = await virtualTryOn2DService.testConnection(apiUrl);
-    setTestingConnection(false);
-    if (res.ok) {
-      setConnectionStatus(`Kết nối thành công! GPU: ${res.gpu || 'Có sẵn'}`);
-    } else {
-      setConnectionStatus('Không thể kết nối đến API URL này. Hãy kiểm tra lại Cloudflare Tunnel!');
-    }
-  };
-
-  const handleSaveApiUrl = () => {
-    virtualTryOn2DService.setApiUrl(apiUrl);
-    setShowSettings(false);
-    toast.success('Đã lưu cấu hình API thành công!');
   };
 
   const handleStartTryOn = async () => {
@@ -117,18 +89,18 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
     }
 
     setLoading(true);
-    setProgressPercent(20);
-    setStepMessage('Đang phân tích phom người và cấu trúc trang phục Áo Dài...');
+    setProgressPercent(15);
+    setStepMessage('Đang phân tích phom người và cấu trúc Áo Dài...');
 
     const progressTimer = setInterval(() => {
       setProgressPercent(prev => {
-        if (prev < 50) return prev + 10;
+        if (prev < 45) return prev + 10;
         if (prev < 80) {
           setStepMessage('AI đang ghép nếp vải và phom dáng Áo Dài (Fashn-VTON)...');
-          return prev + 6;
+          return prev + 5;
         }
         if (prev < 95) {
-          setStepMessage('Đang tinh chỉnh độ chi tiết và sắc nét của ảnh...');
+          setStepMessage('Đang xử lý chi tiết ánh sáng và tà áo...');
           return prev + 2;
         }
         return prev;
@@ -142,8 +114,8 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
       }
 
       let finalClothFile = clothFile;
-      if (!finalClothFile && productImage) {
-        finalClothFile = await virtualTryOn2DService.convertUrlToFile(productImage, 'cloth.jpg');
+      if (!finalClothFile && clothPreview) {
+        finalClothFile = await virtualTryOn2DService.convertUrlToFile(clothPreview, 'cloth.jpg');
       }
 
       const res = await virtualTryOn2DService.generate2D({
@@ -157,10 +129,9 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
       setProgressPercent(100);
       setStepMessage('Hoàn tất!');
       setResultImageUrl(res.imageUrl);
-      
       setProcessTime(res.timeSeconds || 12);
       setActiveTab('result');
-      toast.success('Thử đồ 2D thành công!');
+      toast.success('Ướm thử Áo Dài thành công!');
     } catch (err: any) {
       clearInterval(progressTimer);
       console.error(err);
@@ -182,9 +153,9 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-stone-900/80 backdrop-blur-md animate-fadeIn">
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-3 sm:p-6 bg-stone-900/80 backdrop-blur-md animate-fadeIn">
       <div 
-        className="relative w-full max-w-5xl bg-white rounded-3xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col max-h-[92vh]"
+        className="relative w-full max-w-5xl bg-white rounded-3xl shadow-2xl border border-stone-200 overflow-hidden flex flex-col max-h-[90vh]"
         style={{ fontFamily: "var(--font-body)" }}
       >
         {/* Header Modal */}
@@ -211,14 +182,6 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setShowSettings(!showSettings)}
-              className="p-2 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-xl transition"
-              title="Cài đặt kết nối AI Server"
-            >
-              <Settings size={20} />
-            </button>
-            <button
-              type="button"
               onClick={onClose}
               className="p-2 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-xl transition"
             >
@@ -226,46 +189,6 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
             </button>
           </div>
         </div>
-
-        {/* Settings Box (Toggle) */}
-        {showSettings && (
-          <div className="p-4 bg-amber-50/50 border-b border-amber-100 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between text-xs">
-            <div className="flex-1 w-full">
-              <label className="font-semibold text-stone-700 block mb-1">
-                Kaggle Cloudflare Tunnel URL:
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={apiUrl}
-                  onChange={(e) => setApiUrl(e.target.value)}
-                  placeholder="https://xxxx.trycloudflare.com"
-                  className="flex-1 px-3 py-1.5 rounded-xl border border-stone-300 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
-                <button
-                  type="button"
-                  onClick={handleTestConnection}
-                  disabled={testingConnection}
-                  className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium rounded-xl transition"
-                >
-                  {testingConnection ? 'Kiểm tra...' : 'Kiểm tra'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveApiUrl}
-                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl transition shadow-sm"
-                >
-                  Lưu
-                </button>
-              </div>
-              {connectionStatus && (
-                <p className={`mt-1.5 font-medium ${connectionStatus.includes('thành công') ? 'text-emerald-600' : 'text-rose-600'}`}>
-                  {connectionStatus}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -285,7 +208,7 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
               </div>
 
               <div className="flex gap-3 items-center">
-                <label className="relative flex-1 h-32 border-2 border-dashed border-stone-300 hover:border-amber-500 rounded-xl bg-white flex flex-col items-center justify-center cursor-pointer transition overflow-hidden group">
+                <label className="relative flex-1 h-28 border-2 border-dashed border-stone-300 hover:border-amber-500 rounded-xl bg-white flex flex-col items-center justify-center cursor-pointer transition overflow-hidden group">
                   <input
                     type="file"
                     accept="image/*"
@@ -317,7 +240,7 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
                       key={idx}
                       type="button"
                       onClick={() => handleSelectSampleModel(m.url)}
-                      className="w-9 h-9 rounded-lg overflow-hidden border border-stone-200 hover:border-amber-500 hover:scale-105 transition"
+                      className="w-8 h-8 rounded-lg overflow-hidden border border-stone-200 hover:border-amber-500 hover:scale-105 transition"
                       title={m.name}
                     >
                       <img src={m.url} alt={m.name} className="w-full h-full object-cover" />
@@ -340,7 +263,7 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
                 )}
               </div>
 
-              <label className="relative w-full h-32 border-2 border-dashed border-stone-300 hover:border-amber-500 rounded-xl bg-white flex flex-col items-center justify-center cursor-pointer transition overflow-hidden group">
+              <label className="relative w-full h-28 border-2 border-dashed border-stone-300 hover:border-amber-500 rounded-xl bg-white flex flex-col items-center justify-center cursor-pointer transition overflow-hidden group">
                 <input
                   type="file"
                   accept="image/*"
@@ -363,32 +286,6 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
                   </div>
                 )}
               </label>
-            </div>
-
-            {/* Box 3: Phân Loại Trang Phục */}
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setCategory('one-pieces')}
-                className={`flex-1 py-2 text-xs font-semibold rounded-xl border transition ${
-                  category === 'one-pieces'
-                    ? 'bg-[#8E1B2E] text-white border-[#8E1B2E] shadow-sm'
-                    : 'bg-white text-stone-600 border-[#EFE8DF] hover:bg-[#FAF8F5]'
-                }`}
-              >
-                Áo Dài Toàn Thân
-              </button>
-              <button
-                type="button"
-                onClick={() => setCategory('tops')}
-                className={`flex-1 py-2 text-xs font-semibold rounded-xl border transition ${
-                  category === 'tops'
-                    ? 'bg-[#8E1B2E] text-white border-[#8E1B2E] shadow-sm'
-                    : 'bg-white text-stone-600 border-[#EFE8DF] hover:bg-[#FAF8F5]'
-                }`}
-              >
-                Áo Cách Tân
-              </button>
             </div>
 
             {/* Nút Thực Hiện */}
@@ -427,7 +324,7 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
           </div>
 
           {/* Cột phải: Xem Kết Quả & So Sánh (7 cols) */}
-          <div className="lg:col-span-7 flex flex-col bg-stone-50 rounded-2xl border border-stone-200 overflow-hidden min-h-[380px]">
+          <div className="lg:col-span-7 flex flex-col bg-stone-50 rounded-2xl border border-stone-200 overflow-hidden min-h-[360px]">
             {/* Header kết quả */}
             <div className="px-4 py-2.5 bg-white border-b border-stone-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -470,13 +367,13 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
             </div>
 
             {/* Vùng hiển thị ảnh */}
-            <div className="flex-1 flex items-center justify-center p-4 relative min-h-[360px]">
+            <div className="flex-1 flex items-center justify-center p-3 relative min-h-[320px]">
               {resultImageUrl ? (
-                <div className="relative w-full h-full flex items-center justify-center max-h-[460px]">
+                <div className="relative w-full h-full flex items-center justify-center">
                   <img
                     src={activeTab === 'result' ? resultImageUrl : (personPreview || '')}
                     alt="TryOn Preview"
-                    className="max-h-[460px] max-w-full object-contain rounded-xl shadow-lg border border-stone-200"
+                    className="max-h-[380px] w-auto max-w-full object-contain rounded-xl shadow-md border border-stone-200"
                   />
                   
                   {activeTab === 'result' && (
@@ -486,9 +383,9 @@ export const VirtualTryOn2DModal: React.FC<VirtualTryOn2DModalProps> = ({
                   )}
                 </div>
               ) : (
-                <div className="text-center p-8 max-w-sm">
-                  <div className="w-14 h-14 rounded-full bg-[#FDF2F4] text-[#8E1B2E] border border-[#F5D3D7] flex items-center justify-center mx-auto mb-3">
-                    <Sparkles size={24} className="text-[#C28E3A]" />
+                <div className="text-center p-6 max-w-sm">
+                  <div className="w-12 h-12 rounded-full bg-[#FDF2F4] text-[#8E1B2E] border border-[#F5D3D7] flex items-center justify-center mx-auto mb-2">
+                    <Sparkles size={22} className="text-[#C28E3A]" />
                   </div>
                   <h4 className="text-sm font-bold text-[#231F20] mb-1">
                     Chưa có kết quả ướm thử

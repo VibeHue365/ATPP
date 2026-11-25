@@ -62,4 +62,26 @@ describe('CreateProductDto (UC-16 Add AoDai, UC-19 Set Costume Deposit)', () => 
     ]);
     await expect(errorFields({ depositAmount: 0 })).resolves.toEqual([]);
   });
+
+  it('enforces market bounds for basePrice, depositAmount, hourlyPrice, and replacementValue', async () => {
+    await expect(errorFields({ basePrice: 40000 })).resolves.toEqual([
+      'basePrice',
+    ]);
+    await expect(errorFields({ basePrice: 12000000 })).resolves.toEqual([
+      'basePrice',
+    ]);
+    await expect(errorFields({ depositAmount: 6000000 })).resolves.toEqual([
+      'depositAmount',
+    ]);
+    await expect(errorFields({ hourlyPrice: 5000 })).resolves.toEqual([
+      'hourlyPrice',
+    ]);
+    await expect(errorFields({ hourlyPrice: 100000 })).resolves.toEqual([]);
+    await expect(errorFields({ replacementValue: 50000 })).resolves.toEqual([
+      'replacementValue',
+    ]);
+    await expect(errorFields({ replacementValue: 1500000 })).resolves.toEqual(
+      [],
+    );
+  });
 });

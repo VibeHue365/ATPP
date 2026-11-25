@@ -47,18 +47,22 @@ async function bootstrap() {
           defaultSrc: ["'self'"],
           scriptSrc: isProduction
             ? ["'self'"]
-            : ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com"],
-          styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-          fontSrc: ["'self'", "https://fonts.gstatic.com"],
+            : ["'self'", "'unsafe-inline'", 'https://cdn.tailwindcss.com'],
+          styleSrc: [
+            "'self'",
+            "'unsafe-inline'",
+            'https://fonts.googleapis.com',
+          ],
+          fontSrc: ["'self'", 'https://fonts.gstatic.com'],
           imgSrc: [
             "'self'",
-            "data:",
-            "blob:",
-            "https://img.vietqr.io",
-            "https://images.unsplash.com",
-            "https://res.cloudinary.com",
+            'data:',
+            'blob:',
+            'https://img.vietqr.io',
+            'https://images.unsplash.com',
+            'https://res.cloudinary.com',
             ...storageDomains,
-            ...(!isProduction ? ["*"] : []),
+            ...(!isProduction ? ['*'] : []),
           ],
           connectSrc: ["'self'"],
           objectSrc: ["'none'"],
@@ -83,8 +87,8 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('VibeHue Platform API')
-    .setDescription('Tài liệu API chính thức của hệ thống VibeHue Platform')
+    .setTitle('TàGo Platform API')
+    .setDescription('Tài liệu API chính thức của hệ thống TàGo Platform')
     .setVersion('1.0.0')
     .addBearerAuth(
       {
@@ -104,7 +108,7 @@ async function bootstrap() {
     swaggerOptions: {
       persistAuthorization: true,
     },
-    customSiteTitle: 'VibeHue API Docs',
+    customSiteTitle: 'TàGo API Docs',
   });
   app.enableShutdownHooks();
   await app.listen(process.env.PORT ?? 3000);

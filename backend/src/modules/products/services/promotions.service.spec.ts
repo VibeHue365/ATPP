@@ -63,7 +63,11 @@ describe('PromotionsService', () => {
   it('updates normalized code and date fields only for the owner', async () => {
     const { service, model } = create();
     const updated = { _id: promotionId, code: 'NEWCODE' };
-    model.findById.mockResolvedValue({ _id: promotionId, providerId, usedCount: 0 });
+    model.findById.mockResolvedValue({
+      _id: promotionId,
+      providerId,
+      usedCount: 0,
+    });
     model.findByIdAndUpdate.mockResolvedValue(updated);
     await expect(
       service.updatePromotion(promotionId.toString(), providerId.toString(), {

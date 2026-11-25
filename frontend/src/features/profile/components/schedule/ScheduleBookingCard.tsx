@@ -13,6 +13,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { ImageWithFallback } from '../../../../shared/media/ImageWithFallback';
+import { getBookingStatusMeta } from '../../../../utils/bookingStatus';
 import '../ProfilePage.css';
 
 interface ScheduleBookingCardProps {
@@ -41,21 +42,50 @@ export const ScheduleBookingCard: React.FC<ScheduleBookingCardProps> = ({
   const prodItem = booking.items?.find((i: any) => i.itemType === 'PRODUCT' || i.productId);
   const pkgItem = booking.items?.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId);
 
-  const item = (isCombo ? prodItem : null) || booking.items?.[0] || {};
+  const items = booking.items || [];
+  const item = (isCombo ? prodItem : null) || items[0] || {};
   const isPhoto = !isCombo && item.itemType === 'PHOTOGRAPHY_PACKAGE';
   const pkgObj = (isCombo ? pkgItem?.photographyPackageId : item.photographyPackageId) && typeof (isCombo ? pkgItem?.photographyPackageId : item.photographyPackageId) === 'object' ? (isCombo ? pkgItem.photographyPackageId : item.photographyPackageId) : null;
   const prodObj = (isCombo ? prodItem?.productId : (!isPhoto && item.productId)) && typeof (isCombo ? prodItem?.productId : item.productId) === 'object' ? (isCombo ? prodItem.productId : item.productId) : null;
 
-  const itemName = isCombo
-    ? (booking.comboName || (pkgObj?.name && prodObj?.name ? `${pkgObj.name} • ${prodObj.name}` : null) || booking.name || 'Combo Áo Dài & Chụp Ảnh Nghệ Thuật')
-    : (prodObj?.name || pkgObj?.name || item.name || (isPhoto ? 'Gói Chụp Ảnh Cổ Phong' : 'Áo Dài Nhật Bình'));
+  let itemName = '';
+  if (isCombo) {
+    itemName = booking.comboName || (pkgObj?.name && prodObj?.name ? `${pkgObj.name} • ${prodObj.name}` : null) || booking.name || 'Combo Áo Dài & Chụp Ảnh Nghệ Thuật';
+  } else {
+    const uniqueNames: string[] = [];
+    items.forEach((i: any) => {
+      const p = !isPhoto && i.productId && typeof i.productId === 'object' ? i.productId : null;
+      const k = isPhoto && i.photographyPackageId && typeof i.photographyPackageId === 'object' ? i.photographyPackageId : null;
+      const n = p?.name || k?.name || i.packageSnapshot?.name || i.name || i.productName;
+      if (n && !uniqueNames.includes(n)) uniqueNames.push(n);
+    });
+    const totalQty = items.reduce((sum: number, i: any) => sum + (Number(i.quantity) || 1), 0);
+    if (uniqueNames.length === 1) {
+      itemName = totalQty > 1 ? `${uniqueNames[0]} (x${totalQty})` : uniqueNames[0];
+    } else if (uniqueNames.length > 1) {
+      itemName = `${uniqueNames[0]} + ${items.length - 1} sản phẩm khác`;
+    } else {
+      itemName = prodObj?.name || pkgObj?.name || item.name || (isPhoto ? 'Gói Chụp Ảnh Cổ Phong' : 'Áo Dài Nhật Bình');
+    }
+  }
   const itemImage = prodObj?.images?.[0] || pkgObj?.coverImage || item.image || item.productImage;
   const providerName =
     booking.providerIds?.[0]?.businessName ||
     booking.providerIds?.[0]?.fullName ||
     item.providerId?.businessName ||
     item.providerId?.fullName ||
-    'Đối tác LUMÉ';
+    'Đối tác TàGo';
+
+  const activePhotoSchedule = Array.isArray(booking.schedules)
+    ? booking.schedules.find(
+        (s: any) =>
+          s?.scheduleType === 'PHOTOSHOOT' &&
+          s?.status !== 'CANCELLED' &&
+          s?.status !== 'EXPIRED',
+      ) || booking.schedules.find((s: any) => s?.scheduleType === 'PHOTOSHOOT')
+    : null;
+  const assignedStaffName: string | null =
+    activePhotoSchedule?.assignedStaffSnapshot?.name || null;
 
   // Date formatting
   const rawDate = item.shootDate || item.startDate || item.rentalFrom || booking.startDate;
@@ -71,28 +101,11 @@ export const ScheduleBookingCard: React.FC<ScheduleBookingCardProps> = ({
     'TP. Huế';
 
   // Status info
-  const statusConfig: Record<string, { label: string; bg: string; color: string }> = {
-    CONFIRMED: { label: isCombo ? 'SẮP DIỄN RA' : (isPhoto ? 'SẮP CHỤP' : 'SẮP NHẬN'), bg: '#EFF6FF', color: '#1D4ED8' },
-    DEPOSIT_PAID: { label: 'CHỜ DUYỆT', bg: '#FFFBEB', color: '#B45309' },
-    PENDING_PAYMENT: { label: 'CHỜ CỌC', bg: '#FEF3C7', color: '#B45309' },
-    PICKUP_PENDING: { label: 'CHỜ NHẬN ĐỒ', bg: '#F5EEF8', color: '#8E44AD' },
-    PICKED_UP: { label: isCombo ? 'ĐANG TRẢI NGHIỆM' : (isPhoto ? 'ĐANG CHỤP' : 'ĐANG THUÊ'), bg: '#ECFDF5', color: '#047857' },
-    IN_PROGRESS: { label: isCombo ? 'ĐANG CHỤP ẢNH' : (isPhoto ? 'ĐANG CHỤP' : 'ĐANG THUÊ'), bg: '#ECFDF5', color: '#047857' },
-    AWAITING_REVIEW: { label: 'CHỜ DUYỆT ẢNH', bg: '#FEF3C7', color: '#B45309' },
-    COMBO_PHOTOS_APPROVED: { label: 'ĐÃ DUYỆT ẢNH', bg: '#E0F2FE', color: '#0369A1' },
-    RETURN_PENDING: { label: 'CHỜ TRẢ ĐỒ', bg: '#FEF9E7', color: '#F39C12' },
-    RETURNED: { label: isCombo ? 'HOÀN TẤT' : (isPhoto ? 'HOÀN TẤT' : 'ĐÃ TRẢ'), bg: '#F2F4F4', color: '#574D4F' },
-    COMPLETED: { label: 'HOÀN TẤT', bg: '#E8F8F5', color: '#27AE60' },
-    CANCELLED: { label: 'ĐÃ HỦY', bg: '#FDEDEC', color: '#C0392B' },
-    DISPUTED: { label: 'TRANH CHẤP', bg: '#FEF2F2', color: '#DC2626' },
-    PARTIALLY_REFUNDED: { label: 'ĐÃ HOÀN TIỀN', bg: '#F3F4F6', color: '#4B5563' },
-    REFUNDED: { label: 'ĐÃ HOÀN TIỀN', bg: '#F3F4F6', color: '#4B5563' }
-  };
-
-  const currentStatus = statusConfig[booking.status] || {
-    label: booking.status || 'ĐANG XỬ LÝ',
-    bg: '#F2F4F4',
-    color: '#574D4F'
+  const meta = getBookingStatusMeta(booking.status);
+  const currentStatus = {
+    label: meta.label.toUpperCase(),
+    bg: meta.bg,
+    color: meta.color,
   };
 
   // Pricing
@@ -171,8 +184,25 @@ export const ScheduleBookingCard: React.FC<ScheduleBookingCardProps> = ({
             </span>
           </div>
 
-          {/* Additional details: size / color or countdown pill */}
+          {/* Additional details: size / color, assigned photographer, or countdown pill */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
+            {(isPhoto || isCombo) && (
+              <span
+                style={{
+                  fontSize: '11.5px',
+                  color: assignedStaffName ? '#8E1B2E' : '#B45309',
+                  background: assignedStaffName ? '#FDF2F4' : '#FFFBEB',
+                  border: `1px solid ${assignedStaffName ? '#F5D0D6' : '#FDE68A'}`,
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  fontWeight: 700,
+                }}
+              >
+                {assignedStaffName
+                  ? `Thợ chụp: ${assignedStaffName}`
+                  : 'Chờ Studio phân công thợ'}
+              </span>
+            )}
             {!isPhoto && (item.selectedSize || item.size) && (
               <span style={{ fontSize: '11.5px', color: '#7D736B', background: '#F5EFE6', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
                 Size: {item.selectedSize || item.size}

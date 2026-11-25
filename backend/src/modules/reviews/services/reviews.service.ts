@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
+
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
-/* eslint-disable @typescript-eslint/restrict-template-expressions */
+
 import {
   BadRequestException,
   Injectable,
@@ -137,8 +137,12 @@ export class ReviewsService {
 
     // Recalculate ratings
     await this.updateProviderRating(providerId);
-    let targetProductId = dto.productId ? new Types.ObjectId(dto.productId) : null;
-    let targetPkgId = dto.photographyPackageId ? new Types.ObjectId(dto.photographyPackageId) : null;
+    let targetProductId = dto.productId
+      ? new Types.ObjectId(dto.productId)
+      : null;
+    let targetPkgId = dto.photographyPackageId
+      ? new Types.ObjectId(dto.photographyPackageId)
+      : null;
     if (!targetProductId && !targetPkgId) {
       const bItem = await this.bookingItemModel.findById(bookingItemId);
       if (bItem?.productId) targetProductId = bItem.productId;
@@ -477,23 +481,35 @@ export class ReviewsService {
     const reviews = await this.reviewModel
       .find({ isReported: true })
       .populate('customerId', 'profile.fullName auth.email profile.avatarUrl')
-      .populate('providerId', 'businessName partnerCode media.logoUrl media.coverUrl profile.avatarUrl')
+      .populate(
+        'providerId',
+        'businessName partnerCode media.logoUrl media.coverUrl profile.avatarUrl',
+      )
       .populate('bookingId', 'bookingCode createdAt customerId')
       .populate({
         path: 'bookingItemId',
         select: 'name coverImage productId photographyPackageId',
         populate: [
           { path: 'productId', select: 'name coverImage images media' },
-          { path: 'photographyPackageId', select: 'name coverImage coverImageUrl images media' },
+          {
+            path: 'photographyPackageId',
+            select: 'name coverImage coverImageUrl images media',
+          },
         ],
       })
       .sort({ reportedAt: -1, createdAt: -1 })
       .exec();
 
     const total = reviews.length;
-    const pending = reviews.filter((r) => !r.reportStatus || r.reportStatus === 'PENDING').length;
-    const underReview = reviews.filter((r) => r.reportStatus === 'UNDER_REVIEW').length;
-    const resolved = reviews.filter((r) => r.reportStatus === 'RESOLVED' || r.reportStatus === 'DISMISSED').length;
+    const pending = reviews.filter(
+      (r) => !r.reportStatus || r.reportStatus === 'PENDING',
+    ).length;
+    const underReview = reviews.filter(
+      (r) => r.reportStatus === 'UNDER_REVIEW',
+    ).length;
+    const resolved = reviews.filter(
+      (r) => r.reportStatus === 'RESOLVED' || r.reportStatus === 'DISMISSED',
+    ).length;
     const hidden = reviews.filter((r) => r.isHidden === true).length;
 
     return {
@@ -542,14 +558,18 @@ export class ReviewsService {
       review.historyTimeline = [];
     }
 
-    const effectiveReason = reason?.trim() || 'Xử lý bởi quản trị viên hệ thống';
+    const effectiveReason =
+      reason?.trim() || 'Xử lý bởi quản trị viên hệ thống';
 
     if (action === 'DELETE' || action === 'HIDE' || action === 'CONFIRM') {
       review.isHidden = true;
       review.reportStatus = 'RESOLVED';
       review.historyTimeline.push({
         timestamp: new Date(),
-        title: action === 'CONFIRM' ? 'Admin xác nhận vi phạm' : 'Admin đã ẩn/gỡ đánh giá',
+        title:
+          action === 'CONFIRM'
+            ? 'Admin xác nhận vi phạm'
+            : 'Admin đã ẩn/gỡ đánh giá',
         description: effectiveReason,
       });
       await review.save();
@@ -583,7 +603,9 @@ export class ReviewsService {
       review.historyTimeline.push({
         timestamp: new Date(),
         title: 'Admin bỏ qua báo cáo',
-        description: effectiveReason || 'Báo cáo không vi phạm tiêu chuẩn, giữ nguyên đánh giá.',
+        description:
+          effectiveReason ||
+          'Báo cáo không vi phạm tiêu chuẩn, giữ nguyên đánh giá.',
       });
       await review.save();
 
@@ -601,7 +623,9 @@ export class ReviewsService {
       review.historyTimeline.push({
         timestamp: new Date(),
         title: 'Admin chuyển sang trạng thái đang xem xét',
-        description: effectiveReason || 'Đang tiến hành đối soát và xác minh nội dung báo cáo.',
+        description:
+          effectiveReason ||
+          'Đang tiến hành đối soát và xác minh nội dung báo cáo.',
       });
       await review.save();
     }

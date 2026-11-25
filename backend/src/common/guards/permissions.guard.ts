@@ -1,4 +1,9 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthUser } from '../decorators/current-user.decorator';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';

@@ -68,7 +68,9 @@ describe('Phase 2A: ContractTierEvaluator Unit Tests', () => {
       expect(result.presentationMode).toBe('DETAILED');
       expect(result.isEligible).toBe(true);
       expect(result.effectiveOrderAmount).toBe(150000);
-      expect(result.appliedRule).toBe('ORDER_AMOUNT_EXCEEDS_PROVIDER_THRESHOLD');
+      expect(result.appliedRule).toBe(
+        'ORDER_AMOUNT_EXCEEDS_PROVIDER_THRESHOLD',
+      );
       expect(result.riskTriggers).toHaveLength(0);
     });
 
@@ -85,7 +87,9 @@ describe('Phase 2A: ContractTierEvaluator Unit Tests', () => {
       expect(result.presentationMode).toBe('DETAILED');
       expect(result.isEligible).toBe(true);
       expect(result.effectiveOrderAmount).toBe(150000);
-      expect(result.appliedRule).toBe('ORDER_AMOUNT_EXCEEDS_PROVIDER_THRESHOLD');
+      expect(result.appliedRule).toBe(
+        'ORDER_AMOUNT_EXCEEDS_PROVIDER_THRESHOLD',
+      );
     });
 
     it('evaluates to DETAILED when threshold is 0 (all orders detailed)', () => {
@@ -98,7 +102,9 @@ describe('Phase 2A: ContractTierEvaluator Unit Tests', () => {
 
       const result = evaluator.evaluate(input);
       expect(result.presentationMode).toBe('DETAILED');
-      expect(result.appliedRule).toBe('ORDER_AMOUNT_EXCEEDS_PROVIDER_THRESHOLD');
+      expect(result.appliedRule).toBe(
+        'ORDER_AMOUNT_EXCEEDS_PROVIDER_THRESHOLD',
+      );
     });
   });
 
@@ -199,7 +205,9 @@ describe('Phase 2A: ContractTierEvaluator Unit Tests', () => {
         'CONTRACT_PRODUCT_REPLACEMENT_VALUE_MISSING',
       );
       expect(result.ineligibleProductId).toBe('prod-no-val');
-      expect(result.appliedRule).toBe('INELIGIBLE_MISSING_REQUIRED_ASSET_VALUE');
+      expect(result.appliedRule).toBe(
+        'INELIGIBLE_MISSING_REQUIRED_ASSET_VALUE',
+      );
       expect(result.riskTriggers).toContain('MISSING_REPLACEMENT_VALUE');
       // Never fabricates rentalPrice or deposit as replacementValue
       expect(result.totalAssetValue).toBeNull();

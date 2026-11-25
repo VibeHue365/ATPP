@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   View,
   Text,
   StyleSheet,
@@ -9,6 +11,7 @@ import {
   TextInput,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
@@ -21,6 +24,7 @@ export type PackageComboModalMode = 'PACKAGE' | 'COMBO' | null;
 
 interface PackageAndComboFormModalProps {
   visible: boolean;
+  asScreen?: boolean;
   mode: PackageComboModalMode;
   editingItem?: any | null;
   products: any[];
@@ -31,6 +35,7 @@ interface PackageAndComboFormModalProps {
 
 export function PackageAndComboFormModal({
   visible,
+  asScreen = false,
   mode,
   editingItem,
   products,
@@ -120,15 +125,26 @@ export function PackageAndComboFormModal({
       } else {
         setComboName('');
         setComboDesc('Trọn gói thuê cổ phục cao cấp + Chụp ảnh ngoại cảnh Cố đô');
-        setSelectedProductId(products[0]?._id || '');
-        setSelectedPackageId(packages[0]?._id || '');
+        setSelectedProductId((prev) => prev || products[0]?._id || '');
+        setSelectedPackageId((prev) => prev || packages[0]?._id || '');
         setComboDiscount('20');
         setComboMaxUsage('20');
         setAoDaiQty('1');
         setShootPeople('1');
       }
     }
-  }, [visible, mode, editingItem, products, packages]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, mode, editingItem]);
+
+  useEffect(() => {
+    if (!visible || mode !== 'COMBO' || editingItem) return;
+    if (!selectedProductId && products[0]?._id) {
+      setSelectedProductId(String(products[0]._id));
+    }
+    if (!selectedPackageId && packages[0]?._id) {
+      setSelectedPackageId(String(packages[0]._id));
+    }
+  }, [visible, mode, editingItem, products, packages, selectedProductId, selectedPackageId]);
 
   const handlePickPackagePhotos = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -271,72 +287,69 @@ export function PackageAndComboFormModal({
 
   if (!mode) return null;
 
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <View style={styles.backdrop}>
-        <Pressable style={styles.backdropFill} onPress={onClose} />
-
-        <View style={styles.sheet}>
-          <View style={styles.handle} />
-
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.eyebrow}>
-                {mode === 'PACKAGE' ? 'DỊCH VỤ NHIẾP ẢNH TÀGO' : 'GÓI COMBO ƯU ĐÃI'}
-              </Text>
-              <Text style={styles.title}>
-                {mode === 'PACKAGE'
-                  ? editingItem
-                    ? 'Chỉnh sửa Gói chụp ảnh'
-                    : 'Thêm Gói chụp ảnh mới'
-                  : editingItem
-                    ? 'Chỉnh sửa Gói Combo'
-                    : 'Ghép Gói Combo mới'}
-              </Text>
-            </View>
-            <Pressable style={styles.closeBtn} onPress={onClose}>
-              <Ionicons name="close" size={20} color="#1B1C1C" />
-            </Pressable>
+  const content = (
+    <SafeAreaView style={styles.fullScreenRoot} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Pressable style={styles.backBtn} onPress={onClose} hitSlop={8}>
+            <Ionicons name="arrow-back" size={20} color="#1B1C1C" />
+          </Pressable>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.eyebrow}>
+              {mode === 'PACKAGE' ? 'DỊCH VỤ NHIẾP ẢNH TÀGO' : 'GÓI COMBO ƯU ĐÃI'}
+            </Text>
+            <Text style={styles.title}>
+              {mode === 'PACKAGE'
+                ? editingItem
+                  ? 'Chỉnh sửa Gói chụp ảnh'
+                  : 'Thêm Gói chụp ảnh mới'
+                : editingItem
+                  ? 'Chỉnh sửa Gói Combo'
+                  : 'Ghép Gói Combo mới'}
+            </Text>
           </View>
+          <Pressable style={styles.closeBtn} onPress={onClose}>
+            <Ionicons name="close" size={20} color="#1B1C1C" />
+          </Pressable>
+        </View>
 
-          <ScrollView
-            style={styles.body}
-            contentContainerStyle={styles.bodyContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            {mode === 'PACKAGE' ? (
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Ảnh bìa & Ảnh mẫu gói chụp</Text>
-                <Pressable
-                  style={styles.uploadBtn}
-                  onPress={() => void handlePickPackagePhotos()}
-                  disabled={uploadingImage}
+        <ScrollView
+          style={styles.body}
+          contentContainerStyle={styles.bodyContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {mode === 'PACKAGE' ? (
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Ảnh bìa & Ảnh mẫu gói chụp</Text>
+              <Pressable
+                style={styles.uploadBtn}
+                onPress={() => void handlePickPackagePhotos()}
+                disabled={uploadingImage}
+              >
+                {uploadingImage ? (
+                  <ActivityIndicator size="small" color="#BA0049" />
+                ) : (
+                  <>
+                    <Ionicons name="images-outline" size={17} color="#BA0049" />
+                    <Text style={styles.uploadBtnText}>
+                      Tải ảnh mẫu buổi chụp từ điện thoại
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+
+              {pkgImages.length > 0 && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ flexGrow: 0, flexShrink: 0 }}
+                  contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
                 >
-                  {uploadingImage ? (
-                    <ActivityIndicator size="small" color="#BA0049" />
-                  ) : (
-                    <>
-                      <Ionicons name="images-outline" size={17} color="#BA0049" />
-                      <Text style={styles.uploadBtnText}>
-                        Tải ảnh mẫu buổi chụp từ điện thoại
-                      </Text>
-                    </>
-                  )}
-                </Pressable>
-
-                {pkgImages.length > 0 && (
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
-                  >
                     {pkgImages.map((u, idx) => (
                       <View key={`${u}-${idx}`} style={styles.thumbWrap}>
                         <Image
@@ -482,6 +495,7 @@ export function PackageAndComboFormModal({
                     <ScrollView
                       horizontal
                       showsHorizontalScrollIndicator={false}
+                      style={{ flexGrow: 0, flexShrink: 0 }}
                       contentContainerStyle={styles.selectorRow}
                     >
                       {products.map((p) => {
@@ -623,48 +637,48 @@ export function PackageAndComboFormModal({
               </View>
             )}
           </ScrollView>
-        </View>
-      </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+
+  if (asScreen) {
+    return content;
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      {content}
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
+  fullScreenRoot: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  backdropFill: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-  },
-  sheet: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    maxHeight: '88%',
-    paddingBottom: 24,
-  },
-  handle: {
-    width: 42,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: '#E2E8F0',
-    alignSelf: 'center',
-    marginTop: 10,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    gap: 10,
+    paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
+    flexShrink: 0,
+  },
+  backBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F5F3F3',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   eyebrow: {
     fontSize: 10,
@@ -686,6 +700,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   body: {
+    flex: 1,
     paddingHorizontal: 20,
   },
   bodyContent: {

@@ -23,6 +23,7 @@ import {
   Play,
   Printer,
   Send,
+  Shield,
   ShieldCheck,
   Shirt,
   Sparkles,
@@ -33,6 +34,8 @@ import {
 import type { Order } from '../types';
 import traditionalAoDaiImg from '../../../../assets/images/onboarding_traditional.webp';
 import { RentalEvidenceImage } from '../../../rentals/components/RentalEvidenceImage';
+import { OrderStaffAssignmentCard } from './OrderStaffAssignmentCard';
+import { getRentalFulfillmentMeta, normalizeBookingStatusCode } from '../../../../utils/bookingStatus';
 import { BookingContractsSection } from '../../../../components/contracts/BookingContractsSection';
 import Swal from 'sweetalert2';
 import { httpClient } from '../../../../services/httpClient';
@@ -53,6 +56,27 @@ interface OrderDetailDrawerProps {
   fetchOrders?: (silent?: boolean, force?: boolean) => Promise<void>;
 }
 
+// BookingItem is persisted with `rentalFrom` / `rentalTo`.  Some older
+// responses used `rentalStartDate` / `rentalEndDate`, so read both shapes
+// while the provider UI is displaying historic bookings as well.
+const getRentalFrom = (item: any) =>
+  item?.rentalFrom || item?.rentalStartDate || item?.rentalFulfillment?.rentalFrom || null;
+
+const getRentalTo = (item: any) =>
+  item?.rentalTo || item?.rentalEndDate || item?.rentalFulfillment?.rentalTo || null;
+
+const formatBookingDate = (value: unknown) => {
+  if (!value) return null;
+  const date = new Date(value as string | number | Date);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'Asia/Ho_Chi_Minh',
+  }).format(date);
+};
+
 export function OrderDetailDrawer({
   order,
   orders,
@@ -66,6 +90,7 @@ export function OrderDetailDrawer({
   toast,
   fetchOrders,
 }: OrderDetailDrawerProps) {
+  void onOpenFulfillmentModal;
   const [isMaximized, setIsMaximized] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'details' | 'schedule' | 'payment' | 'incidents'>('overview');
   const [selectedEvidenceImage, setSelectedEvidenceImage] = useState<string | null>(null);
@@ -73,11 +98,75 @@ export function OrderDetailDrawer({
   const [isConfirming, setIsConfirming] = useState(false);
   const [internalNoteInput, setInternalNoteInput] = useState('');
   const [internalNotesList, setInternalNotesList] = useState<Array<{ author: string; time: string; text: string }>>([
-    { author: 'Hệ thống VibeHue Escrow', time: order?.orderDate || 'Khi xác nhận', text: 'Khách hàng hoàn tất đặt cọc qua VibeHue Escrow. Đơn được xác nhận tự động.' },
+    { author: 'Hệ thống TàGo Escrow', time: order?.orderDate || 'Khi xác nhận', text: 'Khách hàng hoàn tất đặt cọc qua TàGo Escrow. Đơn được xác nhận tự động.' },
   ]);
   const [locallySubmittedPickupIds, setLocallySubmittedPickupIds] = useState<Set<string>>(new Set());
   const [locallyReturnedIds, setLocallyReturnedIds] = useState<Set<string>>(new Set());
   const [locallySettledIds, setLocallySettledIds] = useState<Set<string>>(new Set());
+  const [identityCardInfo, setIdentityCardInfo] = useState<{
+    hasIdentityCard?: boolean;
+    hasFrontImage?: boolean;
+    hasBackImage?: boolean;
+    fullName?: string | null;
+    idNumberMasked?: string | null;
+  } | null>(null);
+  const [cccdPreviewUrls, setCccdPreviewUrls] = useState<{ front?: string; back?: string }>({});
+
+  useEffect(() => {
+    if (!order?._id) {
+      setIdentityCardInfo(null);
+      setCccdPreviewUrls({});
+      return;
+    }
+    let isSubscribed = true;
+    const createdUrls: string[] = [];
+
+    httpClient
+      .get<any>(`/api/bookings/${order._id}/customer-identity`)
+      .then(async (res) => {
+        if (!isSubscribed) return;
+        setIdentityCardInfo(res || null);
+        if (res?.hasIdentityCard) {
+          const urls: { front?: string; back?: string } = {};
+          if (res.hasFrontImage) {
+            try {
+              const blob = await httpClient.getBlob(`/api/bookings/${order._id}/customer-identity/image/front`);
+              const u = URL.createObjectURL(blob);
+              createdUrls.push(u);
+              urls.front = u;
+            } catch {
+              // ignore
+            }
+          }
+          if (res.hasBackImage) {
+            try {
+              const blob = await httpClient.getBlob(`/api/bookings/${order._id}/customer-identity/image/back`);
+              const u = URL.createObjectURL(blob);
+              createdUrls.push(u);
+              urls.back = u;
+            } catch {
+              // ignore
+            }
+          }
+          if (isSubscribed) {
+            setCccdPreviewUrls(urls);
+          }
+        } else {
+          setCccdPreviewUrls({});
+        }
+      })
+      .catch(() => {
+        if (isSubscribed) {
+          setIdentityCardInfo(null);
+          setCccdPreviewUrls({});
+        }
+      });
+
+    return () => {
+      isSubscribed = false;
+      createdUrls.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [order?._id, (order as any)?.updatedAt]);
 
   // Keyboard shortcut Esc to close
   useEffect(() => {
@@ -161,7 +250,7 @@ export function OrderDetailDrawer({
   );
 
   const copyOrderId = () => {
-    const code = order.id || `#VH-${order._id.slice(-5).toUpperCase()}`;
+    const code = order.id || `#TG-${order._id.slice(-5).toUpperCase()}`;
     navigator.clipboard.writeText(code);
     toast.success('Đã sao chép mã đơn: ' + code);
   };
@@ -169,10 +258,16 @@ export function OrderDetailDrawer({
   const isCombo = order.bookingType === 'COMBO';
   const isPhoto = order.bookingType === 'PHOTOGRAPHY';
   const isAoDai = !isCombo && !isPhoto;
-  const rawStatus = (order.rawStatus || '').toUpperCase();
-  const isOrderCompleted = rawStatus === 'COMPLETED' || (order.status || '').toUpperCase() === 'HOÀN THÀNH' || (order.status || '').toUpperCase() === 'COMPLETED';
-  const isCancelled = rawStatus === 'CANCELLED' || (order.status || '').toUpperCase() === 'ĐÃ HỦY' || (order.status || '').toUpperCase() === 'CANCELLED';
+  const normalizedStatus = normalizeBookingStatusCode(order.rawStatus || order.status);
+  const rawStatus = normalizedStatus || order.rawStatus || '';
+  const isOrderCompleted = normalizedStatus === 'COMPLETED';
+  const isCancelled = normalizedStatus === 'CANCELLED';
   const primaryItem = order.items?.[0];
+  const primaryRentalItem = order.items?.find((item: any) =>
+    item?.itemType === 'PRODUCT' || item?.productId || (!item?.itemType && !item?.photographyPackageId),
+  ) || primaryItem;
+  const rentalFrom = getRentalFrom(primaryRentalItem);
+  const rentalTo = getRentalTo(primaryRentalItem);
   const rf = primaryItem?.rentalFulfillment;
   const photoItem = order.items?.find((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId);
   const photoSchedule = (order.schedules || []).find((s: any) => s.scheduleType === 'PHOTOSHOOT');
@@ -237,6 +332,7 @@ export function OrderDetailDrawer({
     rawStatus === 'DISPUTED';
 
   const isSingleCleaning =
+    ['RETURNED', 'COMPLETED'].includes(singleFulfillmentStatus) &&
     (singleRf?.inventoryStatus === 'CLEANING' ||
       singleRentalItem?.inventoryItem?.status === 'CLEANING' ||
       (singleFulfillmentStatus === 'RETURNED' && isSingleSettledLocally)) &&
@@ -270,6 +366,7 @@ export function OrderDetailDrawer({
   const isSingleInUse =
     isSingleRentalItem &&
     (singleFulfillmentStatus === 'PICKED_UP' || rawStatus === 'PICKED_UP') &&
+    !['RETURNED', 'COMPLETED', 'CANCELLED', 'OVERDUE', 'LOST_ITEM'].includes(rawStatus) &&
     singleFulfillmentStatus !== 'CUSTOMER_RETURN_REQUESTED' &&
     !isCustomerReturnPending &&
     !isSingleReturnedAndInspecting &&
@@ -333,9 +430,9 @@ export function OrderDetailDrawer({
       { label: 'Chuẩn bị áo', key: 'PREPARE_PENDING', time: rf?.readyAt ? formatShortTime(rf.readyAt) : 'Chuẩn bị' },
       { label: 'Khách nhận áo', key: 'PICKUP_PENDING', time: rf?.pickedUpAt ? formatShortTime(rf.pickedUpAt) : (rf?.pickupDueAt ? formatShortTime(rf.pickupDueAt) : 'Nhận đồ') },
       { label: 'Đang chụp', key: 'IN_PROGRESS', time: shootDate ? formatShortTime(shootDate) : 'Chụp ảnh', icon: Camera },
-      { label: 'Khách trả áo', key: 'RETURN_PENDING', time: rf?.returnedAt ? formatShortTime(rf.returnedAt) : (rf?.returnDueAt ? formatShortTime(rf.returnDueAt) : 'Trả đồ') },
       { label: 'Bàn giao ảnh', key: 'AWAITING_REVIEW', time: (order.deliveredPhotos?.length || order.deliveryDriveUrl || ['AWAITING_REVIEW', 'COMBO_PHOTOS_APPROVED', 'COMPLETED'].includes(rawStatus) || isOrderCompleted) ? 'Đã giao' : 'Trả ảnh' },
       { label: 'Khách duyệt ảnh', key: 'COMBO_PHOTOS_APPROVED', time: (order.photosApproved || isOrderCompleted) ? 'Đã duyệt' : 'Chờ duyệt', icon: Sparkles },
+      { label: 'Khách trả áo', key: 'RETURN_PENDING', time: rf?.returnedAt ? formatShortTime(rf.returnedAt) : (rf?.returnDueAt ? formatShortTime(rf.returnDueAt) : 'Trả đồ') },
       { label: 'Hoàn tất', key: 'COMPLETED', time: rawStatus === 'COMPLETED' ? (formatShortTime(rf?.completedAt, order.updatedDate || 'Hoàn tất')) : 'Dự kiến' },
     ];
   }, [isAoDai, isPhoto, order, rf, shootDate, rawStatus, isOrderCompleted]);
@@ -375,15 +472,17 @@ export function OrderDetailDrawer({
       return 0;
     }
 
-    // COMBO
+    // COMBO:
+    // 0: Xác nhận | 1: Chuẩn bị áo | 2: Khách nhận áo | 3: Đang chụp | 4: Bàn giao ảnh | 5: Khách duyệt ảnh | 6: Khách trả áo | 7: Hoàn tất
     if (rawStatus === 'PENDING' || rawStatus === 'PENDING_PAYMENT') return 0;
     if (rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') return 1;
     if (rawStatus === 'PICKUP_PENDING') return 2;
     if (rawStatus === 'PICKED_UP') return 3;
     if (rawStatus === 'IN_PROGRESS') return 3;
-    if (rawStatus === 'RETURN_PENDING' || rawStatus === 'RETURNED') return 4;
-    if (rawStatus === 'AWAITING_REVIEW') return 5;
-    if (rawStatus === 'COMBO_PHOTOS_APPROVED' || order.photosApproved) return 6;
+    if (rawStatus === 'AWAITING_REVIEW') return 4;
+    if (rawStatus === 'COMBO_PHOTOS_APPROVED') return 6; // Đã duyệt ảnh -> đang chờ trả áo & nhận lại
+    if (rawStatus === 'RETURN_PENDING' || rawStatus === 'RETURNED') return 6;
+    if (rawStatus === 'COMPLETED') return 7;
     return 0;
   }, [isOrderCompleted, isAoDai, isPhoto, rawStatus, masterSteps.length, order.photosApproved]);
 
@@ -391,12 +490,28 @@ export function OrderDetailDrawer({
 
   // Sub-steppers: clean sequential progress without broken gaps
   let aoDaiCurrentIdx = 2;
-  if (isOrderCompleted) aoDaiCurrentIdx = 5;
-  else if (rawStatus === 'PENDING' || rawStatus === 'PENDING_PAYMENT' || rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') aoDaiCurrentIdx = 0;
-  else if (rawStatus === 'PICKUP_PENDING') aoDaiCurrentIdx = 1;
-  else if (rawStatus === 'PICKED_UP' || rawStatus === 'IN_PROGRESS' || rawStatus === 'AWAITING_REVIEW') aoDaiCurrentIdx = 2;
-  else if (rawStatus === 'RETURN_PENDING') aoDaiCurrentIdx = 3;
-  else if (rawStatus === 'RETURNED' || rawStatus === 'COMBO_PHOTOS_APPROVED') aoDaiCurrentIdx = 4;
+  const allRentalsReturned = rentalItems.length > 0 && rentalItems.every((i) => ['RETURNED', 'COMPLETED'].includes(i.rentalFulfillment?.status));
+  const allRentalsRequested = rentalItems.length > 0 && rentalItems.every((i) => ['CUSTOMER_RETURN_REQUESTED', 'RETURNED', 'COMPLETED'].includes(i.rentalFulfillment?.status));
+
+  if (isOrderCompleted) {
+    aoDaiCurrentIdx = 5;
+  } else if (rawStatus === 'PENDING' || rawStatus === 'PENDING_PAYMENT' || rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') {
+    aoDaiCurrentIdx = 0;
+  } else if (rawStatus === 'PICKUP_PENDING') {
+    aoDaiCurrentIdx = 1;
+  } else if (rawStatus === 'PICKED_UP' || rawStatus === 'IN_PROGRESS' || rawStatus === 'AWAITING_REVIEW') {
+    aoDaiCurrentIdx = 2;
+  } else if (rawStatus === 'COMBO_PHOTOS_APPROVED') {
+    if (allRentalsReturned) {
+      aoDaiCurrentIdx = 3;
+    } else if (allRentalsRequested) {
+      aoDaiCurrentIdx = 3;
+    } else {
+      aoDaiCurrentIdx = 2;
+    }
+  } else if (rawStatus === 'RETURN_PENDING' || rawStatus === 'RETURNED') {
+    aoDaiCurrentIdx = 3;
+  }
 
   const aoDaiStepsConfig = ['Chuẩn bị', 'Chờ nhận', 'Đang thuê', 'Nhận lại', 'Hoàn tất'];
   const aoDaiSubsteps = aoDaiStepsConfig.map((label, idx) => {
@@ -493,14 +608,16 @@ export function OrderDetailDrawer({
     };
   }, [order?._id, singleRentalItem?._id]);
 
-  const handleMarkReady = async () => {
-    if (!order?._id) return;
-    const targetItem = singleRentalItem || order.items?.[0];
-    if (!targetItem?._id) return;
+  const handleMarkItemReady = async (item: any) => {
+    if (!order?._id || !item?._id) return;
+    if (item.rentalFulfillment?.status && item.rentalFulfillment?.status !== 'PENDING') {
+      toast.info('Áo dài này đã ở trạng thái sẵn sàng bàn giao.');
+      return;
+    }
     setIsMarkingReady(true);
     try {
-      await httpClient.post(`/api/bookings/${order._id}/items/${targetItem._id}/rental/ready`, {});
-      toast.success('Đã chuẩn bị áo xong! Sẵn sàng bàn giao cho khách.');
+      await httpClient.post(`/api/bookings/${order._id}/items/${item._id}/rental/ready`, {});
+      toast.success(`Đã chuẩn bị áo "${item.productName || item.product?.name || 'trang phục'}" xong!`);
       if (fetchOrders) await fetchOrders(true, true);
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err.message || 'Không thể cập nhật chuẩn bị áo');
@@ -509,25 +626,440 @@ export function OrderDetailDrawer({
     }
   };
 
+  const handleMarkReady = async () => {
+    if (!order?._id) return;
+    const pendingRentalItems = rentalItems.filter(
+      (it: any) => !it.rentalFulfillment?.status || it.rentalFulfillment?.status === 'PENDING'
+    );
+    if (pendingRentalItems.length === 0) {
+      toast.info('Tất cả trang phục trong đơn đã được chuẩn bị xong.');
+      return;
+    }
+    setIsMarkingReady(true);
+    try {
+      await Promise.all(
+        pendingRentalItems.map((item: any) =>
+          httpClient.post(`/api/bookings/${order._id}/items/${item._id}/rental/ready`, {})
+        )
+      );
+      toast.success(
+        pendingRentalItems.length > 1
+          ? `Đã chuẩn bị xong ${pendingRentalItems.length} áo dài! Sẵn sàng bàn giao cho khách.`
+          : 'Đã chuẩn bị áo xong! Sẵn sàng bàn giao cho khách.'
+      );
+      if (fetchOrders) await fetchOrders(true, true);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || 'Không thể cập nhật chuẩn bị áo');
+    } finally {
+      setIsMarkingReady(false);
+    }
+  };
+
+  const handleViewCccd = async (bookingId: string) => {
+    try {
+      Swal.fire({
+        title: 'Đang tải ảnh CCCD...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+      const res: any = await httpClient.get(`/api/bookings/${bookingId}/customer-identity`);
+      if (!res?.hasIdentityCard) {
+        Swal.fire({
+          icon: 'info',
+          title: 'Chưa có ảnh CCCD',
+          text: 'Khách hàng chưa tải ảnh CCCD lên đơn hàng này. Vui lòng nhắc khách tải CCCD tại mục "Lịch của tôi > Thuê áo dài" trước khi bàn giao.',
+          confirmButtonColor: '#881337',
+        });
+        return;
+      }
+      let frontUrl = '';
+      let backUrl = '';
+      if (res.hasFrontImage) {
+        const frontBlob = await httpClient.getBlob(`/api/bookings/${bookingId}/customer-identity/image/front`);
+        frontUrl = URL.createObjectURL(frontBlob);
+      }
+      if (res.hasBackImage) {
+        const backBlob = await httpClient.getBlob(`/api/bookings/${bookingId}/customer-identity/image/back`);
+        backUrl = URL.createObjectURL(backBlob);
+      }
+
+      Swal.fire({
+        width: '560px',
+        padding: '22px 24px 24px',
+        html: `
+          <div style="text-align: left; font-family: inherit; color: #1E293B;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 38px; height: 38px; border-radius: 10px; background: #FFF1F2; color: #881337; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                </div>
+                <div>
+                  <h3 style="margin: 0; font-size: 16.5px; font-weight: 800; color: #0F172A;">Căn cước công dân khách thuê</h3>
+                  <p style="margin: 2px 0 0; font-size: 12px; color: #64748B;">Hồ sơ đối soát mã hóa AES-256 • Che bảo mật mặc định</p>
+                </div>
+              </div>
+              <button type="button" id="toggle-provider-cccd-blur" style="background: #FFF1F2; border: 1px solid #FECDD3; color: #881337; border-radius: 8px; padding: 6px 10px; font-size: 11.5px; font-weight: 700; cursor: pointer; white-space: nowrap;">
+                👁 Hiện rõ để đối soát
+              </button>
+            </div>
+
+            <div style="background: #F8FAFC; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; border: 1px solid #E2E8F0; font-size: 12.5px;">
+              <div><strong>Họ và tên:</strong> ${res.fullName || order.customerName || 'Khách thuê'}</div>
+              <div style="font-size: 11.5px; color: #059669; margin-top: 4px;">🔒 Bảo mật theo Nghị định 13/2023/NĐ-CP — Chỉ dùng đối soát đơn thuê giữa Shop &amp; Sàn TàGo.</div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              ${frontUrl ? `
+                <div class="provider-cccd-mask-box" style="position: relative; height: 150px; border-radius: 10px; overflow: hidden; border: 1.5px solid #CBD5E1; background: #0F172A; cursor: pointer;">
+                  <img class="provider-cccd-mask-img" src="${frontUrl}" style="width: 100%; height: 100%; object-fit: cover; filter: blur(11px); transform: scale(1.06); transition: filter 0.2s ease, transform 0.2s ease;" />
+                  <div class="provider-cccd-mask-overlay" style="position: absolute; inset: 0; background: rgba(15,23,42,0.35); display: flex; flex-direction: column; align-items: center; justify-content: center; color: #FFF; font-size: 11.5px; font-weight: 700; text-align: center; padding: 8px;">
+                    <span>🔒 Đã che bảo mật</span>
+                    <span style="font-size: 10.5px; font-weight: 500; opacity: 0.9; margin-top: 2px;">Bấm để đối soát</span>
+                  </div>
+                  <div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.68); color: #fff; font-size: 11px; font-weight: 600; text-align: center; padding: 3px;">Mặt trước</div>
+                </div>
+              ` : '<div style="color: #9CA3AF; font-size: 12px; padding: 20px; text-align: center; border: 1px dashed #CBD5E1; border-radius: 10px;">Chưa có mặt trước</div>'}
+              ${backUrl ? `
+                <div class="provider-cccd-mask-box" style="position: relative; height: 150px; border-radius: 10px; overflow: hidden; border: 1.5px solid #CBD5E1; background: #0F172A; cursor: pointer;">
+                  <img class="provider-cccd-mask-img" src="${backUrl}" style="width: 100%; height: 100%; object-fit: cover; filter: blur(11px); transform: scale(1.06); transition: filter 0.2s ease, transform 0.2s ease;" />
+                  <div class="provider-cccd-mask-overlay" style="position: absolute; inset: 0; background: rgba(15,23,42,0.35); display: flex; flex-direction: column; align-items: center; justify-content: center; color: #FFF; font-size: 11.5px; font-weight: 700; text-align: center; padding: 8px;">
+                    <span>🔒 Đã che bảo mật</span>
+                    <span style="font-size: 10.5px; font-weight: 500; opacity: 0.9; margin-top: 2px;">Bấm để đối soát</span>
+                  </div>
+                  <div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.68); color: #fff; font-size: 11px; font-weight: 600; text-align: center; padding: 3px;">Mặt sau</div>
+                </div>
+              ` : '<div style="color: #9CA3AF; font-size: 12px; padding: 20px; text-align: center; border: 1px dashed #CBD5E1; border-radius: 10px;">Chưa có mặt sau</div>'}
+            </div>
+          </div>
+        `,
+        confirmButtonText: 'Đóng',
+        confirmButtonColor: '#881337',
+        didOpen: (popup) => {
+          let revealed = false;
+          const toggleBtn = popup.querySelector('#toggle-provider-cccd-blur') as HTMLButtonElement | null;
+          const applyState = () => {
+            popup.querySelectorAll('.provider-cccd-mask-img').forEach((el) => {
+              const img = el as HTMLElement;
+              img.style.filter = revealed ? 'none' : 'blur(11px)';
+              img.style.transform = revealed ? 'scale(1)' : 'scale(1.06)';
+            });
+            popup.querySelectorAll('.provider-cccd-mask-overlay').forEach((el) => {
+              (el as HTMLElement).style.display = revealed ? 'none' : 'flex';
+            });
+            if (toggleBtn) {
+              toggleBtn.textContent = revealed ? '🙈 Che lại' : '👁 Hiện rõ để đối soát';
+            }
+          };
+          toggleBtn?.addEventListener('click', () => {
+            revealed = !revealed;
+            applyState();
+          });
+          popup.querySelectorAll('.provider-cccd-mask-box').forEach((box) => {
+            box.addEventListener('click', () => {
+              revealed = !revealed;
+              applyState();
+            });
+          });
+        },
+        didClose: () => {
+          if (frontUrl) URL.revokeObjectURL(frontUrl);
+          if (backUrl) URL.revokeObjectURL(backUrl);
+        },
+      });
+    } catch (err: any) {
+      Swal.fire({ icon: 'error', title: 'Lỗi', text: err?.message || 'Không thể tải ảnh CCCD.' });
+    }
+  };
+
+  const handleConfirmLostItem = async (bookingId: string) => {
+    try {
+      const result = await Swal.fire({
+        title: 'Xác nhận mất trang phục (LOST_ITEM)?',
+        html: `
+          <div style="text-align: left; font-size: 13px; color: #374151;">
+            <p style="color: #991B1B; font-weight: 600; margin-bottom: 10px;">
+              ⚠️ Cảnh báo: Thao tác này sẽ áp dụng chế tài nghiêm ngặt đối với khách thuê:
+            </p>
+            <ul style="padding-left: 18px; margin-bottom: 12px; line-height: 1.6; color: #4B5563;">
+              <li>Tịch thu toàn bộ tiền cọc chuyển vào ví thanh toán của Shop.</li>
+              <li>Khóa vĩnh viễn tài khoản của khách (Blacklist).</li>
+              <li>Trang phục sẽ được ẩn khỏi kho để không nhận đơn mới.</li>
+              <li>Hồ sơ CCCD và hợp đồng điện tử có chữ ký SHA-256 được lưu vết để chuyển cơ quan chức năng theo Điều 175 BLHS nếu cần thiết.</li>
+            </ul>
+            <div style="margin-bottom: 10px;">
+              <label style="display: block; font-weight: 700; font-size: 12px; margin-bottom: 4px; color: #1E293B;">
+                Số lần đã liên hệ khách thất bại (tối thiểu 3 lần):
+              </label>
+              <input id="lost-contact-count" type="number" min="3" value="3" style="width: 100%; padding: 6px 10px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 13px; box-sizing: border-box;" />
+            </div>
+            <div>
+              <label style="display: block; font-weight: 700; font-size: 12px; margin-bottom: 4px; color: #1E293B;">
+                Ghi chú / Lý do mất đồ:
+              </label>
+              <textarea id="lost-reason-note" placeholder="Ví dụ: Gọi 3 lần thuê bao không liên lạc được, quá 24h không trả áo." rows="3" style="width: 100%; padding: 6px 10px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 12px; box-sizing: border-box;"></textarea>
+            </div>
+          </div>
+        `,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#DC2626',
+        cancelButtonColor: '#6B7280',
+        confirmButtonText: 'Xác nhận Mất đồ & Tịch thu cọc',
+        cancelButtonText: 'Hủy',
+        preConfirm: () => {
+          const countInput = document.getElementById('lost-contact-count') as HTMLInputElement | null;
+          const noteInput = document.getElementById('lost-reason-note') as HTMLTextAreaElement | null;
+          const count = Number(countInput?.value || 3);
+          if (count < 3) {
+            Swal.showValidationMessage('Theo quy chế sàn TàGo, Shop phải liên hệ khách tối thiểu 3 lần!');
+            return false;
+          }
+          return {
+            contactAttempts: count,
+            reason: noteInput?.value?.trim() || 'Khách không trả áo và không thể liên lạc được.',
+          };
+        },
+      });
+
+      if (!result.isConfirmed || !result.value) return;
+
+      Swal.fire({
+        title: 'Đang xử lý tịch thu cọc & chế tài...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      await httpClient.post(`/api/bookings/${bookingId}/overdue/confirm-lost`, result.value);
+      toast.success('Đã xác nhận mất trang phục và tịch thu tiền cọc chuyển vào ví Shop!');
+      Swal.close();
+
+      if (fetchOrders) await fetchOrders(true, true);
+      try {
+        const fresh: any = await httpClient.get(`/api/bookings/${bookingId}`);
+        if (fresh && onSelectOrderRef.current) {
+          onSelectOrderRef.current({
+            ...order,
+            ...fresh,
+            rawStatus: fresh.status || 'LOST_ITEM',
+            overdueTracking: fresh.overdueTracking || (order as any).overdueTracking || null,
+            dominoRecovery: fresh.dominoRecovery || (order as any).dominoRecovery || null,
+          });
+        }
+      } catch {
+        // ignore
+      }
+    } catch (err: any) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Lỗi',
+        text: err?.response?.data?.message || err?.message || 'Không thể xác nhận mất đồ.',
+      });
+    }
+  };
+
+  const handleSimulateOverdue = async (bookingId: string) => {
+    try {
+      const res = await Swal.fire({
+        title: '⚡ Demo: Giả lập đơn quá hạn',
+        html: `
+          <div style="text-align: left; font-size: 13px; color: #374151; line-height: 1.5;">
+            <p style="margin: 0 0 12px;">Chọn mốc thời gian trễ để kiểm thử ngay luồng phạt quá hạn (+10% tiền cọc / 30 phút, trần 50% cọc) trước Hội đồng:</p>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <label style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #E5E7EB; border-radius: 8px; cursor: pointer; background: #FFFBEB;">
+                <input type="radio" name="sim-hours" value="1" checked />
+                <span><strong>Trễ 1 giờ (T+1h)</strong> — Tính phạt quá hạn, chưa khóa tài khoản</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #E5E7EB; border-radius: 8px; cursor: pointer; background: #FEF2F2;">
+                <input type="radio" name="sim-hours" value="3" />
+                <span><strong>Trễ 3 giờ (T+3h)</strong> — Phạt chạm trần + Khóa quyền đặt đơn mới</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #E5E7EB; border-radius: 8px; cursor: pointer; background: #FEF2F2;">
+                <input type="radio" name="sim-hours" value="25" />
+                <span><strong>Trễ 25 giờ (T+25h)</strong> — Kích hoạt đề xuất Mất đồ (LOST_ITEM)</span>
+              </label>
+            </div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonColor: '#D97706',
+        cancelButtonColor: '#6B7280',
+        confirmButtonText: 'Chạy giả lập ngay',
+        cancelButtonText: 'Hủy',
+        preConfirm: () => {
+          const checked = document.querySelector('input[name="sim-hours"]:checked') as HTMLInputElement | null;
+          return Number(checked?.value || 1);
+        },
+      });
+      if (!res.isConfirmed) return;
+
+      Swal.fire({
+        title: 'Đang giả lập & quét phạt...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      const simRes: any = await httpClient.post(`/api/bookings/${bookingId}/overdue/simulate`, {
+        hoursOverdue: res.value,
+      });
+
+      if (fetchOrders) await fetchOrders(true, true);
+      try {
+        const fresh: any = await httpClient.get(`/api/bookings/${bookingId}`);
+        if (fresh && onSelectOrderRef.current) {
+          onSelectOrderRef.current({
+            ...order,
+            ...fresh,
+            rawStatus: fresh.status || 'COMPLETED',
+            overdueTracking: fresh.overdueTracking || null,
+            dominoRecovery: fresh.dominoRecovery || (order as any).dominoRecovery || null,
+          });
+        }
+      } catch {
+        // ignore
+      }
+
+      const fee = simRes?.overdueTracking?.calculatedLateFee || 0;
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Đã kích hoạt trạng thái QUÁ HẠN!',
+        text: `Đơn hàng đã chuyển OVERDUE. Phí phạt hiện tại: ${fee.toLocaleString('vi-VN')}đ.`,
+        confirmButtonColor: '#881337',
+      });
+    } catch (err: any) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Không thể giả lập',
+        text: err?.response?.data?.message || err?.message || 'Chỉ hỗ trợ ở môi trường Demo/Dev.',
+      });
+    }
+  };
+
+  const handleReverseOverdue = async (bookingId: string) => {
+    try {
+      const depositTotal = Number((order as any)?.deposit || (order as any)?.depositTotal || order?.pricingSummary?.depositTotal || 0);
+      const lateFee = Math.min(Number((order as any)?.overdueTracking?.calculatedLateFee || 0), depositTotal);
+      const refundAmt = Math.max(0, depositTotal - lateFee);
+
+      const res = await Swal.fire({
+        title: 'Đối soát & Hoàn tác quá hạn',
+        html: `
+          <div style="text-align: left; font-size: 13px; color: #374151; line-height: 1.6;">
+            <p style="margin: 0 0 12px;">Khách đã mang áo dài đến trả. Hệ thống sẽ thực hiện đối soát dòng tiền thực tế như sau:</p>
+            <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px;">
+              <div style="display: flex; justify-content: space-between;">
+                <span>Tiền cọc gốc đang ký quỹ:</span>
+                <strong>${depositTotal.toLocaleString('vi-VN')}đ</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; color: #DC2626;">
+                <span>Khấu trừ phạt trễ (+vào ví Shop):</span>
+                <strong>-${lateFee.toLocaleString('vi-VN')}đ</strong>
+              </div>
+              <div style="border-top: 1px dashed #CBD5E1; margin: 4px 0;"></div>
+              <div style="display: flex; justify-content: space-between; color: #16A34A; font-size: 14px;">
+                <span><strong>Hoàn lại cọc dư cho Khách:</strong></span>
+                <strong>${refundAmt.toLocaleString('vi-VN')}đ</strong>
+              </div>
+            </div>
+            <p style="margin: 10px 0 0; font-size: 12px; color: #64748B;">Đồng thời mở khóa tài khoản khách hàng và đưa áo về trạng thái giặt ủi.</p>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonColor: '#16A34A',
+        cancelButtonColor: '#6B7280',
+        confirmButtonText: 'Xác nhận trừ tiền & hoàn tất',
+        cancelButtonText: 'Hủy',
+      });
+      if (!res.isConfirmed) return;
+
+      Swal.fire({
+        title: 'Đang đối soát ví & hoàn cọc...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      const response: any = await httpClient.post(`/api/bookings/${bookingId}/overdue/reverse`, {});
+      const deducted = response?.lateFeeDeducted ?? lateFee;
+      const refunded = response?.depositRefunded ?? refundAmt;
+
+      if (fetchOrders) await fetchOrders(true, true);
+      try {
+        const fresh: any = await httpClient.get(`/api/bookings/${bookingId}`);
+        if (fresh && onSelectOrderRef.current) {
+          onSelectOrderRef.current({
+            ...order,
+            ...fresh,
+            rawStatus: fresh.status || 'COMPLETED',
+            overdueTracking: fresh.overdueTracking || null,
+            dominoRecovery: fresh.dominoRecovery || (order as any).dominoRecovery || null,
+          });
+        }
+      } catch {
+        // ignore
+      }
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'Đã đối soát trừ tiền thành công!',
+        html: `
+          <div style="font-size: 13px; color: #374151; line-height: 1.6;">
+            <div>• Đã cộng <strong>+${deducted.toLocaleString('vi-VN')}đ</strong> tiền phạt vào <strong>Ví Shop</strong>.</div>
+            <div>• Đã hoàn trả <strong>${refunded.toLocaleString('vi-VN')}đ</strong> tiền cọc dư về <strong>Khách hàng</strong>.</div>
+          </div>
+        `,
+        confirmButtonColor: '#16A34A',
+      });
+    } catch (err: any) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Lỗi',
+        text: err?.response?.data?.message || err?.message || 'Không thể hoàn tác quá hạn.',
+      });
+    }
+  };
+
   const handleSubmitPickupEvidence = async () => {
     if (!order?._id) return;
     const targetItem = singleRentalItem || order.items?.[0];
     if (!targetItem?._id) return;
-    if (isSendingPickupEvidence || locallySubmittedPickupIds.has(targetItem._id) || hasSubmittedPickupEvidence(targetItem)) return;
+    if (isSendingPickupEvidence || (rentalItems.length > 0 && allRentalHandoverEvidenceSubmitted)) return;
+
+    let cccdData: any = null;
+    try {
+      cccdData = await httpClient.get(`/api/bookings/${order._id}/customer-identity`);
+    } catch {
+      // ignore
+    }
+    const hasCccd = Boolean(cccdData?.hasIdentityCard);
 
     const result = await Swal.fire({
-      title: 'Chụp ảnh bàn giao áo',
+      title: 'Bàn giao áo dài tại quầy',
       html: `
-        <p style="margin: -2px 8px 18px; color: #6b7280; font-size: 14px; line-height: 1.55;">
-          Chụp rõ áo và phụ kiện trước khi bàn giao. Khách sẽ xem ảnh này để xác nhận nhận áo.
-        </p>
-        <label for="pickup-evidence-input" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 142px; padding: 18px; border: 1.5px dashed #b98a94; border-radius: 14px; background: #fff8f8; cursor: pointer; box-sizing: border-box;">
-          <span style="width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #fbe9ed; color: #8e1b2e;"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
-          <strong style="margin-top: 10px; color: #4a2430; font-size: 14px;">Chọn ảnh từ thiết bị</strong>
-          <span style="margin-top: 5px; color: #8c827a; font-size: 12px;">JPG, PNG hoặc WEBP • Tối đa 5 ảnh</span>
-          <input id="pickup-evidence-input" type="file" accept="image/jpeg,image/png,image/webp" multiple style="display: none;" />
-        </label>
-        <div id="pickup-evidence-summary" style="min-height: 20px; margin-top: 10px;"></div>
+        <div style="text-align: left; font-size: 13px;">
+          ${hasCccd ? `
+            <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; font-size: 12px; color: #166534; display: flex; align-items: center; justify-content: space-between;">
+              <span>✅ <strong>Khách đã tải CCCD:</strong> ${cccdData?.idNumberMasked || '*** (Đã xác thực)'}</span>
+              <span style="font-size: 11px; background: #DCFCE7; padding: 2px 6px; border-radius: 4px;">Đã xác thực</span>
+            </div>
+          ` : `
+            <div style="background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; font-size: 12px; color: #92400E;">
+              ⚠️ <strong>Khách chưa tải ảnh CCCD trên ứng dụng.</strong> Vui lòng nhắc khách mở mục <em>Lịch của tôi &gt; Thuê áo dài</em> để tải CCCD trước khi xác nhận bàn giao.
+            </div>
+          `}
+
+          <strong style="color: #1F2937; font-size: 12.5px; display: block; margin-bottom: 6px;">
+            👗 Ảnh tình trạng áo dài lúc bàn giao *
+          </strong>
+          <p style="margin: -2px 0 10px; color: #6b7280; font-size: 12px; line-height: 1.4;">
+            Chụp rõ áo và phụ kiện trước khi bàn giao. Khách sẽ xem ảnh này để xác nhận nhận áo.
+          </p>
+          <label for="pickup-evidence-input" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 110px; padding: 14px; border: 1.5px dashed #b98a94; border-radius: 12px; background: #fff8f8; cursor: pointer; box-sizing: border-box;">
+            <span style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #fbe9ed; color: #8e1b2e;"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
+            <strong style="margin-top: 8px; color: #4a2430; font-size: 13px;">Chọn ảnh áo bàn giao từ thiết bị</strong>
+            <span style="margin-top: 4px; color: #8c827a; font-size: 11px;">JPG, PNG hoặc WEBP • Tối đa 5 ảnh</span>
+            <input id="pickup-evidence-input" type="file" accept="image/jpeg,image/png,image/webp" multiple style="display: none;" />
+          </label>
+          <div id="pickup-evidence-summary" style="min-height: 20px; margin-top: 8px;"></div>
+        </div>
       `,
       showCancelButton: true,
       confirmButtonText: 'Gửi ảnh bàn giao',
@@ -545,7 +1077,7 @@ export function OrderDetailDrawer({
           if (!files.length) return;
 
           const label = document.createElement('div');
-          label.textContent = `Đã chọn ${files.length} ảnh sẵn sàng gửi`;
+          label.textContent = `Đã chọn ${files.length} ảnh áo bàn giao`;
           label.style.cssText = 'margin: 2px 0 9px; color: #8e1b2e; font-size: 12px; font-weight: 700; text-align: center;';
           summary.appendChild(label);
 
@@ -566,47 +1098,61 @@ export function OrderDetailDrawer({
         const input = document.getElementById('pickup-evidence-input') as HTMLInputElement | null;
         const files = Array.from(input?.files || []);
         if (!files.length) {
-          Swal.showValidationMessage('Vui lòng chọn ít nhất một ảnh bàn giao.');
+          Swal.showValidationMessage('Vui lòng chọn ít nhất một ảnh bàn giao áo dài.');
           return false;
         }
         if (files.length > 5) {
           Swal.showValidationMessage('Tối đa 5 ảnh cho một lần bàn giao.');
           return false;
         }
-        return files;
+
+        return {
+          evidenceFiles: files,
+        };
       },
     });
-    if (!result.isConfirmed) return;
+    if (!result.isConfirmed || !result.value) return;
 
     setIsSendingPickupEvidence(true);
     try {
-      const formData = new FormData();
-      (result.value as File[]).forEach((file) => formData.append('images', file));
-      const uploaded = await httpClient.post<{ files: Array<{ fileId: string }> }>(
-        `/api/bookings/${order._id}/items/${targetItem._id}/rental/evidence`,
-        formData,
+      const { evidenceFiles } = result.value;
+
+      const pendingHandoverItems = rentalItems.filter(
+        (it: any) => !locallySubmittedPickupIds.has(it._id) && !hasSubmittedPickupEvidence(it)
       );
-      const fileIds = (uploaded.files || []).map((file) => file.fileId);
-      await httpClient.post(`/api/bookings/${order._id}/items/${targetItem._id}/rental/picked-up`, {
-        fileIds,
-      });
+      const itemsToSubmit = pendingHandoverItems.length > 0 ? pendingHandoverItems : [targetItem];
+
+      let lastFileIds: string[] = [];
+      for (const item of itemsToSubmit) {
+        const formData = new FormData();
+        evidenceFiles.forEach((file: File) => formData.append('images', file));
+        const uploaded = await httpClient.post<{ files: Array<{ fileId: string }> }>(
+          `/api/bookings/${order._id}/items/${item._id}/rental/evidence`,
+          formData,
+        );
+        const fileIds = (uploaded.files || []).map((file) => file.fileId);
+        lastFileIds = fileIds;
+        await httpClient.post(`/api/bookings/${order._id}/items/${item._id}/rental/picked-up`, {
+          fileIds,
+        });
+        setLocallySubmittedPickupIds((previous) => new Set(previous).add(item._id));
+      }
+
       toast.success('Đã gửi ảnh bàn giao. Đang chờ khách xác nhận nhận áo.');
-      setLocallySubmittedPickupIds((previous) => new Set(previous).add(targetItem._id));
-      // Update this drawer immediately. List endpoints may omit private evidence
-      // fields, so waiting only for a list refresh used to leave the handover
-      // button visible even though the server had accepted the evidence.
       onSelectOrderRef.current({
         ...order,
-        handoverPhotos: fileIds,
-        items: (order.items || []).map((item: any) => item._id === targetItem._id
-          ? {
-              ...item,
-              rentalFulfillment: {
-                ...item.rentalFulfillment,
-                pickupEvidence: { files: fileIds.map((fileId) => ({ fileId })) },
-              },
-            }
-          : item),
+        handoverPhotos: lastFileIds,
+        items: (order.items || []).map((item: any) =>
+          itemsToSubmit.some((sub: any) => sub._id === item._id)
+            ? {
+                ...item,
+                rentalFulfillment: {
+                  ...item.rentalFulfillment,
+                  pickupEvidence: { files: lastFileIds.map((fileId) => ({ fileId })) },
+                },
+              }
+            : item
+        ),
       });
       await fetchOrders?.(true, true);
       const fresh = await httpClient.get<any>(`/api/bookings/${order._id}`);
@@ -705,6 +1251,92 @@ export function OrderDetailDrawer({
     }
   };
 
+  const handleReceiveAllRentalReturns = async () => {
+    if (!order?._id || !rentalItems.length) return;
+    const pendingReturns = rentalItems.filter(
+      (item) => !['RETURNED', 'COMPLETED'].includes(item.rentalFulfillment?.status),
+    );
+    if (!pendingReturns.length) return;
+
+    const result = await Swal.fire({
+      title: 'Xác nhận đã nhận lại áo dài',
+      text: 'Xác nhận shop đã nhận lại áo để kiểm tra. Không cần gửi ảnh ở bước này. Nếu phát hiện hư hỏng hoặc thiếu phụ kiện, hãy chọn “Yêu cầu đền bù” ở bước kế tiếp và gửi ảnh bằng chứng khi đó.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#881337',
+      cancelButtonColor: '#9CA3AF',
+      confirmButtonText: 'Xác nhận đã nhận & Kiểm tra',
+      cancelButtonText: 'Đóng',
+      background: 'white',
+    });
+
+    if (!result.isConfirmed) return;
+
+    setIsReceivingReturn(true);
+    try {
+      for (const item of pendingReturns) {
+        await httpClient.post(
+          `/bookings/${order._id}/items/${item._id}/rental/returned`,
+          { fileIds: [], note: 'Shop đã nhận lại áo và bắt đầu kiểm tra' }
+        );
+        setLocallyReturnedIds((prev) => new Set(prev).add(item._id));
+      }
+      toast.success('Đã xác nhận nhận lại áo! Hãy kiểm tra kỹ trang phục và chọn Hoàn cọc hoặc Yêu cầu đền bù.');
+      if (fetchOrders) await fetchOrders(true, true);
+      const fresh = await httpClient.get<any>('/api/bookings/' + order._id);
+      if (fresh && onSelectOrderRef.current) {
+        onSelectOrderRef.current(fresh);
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Không thể xác nhận nhận lại áo.');
+    } finally {
+      setIsReceivingReturn(false);
+    }
+  };
+
+  const handleConfirmAllNoIncident = async () => {
+    if (!order?._id || !rentalItems.length) return;
+    const returnedItems = rentalItems.filter(
+      (item) => item.rentalFulfillment?.status === 'RETURNED' &&
+        !['FULLY_RELEASED', 'PARTIALLY_DEDUCTED', 'FULLY_DEDUCTED'].includes(item.rentalFulfillment?.depositSettlementStatus),
+    );
+    if (!returnedItems.length) return;
+
+    const res = await Swal.fire({
+      title: 'Xác nhận không có sự cố?',
+      text: 'Áo dài và phụ kiện nguyên vẹn. Hệ thống sẽ tạo yêu cầu hoàn cọc cho khách hàng và chuyển trang phục sang trạng thái Giặt ủi (CLEANING).',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: '✓ Xác nhận hoàn cọc',
+      cancelButtonText: 'Kiểm tra lại',
+      confirmButtonColor: '#059669',
+      cancelButtonColor: '#6B7280',
+    });
+
+    if (!res.isConfirmed) return;
+
+    setIsConfirmingNoIncident(true);
+    try {
+      for (const item of returnedItems) {
+        await httpClient.post(
+          `/api/bookings/${order._id}/items/${item._id}/rental/confirm-no-incident`,
+          { note: 'Không có sự cố từ thanh tác vụ nhanh' }
+        );
+        setLocallySettledIds((prev) => new Set(prev).add(item._id));
+      }
+      toast.success('Đã xác nhận không có sự cố và hoàn tất thủ tục hoàn cọc cho khách hàng!');
+      if (fetchOrders) await fetchOrders(true, true);
+      const fresh = await httpClient.get<any>('/api/bookings/' + order._id);
+      if (fresh && onSelectOrderRef.current) {
+        onSelectOrderRef.current(fresh);
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Không thể xác nhận hoàn cọc.');
+    } finally {
+      setIsConfirmingNoIncident(false);
+    }
+  };
+
   const handleCleaningCompleted = async (itemToProcess?: any) => {
     const targetItem = itemToProcess || singleRentalItem;
     if (!order?._id || !targetItem?._id) return;
@@ -782,7 +1414,7 @@ export function OrderDetailDrawer({
 
     // Compute remaining time from real dates
     const primaryItem = order.items?.[0];
-    const targetDateStr = primaryItem?.rentalEndDate || order.endDate || primaryItem?.shootDate;
+    const targetDateStr = getRentalTo(primaryRentalItem) || order.endDate || primaryItem?.shootDate;
     let deadlineNum = 'Theo lịch';
     let deadlineColor = '#D97706';
     let deadlineTitle = 'Thời hạn dịch vụ';
@@ -952,8 +1584,8 @@ export function OrderDetailDrawer({
       time: orderTimeStr,
       title: 'Khách hàng đặt lịch & Thanh toán cọc giữ chỗ',
       desc: isPaid
-        ? `Hệ thống xác nhận đã nhận cọc ${depositAmt > 0 ? `${depositAmt.toLocaleString('vi-VN')}đ` : 'giữ chỗ'} qua VibeHue Escrow QR.`
-        : `Đang chờ khách hàng thanh toán cọc ${depositAmt > 0 ? `${depositAmt.toLocaleString('vi-VN')}đ` : ''} qua VibeHue Escrow.`,
+        ? `Hệ thống xác nhận đã nhận cọc ${depositAmt > 0 ? `${depositAmt.toLocaleString('vi-VN')}đ` : 'giữ chỗ'} qua TàGo Escrow QR.`
+        : `Đang chờ khách hàng thanh toán cọc ${depositAmt > 0 ? `${depositAmt.toLocaleString('vi-VN')}đ` : ''} qua TàGo Escrow.`,
       icon: CheckCircle,
       color: '#10B981',
       bg: '#ECFDF5',
@@ -1086,8 +1718,8 @@ export function OrderDetailDrawer({
         : 'Sau khi kiểm tra và nghiệm thu toàn bộ',
       title: 'Nghiệm thu dịch vụ & Tất toán Escrow',
       desc: isOrderCompleted
-        ? `Đơn hàng đã hoàn tất thành công trọn vẹn. Hệ thống VibeHue Escrow đã giải ngân doanh thu cho nhà cung cấp${rf?.depositRefundAmount ? ` và hoàn lại ${rf.depositRefundAmount.toLocaleString('vi-VN')}đ cọc cho khách hàng.` : '.'}`
-        : 'Khách hàng nghiệm thu dịch vụ và hệ thống VibeHue Escrow tự động giải ngân doanh thu cho nhà cung cấp.',
+        ? `Đơn hàng đã hoàn tất thành công trọn vẹn. Hệ thống TàGo Escrow đã giải ngân doanh thu cho nhà cung cấp${rf?.depositRefundAmount ? ` và hoàn lại ${rf.depositRefundAmount.toLocaleString('vi-VN')}đ cọc cho khách hàng.` : '.'}`
+        : 'Khách hàng nghiệm thu dịch vụ và hệ thống TàGo Escrow tự động giải ngân doanh thu cho nhà cung cấp.',
       icon: CheckCircle,
       color: isOrderCompleted ? '#10B981' : '#64748B',
       bg: isOrderCompleted ? '#ECFDF5' : '#F8FAFC',
@@ -1177,7 +1809,7 @@ export function OrderDetailDrawer({
                 </h2>
                 <div className="p-dh-subgroup">
                   <span className="p-code-badge">
-                    {order.id || `#VH-${order._id.slice(-5).toUpperCase()}`}
+                    {order.id || `#TG-${order._id.slice(-5).toUpperCase()}`}
                     <button
                       type="button"
                       onClick={copyOrderId}
@@ -1238,7 +1870,7 @@ export function OrderDetailDrawer({
           <div className="p-dh-details-bar">
             <div className="p-dh-item">
               <span className="label">Mã đơn:</span>
-              <span className="val">{order.id || `#VH-${order._id.slice(-5).toUpperCase()}`}</span>
+              <span className="val">{order.id || `#TG-${order._id.slice(-5).toUpperCase()}`}</span>
             </div>
             <div className="p-dh-item">
               <span className="label">Khách hàng:</span>
@@ -1256,6 +1888,18 @@ export function OrderDetailDrawer({
               <span className="label">Ngày đặt:</span>
               <span className="val">{order.orderDate}</span>
             </div>
+            {rentalFrom && (
+              <div className="p-dh-item">
+                <span className="label">Ngày nhận đồ:</span>
+                <span className="val">{formatBookingDate(rentalFrom) || '—'}</span>
+              </div>
+            )}
+            {rentalTo && (
+              <div className="p-dh-item">
+                <span className="label">Ngày trả đồ:</span>
+                <span className="val">{formatBookingDate(rentalTo) || '—'}</span>
+              </div>
+            )}
             <div className="p-dh-item">
               <span className="label">Địa chỉ:</span>
               <span className="val">{order.pickupLocation || 'Tại cửa hàng'}</span>
@@ -1349,6 +1993,18 @@ export function OrderDetailDrawer({
                   </div>
                 </div>
 
+                {/* Staff Assignment & Read-Only Chat Supervision */}
+                {photoSchedule && (
+                  <OrderStaffAssignmentCard
+                    orderId={order._id}
+                    bookingStatus={rawStatus}
+                    schedule={photoSchedule}
+                    toast={toast}
+                    onOrderRefreshed={onSelectOrder}
+                    fetchOrders={fetchOrders}
+                  />
+                )}
+
                 {/* Cancellation Detail Box */}
                 {isCancelled && (
                   <div
@@ -1432,6 +2088,204 @@ export function OrderDetailDrawer({
                         ✓ Số tiền hoàn cọc/số dư cho khách: <strong>{Number(order.cancellation.refundAmount).toLocaleString('vi-VN')}đ</strong>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* Overdue Alert Banner (Khách A) */}
+                {(rawStatus === 'OVERDUE' || ((order as any).overdueTracking?.isOverdue && !['COMPLETED', 'CANCELLED', 'RETURNED', 'LOST_ITEM'].includes(rawStatus))) && (
+                  <div
+                    style={{
+                      backgroundColor: '#FEF2F2',
+                      border: '1.5px solid #FCA5A5',
+                      borderRadius: '12px',
+                      padding: '16px',
+                      marginBottom: '14px',
+                      boxShadow: '0 2px 8px rgba(220, 38, 38, 0.08)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <AlertTriangle size={18} color="#DC2626" />
+                        <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#991B1B' }}>
+                          ĐƠN THUÊ QUÁ HẠN TRẢ ÁO DÀI
+                        </span>
+                      </div>
+                      <span
+                        style={{
+                          backgroundColor: '#FEE2E2',
+                          color: '#B91C1C',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          border: '1px solid #FECACA',
+                        }}
+                      >
+                        Trễ {Math.floor(((order as any).overdueTracking?.minutesOverdue || 0) / 60)}h {((order as any).overdueTracking?.minutesOverdue || 0) % 60}m
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: '12.5px', color: '#450A0A', lineHeight: 1.5, marginBottom: '12px' }}>
+                      <div>• <strong>Phí quá hạn đang tính:</strong> +10% tiền cọc / 30 phút. Phạt hiện tại: <span style={{ color: '#DC2626', fontWeight: 700 }}>{((order as any).overdueTracking?.calculatedLateFee || 0).toLocaleString('vi-VN')}đ</span> (trần tối đa 50% cọc: {((order as any).overdueTracking?.maxLateFeeCap || 0).toLocaleString('vi-VN')}đ).</div>
+                      <div>• <strong>Khóa quyền tạo đơn (T+2h):</strong> {(order as any).overdueTracking?.accountRestrictedAt ? <span style={{ color: '#DC2626', fontWeight: 600 }}>✓ Đã khóa tài khoản khách</span> : <span style={{ color: '#D97706' }}>Tự động khóa nếu trễ ≥ 2h</span>}</div>
+                      <div>• <strong>Đề xuất mất đồ (T+24h):</strong> {(order as any).overdueTracking?.lostItemProposedAt ? <span style={{ color: '#DC2626', fontWeight: 600 }}>⚠️ Đã kích hoạt đề xuất LOST_ITEM</span> : <span style={{ color: '#6B7280' }}>Chờ kích hoạt nếu trễ ≥ 24h</span>}</div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => void handleConfirmLostItem(order._id)}
+                        style={{
+                          backgroundColor: '#DC2626',
+                          color: '#FFF',
+                          border: 'none',
+                          padding: '7px 14px',
+                          borderRadius: '8px',
+                          fontSize: '12.5px',
+                          fontWeight: 650,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        <XCircle size={14} />
+                        <span>Xác nhận mất đồ (LOST_ITEM)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleReverseOverdue(order._id)}
+                        style={{
+                          backgroundColor: '#FFF',
+                          color: '#166534',
+                          border: '1px solid #86EFAC',
+                          padding: '7px 14px',
+                          borderRadius: '8px',
+                          fontSize: '12.5px',
+                          fontWeight: 650,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        <CheckCircle size={14} />
+                        <span>Khách trả áo (Hoàn tác quá hạn)</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Completed Overdue Settlement Summary Banner (Provider) */}
+                {(() => {
+                  const isCompletedOrder = ['COMPLETED', 'RETURNED'].includes(rawStatus);
+                  const resolvedLateFee = Number(
+                    (order as any).overdueTracking?.calculatedLateFee ?? order.pricingSummary?.lateFee ?? 0,
+                  );
+                  const wasOverdue = Boolean((order as any).overdueTracking?.isOverdue) || resolvedLateFee > 0;
+                  if (!isCompletedOrder || !wasOverdue) return null;
+
+                  const depositTotal = Number(order.pricingSummary?.depositTotal ?? 0);
+                  const rawDepositRefunded = (order as any).overdueTracking?.depositRefundedAmount;
+                  const resolvedDepositRefund =
+                    typeof rawDepositRefunded === 'number' && rawDepositRefunded > 0
+                      ? rawDepositRefunded
+                      : Math.max(0, depositTotal - resolvedLateFee);
+                  const minutesOverdue = Number((order as any).overdueTracking?.minutesOverdue || 0);
+
+                  return (
+                    <div
+                      style={{
+                        backgroundColor: '#FFFBEB',
+                        border: '1.5px solid #FCD34D',
+                        borderRadius: '12px',
+                        padding: '14px 16px',
+                        marginBottom: '14px',
+                        boxShadow: '0 2px 8px rgba(217, 119, 6, 0.06)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', gap: '8px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <AlertTriangle size={17} color="#D97706" />
+                          <span style={{ fontSize: '13.5px', fontWeight: 750, color: '#92400E' }}>
+                            ĐỐI SOÁT PHÍ QUÁ HẠN (ĐƠN ĐÃ HOÀN TẤT)
+                          </span>
+                        </div>
+                        {minutesOverdue > 0 && (
+                          <span style={{ fontSize: '11px', fontWeight: 700, color: '#B45309', backgroundColor: '#FEF3C7', padding: '2px 8px', borderRadius: '6px', border: '1px solid #FDE68A' }}>
+                            Trễ {Math.floor(minutesOverdue / 60)}h {minutesOverdue % 60}m
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '12.5px', color: '#78350F', lineHeight: 1.55 }}>
+                        <div>
+                          • Đơn hàng này từng quá hạn trả áo và đã được khấu trừ{' '}
+                          <strong style={{ color: '#B45309' }}>-{resolvedLateFee.toLocaleString('vi-VN')}đ</strong> tiền phạt từ tiền cọc của khách (đã cộng vào ví Shop).
+                        </div>
+                        <div>
+                          • Phần tiền cọc còn lại đã hoàn trả về cho khách hàng:{' '}
+                          <strong style={{ color: '#15803D' }}>{resolvedDepositRefund.toLocaleString('vi-VN')}đ</strong>.
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Lost Item Banner */}
+                {rawStatus === 'LOST_ITEM' && (
+                  <div
+                    style={{
+                      backgroundColor: '#450A0A',
+                      color: '#FFF',
+                      borderRadius: '12px',
+                      padding: '16px',
+                      marginBottom: '14px',
+                      boxShadow: '0 2px 10px rgba(69, 10, 10, 0.2)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                      <XCircle size={20} color="#F87171" />
+                      <span style={{ fontSize: '14px', fontWeight: 700, color: '#FECACA' }}>
+                        ĐƠN HÀNG ĐÃ XÁC NHẬN MẤT TRANG PHỤC (LOST_ITEM)
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '12.5px', color: '#FCA5A5', lineHeight: 1.5 }}>
+                      Toàn bộ tiền cọc đã được chuyển vào ví Shop để bù đắp giá trị áo dài. Tài khoản khách hàng đã bị khóa vĩnh viễn (Blacklist). Hồ sơ hợp đồng điện tử và CCCD của khách đã được lưu vết đối soát.
+                    </div>
+                  </div>
+                )}
+
+                {/* Domino Recovery Banner (Khách B) */}
+                {(order as any).dominoRecovery?.hasConflict && (
+                  <div
+                    style={{
+                      backgroundColor: (order as any).dominoRecovery?.status === 'SWAPPED' ? '#F0FDF4' : '#FFFBEB',
+                      border: `1.5px solid ${(order as any).dominoRecovery?.status === 'SWAPPED' ? '#86EFAC' : '#FCD34D'}`,
+                      borderRadius: '12px',
+                      padding: '14px 16px',
+                      marginBottom: '14px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <Sparkles size={16} color={(order as any).dominoRecovery?.status === 'SWAPPED' ? '#16A34A' : '#D97706'} />
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: (order as any).dominoRecovery?.status === 'SWAPPED' ? '#166534' : '#92400E' }}>
+                        DOMINO RECOVERY CHO KHÁCH THUÊ CA TIẾP THEO
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: (order as any).dominoRecovery?.status === 'SWAPPED' ? '#15803D' : '#78350F', lineHeight: 1.5 }}>
+                      {(order as any).dominoRecovery?.status === 'SWAPPED' && (
+                        <span>✓ Đã tự động điều phối chiếc áo cùng mẫu &amp; size mới tinh trống lịch cho đơn hàng này (Auto-Swap thành công).</span>
+                      )}
+                      {(order as any).dominoRecovery?.status === 'OFFERED' && (
+                        <span>⚠️ Áo ca trước trễ hạn. Hệ thống đã mở đề xuất Top 3 mẫu tương đương cho Khách B (Đếm ngược 60 phút tự động hoàn tiền 100% nếu Shop không kịp bàn giao).</span>
+                      )}
+                      {(order as any).dominoRecovery?.status === 'ACCEPTED_ALTERNATIVE' && (
+                        <span>✓ Khách hàng đã chọn đổi sang mẫu áo tương đương thay thế.</span>
+                      )}
+                      {(order as any).dominoRecovery?.status === 'REFUNDED' && (
+                        <span>✓ Đơn hàng đã tự động hoàn tiền 100% cọc + phí thuê do trang phục ca trước không thể phục vụ.</span>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -1675,8 +2529,10 @@ export function OrderDetailDrawer({
                       <span className="info-val">
                         {(() => {
                           const primaryItem = order.items?.[0];
-                          if (primaryItem?.rentalStartDate && primaryItem?.rentalEndDate) {
-                            return `${new Date(primaryItem.rentalStartDate).toLocaleDateString('vi-VN')} → ${new Date(primaryItem.rentalEndDate).toLocaleDateString('vi-VN')}`;
+                          const startDate = getRentalFrom(primaryRentalItem);
+                          const endDate = getRentalTo(primaryRentalItem);
+                          if (startDate && endDate) {
+                            return `${formatBookingDate(startDate)} → ${formatBookingDate(endDate)}`;
                           }
                           if (primaryItem?.shootDate) {
                             return `${primaryItem.shootDate} (${primaryItem.timeSlot || 'Theo lịch'})`;
@@ -1691,6 +2547,162 @@ export function OrderDetailDrawer({
                     <div className="p-info-item">
                       <span className="info-label">Địa điểm chụp &amp; Giao nhận</span>
                       <span className="info-val">{order.pickupLocation || 'Tại cửa hàng nhà cung cấp'}</span>
+                    </div>
+                    <div className="p-info-item" style={{ gridColumn: '1 / -1' }}>
+                      <span className="info-label">CCCD / Giấy tờ tùy thân</span>
+                      <div className="info-val" style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          {identityCardInfo?.hasIdentityCard || order.customerIdentityCard?.hasIdentityCard || order.customerIdentityCard?.frontImage ? (
+                            <span style={{ color: '#16A34A', fontWeight: 600, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#F0FDF4', border: '1px solid #BBF7D0', padding: '3px 8px', borderRadius: '6px' }}>
+                              <CheckCircle size={13} color="#16A34A" />
+                              <span>
+                                Đã xác thực CCCD
+                                {identityCardInfo?.fullName ? ` • ${identityCardInfo.fullName}` : ''}
+                              </span>
+                            </span>
+                          ) : (
+                            <span style={{ color: '#D97706', fontSize: '12px', fontWeight: 500, background: '#FFFBEB', border: '1px solid #FDE68A', padding: '3px 8px', borderRadius: '6px' }}>
+                              Khách chưa tải CCCD
+                            </span>
+                          )}
+                          {(identityCardInfo?.hasIdentityCard || cccdPreviewUrls.front || cccdPreviewUrls.back) && (
+                            <button
+                              type="button"
+                              onClick={() => void handleViewCccd(order._id)}
+                              style={{
+                                background: '#FFF1F2',
+                                border: '1px solid #FECDD3',
+                                color: '#9F1239',
+                                borderRadius: '6px',
+                                padding: '3px 9px',
+                                fontSize: '11.5px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                              }}
+                              title="Xem phóng to thông tin và ảnh CCCD đối soát bảo mật"
+                            >
+                              <Shield size={12} />
+                              <span>Xem phóng to</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {(cccdPreviewUrls.front || cccdPreviewUrls.back) && (
+                          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                            {cccdPreviewUrls.front && (
+                              <div
+                                onClick={() => void handleViewCccd(order._id)}
+                                title="Bấm để xem ảnh lớn"
+                                style={{
+                                  position: 'relative',
+                                  width: '138px',
+                                  height: '88px',
+                                  borderRadius: '8px',
+                                  overflow: 'hidden',
+                                  border: '1.5px solid #E2E8F0',
+                                  backgroundColor: '#0F172A',
+                                  cursor: 'pointer',
+                                  boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+                                }}
+                              >
+                                <img
+                                  src={cccdPreviewUrls.front}
+                                  alt="CCCD mặt trước"
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(7px)', transform: 'scale(1.08)' }}
+                                />
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    inset: 0,
+                                    background: 'rgba(15, 23, 42, 0.3)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#FFFFFF',
+                                    fontSize: '10.5px',
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  🔒 Đã che • Bấm xem
+                                </div>
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    bottom: 0,
+                                    left: 0,
+                                    right: 0,
+                                    background: 'rgba(15, 23, 42, 0.72)',
+                                    color: '#FFFFFF',
+                                    fontSize: '10.5px',
+                                    fontWeight: 600,
+                                    textAlign: 'center',
+                                    padding: '2px 4px',
+                                  }}
+                                >
+                                  Mặt trước
+                                </div>
+                              </div>
+                            )}
+                            {cccdPreviewUrls.back && (
+                              <div
+                                onClick={() => void handleViewCccd(order._id)}
+                                title="Bấm để xem ảnh lớn"
+                                style={{
+                                  position: 'relative',
+                                  width: '138px',
+                                  height: '88px',
+                                  borderRadius: '8px',
+                                  overflow: 'hidden',
+                                  border: '1.5px solid #E2E8F0',
+                                  backgroundColor: '#0F172A',
+                                  cursor: 'pointer',
+                                  boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+                                }}
+                              >
+                                <img
+                                  src={cccdPreviewUrls.back}
+                                  alt="CCCD mặt sau"
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(7px)', transform: 'scale(1.08)' }}
+                                />
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    inset: 0,
+                                    background: 'rgba(15, 23, 42, 0.3)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#FFFFFF',
+                                    fontSize: '10.5px',
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  🔒 Đã che • Bấm xem
+                                </div>
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    bottom: 0,
+                                    left: 0,
+                                    right: 0,
+                                    background: 'rgba(15, 23, 42, 0.72)',
+                                    color: '#FFFFFF',
+                                    fontSize: '10.5px',
+                                    fontWeight: 600,
+                                    textAlign: 'center',
+                                    padding: '2px 4px',
+                                  }}
+                                >
+                                  Mặt sau
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -1743,6 +2755,8 @@ export function OrderDetailDrawer({
                       const itemImg = item.productId?.images?.[0] || item.photographyPackageId?.images?.[0] || (isProd ? traditionalAoDaiImg : photoPackageImg);
                       const linePrice = Number(item.subtotal || (item.unitPrice || item.price || 0) * (item.quantity || 1));
                       const depositAmt = Number(item.depositAmount || 0);
+                      const itemRentalFrom = getRentalFrom(item);
+                      const itemRentalTo = getRentalTo(item);
 
                       return (
                         <div key={item._id || idx} className="p-drawer-item-card" style={{ marginBottom: idx < order.items!.length - 1 ? '10px' : 0 }}>
@@ -1771,9 +2785,9 @@ export function OrderDetailDrawer({
                                 </>
                               )}
                             </div>
-                            {isProd && item.rentalStartDate && item.rentalEndDate && (
+                            {isProd && itemRentalFrom && itemRentalTo && (
                               <div style={{ fontSize: '11px', color: '#475569', marginTop: '3px' }}>
-                                Thời gian thuê: <strong>{new Date(item.rentalStartDate).toLocaleDateString('vi-VN')}</strong> → <strong>{new Date(item.rentalEndDate).toLocaleDateString('vi-VN')}</strong>
+                                Thời gian thuê: <strong>{formatBookingDate(itemRentalFrom)}</strong> → <strong>{formatBookingDate(itemRentalTo)}</strong>
                               </div>
                             )}
                           </div>
@@ -1792,19 +2806,34 @@ export function OrderDetailDrawer({
                               display: 'inline-block',
                               marginTop: '4px'
                             }}>
-                              {isOrderCompleted ? '✓ Đã hoàn tất' : (item.rentalFulfillment?.status ? `Trạng thái: ${item.rentalFulfillment.status}` : 'Đang xử lý')}
+                              {isOrderCompleted ? '✓ Đã hoàn tất' : (item.rentalFulfillment?.status ? `Trạng thái: ${getRentalFulfillmentMeta(item.rentalFulfillment.status).label}` : 'Đang xử lý')}
                             </span>
-                            {isProd && !isSingleRentalItem && !isOrderCompleted && (
+                            {isProd && !isSingleRentalItem && !isCombo && !isOrderCompleted && (
                               <div style={{ marginTop: '8px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                                {item.rentalFulfillment?.status === 'CUSTOMER_RETURN_REQUESTED' && (
+                                {(!item.rentalFulfillment?.status || item.rentalFulfillment?.status === 'PENDING') && (
                                   <button
                                     type="button"
                                     className="p-drawer-primary-btn"
-                                    style={{ padding: '5px 10px', fontSize: '11.5px' }}
+                                    style={{ padding: '5px 10px', fontSize: '11.5px', backgroundColor: '#8E1B2E', color: '#FFFFFF' }}
+                                    onClick={() => handleMarkItemReady(item)}
+                                    disabled={isMarkingReady}
+                                  >
+                                    <Package size={12} />
+                                    <span>✓ Chuẩn bị xong</span>
+                                  </button>
+                                )}
+                                {(item.rentalFulfillment?.status === 'CUSTOMER_RETURN_REQUESTED' ||
+                                  (['PICKED_UP', 'IN_PROGRESS'].includes(item.rentalFulfillment?.status) &&
+                                    ['COMBO_PHOTOS_APPROVED', 'RETURN_PENDING'].includes(rawStatus))) && (
+                                  <button
+                                    type="button"
+                                    className="p-drawer-primary-btn"
+                                    style={{ padding: '5px 10px', fontSize: '11.5px', backgroundColor: '#881337', color: '#FFFFFF' }}
                                     onClick={() => handleReceiveReturn(item)}
+                                    disabled={isReceivingReturn}
                                   >
                                     <PackageCheck size={12} />
-                                    <span>Xác nhận nhận lại áo</span>
+                                    <span>{item.rentalFulfillment?.status === 'CUSTOMER_RETURN_REQUESTED' ? 'Xác nhận nhận lại áo' : 'Nhận lại áo & Kiểm tra'}</span>
                                   </button>
                                 )}
                                 {item.rentalFulfillment?.status === 'RETURNED' && !['FULLY_RELEASED', 'PARTIALLY_DEDUCTED', 'FULLY_DEDUCTED'].includes(item.rentalFulfillment?.depositSettlementStatus) && (
@@ -1829,12 +2858,12 @@ export function OrderDetailDrawer({
                                     </button>
                                   </>
                                 )}
-                                {(item.rentalFulfillment?.inventoryStatus === 'CLEANING' ||
-                                  item.inventoryItem?.status === 'CLEANING' ||
-                                  (item.rentalFulfillment?.status === 'RETURNED' &&
+                                {['RETURNED', 'COMPLETED'].includes(item.rentalFulfillment?.status || '') &&
+                                  (item.rentalFulfillment?.inventoryStatus === 'CLEANING' ||
+                                    item.inventoryItem?.status === 'CLEANING' ||
                                     ['FULLY_RELEASED', 'PARTIALLY_DEDUCTED', 'FULLY_DEDUCTED'].includes(
                                       item.rentalFulfillment?.depositSettlementStatus,
-                                    ))) && (
+                                    )) && (
                                   <button
                                     type="button"
                                     className="p-drawer-primary-btn"
@@ -1858,7 +2887,7 @@ export function OrderDetailDrawer({
                 <div style={{ marginTop: '16px' }}>
                   <BookingContractsSection
                     bookingId={order._id}
-                    bookingStatus={order.status}
+                    bookingStatus={order.rawStatus || order.status}
                     viewerRole="provider"
                     title="Hợp đồng điện tử (Phạm vi đối tác)"
                     hideWhenEmpty={true}
@@ -1939,7 +2968,7 @@ export function OrderDetailDrawer({
                         </div>
                         <div className="p-quick-doc-info">
                           <span className="p-quick-doc-title">Biên bản điện tử đơn đặt lịch</span>
-                          <span className="p-quick-doc-meta">Mã xác nhận đơn {order.id || `#VH-${order._id.slice(-5).toUpperCase()}`}</span>
+                          <span className="p-quick-doc-meta">Mã xác nhận đơn {order.id || `#TG-${order._id.slice(-5).toUpperCase()}`}</span>
                         </div>
                       </div>
                       <span style={{ fontSize: '10.5px', fontWeight: 600, color: '#059669', background: '#ECFDF5', padding: '2px 8px', borderRadius: '4px' }}>
@@ -1953,7 +2982,7 @@ export function OrderDetailDrawer({
                           <ShieldCheck size={16} />
                         </div>
                         <div className="p-quick-doc-info">
-                          <span className="p-quick-doc-title">Hợp đồng ký quỹ VibeHue Escrow</span>
+                          <span className="p-quick-doc-title">Hợp đồng ký quỹ TàGo Escrow</span>
                           <span className="p-quick-doc-meta">Bảo đảm tiền cọc và giải ngân an toàn</span>
                         </div>
                       </div>
@@ -1966,30 +2995,40 @@ export function OrderDetailDrawer({
 
                 {/* Card 4: Thông tin thanh toán & Escrow */}
                 <div className="p-card-box">
-                  <div className="p-card-header">
-                    <h3 className="p-card-title">
-                      <ShieldCheck size={16} color="#881337" />
-                      <span>Thông tin thanh toán &amp; Ký quỹ (Escrow)</span>
-                    </h3>
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#059669', background: '#ECFDF5', padding: '2px 8px', borderRadius: '6px' }}>
-                      {order.rawStatus === 'PENDING' || order.rawStatus === 'PENDING_PAYMENT' ? 'Chờ thanh toán cọc' : '✓ Đã thanh toán Escrow'}
-                    </span>
-                  </div>
-
                   {(() => {
+                    const rawCode = String(order.rawStatus || '').toUpperCase();
+                    const isUnpaidOrder = !rawCode || ['DRAFT', 'PENDING', 'PENDING_PAYMENT'].includes(rawCode);
+                    const isCancelledOrder = rawCode === 'CANCELLED';
+                    const isRefundedOrder = rawCode === 'REFUNDED' || rawCode === 'PARTIALLY_REFUNDED';
+                    const isPaidStatus = !isUnpaidOrder && !isCancelledOrder && !isRefundedOrder;
+
+                    const escrowBadge = isUnpaidOrder
+                      ? { text: 'Chờ thanh toán cọc', color: '#B45309', background: '#FFFBEB' }
+                      : isCancelledOrder
+                      ? { text: 'Đơn đã hủy', color: '#B91C1C', background: '#FEF2F2' }
+                      : rawCode === 'REFUNDED'
+                      ? { text: 'Đã hoàn tiền', color: '#475569', background: '#F1F5F9' }
+                      : rawCode === 'PARTIALLY_REFUNDED'
+                      ? { text: 'Hoàn tiền một phần', color: '#B45309', background: '#FFFBEB' }
+                      : isOrderCompleted
+                      ? { text: '✓ Đã tất toán Escrow', color: '#059669', background: '#ECFDF5' }
+                      : { text: '✓ Đã thanh toán Escrow', color: '#059669', background: '#ECFDF5' };
+
                     const grandTotal = order.pricingSummary?.grandTotal || order.totalAmount || Number((order.total || '').replace(/[^\d]/g, '')) || 0;
                     const assetDeposit = Number(order.depositTotal || order.pricingSummary?.depositTotal || 0);
                     const isRental = order.bookingType === 'AODAI_RENTAL';
                     const isPhoto = order.bookingType === 'PHOTOGRAPHY';
                     const isCombo = order.bookingType === 'COMBO';
-                    const isPaidStatus = !['PENDING', 'PENDING_PAYMENT'].includes(order.rawStatus || '');
                     const totalPaid = Number(order.paymentSummary?.totalPaid || 0);
                     const serviceAmount = Math.max(0, Number(order.pricingSummary?.subTotal || (grandTotal - assetDeposit)));
 
                     let serviceDepositPaid = 0;
                     let remaining = 0;
 
-                    if (isOrderCompleted || order.paymentSummary?.paymentStatus === 'PAID') {
+                    if (isCancelledOrder || isRefundedOrder) {
+                      serviceDepositPaid = totalPaid > 0 ? Math.min(totalPaid, serviceAmount) : 0;
+                      remaining = 0;
+                    } else if (isOrderCompleted || order.paymentSummary?.paymentStatus === 'PAID') {
                       serviceDepositPaid = serviceAmount;
                       remaining = 0;
                     } else if (isRental) {
@@ -2008,33 +3047,72 @@ export function OrderDetailDrawer({
                       remaining = isPaidStatus ? Math.max(0, grandTotal - serviceDepositPaid - assetDeposit) : grandTotal;
                     }
 
+                    const serviceStatusNote = isCancelledOrder
+                      ? '(Đơn đã hủy)'
+                      : rawCode === 'REFUNDED'
+                      ? '(Đã hoàn tiền)'
+                      : rawCode === 'PARTIALLY_REFUNDED'
+                      ? '(Hoàn tiền một phần)'
+                      : isPaidStatus
+                      ? '(Đã thanh toán)'
+                      : '(Chờ thanh toán)';
+
+                    const depositStatusNote = isOrderCompleted
+                      ? '(Đã tất toán)'
+                      : isCancelledOrder
+                      ? '(Đơn đã hủy)'
+                      : isRefundedOrder
+                      ? '(Đã xử lý hoàn cọc)'
+                      : isUnpaidOrder
+                      ? '(Chờ thanh toán)'
+                      : '(Đang tạm giữ Escrow)';
+
                     return (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
-                          <span>Tổng giá trị đơn hàng:</span>
-                          <strong style={{ color: '#0F172A', fontSize: '14px' }}>{grandTotal.toLocaleString('vi-VN')}đ</strong>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
-                          <span>{isRental ? 'Tiền thuê trang phục:' : 'Đặt cọc dịch vụ trước:'}</span>
-                          <span style={{ fontWeight: 600, color: '#15803D' }}>
-                            {serviceDepositPaid.toLocaleString('vi-VN')}đ {isPaidStatus ? '(Đã thanh toán)' : '(Chờ thanh toán)'}
+                      <>
+                        <div className="p-card-header">
+                          <h3 className="p-card-title">
+                            <ShieldCheck size={16} color="#881337" />
+                            <span>Thông tin thanh toán &amp; Ký quỹ (Escrow)</span>
+                          </h3>
+                          <span style={{ fontSize: '11px', fontWeight: 700, color: escrowBadge.color, background: escrowBadge.background, padding: '2px 8px', borderRadius: '6px' }}>
+                            {escrowBadge.text}
                           </span>
                         </div>
-                        {assetDeposit > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
-                            <span>Tiền cọc tài sản trang phục:</span>
-                            <span style={{ fontWeight: 600, color: '#0284C7' }}>
-                              {assetDeposit.toLocaleString('vi-VN')}đ {isOrderCompleted ? '(Đã tất toán)' : '(Đang tạm giữ Escrow)'}
+                            <span>Tổng giá trị đơn hàng:</span>
+                            <strong style={{ color: '#0F172A', fontSize: '14px' }}>{grandTotal.toLocaleString('vi-VN')}đ</strong>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                            <span>{isRental ? 'Tiền thuê trang phục:' : 'Đặt cọc dịch vụ trước:'}</span>
+                            <span style={{ fontWeight: 600, color: isPaidStatus ? '#15803D' : '#64748B' }}>
+                              {serviceDepositPaid.toLocaleString('vi-VN')}đ {serviceStatusNote}
                             </span>
                           </div>
-                        )}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #e2e8f0', paddingTop: '8px', fontWeight: 700 }}>
-                          <span style={{ color: '#0F172A' }}>Còn lại cần thanh toán:</span>
-                          <span style={{ color: remaining === 0 ? '#10B981' : '#D97706', fontSize: '14px' }}>
-                            {remaining === 0 ? 'Đã thanh toán đủ' : `${remaining.toLocaleString('vi-VN')}đ`}
-                          </span>
+                          {assetDeposit > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                              <span>Tiền cọc tài sản trang phục:</span>
+                              <span style={{ fontWeight: 600, color: '#0284C7' }}>
+                                {assetDeposit.toLocaleString('vi-VN')}đ {depositStatusNote}
+                              </span>
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #e2e8f0', paddingTop: '8px', fontWeight: 700 }}>
+                            <span style={{ color: '#0F172A' }}>Còn lại cần thanh toán:</span>
+                            <span style={{ color: isCancelledOrder || isRefundedOrder ? '#64748B' : remaining === 0 ? '#10B981' : '#D97706', fontSize: '14px' }}>
+                              {isCancelledOrder
+                                ? 'Không thu (Đơn đã hủy)'
+                                : rawCode === 'REFUNDED'
+                                ? 'Đã hoàn tiền'
+                                : rawCode === 'PARTIALLY_REFUNDED'
+                                ? 'Đã hoàn một phần'
+                                : remaining === 0
+                                ? 'Đã thanh toán đủ'
+                                : `${remaining.toLocaleString('vi-VN')}đ`}
+                            </span>
+                          </div>
                         </div>
-                      </div>
+                      </>
                     );
                   })()}
                 </div>
@@ -2342,13 +3420,13 @@ export function OrderDetailDrawer({
                 <div className="p-card-header">
                   <h3 className="p-card-title">
                     <ShieldCheck size={16} color="#881337" />
-                    <span>Chính sách bảo chứng VibeHue Escrow</span>
+                    <span>Chính sách bảo chứng TàGo Escrow</span>
                   </h3>
                 </div>
                 <div style={{ fontSize: '12.5px', color: '#475569', lineHeight: 1.6 }}>
-                  • <strong>Bảo vệ tiền cọc:</strong> Khoản tiền cọc dịch vụ 1.400.000đ và cọc trang phục 1.000.000đ được khóa an toàn trên hợp đồng thông minh ký quỹ VibeHue Escrow.<br />
+                  • <strong>Bảo vệ tiền cọc:</strong> Khoản tiền cọc dịch vụ 1.400.000đ và cọc trang phục 1.000.000đ được khóa an toàn trên hợp đồng thông minh ký quỹ TàGo Escrow.<br />
                   • <strong>Giải ngân doanh thu:</strong> Doanh thu được tự động chuyển về ví đối tác của bạn ngay sau khi khách hàng xác nhận nhận đủ ảnh và hoàn trả áo dài nguyên vẹn.<br />
-                  • <strong>Bảo hiểm sự cố:</strong> Trường hợp phát sinh hư hỏng, hệ thống trọng tài VibeHue sẽ thụ lý bằng chứng hình ảnh trong vòng 24 giờ.
+                  • <strong>Bảo hiểm sự cố:</strong> Trường hợp phát sinh hư hỏng, hệ thống trọng tài TàGo sẽ thụ lý bằng chứng hình ảnh trong vòng 24 giờ.
                 </div>
               </div>
 
@@ -2356,7 +3434,7 @@ export function OrderDetailDrawer({
               <div style={{ marginTop: '16px' }}>
                 <BookingContractsSection
                   bookingId={order._id}
-                  bookingStatus={order.status}
+                  bookingStatus={order.rawStatus || order.status}
                   viewerRole="provider"
                   title="Hợp đồng điện tử (Phạm vi đối tác)"
                   hideWhenEmpty={true}
@@ -2415,77 +3493,40 @@ export function OrderDetailDrawer({
               ============================================================ */}
           {activeTab === 'payment' && (
             <div className="p-tab-payment-container">
-              <div className="p-payment-summary-box">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#0F172A' }}>
-                    Bảng kê tài chính chi tiết
-                  </span>
-                  <span className="p-payment-badge-paid">
-                    ✓ Đã thanh toán cọc Escrow
-                  </span>
-                </div>
-
-                {order.items && order.items.length > 0 ? (
-                  order.items.map((item: any, idx: number) => {
-                    const itemName = item.name || item.productId?.name || item.photographyPackageId?.name || (item.itemType === 'PRODUCT' ? 'Áo dài' : 'Gói chụp ảnh');
-                    const linePrice = Number(item.subtotal || (item.unitPrice || item.price || 0) * (item.quantity || 1));
-                    return (
-                      <div key={item._id || idx} className="p-payment-row">
-                        <span>{itemName} (x{item.quantity || 1})</span>
-                        <strong>{linePrice.toLocaleString('vi-VN')}đ</strong>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="p-payment-row">
-                    <span>{order.productName || 'Dịch vụ'}</span>
-                    <strong>{order.total}</strong>
-                  </div>
-                )}
-
-                {Boolean(order.depositTotal && order.depositTotal > 0) && (
-                  <div className="p-payment-row">
-                    <span>Tiền cọc tài sản trang phục (Áo dài)</span>
-                    <strong>{Number(order.depositTotal).toLocaleString('vi-VN')}đ</strong>
-                  </div>
-                )}
-
-                {Boolean(order.pricingSummary?.serviceFee && order.pricingSummary.serviceFee > 0) && (
-                  <div className="p-payment-row">
-                    <span>Phí dịch vụ / Vệ sinh</span>
-                    <strong>{Number(order.pricingSummary.serviceFee).toLocaleString('vi-VN')}đ</strong>
-                  </div>
-                )}
-
-                {Boolean((order.pricingSummary?.voucherDiscountTotal || order.pricingSummary?.discountAmount) && (order.pricingSummary.voucherDiscountTotal > 0 || order.pricingSummary.discountAmount > 0)) && (
-                  <div className="p-payment-row" style={{ color: '#059669' }}>
-                    <span>Ưu đãi giảm giá</span>
-                    <strong>-{Number(order.pricingSummary.voucherDiscountTotal || order.pricingSummary.discountAmount).toLocaleString('vi-VN')}đ</strong>
-                  </div>
-                )}
-
-                <div className="p-payment-row total">
-                  <span>Tổng giá trị đơn hàng:</span>
-                  <span style={{ color: '#BE123C', fontSize: '16px' }}>
-                    {order.total || `${(order.totalAmount || 0).toLocaleString('vi-VN')}đ`}
-                  </span>
-                </div>
-              </div>
-
               {(() => {
+                const rawCode = String(order.rawStatus || '').toUpperCase();
+                const isUnpaidOrder = !rawCode || ['DRAFT', 'PENDING', 'PENDING_PAYMENT'].includes(rawCode);
+                const isCancelledOrder = rawCode === 'CANCELLED';
+                const isRefundedOrder = rawCode === 'REFUNDED' || rawCode === 'PARTIALLY_REFUNDED';
+                const isPaidStatus = !isUnpaidOrder && !isCancelledOrder && !isRefundedOrder;
+
+                const paymentBadge = isUnpaidOrder
+                  ? { text: 'Chờ thanh toán cọc', color: '#B45309', background: '#FFFBEB' }
+                  : isCancelledOrder
+                  ? { text: 'Đơn đã hủy', color: '#B91C1C', background: '#FEF2F2' }
+                  : rawCode === 'REFUNDED'
+                  ? { text: 'Đã hoàn tiền', color: '#475569', background: '#F1F5F9' }
+                  : rawCode === 'PARTIALLY_REFUNDED'
+                  ? { text: 'Hoàn tiền một phần', color: '#B45309', background: '#FFFBEB' }
+                  : isOrderCompleted
+                  ? { text: '✓ Đã tất toán Escrow', color: '#059669', background: '#ECFDF5' }
+                  : { text: '✓ Đã thanh toán cọc Escrow', color: '#059669', background: '#ECFDF5' };
+
                 const grandTotal = order.pricingSummary?.grandTotal || order.totalAmount || Number((order.total || '').replace(/[^\d]/g, '')) || 0;
                 const assetDeposit = Number(order.depositTotal || order.pricingSummary?.depositTotal || 0);
                 const isRental = order.bookingType === 'AODAI_RENTAL';
                 const isPhoto = order.bookingType === 'PHOTOGRAPHY';
                 const isCombo = order.bookingType === 'COMBO';
-                const isPaidStatus = !['PENDING', 'PENDING_PAYMENT'].includes(order.rawStatus || '');
                 const totalPaid = Number(order.paymentSummary?.totalPaid || 0);
                 const serviceAmount = Math.max(0, Number(order.pricingSummary?.subTotal || (grandTotal - assetDeposit)));
 
                 let serviceDepositPaid = 0;
                 let remaining = 0;
 
-                if (isOrderCompleted || order.paymentSummary?.paymentStatus === 'PAID') {
+                if (isCancelledOrder || isRefundedOrder) {
+                  serviceDepositPaid = totalPaid > 0 ? Math.min(totalPaid, serviceAmount) : 0;
+                  remaining = 0;
+                } else if (isOrderCompleted || order.paymentSummary?.paymentStatus === 'PAID') {
                   serviceDepositPaid = serviceAmount;
                   remaining = 0;
                 } else if (isRental) {
@@ -2504,48 +3545,138 @@ export function OrderDetailDrawer({
                   remaining = isPaidStatus ? Math.max(0, grandTotal - serviceDepositPaid - assetDeposit) : grandTotal;
                 }
 
-                return (
-                  <div className="p-payment-summary-box">
-                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>
-                      Trạng thái dòng tiền &amp; Ký quỹ Escrow
-                    </span>
+                const serviceFlowNote = isCancelledOrder
+                  ? 'Đơn đã hủy'
+                  : rawCode === 'REFUNDED'
+                  ? 'Đã hoàn tiền'
+                  : rawCode === 'PARTIALLY_REFUNDED'
+                  ? 'Hoàn tiền một phần'
+                  : isPaidStatus
+                  ? 'Đã thu qua Escrow'
+                  : 'Chờ thanh toán';
 
-                    <div className="p-payment-row">
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <CheckCircle size={14} color="#10B981" />
-                        <span>{isRental ? 'Tiền thuê dịch vụ đã thu' : 'Tiền cọc dịch vụ đã thu'}</span>
-                      </span>
-                      <strong style={{ color: '#10B981' }}>
-                        {serviceDepositPaid.toLocaleString('vi-VN')}đ ({isPaidStatus ? 'Đã thu qua Escrow' : 'Chờ thanh toán'})
-                      </strong>
+                const depositFlowNote = isOrderCompleted
+                  ? 'Đã tất toán'
+                  : isCancelledOrder
+                  ? 'Đơn đã hủy'
+                  : isRefundedOrder
+                  ? 'Đã xử lý hoàn cọc'
+                  : isUnpaidOrder
+                  ? 'Chờ thanh toán'
+                  : 'Đang tạm giữ bảo đảm';
+
+                return (
+                  <>
+                    <div className="p-payment-summary-box">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#0F172A' }}>
+                          Bảng kê tài chính chi tiết
+                        </span>
+                        <span
+                          className="p-payment-badge-paid"
+                          style={{ color: paymentBadge.color, background: paymentBadge.background }}
+                        >
+                          {paymentBadge.text}
+                        </span>
+                      </div>
+
+                      {order.items && order.items.length > 0 ? (
+                        order.items.map((item: any, idx: number) => {
+                          const itemName = item.name || item.productId?.name || item.photographyPackageId?.name || (item.itemType === 'PRODUCT' ? 'Áo dài' : 'Gói chụp ảnh');
+                          const linePrice = Number(item.subtotal || (item.unitPrice || item.price || 0) * (item.quantity || 1));
+                          return (
+                            <div key={item._id || idx} className="p-payment-row">
+                              <span>{itemName} (x{item.quantity || 1})</span>
+                              <strong>{linePrice.toLocaleString('vi-VN')}đ</strong>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="p-payment-row">
+                          <span>{order.productName || 'Dịch vụ'}</span>
+                          <strong>{order.total}</strong>
+                        </div>
+                      )}
+
+                      {Boolean(order.depositTotal && order.depositTotal > 0) && (
+                        <div className="p-payment-row">
+                          <span>Tiền cọc tài sản trang phục (Áo dài)</span>
+                          <strong>{Number(order.depositTotal).toLocaleString('vi-VN')}đ</strong>
+                        </div>
+                      )}
+
+                      {Boolean(order.pricingSummary?.serviceFee && order.pricingSummary.serviceFee > 0) && (
+                        <div className="p-payment-row">
+                          <span>Phí dịch vụ / Vệ sinh</span>
+                          <strong>{Number(order.pricingSummary.serviceFee).toLocaleString('vi-VN')}đ</strong>
+                        </div>
+                      )}
+
+                      {Boolean((order.pricingSummary?.voucherDiscountTotal || order.pricingSummary?.discountAmount) && (order.pricingSummary.voucherDiscountTotal > 0 || order.pricingSummary.discountAmount > 0)) && (
+                        <div className="p-payment-row" style={{ color: '#059669' }}>
+                          <span>Ưu đãi giảm giá</span>
+                          <strong>-{Number(order.pricingSummary.voucherDiscountTotal || order.pricingSummary.discountAmount).toLocaleString('vi-VN')}đ</strong>
+                        </div>
+                      )}
+
+                      <div className="p-payment-row total">
+                        <span>Tổng giá trị đơn hàng:</span>
+                        <span style={{ color: '#BE123C', fontSize: '16px' }}>
+                          {order.total || `${(order.totalAmount || 0).toLocaleString('vi-VN')}đ`}
+                        </span>
+                      </div>
                     </div>
 
-                    {assetDeposit > 0 && (
+                    <div className="p-payment-summary-box">
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>
+                        Trạng thái dòng tiền &amp; Ký quỹ Escrow
+                      </span>
+
                       <div className="p-payment-row">
                         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <CheckCircle size={14} color="#10B981" />
-                          <span>Tiền cọc tài sản trang phục</span>
+                          {isPaidStatus ? <CheckCircle size={14} color="#10B981" /> : <Hourglass size={14} color="#D97706" />}
+                          <span>{isRental ? 'Tiền thuê dịch vụ đã thu' : 'Tiền cọc dịch vụ đã thu'}</span>
                         </span>
-                        <strong style={{ color: '#0284C7' }}>
-                          {assetDeposit.toLocaleString('vi-VN')}đ ({isOrderCompleted ? 'Đã tất toán' : 'Đang tạm giữ bảo đảm'})
+                        <strong style={{ color: isPaidStatus ? '#10B981' : '#64748B' }}>
+                          {serviceDepositPaid.toLocaleString('vi-VN')}đ ({serviceFlowNote})
                         </strong>
                       </div>
-                    )}
 
-                    <div className="p-payment-row">
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {remaining === 0 ? <CheckCircle size={14} color="#10B981" /> : <Hourglass size={14} color="#D97706" />}
-                        <span>Số tiền còn lại cần thu</span>
-                      </span>
-                      <strong style={{ color: remaining === 0 ? '#10B981' : '#D97706' }}>
-                        {remaining === 0 ? 'Đã thanh toán đủ' : `${remaining.toLocaleString('vi-VN')}đ (Thanh toán tại chỗ)`}
-                      </strong>
-                    </div>
+                      {assetDeposit > 0 && (
+                        <div className="p-payment-row">
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            {isPaidStatus ? <CheckCircle size={14} color="#10B981" /> : <Hourglass size={14} color="#D97706" />}
+                            <span>Tiền cọc tài sản trang phục</span>
+                          </span>
+                          <strong style={{ color: '#0284C7' }}>
+                            {assetDeposit.toLocaleString('vi-VN')}đ ({depositFlowNote})
+                          </strong>
+                        </div>
+                      )}
 
-                    <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
-                      Cổng ký quỹ: <strong>VibeHue Escrow Banking</strong> &nbsp;|&nbsp; Mã đơn: <strong>{order.id || `#VH-${order._id.slice(-5).toUpperCase()}`}</strong>
+                      <div className="p-payment-row">
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {remaining === 0 && isPaidStatus ? <CheckCircle size={14} color="#10B981" /> : <Hourglass size={14} color="#D97706" />}
+                          <span>Số tiền còn lại cần thu</span>
+                        </span>
+                        <strong style={{ color: isCancelledOrder || isRefundedOrder ? '#64748B' : remaining === 0 ? '#10B981' : '#D97706' }}>
+                          {isCancelledOrder
+                            ? 'Không thu (Đơn đã hủy)'
+                            : rawCode === 'REFUNDED'
+                            ? 'Đã hoàn tiền'
+                            : rawCode === 'PARTIALLY_REFUNDED'
+                            ? 'Đã hoàn một phần'
+                            : remaining === 0
+                            ? 'Đã thanh toán đủ'
+                            : `${remaining.toLocaleString('vi-VN')}đ (${isPaidStatus ? 'Thanh toán tại chỗ' : 'Chờ thanh toán'})`}
+                        </strong>
+                      </div>
+
+                      <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
+                        Cổng ký quỹ: <strong>TàGo Escrow Banking</strong> &nbsp;|&nbsp; Mã đơn: <strong>{order.id || `#TG-${order._id.slice(-5).toUpperCase()}`}</strong>
+                      </div>
                     </div>
-                  </div>
+                  </>
                 );
               })()}
 
@@ -2961,7 +4092,10 @@ export function OrderDetailDrawer({
               </>
             )}
 
-            {(rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') && !isPhoto && (
+            {((rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') &&
+              !isPhoto &&
+              (rentalItems.length === 0 ||
+                rentalItems.some((it: any) => !it.rentalFulfillment?.status || it.rentalFulfillment?.status === 'PENDING'))) && (
               <button
                 type="button"
                 className="p-drawer-primary-btn"
@@ -2973,7 +4107,12 @@ export function OrderDetailDrawer({
               </button>
             )}
 
-            {(rawStatus === 'PICKUP_PENDING' || rawStatus === 'READY_FOR_PICKUP') && !isPhoto && (
+            {(rawStatus === 'PICKUP_PENDING' ||
+              rawStatus === 'READY_FOR_PICKUP' ||
+              ((rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') &&
+                rentalItems.length > 0 &&
+                rentalItems.every((it: any) => it.rentalFulfillment?.status && it.rentalFulfillment?.status !== 'PENDING'))) &&
+              !isPhoto && (
               <>
                 <span
                   style={{
@@ -3055,18 +4194,117 @@ export function OrderDetailDrawer({
               </span>
             )}
 
-            {rawStatus === 'RETURN_PENDING' && !isSingleRentalItem && !hasIncidentPending && !hasDispute && (
+            {/* Đơn có nhiều áo dài hoặc đơn Combo: Khi có áo dài chưa nhận lại */}
+            {!isSingleRentalItem && !hasIncidentPending && !hasDispute && !isOrderCompleted &&
+              rentalItems.length > 0 &&
+              rentalItems.some((i) => !['RETURNED', 'COMPLETED'].includes(i.rentalFulfillment?.status)) &&
+              ['COMBO_PHOTOS_APPROVED', 'RETURN_PENDING'].includes(rawStatus) && (
+              <>
+                <span
+                  style={{
+                    fontSize: '12.5px',
+                    fontWeight: 650,
+                    color: '#D97706',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    backgroundColor: '#FEF3C7',
+                    padding: '7px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid #FDE68A',
+                  }}
+                >
+                  <Clock size={14} />
+                  <span>Khách đã trả áo - Chờ shop nhận &amp; kiểm tra</span>
+                </span>
+                <button
+                  type="button"
+                  className="p-drawer-primary-btn"
+                  disabled={isReceivingReturn}
+                  onClick={() => void handleReceiveAllRentalReturns()}
+                >
+                  <PackageCheck size={14} />
+                  <span>{isReceivingReturn ? 'Đang xử lý...' : 'Xác nhận đã nhận lại áo & kiểm tra'}</span>
+                </button>
+              </>
+            )}
+
+            {/* Đơn có nhiều áo dài hoặc đơn Combo: Khi đã nhận lại tất cả áo dài -> Tất toán cọc */}
+            {!isSingleRentalItem && !hasIncidentPending && !hasDispute && !isOrderCompleted &&
+              rentalItems.length > 0 &&
+              rentalItems.every((i) => ['RETURNED', 'COMPLETED'].includes(i.rentalFulfillment?.status)) &&
+              rentalItems.some((i) => i.rentalFulfillment?.status === 'RETURNED' && !['FULLY_RELEASED', 'PARTIALLY_DEDUCTED', 'FULLY_DEDUCTED'].includes(i.rentalFulfillment?.depositSettlementStatus)) && (
+              <>
+                <button
+                  type="button"
+                  className="p-drawer-danger-btn"
+                  onClick={() => onOpenIncidentReport(order)}
+                  style={{ padding: '8px 14px', fontSize: '13px' }}
+                  title="Yêu cầu đền bù sự cố hư hỏng hoặc vi phạm"
+                >
+                  <AlertTriangle size={14} />
+                  <span>⚠️ Yêu cầu đền bù</span>
+                </button>
+                <button
+                  type="button"
+                  className="p-drawer-primary-btn"
+                  style={{ backgroundColor: '#059669', border: 'none', color: '#FFFFFF' }}
+                  onClick={() => void handleConfirmAllNoIncident()}
+                  disabled={isConfirmingNoIncident}
+                >
+                  <CheckCircle size={14} />
+                  <span>{isConfirmingNoIncident ? 'Đang xử lý...' : '✓ Không có sự cố (Hoàn cọc)'}</span>
+                </button>
+              </>
+            )}
+
+            {['PICKED_UP', 'RETURN_PENDING', 'OVERDUE'].includes(rawStatus) && (
               <button
                 type="button"
-                className="p-drawer-primary-btn"
-                onClick={() => onOpenFulfillmentModal ? onOpenFulfillmentModal(order._id) : void changeOrderStatus(order._id, 'RETURNED')}
+                onClick={() => void handleSimulateOverdue(order._id)}
+                style={{
+                  backgroundColor: '#FFFBEB',
+                  color: '#B45309',
+                  border: '1px solid #FCD34D',
+                  padding: '7px 12px',
+                  borderRadius: '8px',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                }}
+                title="Giả lập đơn trễ hạn để test luồng trừ tiền trước Hội đồng"
               >
-                <PackageCheck size={14} />
-                <span>Kiểm tra &amp; Nhận lại áo dài</span>
+                <span>⚡ Demo: Giả lập trễ hạn</span>
               </button>
             )}
 
-            {(rawStatus === 'RETURNED' || rawStatus === 'COMBO_PHOTOS_APPROVED') && !isSingleRentalItem && !isOrderCompleted && !isSingleCleaning && !hasIncidentPending && !hasDispute && (
+            {rawStatus === 'OVERDUE' && (
+              <>
+                <button
+                  type="button"
+                  className="p-drawer-danger-btn"
+                  onClick={() => void handleConfirmLostItem(order._id)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <XCircle size={14} />
+                  <span>Xác nhận mất đồ (LOST_ITEM)</span>
+                </button>
+                <button
+                  type="button"
+                  className="p-drawer-primary-btn"
+                  onClick={() => void handleReverseOverdue(order._id)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#16A34A', borderColor: '#16A34A' }}
+                >
+                  <CheckCircle size={14} />
+                  <span>Khách trả áo (Hoàn tác)</span>
+                </button>
+              </>
+            )}
+
+            {rawStatus === 'RETURNED' && !isSingleRentalItem && !isOrderCompleted && !isSingleCleaning && !hasIncidentPending && !hasDispute && (
               <span
                 style={{
                   fontSize: '12.5px',
@@ -3119,7 +4357,7 @@ export function OrderDetailDrawer({
                 <img src={selectedEvidenceImage} alt="Phóng to bằng chứng" />
               </div>
               <div className="p-lightbox-footer">
-                <span>VibeHue Escrow • Bằng chứng xác thực</span>
+                <span>TàGo Escrow • Bằng chứng xác thực</span>
                 <a
                   href={selectedEvidenceImage}
                   target="_blank"

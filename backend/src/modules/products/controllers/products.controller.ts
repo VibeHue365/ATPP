@@ -66,16 +66,43 @@ export class ProductsController {
       minPrice: minPrice ? Number(minPrice) : undefined,
       maxPrice: maxPrice ? Number(maxPrice) : undefined,
       minRating: minRating ? Number(minRating) : undefined,
-      colors: colors ? colors.split(',').map(c => c.trim()).filter(Boolean) : undefined,
-      sizes: sizes ? sizes.split(',').map(s => s.trim()).filter(Boolean) : undefined,
-      materials: materials ? materials.split(',').map(m => m.trim()).filter(Boolean) : undefined,
+      colors: colors
+        ? colors
+            .split(',')
+            .map((c) => c.trim())
+            .filter(Boolean)
+        : undefined,
+      sizes: sizes
+        ? sizes
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : undefined,
+      materials: materials
+        ? materials
+            .split(',')
+            .map((m) => m.trim())
+            .filter(Boolean)
+        : undefined,
       categoryId,
-      styleCategoryIds: styleCategoryIds?.split(',').map((id) => id.trim()).filter(Boolean),
-      eventCategoryIds: eventCategoryIds?.split(',').map((id) => id.trim()).filter(Boolean),
+      styleCategoryIds: styleCategoryIds
+        ?.split(',')
+        .map((id) => id.trim())
+        .filter(Boolean),
+      eventCategoryIds: eventCategoryIds
+        ?.split(',')
+        .map((id) => id.trim())
+        .filter(Boolean),
       providerId,
       providerLocation,
-      productTypes: types?.split(',').map((type) => type.trim()).filter(Boolean),
-      ids: ids?.split(',').map((id) => id.trim()).filter(Boolean),
+      productTypes: types
+        ?.split(',')
+        .map((type) => type.trim())
+        .filter(Boolean),
+      ids: ids
+        ?.split(',')
+        .map((id) => id.trim())
+        .filter(Boolean),
       startDate,
       endDate,
       rentalType,
@@ -85,8 +112,16 @@ export class ProductsController {
     }
     if (page || limit || ids) {
       const parsedPage = Math.max(1, Number.parseInt(page ?? '1', 10) || 1);
-      const parsedLimit = Math.min(24, Math.max(1, Number.parseInt(limit ?? '12', 10) || 12));
-      return this.productsService.getActiveProductsPage(options, parsedPage, parsedLimit, sort);
+      const parsedLimit = Math.min(
+        24,
+        Math.max(1, Number.parseInt(limit ?? '12', 10) || 12),
+      );
+      return this.productsService.getActiveProductsPage(
+        options,
+        parsedPage,
+        parsedLimit,
+        sort,
+      );
     }
     return this.productsService.getAllActiveProducts(options);
   }
@@ -142,11 +177,20 @@ export class ProductsController {
       {
         search: search?.trim() || undefined,
         maxPrice: maxPrice ? Number(maxPrice) : undefined,
-        colors: colors?.split(',').map((value) => value.trim()).filter(Boolean),
-        sizes: sizes?.split(',').map((value) => value.trim()).filter(Boolean),
+        colors: colors
+          ?.split(',')
+          .map((value) => value.trim())
+          .filter(Boolean),
+        sizes: sizes
+          ?.split(',')
+          .map((value) => value.trim())
+          .filter(Boolean),
         categoryId,
         providerLocation,
-        productTypes: types?.split(',').map((value) => value.trim()).filter(Boolean),
+        productTypes: types
+          ?.split(',')
+          .map((value) => value.trim())
+          .filter(Boolean),
       },
     );
   }
@@ -154,9 +198,29 @@ export class ProductsController {
   @Get(':id/availability')
   // Public read-only calendar probes should not consume the global throttle
   // budget while users move between dates, sizes, and colors.
-  @SkipThrottle({ default: true })
-  async getAvailability(@Param('id') id: string, @Query('size') size: string, @Query('color') color: string, @Query('rentalFrom') rentalFrom: string, @Query('rentalTo') rentalTo: string, @Query('quantity') quantity?: string, @Query('rentalType') rentalType?: string, @Query('startTime') startTime?: string, @Query('endTime') endTime?: string) {
-    return this.availabilityService.check(id, size, color, rentalFrom, rentalTo, quantity ? Number(quantity) : 1, rentalType, startTime, endTime);
+  @SkipThrottle()
+  async getAvailability(
+    @Param('id') id: string,
+    @Query('size') size: string,
+    @Query('color') color: string,
+    @Query('rentalFrom') rentalFrom: string,
+    @Query('rentalTo') rentalTo: string,
+    @Query('quantity') quantity?: string,
+    @Query('rentalType') rentalType?: string,
+    @Query('startTime') startTime?: string,
+    @Query('endTime') endTime?: string,
+  ) {
+    return this.availabilityService.check(
+      id,
+      size,
+      color,
+      rentalFrom,
+      rentalTo,
+      quantity ? Number(quantity) : 1,
+      rentalType,
+      startTime,
+      endTime,
+    );
   }
 
   @Get('my-listings')
@@ -172,7 +236,15 @@ export class ProductsController {
   ): Promise<any> {
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 10;
-    return this.productsService.getMyProducts(user.sub, search, sortBy, pageNum, limitNum, sizes, colors);
+    return this.productsService.getMyProducts(
+      user.sub,
+      search,
+      sortBy,
+      pageNum,
+      limitNum,
+      sizes,
+      colors,
+    );
   }
 
   @Post()
@@ -246,7 +318,9 @@ export class ProductsController {
     @UploadedFiles() files: Express.Multer.File[],
   ): Promise<{ urls: string[] }> {
     const uploads = await Promise.all(
-      (files || []).map((file) => this.publicMedia.uploadImage('products', file)),
+      (files || []).map((file) =>
+        this.publicMedia.uploadImage('products', file),
+      ),
     );
     return { urls: uploads.map((upload) => upload.url) };
   }
@@ -276,7 +350,9 @@ export class ProductsController {
     @UploadedFiles() files: Express.Multer.File[],
   ): Promise<{ urls: string[] }> {
     const uploads = await Promise.all(
-      (files || []).map((file) => this.publicMedia.uploadVideo('products', file)),
+      (files || []).map((file) =>
+        this.publicMedia.uploadVideo('products', file),
+      ),
     );
     return { urls: uploads.map((upload) => upload.url) };
   }
@@ -290,4 +366,3 @@ export class ProductsController {
     return product;
   }
 }
-

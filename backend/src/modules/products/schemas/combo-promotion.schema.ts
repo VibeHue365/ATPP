@@ -26,7 +26,12 @@ export class ComboPromotion {
   @Prop({ type: Types.ObjectId, ref: 'Product', required: true, index: true })
   productId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'PhotographyPackage', required: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'PhotographyPackage',
+    required: true,
+    index: true,
+  })
   photographyPackageId: Types.ObjectId;
 
   @Prop({ required: true, min: 1, max: 80 })
@@ -108,7 +113,8 @@ export class ComboPromotion {
   }>;
 }
 
-export const ComboPromotionSchema = SchemaFactory.createForClass(ComboPromotion);
+export const ComboPromotionSchema =
+  SchemaFactory.createForClass(ComboPromotion);
 ComboPromotionSchema.index({ status: 1, shootDate: 1 });
 ComboPromotionSchema.index({ providerId: 1, status: 1 });
 ComboPromotionSchema.index({ createdAt: -1 });

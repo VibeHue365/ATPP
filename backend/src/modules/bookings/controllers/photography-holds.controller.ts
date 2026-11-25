@@ -31,7 +31,9 @@ export class PhotographyHoldsController {
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     if (!idempotencyKey?.trim()) {
-      throw new BadRequestException('Cần gửi header Idempotency-Key khi giữ lịch chụp.');
+      throw new BadRequestException(
+        'Cần gửi header Idempotency-Key khi giữ lịch chụp.',
+      );
     }
     return this.photographyHoldService.createHold(
       user.sub,
@@ -47,11 +49,14 @@ export class PhotographyHoldsController {
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     if (!idempotencyKey?.trim()) {
-      throw new BadRequestException('Cần gửi header Idempotency-Key khi giữ combo.');
+      throw new BadRequestException(
+        'Cần gửi header Idempotency-Key khi giữ combo.',
+      );
     }
     return this.photographyHoldService.createComboHold(
       user.sub,
       dto,
       idempotencyKey.trim(),
     );
-  }}
+  }
+}

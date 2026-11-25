@@ -1,14 +1,18 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
-/* eslint-disable @typescript-eslint/restrict-template-expressions */
+
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import {
+  StaffAvailabilityService,
+  parseTimeRangeToMinutes,
+} from './staff-availability.service';
+import { bumpProviderAvailabilityVersion } from './provider-availability-version';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, ClientSession } from 'mongoose';
 import { BookingStatus } from '../schemas/booking.schema';
@@ -38,6 +42,8 @@ export class BookingRescheduleService {
     @InjectModel(Provider.name)
     private readonly providerModel: Model<ProviderDocument>,
     private readonly notificationsService: NotificationsService,
+    @Optional()
+    private readonly staffAvailabilityService?: StaffAvailabilityService,
   ) {}
 
   private parseTimeSlot(slot: string): { start: number; end: number } {
@@ -489,14 +495,49 @@ export class BookingRescheduleService {
         }
 
         const photographerId = bookingItem.providerId.toString();
-        if (photographerId) {
-          const busySchedules = await this.getBusySchedulesForProvider(
-            photographerId,
-            session,
-          );
-          const isSlotConflict =
-            dto.newShootTimeSlot &&
-            busySchedules.bookedSlots.some(
+        let reassignedDecision: {
+          assignedStaffId: Types.ObjectId | null;
+          assignedStaffSnapshot: any;
+        } | null = null;
+
+        if (photographerId && dto.newShootTimeSlot) {
+          const parsedRange = parseTimeRangeToMinutes(dto.newShootTimeSlot);
+          if (this.staffAvailabilityService && parsedRange) {
+            const evaluation =
+              await this.staffAvailabilityService.evaluateSessions(
+                new Types.ObjectId(photographerId),
+                [
+                  {
+                    clientId: 'reschedule',
+                    dateKey: dto.newShootDate,
+                    startMin: parsedRange.startMin,
+                    endMin: parsedRange.endMin,
+                  },
+                ],
+                {
+                  excludeBookingItemId: bookingItem._id,
+                  session,
+                },
+              );
+            if (!evaluation.valid) {
+              throw new BadRequestException(
+                evaluation.errors[0]?.message ||
+                  `Thợ ảnh đã có lịch vào ngày ${dto.newShootDate} khung giờ ${dto.newShootTimeSlot}`,
+              );
+            }
+            const dec = evaluation.assignmentsByClientId.get('reschedule');
+            if (dec) {
+              reassignedDecision = {
+                assignedStaffId: dec.assignedStaffId,
+                assignedStaffSnapshot: dec.assignedStaffSnapshot,
+              };
+            }
+          } else {
+            const busySchedules = await this.getBusySchedulesForProvider(
+              photographerId,
+              session,
+            );
+            const isSlotConflict = busySchedules.bookedSlots.some(
               (slot) =>
                 slot.date === dto.newShootDate &&
                 slot.timeSlot &&
@@ -504,10 +545,11 @@ export class BookingRescheduleService {
                 slot.bookingItemId !== dto.itemId,
             );
 
-          if (isSlotConflict) {
-            throw new BadRequestException(
-              `Thợ ảnh đã có lịch vào ngày ${dto.newShootDate} khung giờ ${dto.newShootTimeSlot}`,
-            );
+            if (isSlotConflict) {
+              throw new BadRequestException(
+                `Thợ ảnh đã có lịch vào ngày ${dto.newShootDate} khung giờ ${dto.newShootTimeSlot}`,
+              );
+            }
           }
         }
 
@@ -522,6 +564,20 @@ export class BookingRescheduleService {
           session,
         );
 
+        const parsedSlot = dto.newShootTimeSlot
+          ? parseTimeRangeToMinutes(dto.newShootTimeSlot)
+          : null;
+        const nextStartsAt = parsedSlot
+          ? new Date(
+              `${dto.newShootDate}T${String(Math.floor(parsedSlot.startMin / 60)).padStart(2, '0')}:${String(parsedSlot.startMin % 60).padStart(2, '0')}:00+07:00`,
+            )
+          : undefined;
+        const nextEndsAt = parsedSlot
+          ? new Date(
+              `${dto.newShootDate}T${String(Math.floor(parsedSlot.endMin / 60)).padStart(2, '0')}:${String(parsedSlot.endMin % 60).padStart(2, '0')}:00+07:00`,
+            )
+          : undefined;
+
         await this.bookingsRepository.updateManySchedules(
           {
             bookingId: new Types.ObjectId(bookingId),
@@ -530,10 +586,23 @@ export class BookingRescheduleService {
           {
             scheduledDate: new Date(dto.newShootDate),
             timeSlot: dto.newShootTimeSlot || null,
-            status: BookingScheduleStatus.Scheduled,
+            providerLocalDate: dto.newShootDate,
+            ...(nextStartsAt ? { startsAt: nextStartsAt } : {}),
+            ...(nextEndsAt ? { endsAt: nextEndsAt } : {}),
+            ...(reassignedDecision
+              ? {
+                  assignedStaffId: reassignedDecision.assignedStaffId,
+                  assignedStaffSnapshot:
+                    reassignedDecision.assignedStaffSnapshot,
+                }
+              : {}),
+            status: BookingScheduleStatus.Confirmed,
           },
           session,
         );
+        if (photographerId) {
+          bumpProviderAvailabilityVersion(photographerId);
+        }
       }
 
       await this.bookingsRepository.updateBooking(

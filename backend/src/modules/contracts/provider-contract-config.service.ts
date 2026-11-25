@@ -39,7 +39,9 @@ export class ProviderContractConfigService {
       throw new ServiceUnavailableException('CONTRACTS_V2_DISABLED');
     }
     if (!user.roles.includes('PROVIDER')) {
-      throw new ForbiddenException('PROVIDER_ROLE_REQUIRED: Chỉ đối tác cho thuê mới được xem cấu hình này.');
+      throw new ForbiddenException(
+        'PROVIDER_ROLE_REQUIRED: Chỉ đối tác cho thuê mới được xem cấu hình này.',
+      );
     }
     const provider = await this.access.ownProvider(user);
     const existing = await this.configModel
@@ -78,12 +80,16 @@ export class ProviderContractConfigService {
       throw new ServiceUnavailableException('CONTRACTS_V2_DISABLED');
     }
     if (!user.roles.includes('PROVIDER')) {
-      throw new ForbiddenException('PROVIDER_ROLE_REQUIRED: Chỉ đối tác cho thuê mới được cập nhật cấu hình này.');
+      throw new ForbiddenException(
+        'PROVIDER_ROLE_REQUIRED: Chỉ đối tác cho thuê mới được cập nhật cấu hình này.',
+      );
     }
     const provider = await this.access.ownProvider(user);
     const status = String(provider.status || '').toUpperCase();
     if (status !== 'ACTIVE') {
-      throw new ForbiddenException('PROVIDER_NOT_ACTIVE: Tài khoản đối tác chưa được kích hoạt.');
+      throw new ForbiddenException(
+        'PROVIDER_NOT_ACTIVE: Tài khoản đối tác chưa được kích hoạt.',
+      );
     }
     const actorId = contractObjectId(user.sub);
 
@@ -196,7 +202,9 @@ export class ProviderContractConfigService {
       throw new ServiceUnavailableException('CONTRACTS_V2_DISABLED');
     }
     if (!user.roles.includes('PROVIDER')) {
-      throw new ForbiddenException('PROVIDER_ROLE_REQUIRED: Chỉ đối tác cho thuê mới được xem lịch sử cấu hình.');
+      throw new ForbiddenException(
+        'PROVIDER_ROLE_REQUIRED: Chỉ đối tác cho thuê mới được xem lịch sử cấu hình.',
+      );
     }
     const provider = await this.access.ownProvider(user);
     const safeLimit = Math.min(Math.max(1, limit), 100);

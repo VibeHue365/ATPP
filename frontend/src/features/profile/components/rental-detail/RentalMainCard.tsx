@@ -16,6 +16,19 @@ import { ImageWithFallback } from '../../../../shared/media/ImageWithFallback';
 import { getMediaUrl } from '../../../../shared/media/mediaUrl';
 import { RentalEvidenceImage } from '../../../rentals/components/RentalEvidenceImage';
 
+export interface RentalItemDetail {
+  id?: string;
+  title: string;
+  image?: string;
+  size?: string;
+  color?: string;
+  material?: string;
+  brand?: string;
+  accessories?: string;
+  price?: number;
+  quantity?: number;
+}
+
 interface RentalMainCardProps {
   rentalData: {
     image?: string;
@@ -33,6 +46,7 @@ interface RentalMainCardProps {
     dueTime: string;
     remainingTime: string;
     currentStepIndex?: number;
+    items?: RentalItemDetail[];
   };
   pickupInspection?: {
     handoverPhotos?: any[];
@@ -68,6 +82,8 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({
   const progressWidth =
     activeStep === 4 ? '100%' : activeStep === 3 ? '66%' : activeStep === 2 ? '33%' : '0%';
 
+  const hasMultipleItems = Boolean(rentalData.items && rentalData.items.length > 1);
+
   return (
     <div
       style={{
@@ -75,115 +91,252 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({
         borderRadius: '16px',
         border: '1px solid #EFE9E1',
         padding: '24px',
-        display: 'grid',
-        gridTemplateColumns: '170px 1fr',
+        display: hasMultipleItems ? 'flex' : 'grid',
+        flexDirection: hasMultipleItems ? 'column' : undefined,
+        gridTemplateColumns: hasMultipleItems ? undefined : '170px 1fr',
         gap: '24px',
         boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)',
         alignItems: 'start'
       }}
     >
-      {/* 1. Left Thumbnail Image */}
-      <div
-        style={{
-          width: '170px',
-          height: '210px',
-          borderRadius: '12px',
-          overflow: 'hidden',
-          backgroundColor: '#F8F5F1',
-          border: '1px solid #ECE5DB',
-          flexShrink: 0
-        }}
-      >
-        <ImageWithFallback
-          src={rentalData.image}
-          alt={rentalData.title}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-          fallback={
-            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8C827A' }}>
-              <Shirt size={40} />
-            </div>
-          }
-        />
-      </div>
+      {/* CASE 1: ĐƠN CÓ NHIỀU ÁO DÀI (MULTI-ITEM LIST - PHƯƠNG ÁN 1A) */}
+      {hasMultipleItems ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
+          {/* Top Header: Badge + Title + Code */}
+          <div>
+            <span
+              style={{
+                display: 'inline-block',
+                padding: '3px 8px',
+                borderRadius: '4px',
+                backgroundColor:
+                  rawStatus === 'DISPUTED'
+                    ? '#FEE2E2'
+                    : rawStatus === 'RETURN_PENDING' && rentalData.statusLabel.includes('SỰ CỐ')
+                    ? '#FFF1F2'
+                    : ['RETURNED', 'COMPLETED', 'COMBO_PHOTOS_APPROVED'].includes(rawStatus)
+                    ? '#ECFDF5'
+                    : '#FFEDD5',
+                color:
+                  rawStatus === 'DISPUTED'
+                    ? '#991B1B'
+                    : rawStatus === 'RETURN_PENDING' && rentalData.statusLabel.includes('SỰ CỐ')
+                    ? '#E11D48'
+                    : ['RETURNED', 'COMPLETED', 'COMBO_PHOTOS_APPROVED'].includes(rawStatus)
+                    ? '#047857'
+                    : '#C2410C',
+                fontSize: '11px',
+                fontWeight: 800,
+                letterSpacing: '0.03em',
+                marginBottom: '6px'
+              }}
+            >
+              {rentalData.statusLabel}
+            </span>
 
-      {/* 2. Right Content & Stepper */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
-        {/* Top Header: Badge + Title + Code */}
-        <div>
-          <span
+            <h2 style={{ margin: '0 0 4px 0', fontSize: '20px', fontWeight: 800, color: '#231F20' }}>
+              Danh sách trang phục thuê ({rentalData.items?.length} áo dài)
+            </h2>
+
+            <div style={{ fontSize: '12.5px', color: '#7D736B', fontWeight: 600 }}>
+              Mã thuê: <span style={{ color: '#231F20', fontWeight: 700 }}>{rentalData.code}</span>
+            </div>
+          </div>
+
+          {/* Grid danh sách từng áo dài chi tiết */}
+          <div
             style={{
-              display: 'inline-block',
-              padding: '3px 8px',
-              borderRadius: '4px',
-              backgroundColor:
-                rawStatus === 'DISPUTED' || rentalData.statusLabel === 'TRANH CHẤP'
-                  ? '#FEE2E2'
-                  : rentalData.statusLabel === 'CHỜ DUYỆT SỰ CỐ'
-                  ? '#FFF1F2'
-                  : ['RETURNED', 'COMPLETED', 'COMBO_PHOTOS_APPROVED'].includes(rawStatus)
-                  ? '#ECFDF5'
-                  : '#FFEDD5',
-              color:
-                rawStatus === 'DISPUTED' || rentalData.statusLabel === 'TRANH CHẤP'
-                  ? '#991B1B'
-                  : rentalData.statusLabel === 'CHỜ DUYỆT SỰ CỐ'
-                  ? '#E11D48'
-                  : ['RETURNED', 'COMPLETED', 'COMBO_PHOTOS_APPROVED'].includes(rawStatus)
-                  ? '#047857'
-                  : '#C2410C',
-              fontSize: '11px',
-              fontWeight: 800,
-              letterSpacing: '0.03em',
-              marginBottom: '6px'
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+              gap: '14px',
+              width: '100%'
             }}
           >
-            {rentalData.statusLabel}
-          </span>
+            {rentalData.items?.map((it, idx) => (
+              <div
+                key={it.id || idx}
+                style={{
+                  backgroundColor: '#FCFAF8',
+                  borderRadius: '12px',
+                  border: '1px solid #ECE5DB',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  gap: '16px',
+                  alignItems: 'center'
+                }}
+              >
+                {/* Thumbnail */}
+                <div
+                  style={{
+                    width: '90px',
+                    height: '118px',
+                    minWidth: '90px',
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    backgroundColor: '#F8F5F1',
+                    border: '1px solid #E5DCD0'
+                  }}
+                >
+                  <ImageWithFallback
+                    src={it.image}
+                    alt={it.title}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    fallback={
+                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8C827A' }}>
+                        <Shirt size={28} />
+                      </div>
+                    }
+                  />
+                </div>
 
-          <h2 style={{ margin: '0 0 4px 0', fontSize: '20px', fontWeight: 800, color: '#231F20' }}>
-            {rentalData.title}
-          </h2>
+                {/* Details */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', minWidth: 0, flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+                    <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#231F20' }}>
+                      {it.title}
+                    </h4>
+                    {it.price !== undefined && (
+                      <span style={{ fontSize: '13px', fontWeight: 800, color: '#8E1B2E', whiteSpace: 'nowrap' }}>
+                        {it.price.toLocaleString('vi-VN')}đ{it.quantity && it.quantity > 1 ? ` x${it.quantity}` : ''}
+                      </span>
+                    )}
+                  </div>
 
-          <div style={{ fontSize: '12.5px', color: '#7D736B', fontWeight: 600 }}>
-            Mã thuê: <span style={{ color: '#231F20', fontWeight: 700 }}>{rentalData.code}</span>
-            {rentalData.size && (
-              <> • Size <span style={{ color: '#231F20', fontWeight: 700 }}>{rentalData.size}</span></>
-            )}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', fontSize: '11.5px', marginTop: '2px' }}>
+                    <span style={{ backgroundColor: '#F3EFE9', padding: '2px 7px', borderRadius: '4px', fontWeight: 700, color: '#4A3F35' }}>
+                      Size {it.size || 'M'}
+                    </span>
+                    <span style={{ backgroundColor: '#F3EFE9', padding: '2px 7px', borderRadius: '4px', fontWeight: 700, color: '#4A3F35' }}>
+                      Màu {it.color || 'Đa sắc'}
+                    </span>
+                    {it.material && (
+                      <span style={{ backgroundColor: '#F3EFE9', padding: '2px 7px', borderRadius: '4px', color: '#6A5F55' }}>
+                        {it.material}
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ fontSize: '11.5px', color: '#7D736B', marginTop: '2px' }}>
+                    <span>Thương hiệu: <strong style={{ color: '#231F20' }}>{it.brand || 'TàGo Premium'}</strong></span>
+                    {it.accessories && (
+                      <span style={{ marginLeft: '10px' }}>Phụ kiện: <strong style={{ color: '#231F20' }}>{it.accessories}</strong></span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-
-        {/* 2x2 Attribute Grid */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: '10px 20px',
-            backgroundColor: '#FCFAF8',
-            borderRadius: '10px',
-            padding: '12px 16px',
-            border: '1px solid #F0ECE4'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#574D4F' }}>
-            <Sparkles size={14} color="#8E1B2E" />
-            <span>Thương hiệu: <strong style={{ color: '#231F20' }}>{rentalData.brand || 'LUMÉ'}</strong></span>
+      ) : (
+        /* CASE 2: ĐƠN CÓ 1 ÁO DÀI (BỐ CỤC MẶC ĐỊNH) */
+        <>
+          {/* 1. Left Thumbnail Image */}
+          <div
+            style={{
+              width: '170px',
+              height: '210px',
+              borderRadius: '12px',
+              overflow: 'hidden',
+              backgroundColor: '#F8F5F1',
+              border: '1px solid #ECE5DB',
+              flexShrink: 0
+            }}
+          >
+            <ImageWithFallback
+              src={rentalData.image}
+              alt={rentalData.title}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              fallback={
+                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8C827A' }}>
+                  <Shirt size={40} />
+                </div>
+              }
+            />
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#574D4F' }}>
-            <Palette size={14} color="#8E1B2E" />
-            <span>Màu sắc: <strong style={{ color: '#231F20' }}>{rentalData.color || 'Đa sắc'}</strong></span>
-          </div>
+          {/* 2. Right Content Header & Attributes */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
+            <div>
+              <span
+                style={{
+                  display: 'inline-block',
+                  padding: '3px 8px',
+                  borderRadius: '4px',
+                  backgroundColor:
+                    rawStatus === 'DISPUTED'
+                      ? '#FEE2E2'
+                      : rawStatus === 'RETURN_PENDING' && rentalData.statusLabel.includes('SỰ CỐ')
+                      ? '#FFF1F2'
+                      : ['RETURNED', 'COMPLETED', 'COMBO_PHOTOS_APPROVED'].includes(rawStatus)
+                      ? '#ECFDF5'
+                      : '#FFEDD5',
+                  color:
+                    rawStatus === 'DISPUTED'
+                      ? '#991B1B'
+                      : rawStatus === 'RETURN_PENDING' && rentalData.statusLabel.includes('SỰ CỐ')
+                      ? '#E11D48'
+                      : ['RETURNED', 'COMPLETED', 'COMBO_PHOTOS_APPROVED'].includes(rawStatus)
+                      ? '#047857'
+                      : '#C2410C',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  letterSpacing: '0.03em',
+                  marginBottom: '6px'
+                }}
+              >
+                {rentalData.statusLabel}
+              </span>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#574D4F' }}>
-            <Shirt size={14} color="#8E1B2E" />
-            <span>Chất liệu: <strong style={{ color: '#231F20' }}>{rentalData.material || 'Lụa cao cấp'}</strong></span>
-          </div>
+              <h2 style={{ margin: '0 0 4px 0', fontSize: '20px', fontWeight: 800, color: '#231F20' }}>
+                {rentalData.title}
+              </h2>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#574D4F' }}>
-            <Gem size={14} color="#8E1B2E" />
-            <span>Phụ kiện đi kèm: <strong style={{ color: '#231F20' }}>{rentalData.accessories || 'Mấn đội đầu'}</strong></span>
+              <div style={{ fontSize: '12.5px', color: '#7D736B', fontWeight: 600 }}>
+                Mã thuê: <span style={{ color: '#231F20', fontWeight: 700 }}>{rentalData.code}</span>
+                {rentalData.size && (
+                  <> • Size <span style={{ color: '#231F20', fontWeight: 700 }}>{rentalData.size}</span></>
+                )}
+              </div>
+            </div>
+
+            {/* 2x2 Attribute Grid */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '10px 20px',
+                backgroundColor: '#FCFAF8',
+                borderRadius: '10px',
+                padding: '12px 16px',
+                border: '1px solid #F0ECE4'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#574D4F' }}>
+                <Sparkles size={14} color="#8E1B2E" />
+                <span>Thương hiệu: <strong style={{ color: '#231F20' }}>{rentalData.brand || 'TàGo Premium'}</strong></span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#574D4F' }}>
+                <Palette size={14} color="#8E1B2E" />
+                <span>Màu sắc: <strong style={{ color: '#231F20' }}>{rentalData.color || 'Đa sắc'}</strong></span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#574D4F' }}>
+                <Shirt size={14} color="#8E1B2E" />
+                <span>Chất liệu: <strong style={{ color: '#231F20' }}>{rentalData.material || 'Lụa cao cấp'}</strong></span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#574D4F' }}>
+                <Gem size={14} color="#8E1B2E" />
+                <span>Phụ kiện đi kèm: <strong style={{ color: '#231F20' }}>{rentalData.accessories || 'Mấn đội đầu'}</strong></span>
+              </div>
+            </div>
           </div>
-        </div>
+        </>
+      )}
+
+      {/* CHUNG: PHẦN TIẾN TRÌNH STEPPER & HẠN TRẢ ĐỒ */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0, width: '100%', gridColumn: hasMultipleItems ? undefined : '2 / 3' }}>
 
         {/* Horizontal 4-Step Stepper */}
         <div style={{ position: 'relative', margin: '4px 0 0 0' }}>
@@ -315,34 +468,36 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({
           </div>
         </div>
 
-        {/* Due Date Alert Banner */}
-        <div
-          style={{
-            backgroundColor: '#FFF7EE',
-            border: '1px solid #FED7AA',
-            borderRadius: '12px',
-            padding: '12px 18px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '16px',
-            flexWrap: 'wrap'
-          }}
-        >
-          <div>
-            <span style={{ fontSize: '11px', color: '#9A3412', fontWeight: 600, display: 'block' }}>Hạn trả</span>
-            <span style={{ fontSize: '14.5px', fontWeight: 800, color: '#231F20' }}>
-              {rentalData.dueTime}
-            </span>
-          </div>
+        {/* Due Date Alert Banner (chỉ hiện khi đơn chưa kết thúc) */}
+        {!['COMPLETED', 'CANCELLED', 'RETURNED', 'LOST_ITEM'].includes(rentalData.status) && (
+          <div
+            style={{
+              backgroundColor: '#FFF7EE',
+              border: '1px solid #FED7AA',
+              borderRadius: '12px',
+              padding: '12px 18px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '16px',
+              flexWrap: 'wrap'
+            }}
+          >
+            <div>
+              <span style={{ fontSize: '11px', color: '#9A3412', fontWeight: 600, display: 'block' }}>Hạn trả</span>
+              <span style={{ fontSize: '14.5px', fontWeight: 800, color: '#231F20' }}>
+                {rentalData.dueTime}
+              </span>
+            </div>
 
-          <div style={{ textAlign: 'right' }}>
-            <span style={{ fontSize: '11px', color: '#C2410C', fontWeight: 700, display: 'block' }}>Còn lại</span>
-            <span style={{ fontSize: '17px', fontWeight: 900, color: '#EA580C' }}>
-              {rentalData.remainingTime}
-            </span>
+            <div style={{ textAlign: 'right' }}>
+              <span style={{ fontSize: '11px', color: '#C2410C', fontWeight: 700, display: 'block' }}>Còn lại</span>
+              <span style={{ fontSize: '17px', fontWeight: 900, color: '#EA580C' }}>
+                {rentalData.remainingTime}
+              </span>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* 3. Phần nổi lên về kiểm tra và bàn giao trang phục ở phần tổng quan */}
@@ -455,7 +610,7 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({
                   return (
                     <div
                       key={index}
-                      onClick={() => pickupInspection.onViewPhoto?.(resolvedUrl)}
+                      onClick={pickupInspection.onViewPhoto ? () => pickupInspection.onViewPhoto?.(resolvedUrl) : undefined}
                       style={{
                         width: '76px',
                         height: '76px',
@@ -463,11 +618,10 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({
                         overflow: 'hidden',
                         border: '1.5px solid #FCD34D',
                         boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
-                        cursor: 'pointer',
+                        cursor: pickupInspection.onViewPhoto ? 'pointer' : 'default',
                         position: 'relative',
                         backgroundColor: '#F8F5F1'
                       }}
-                      title="Bấm để xem ảnh lớn"
                     >
                       {fileId && pickupInspection.bookingId && pickupInspection.itemId ? (
                         <RentalEvidenceImage

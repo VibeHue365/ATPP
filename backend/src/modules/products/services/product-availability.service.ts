@@ -1,26 +1,42 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ProductsRepository } from '../repositories/products.repository';
 import { InventoryItem } from '../schemas/inventory-item.schema';
-import { InventoryReservation, ReservationStatus } from '../schemas/inventory-reservation.schema';
-import { ProviderSchedule, ScheduleType, ScheduleCapability } from '../schemas/provider-schedule.schema';
+import {
+  InventoryReservation,
+  ReservationStatus,
+} from '../schemas/inventory-reservation.schema';
+import {
+  ProviderSchedule,
+  ScheduleType,
+  ScheduleCapability,
+} from '../schemas/provider-schedule.schema';
 import { Provider } from '../../providers/schemas/provider.schema';
 import {
   InventorySlotLease,
   SlotLeaseStatus,
 } from '../../bookings/schemas/inventory-slot-lease.schema';
 import { TimeSlotEngineService } from '../../bookings/services/time-slot-engine.service';
+import { buildReservationOverlapFilter } from '../../bookings/services/reservation-overlap-filter';
 
 @Injectable()
 export class ProductAvailabilityService {
   constructor(
     private readonly products: ProductsRepository,
-    @InjectModel(InventoryItem.name) private readonly inventory: Model<InventoryItem>,
-    @InjectModel(InventoryReservation.name) private readonly reservations: Model<InventoryReservation>,
-    @InjectModel(ProviderSchedule.name) private readonly providerSchedule: Model<ProviderSchedule>,
+    @InjectModel(InventoryItem.name)
+    private readonly inventory: Model<InventoryItem>,
+    @InjectModel(InventoryReservation.name)
+    private readonly reservations: Model<InventoryReservation>,
+    @InjectModel(ProviderSchedule.name)
+    private readonly providerSchedule: Model<ProviderSchedule>,
     @InjectModel(Provider.name) private readonly providerModel: Model<Provider>,
-    @InjectModel(InventorySlotLease.name) private readonly leaseModel: Model<InventorySlotLease>,
+    @InjectModel(InventorySlotLease.name)
+    private readonly leaseModel: Model<InventorySlotLease>,
     private readonly timeEngine: TimeSlotEngineService,
   ) {}
 
@@ -49,7 +65,11 @@ export class ProductAvailabilityService {
 
     const from = parseDateLocal(fromValue);
     const to = parseDateLocal(toValue);
-    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to < from) {
+    if (
+      Number.isNaN(from.getTime()) ||
+      Number.isNaN(to.getTime()) ||
+      to < from
+    ) {
       throw new BadRequestException('Invalid rental period');
     }
 
@@ -63,7 +83,8 @@ export class ProductAvailabilityService {
       from.setHours(sh, sm, 0, 0);
       to.setTime(from.getTime());
       to.setHours(eh, em, 0, 0);
-      if (to <= from) throw new BadRequestException('Invalid hourly rental period');
+      if (to <= from)
+        throw new BadRequestException('Invalid hourly rental period');
     } else {
       from.setHours(0, 0, 0, 0);
       to.setHours(23, 59, 59, 999);
@@ -89,7 +110,10 @@ export class ProductAvailabilityService {
       const schedules = await this.providerSchedule
         .find({
           providerId: new Types.ObjectId(providerId.toString()),
-          $or: [{ capability: null }, { capability: ScheduleCapability.AodaiRental }],
+          $or: [
+            { capability: null },
+            { capability: ScheduleCapability.AodaiRental },
+          ],
         })
         .lean()
         .exec();
@@ -100,18 +124,36 @@ export class ProductAvailabilityService {
           availableQuantity: 0,
           requestedQuantity: Math.max(1, Math.floor(quantityValue || 1)),
           reason: 'NO_SCHEDULE',
-          message: 'Nhà cung cấp chưa thiết lập lịch làm việc. Vui lòng quay lại sau.',
+          message:
+            'Nhà cung cấp chưa thiết lập lịch làm việc. Vui lòng quay lại sau.',
         };
       }
 
+      // Check every requested date, not only the first and last one.  A range
+      // such as Mon–Fri must not be accepted if Wednesday is an off day and
+      // then rejected only when the booking is created.
+      const requestedDateKeys: string[] = [];
+      const requestedCursor = new Date(from);
+      const requestedEnd = new Date(to);
+      while (requestedCursor <= requestedEnd) {
+        requestedDateKeys.push(
+          requestedCursor.toLocaleDateString('en-CA', {
+            timeZone: 'Asia/Ho_Chi_Minh',
+          }),
+        );
+        requestedCursor.setDate(requestedCursor.getDate() + 1);
+      }
+
       // Check for off days
-      const specificSchedules = schedules.filter((s) => s.scheduleType === ScheduleType.SpecificDate);
+      const specificSchedules = schedules.filter(
+        (s) => s.scheduleType === ScheduleType.SpecificDate,
+      );
       const isOffDay = specificSchedules.some((s) =>
         s.offDays?.some((d) => {
-          const offStr = new Date(d).toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
-          const fromStr = from.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
-          const toStr = to.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
-          return offStr === fromStr || offStr === toStr;
+          const offStr = new Date(d).toLocaleDateString('en-CA', {
+            timeZone: 'Asia/Ho_Chi_Minh',
+          });
+          return requestedDateKeys.includes(offStr);
         }),
       );
 
@@ -126,12 +168,16 @@ export class ProductAvailabilityService {
       }
 
       // Check recurring working days
-      const recurringSchedules = schedules.filter((s) => s.scheduleType === ScheduleType.Recurring);
+      const recurringSchedules = schedules.filter(
+        (s) => s.scheduleType === ScheduleType.Recurring,
+      );
       if (recurringSchedules.length > 0) {
         const workingDays = new Set(recurringSchedules.map((s) => s.dayOfWeek));
-        const fromDay = from.getDay();
-        const toDay = to.getDay();
-        if (!workingDays.has(fromDay) || !workingDays.has(toDay)) {
+        const hasNonWorkingDay = requestedDateKeys.some((dateStr) => {
+          const [year, month, day] = dateStr.split('-').map(Number);
+          return !workingDays.has(new Date(year, month - 1, day).getDay());
+        });
+        if (hasNonWorkingDay) {
           return {
             available: false,
             availableQuantity: 0,
@@ -179,16 +225,19 @@ export class ProductAvailabilityService {
 
     // Check provider's useSlotLeases feature flag
     const providerDoc = providerId
-      ? await this.providerModel.findById(providerId).select({ useSlotLeases: 1 }).lean().exec()
+      ? await this.providerModel
+          .findById(providerId)
+          .select({ useSlotLeases: 1 })
+          .lean()
+          .exec()
       : null;
     const useSlotLeases = !!providerDoc?.useSlotLeases;
 
     let bookedIds = new Set<string>();
 
     if (useSlotLeases && rentalType === 'HOURLY' && startTime && endTime) {
-      const { startSlotIndex, rentalSlotCount } = this.timeEngine.parseAndValidateTimeSlot(
-        `${startTime}-${endTime}`,
-      );
+      const { startSlotIndex, rentalSlotCount } =
+        this.timeEngine.parseAndValidateTimeSlot(`${startTime}-${endTime}`);
       const slotIndices = Array.from(
         { length: rentalSlotCount },
         (_, idx) => startSlotIndex + idx,
@@ -212,23 +261,35 @@ export class ProductAvailabilityService {
 
       bookedIds = new Set(busyLeases.map((l) => l.inventoryItemId.toString()));
     } else {
+      // Keep this exactly in sync with booking creation. In particular, an
+      // expired temporary reservation must not consume stock, whereas an
+      // unexpired one and every confirmed reservation must.
       const booked = await this.reservations
         .find({
           inventoryItemId: { $in: items.map((item) => item._id) },
-          status: { $in: [ReservationStatus.TempReserved, ReservationStatus.Confirmed] },
-          reservedFrom: { $lte: reservationTo },
-          reservedTo: { $gte: from },
+          ...buildReservationOverlapFilter(
+            from,
+            reservationTo,
+            rentalType === 'HOURLY',
+            new Date(),
+          ),
         })
         .select({ inventoryItemId: 1 })
         .lean()
         .exec();
 
-      bookedIds = new Set(booked.map((item) => item.inventoryItemId.toString()));
+      bookedIds = new Set(
+        booked.map((item) => item.inventoryItemId.toString()),
+      );
 
       // Daily checkout also blocks confirmed/temporary slot leases (including
       // turnaround days). Mirror that rule here so the product page cannot say
       // "available" while booking creation later rejects the same dates.
-      if (useSlotLeases && rentalType !== 'HOURLY' && this.leaseModel) {
+      // Older bookings may have active daily/turnaround slot leases even when
+      // the provider no longer has useSlotLeases enabled. Checkout blocks
+      // those leases, therefore the public availability endpoint must block
+      // them too; otherwise a customer can add an invalid range to the cart.
+      if (rentalType !== 'HOURLY' && this.leaseModel) {
         const dateStrs: string[] = [];
         const cursor = new Date(from);
         const end = new Date(reservationTo);
@@ -250,17 +311,23 @@ export class ProductAvailabilityService {
           .select({ inventoryItemId: 1 })
           .lean()
           .exec();
-        for (const lease of busyLeases) bookedIds.add(lease.inventoryItemId.toString());
+        for (const lease of busyLeases)
+          bookedIds.add(lease.inventoryItemId.toString());
       }
     }
 
-    const availableQuantity = items.filter((item) => !bookedIds.has(item._id.toString())).length;
+    const availableQuantity = items.filter(
+      (item) => !bookedIds.has(item._id.toString()),
+    ).length;
 
     return {
       available: availableQuantity >= requestedQuantity,
       availableQuantity,
       requestedQuantity,
-      message: availableQuantity >= requestedQuantity ? undefined : 'Không đủ số lượng cho lịch thuê đã chọn.',
+      message:
+        availableQuantity >= requestedQuantity
+          ? undefined
+          : 'Không đủ số lượng cho lịch thuê đã chọn.',
     };
   }
 }

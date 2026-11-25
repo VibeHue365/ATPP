@@ -5,7 +5,6 @@ import {
   StyleSheet,
   Pressable,
   TextInput,
-  Alert,
   ActivityIndicator,
   ScrollView,
 } from 'react-native';
@@ -16,13 +15,31 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { providerApi } from '@/apis/providerApi';
 import { useToast } from '@/contexts/ToastContext';
+import { useNotifications } from '@/contexts/NotificationContext';
 import { FontFamily } from '@/constants/theme';
 import { TagoAlert } from '@/components/ui/TagoAlertModal';
+import { getRentalItems, resolveBookingDisplayState } from '@/utils/rentalState';
 
 type ScanTab = 'ORDER' | 'RFID';
 
+const INVENTORY_STATUS_LABELS: Record<string, string> = {
+  AVAILABLE: 'Sẵn sàng',
+  RESERVED: 'Đã giữ lịch',
+  RENTED: 'Đang cho thuê',
+  CLEANING: 'Đang giặt ủi',
+  MAINTENANCE: 'Đang bảo trì',
+  DAMAGED: 'Hư hỏng',
+  RETIRED: 'Ngừng sử dụng',
+};
+
+const getInventoryStatusLabel = (status?: string | null): string => {
+  const key = String(status || '').toUpperCase();
+  return INVENTORY_STATUS_LABELS[key] ?? 'Đang cập nhật';
+};
+
 export default function ProviderQrScannerScreen() {
   const { show } = useToast();
+  const { bumpBookingSync } = useNotifications();
   const [scanTab, setScanTab] = useState<ScanTab>('ORDER');
   const [manualCode, setManualCode] = useState('');
   const [bookings, setBookings] = useState<any[]>([]);
@@ -38,7 +55,14 @@ export default function ProviderQrScannerScreen() {
           providerApi.getInventoryItems({ limit: 100 }).catch(() => ({ items: [] })),
         ]);
         if (Array.isArray(bookingRes)) {
-          setBookings(bookingRes.filter((b) => b.status !== 'CANCELLED'));
+          setBookings(
+            bookingRes.filter(
+              (b) =>
+                !['CANCELLED', 'COMPLETED', 'REFUNDED', 'PARTIALLY_REFUNDED'].includes(
+                  String(b.status || '').toUpperCase(),
+                ),
+            ),
+          );
         }
         if (Array.isArray(chipRes?.items)) {
           setRfidChips(chipRes.items);
@@ -66,7 +90,7 @@ export default function ProviderQrScannerScreen() {
   const handleOpenLiveCamera = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
-      show('Vui lòng cấp quyền máy ảnh để quét mã QR / Tag áo', 'error');
+      show('Vui lòng cấp quyền máy ảnh để chụp ảnh kiểm chứng tại quầy', 'error');
       return;
     }
     const res = await ImagePicker.launchCameraAsync({
@@ -75,19 +99,20 @@ export default function ProviderQrScannerScreen() {
     });
     if (!res.canceled && res.assets?.[0]?.uri) {
       setCapturedUri(res.assets[0].uri);
-      if (scanTab === 'ORDER' && bookings[0]) {
-        const code =
-          bookings[0].bookingCode ||
-          (bookings[0]._id ? bookings[0]._id.slice(-6).toUpperCase() : '');
-        setManualCode(code);
-        show(`Đã nhận diện ảnh quét Camera! Mã gợi ý: #${code}`, 'success');
-      } else if (scanTab === 'RFID' && rfidChips[0]?.sku) {
-        setManualCode(rfidChips[0].sku);
-        show(`Đã nhận diện Tag RFID: ${rfidChips[0].sku}`, 'success');
-      } else {
-        show('Đã chụp ảnh mã QR/Tag thành công', 'success');
-      }
+      show(
+        scanTab === 'ORDER'
+          ? 'Đã chụp ảnh đối chứng! Hãy nhập hoặc chọn đúng mã đơn bên dưới để xử lý.'
+          : 'Đã chụp ảnh hiện vật! Hãy nhập hoặc chọn đúng mã SKU chip RFID bên dưới.',
+        'info',
+      );
     }
+  };
+
+  const openOrderInTab = (bookingId: string) => {
+    router.replace({
+      pathname: '/provider/(tabs)/orders',
+      params: { bookingId },
+    } as any);
   };
 
   const handleProcessCode = (rawInput: string) => {
@@ -103,20 +128,25 @@ export default function ProviderQrScannerScreen() {
       (c) => (c.sku || '').toUpperCase() === clean || (c._id || '').toUpperCase() === clean,
     );
 
-    if (matchedChip && (scanTab === 'RFID' || !bookings.some((b) => (b.bookingCode || '').toUpperCase().includes(clean)))) {
+    if (
+      matchedChip &&
+      (scanTab === 'RFID' ||
+        !bookings.some((b) => (b.bookingCode || '').toUpperCase().includes(clean)))
+    ) {
       TagoAlert.alert(
         'Quét Tag Chip RFID Hiện vật',
-        `Mã SKU: ${matchedChip.sku}\nBiến thể: Size ${matchedChip.size} • ${matchedChip.color}\nTrạng thái hiện tại: ${matchedChip.status}`,
+        `Mã SKU: ${matchedChip.sku}\nBiến thể: Size ${matchedChip.size} • ${matchedChip.color}\nTrạng thái hiện tại: ${getInventoryStatusLabel(matchedChip.status)}`,
         [
           { text: 'Đóng', style: 'cancel' },
           {
-            text: 'Chuyển Sẵn sàng (Available)',
+            text: 'Chuyển sang Sẵn sàng',
             onPress: async () => {
               setProcessing(true);
               try {
                 await providerApi.updateInventoryItem(matchedChip._id, {
                   status: 'AVAILABLE',
                 });
+                bumpBookingSync();
                 show(`Chip ${matchedChip.sku} đã chuyển sang Sẵn sàng!`, 'success');
                 router.back();
               } catch {
@@ -134,6 +164,7 @@ export default function ProviderQrScannerScreen() {
                 await providerApi.updateInventoryItem(matchedChip._id, {
                   status: 'MAINTENANCE',
                 });
+                bumpBookingSync();
                 show(`Chip ${matchedChip.sku} đã chuyển sang Bảo dưỡng!`, 'success');
                 router.back();
               } catch {
@@ -161,83 +192,187 @@ export default function ProviderQrScannerScreen() {
       );
     });
 
+    if (!matchedOrder) {
+      TagoAlert.alert(
+        'Không tìm thấy đơn hàng',
+        `Không tìm thấy đơn đang hoạt động hoặc chip RFID khớp với mã #${clean}. Bạn có thể kiểm tra lại danh sách trong tab Đơn hàng.`,
+        [
+          { text: 'Đóng', style: 'cancel' },
+          {
+            text: 'Mở danh sách đơn',
+            onPress: () => router.replace('/provider/(tabs)/orders' as any),
+          },
+        ],
+      );
+      return;
+    }
+
     const custName =
       matchedOrder?.customerId?.profile?.fullName ||
       matchedOrder?.contactInfo?.fullName ||
       'Khách hàng';
+    const display = resolveBookingDisplayState(matchedOrder, 'provider');
+    const stage = display.stage;
+    const rentalItems = getRentalItems(matchedOrder, true);
+    const firstRental = rentalItems[0];
+
+    const buttons: Array<{
+      text: string;
+      style?: 'default' | 'cancel' | 'destructive';
+      onPress?: () => void;
+    }> = [{ text: 'Đóng', style: 'cancel' }];
+
+    if (stage === 'DEPOSIT_PAID') {
+      buttons.push({
+        text: 'Xác nhận đơn & Chuẩn bị đồ',
+        onPress: async () => {
+          setProcessing(true);
+          try {
+            await providerApi.updateBookingStatus(
+              matchedOrder._id,
+              'CONFIRMED',
+              'Quét QR xác nhận chuẩn bị đơn',
+            );
+            bumpBookingSync(matchedOrder._id);
+            show(`Đã xác nhận đơn #${matchedOrder.bookingCode || clean}!`, 'success');
+            openOrderInTab(matchedOrder._id);
+          } catch (e: any) {
+            show(e?.response?.data?.message || 'Không thể xác nhận đơn', 'error');
+          } finally {
+            setProcessing(false);
+          }
+        },
+      });
+    } else if (stage === 'PREPARING' && firstRental?._id) {
+      buttons.push({
+        text: 'Xác nhận đã soạn xong áo',
+        onPress: async () => {
+          setProcessing(true);
+          try {
+            const targets = rentalItems.filter(
+              (it) => !it.rentalFulfillment?.status || it.rentalFulfillment.status === 'PENDING',
+            );
+            for (const it of targets.length ? targets : [firstRental]) {
+              await providerApi.markRentalReady(matchedOrder._id, it._id);
+            }
+            bumpBookingSync(matchedOrder._id);
+            show('Đã soạn xong áo! Hãy tải ảnh hiện trạng khi bàn giao.', 'success');
+            openOrderInTab(matchedOrder._id);
+          } catch (e: any) {
+            show(e?.response?.data?.message || 'Không thể chuyển trạng thái soạn đồ', 'error');
+          } finally {
+            setProcessing(false);
+          }
+        },
+      });
+    } else if (stage === 'READY_NEEDS_HANDOVER_PHOTOS') {
+      buttons.push({
+        text: 'Chụp & Tải ảnh bàn giao áo',
+        onPress: () => openOrderInTab(matchedOrder._id),
+      });
+    } else if (stage === 'CUSTOMER_RETURN_REQUESTED' && firstRental?._id) {
+      buttons.push({
+        text: 'Xác nhận đã nhận lại áo',
+        onPress: async () => {
+          setProcessing(true);
+          try {
+            const targets = rentalItems.filter(
+              (it) => it.rentalFulfillment?.status === 'CUSTOMER_RETURN_REQUESTED',
+            );
+            for (const it of targets.length ? targets : [firstRental]) {
+              await providerApi.markReturned(matchedOrder._id, it._id, {
+                note: 'Quét QR nhận trả đồ tại cửa hàng',
+              });
+            }
+            bumpBookingSync(matchedOrder._id);
+            show('Đã nhận lại áo! Chuyển sang kiểm tra & hoàn cọc Escrow.', 'success');
+            openOrderInTab(matchedOrder._id);
+          } catch (e: any) {
+            show(e?.response?.data?.message || 'Không thể xác nhận nhận trả áo', 'error');
+          } finally {
+            setProcessing(false);
+          }
+        },
+      });
+    } else if (stage === 'RETURNED_NEEDS_INSPECTION' && firstRental?._id) {
+      buttons.push({
+        text: 'Áo nguyên vẹn & Hoàn cọc Escrow',
+        onPress: async () => {
+          setProcessing(true);
+          try {
+            const targets = rentalItems.filter(
+              (it) => it.rentalFulfillment?.status === 'RETURNED',
+            );
+            for (const it of targets.length ? targets : [firstRental]) {
+              await providerApi.confirmNoIncident(
+                matchedOrder._id,
+                it._id,
+                'Quét QR kiểm nhận nguyên vẹn & giải ngân hoàn cọc',
+              );
+            }
+            bumpBookingSync(matchedOrder._id);
+            show(
+              `Đã hoàn cọc Escrow đơn #${matchedOrder.bookingCode || clean}!`,
+              'success',
+            );
+            openOrderInTab(matchedOrder._id);
+          } catch (e: any) {
+            show(e?.response?.data?.message || 'Không thể xác nhận hoàn cọc', 'error');
+          } finally {
+            setProcessing(false);
+          }
+        },
+      });
+    } else if (stage === 'CLEANING_AFTER_REFUND' && firstRental?._id) {
+      buttons.push({
+        text: 'Hoàn tất giặt ủi & Mở kho',
+        onPress: async () => {
+          setProcessing(true);
+          try {
+            const targets = rentalItems.filter(
+              (it) => it.rentalFulfillment?.status === 'RETURNED',
+            );
+            for (const it of targets.length ? targets : [firstRental]) {
+              await providerApi.markCleaningCompleted(matchedOrder._id, it._id);
+            }
+            bumpBookingSync(matchedOrder._id);
+            show('Đã hoàn tất giặt ủi & mở khóa kho!', 'success');
+            router.back();
+          } catch (e: any) {
+            show(e?.response?.data?.message || 'Không thể hoàn tất giặt ủi', 'error');
+          } finally {
+            setProcessing(false);
+          }
+        },
+      });
+    } else {
+      buttons.push({
+        text: 'Mở chi tiết đơn',
+        onPress: () => openOrderInTab(matchedOrder._id),
+      });
+    }
 
     TagoAlert.alert(
       'Xác thực Vé Điện Tử TàGo',
-      matchedOrder
-        ? `Tìm thấy đơn #${matchedOrder.bookingCode || clean} của khách ${custName}.\n\nBạn muốn thực hiện thao tác nào?`
-        : `Mã hiện vật/đơn hàng: #${clean}\n\nBạn muốn thực hiện thao tác nào?`,
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Bàn giao đồ / Check-in',
-          onPress: async () => {
-            if (matchedOrder?._id) {
-              setProcessing(true);
-              try {
-                await providerApi.updateBookingStatus(
-                  matchedOrder._id,
-                  'PICKED_UP',
-                  'Quét mã QR bàn giao tại tiệm',
-                );
-                show(`Đã bàn giao đơn #${matchedOrder.bookingCode || clean}!`, 'success');
-                router.back();
-              } catch {
-                show('Không thể cập nhật trạng thái đơn', 'error');
-              } finally {
-                setProcessing(false);
-              }
-            } else {
-              show(`Đã quét mã #${clean} & hoàn tất giao đồ!`, 'success');
-              router.back();
-            }
-          },
-        },
-        {
-          text: 'Nhận trả & Hoàn cọc Escrow',
-          onPress: async () => {
-            if (matchedOrder?._id) {
-              setProcessing(true);
-              try {
-                await providerApi.updateBookingStatus(
-                  matchedOrder._id,
-                  'COMPLETED',
-                  'Quét mã QR nhận trả đồ & giải ngân cọc Escrow',
-                );
-                show(
-                  `Đã thu hồi đồ & hoàn cọc đơn #${matchedOrder.bookingCode || clean}!`,
-                  'success',
-                );
-                router.back();
-              } catch {
-                show('Không thể cập nhật trạng thái đơn', 'error');
-              } finally {
-                setProcessing(false);
-              }
-            } else {
-              show(`Đã kiểm nhận hiện vật #${clean} thành công!`, 'success');
-              router.back();
-            }
-          },
-        },
-      ],
+      `Đơn #${matchedOrder.bookingCode || clean} · ${custName}\nTrạng thái: ${display.label}${display.nextStepText ? `\n${display.nextStepText}` : ''}`,
+      buttons,
     );
   };
 
   const quickItems = useMemo(() => {
     if (scanTab === 'ORDER') {
-      return bookings.slice(0, 5).map((b) => ({
-        id: b._id,
-        code: b.bookingCode || (b._id ? b._id.slice(-6).toUpperCase() : 'BK'),
-        sub:
+      return bookings.slice(0, 5).map((b) => {
+        const display = resolveBookingDisplayState(b, 'provider');
+        const custName =
           b.customerId?.profile?.fullName ||
           b.contactInfo?.fullName ||
-          'Khách đặt lịch',
-      }));
+          'Khách đặt lịch';
+        return {
+          id: b._id,
+          code: b.bookingCode || (b._id ? b._id.slice(-6).toUpperCase() : 'BK'),
+          sub: `${custName} • ${display.shortLabel}`,
+        };
+      });
     }
     return rfidChips.slice(0, 6).map((c) => ({
       id: c._id || c.sku,

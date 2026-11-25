@@ -197,11 +197,19 @@ function PaymentCard({ item }: { item: PaymentHistoryItem }) {
                 ? 'Thành công'
                 : item.status === 'PENDING'
                   ? 'Chờ xử lý'
-                  : item.status === 'CANCELLED'
-                    ? 'Đã hủy'
-                    : 'Thất bại'
+                  : (item.status as string) === 'PROCESSING'
+                    ? 'Đang xử lý'
+                    : item.status === 'CANCELLED'
+                      ? 'Đã hủy'
+                      : 'Thất bại'
             }
-            tone={ok ? 'success' : item.status === 'PENDING' ? 'warning' : 'error'}
+            tone={
+              ok
+                ? 'success'
+                : item.status === 'PENDING' || (item.status as string) === 'PROCESSING'
+                  ? 'warning'
+                  : 'error'
+            }
           />
         </View>
         <Text style={s.purpose}>{purpose(item.purpose)}</Text>
@@ -217,16 +225,25 @@ function PaymentCard({ item }: { item: PaymentHistoryItem }) {
   );
 }
 
-const purpose = (value: string) =>
-  value === 'DEPOSIT_PAYMENT'
-    ? 'Đặt cọc giữ chỗ dịch vụ'
-    : value === 'DEPOSIT_REFUND'
-      ? 'Hoàn trả tiền cọc giữ đồ'
-      : value === 'FULL_PAYMENT'
-        ? 'Thanh toán trọn gói'
-        : value === 'REMAINING_PAYMENT'
-          ? 'Thanh toán phần còn lại'
-          : 'Thanh toán dịch vụ';
+const purpose = (value: string) => {
+  switch (value) {
+    case 'DEPOSIT_PAYMENT':
+    case 'DepositPayment':
+      return 'Đặt cọc giữ chỗ dịch vụ';
+    case 'DEPOSIT_REFUND':
+    case 'DepositRefund':
+    case 'Refund':
+      return 'Hoàn trả tiền cọc giữ đồ';
+    case 'FULL_PAYMENT':
+    case 'FullPayment':
+      return 'Thanh toán trọn gói';
+    case 'REMAINING_PAYMENT':
+    case 'RemainingPayment':
+      return 'Thanh toán phần còn lại';
+    default:
+      return 'Thanh toán dịch vụ';
+  }
+};
 
 const money = (v = 0) => new Intl.NumberFormat('vi-VN').format(v) + 'đ';
 const formatDate = (v: string) =>

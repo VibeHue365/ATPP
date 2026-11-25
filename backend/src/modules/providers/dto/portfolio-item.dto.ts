@@ -1,4 +1,14 @@
-import { ArrayMinSize, IsArray, IsEnum, IsNotEmpty, IsOptional, IsString, IsUrl, MaxLength, ValidateIf } from 'class-validator';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUrl,
+  MaxLength,
+  ValidateIf,
+} from 'class-validator';
 import { ProductModerationStatus } from '../../products/schemas/product.schema';
 
 export class CreatePortfolioItemDto {
@@ -24,7 +34,11 @@ export class ModeratePortfolioItemDto {
   @IsEnum(ProductModerationStatus)
   action: ProductModerationStatus;
 
-  @ValidateIf((dto: ModeratePortfolioItemDto) => dto.action === ProductModerationStatus.Rejected || dto.action === ProductModerationStatus.Hidden)
+  @ValidateIf(
+    (dto: ModeratePortfolioItemDto) =>
+      dto.action === ProductModerationStatus.Rejected ||
+      dto.action === ProductModerationStatus.Hidden,
+  )
   @IsString()
   @IsNotEmpty()
   @MaxLength(300)

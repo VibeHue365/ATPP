@@ -155,9 +155,37 @@ export class ContractSnapshotService {
         item.quantity = 1;
       }
       if (!item.pickupReturnLocationSnapshot) {
+        const useBusinessAddress =
+          (provider as any)?.rentalSettings?.useBusinessAddressForPickup !==
+          false;
+        const customPickup = (provider as any)?.rentalSettings?.pickupLocation;
+        const loc =
+          !useBusinessAddress && customPickup
+            ? customPickup
+            : (provider.address as any);
+        const formattedAddress =
+          [
+            loc?.addressLine || loc?.fullAddress || loc?.address,
+            loc?.ward,
+            loc?.district,
+            loc?.city,
+          ]
+            .filter(
+              (part) => typeof part === 'string' && part.trim().length > 0,
+            )
+            .map((part) => part.trim())
+            .join(', ') || 'Tại cửa hàng cung cấp';
+        const hasValidGeo =
+          Array.isArray(loc?.geo?.coordinates) &&
+          loc.geo.coordinates.length === 2;
         item.pickupReturnLocationSnapshot = {
-          address: (provider.address as any)?.fullAddress || 'Tại cửa hàng cung cấp',
-          geo: { type: 'Point', coordinates: [107.590866, 16.463713] },
+          address: formattedAddress,
+          ...(loc?.ward ? { ward: loc.ward } : {}),
+          ...(loc?.district ? { district: loc.district } : {}),
+          ...(loc?.city ? { city: loc.city } : {}),
+          geo: hasValidGeo
+            ? loc.geo
+            : { type: 'Point', coordinates: [107.590866, 16.463713] },
         };
       }
       if (
@@ -165,7 +193,8 @@ export class ContractSnapshotService {
         !item.priceVersionId ||
         !item.rentalFrom ||
         !item.rentalTo ||
-        new Date(item.rentalFrom).getTime() > new Date(item.rentalTo).getTime() ||
+        new Date(item.rentalFrom).getTime() >
+          new Date(item.rentalTo).getTime() ||
         !item.selectedSize ||
         !item.pickupReturnLocationSnapshot ||
         !Number.isFinite(item.unitPrice) ||
@@ -208,8 +237,7 @@ export class ContractSnapshotService {
             (item as any).productName ||
             (item as any).name ||
             'Áo dài truyền thống Huế',
-          slug:
-            (item as any).productSlug || (item as any).slug || 'ao-dai-hue',
+          slug: (item as any).productSlug || (item as any).slug || 'ao-dai-hue',
         };
       }
       if (!sameContractId(product.providerId, providerId)) {
@@ -224,7 +252,9 @@ export class ContractSnapshotService {
         itemReplacementValue = parsedItemVal;
         replacementStatus = 'VALID';
       } else if (product) {
-        const parsedProductVal = parseValidReplacementValue((product as any).replacementValue);
+        const parsedProductVal = parseValidReplacementValue(
+          (product as any).replacementValue,
+        );
         if (parsedProductVal !== null && parsedProductVal > 0) {
           const isApproved =
             (product as any).moderationStatus === 'APPROVED' ||
@@ -251,7 +281,11 @@ export class ContractSnapshotService {
             'CONTRACT_PRODUCT_REPLACEMENT_VALUE_UNAPPROVED',
           );
         }
-        if (replacementStatus === 'MISSING' || !itemReplacementValue || itemReplacementValue <= 0) {
+        if (
+          replacementStatus === 'MISSING' ||
+          !itemReplacementValue ||
+          itemReplacementValue <= 0
+        ) {
           throw new UnprocessableEntityException(
             'CONTRACT_PRODUCT_REPLACEMENT_VALUE_MISSING',
           );
@@ -324,8 +358,7 @@ export class ContractSnapshotService {
     const provider = (await contractDb(this.connection)
       .collection('providers')
       .findOne({ _id: providerId })) as ProviderSource | null;
-    if (!provider)
-      throw new UnprocessableEntityException('PROVIDER_NOT_FOUND');
+    if (!provider) throw new UnprocessableEntityException('PROVIDER_NOT_FOUND');
     if (!provider.policies) provider.policies = {};
     if (!provider.policies.rentalPolicy) {
       provider.policies.rentalPolicy =
@@ -374,7 +407,8 @@ export class ContractSnapshotService {
         providerLateReturn: approvedStructuredPolicy.lateReturn,
         providerDamageCompensation: approvedStructuredPolicy.damageCompensation,
         providerCancellationPolicy: approvedStructuredPolicy.cancellationPolicy,
-        providerCustomTermsText: approvedStructuredPolicy.customTermsText ?? null,
+        providerCustomTermsText:
+          approvedStructuredPolicy.customTermsText ?? null,
         providerPolicyUpdatedAt:
           approvedStructuredPolicy.approvedAt ??
           approvedStructuredPolicy.updatedAt ??

@@ -24,7 +24,7 @@ export const ScheduleStatsFilterBar: React.FC<ScheduleStatsFilterBarProps> = ({
     { key: 'ALL', label: 'Tất cả lịch hẹn', count: counts.all },
     { key: 'UPCOMING', label: 'Sắp tới', count: counts.upcoming },
     { key: 'ACTIVE', label: 'Đang thuê / Đang chụp', count: counts.active },
-    { key: 'COMPLETED', label: 'Đã hoàn thành', count: counts.completed },
+    { key: 'COMPLETED', label: 'Hoàn tất', count: counts.completed },
     { key: 'CANCELLED', label: 'Đã hủy', count: counts.cancelled }
   ];
 

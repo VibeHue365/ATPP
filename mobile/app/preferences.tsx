@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { type Href, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { userApi } from '@/apis/userApi';
 import { RequireAuth } from '@/components/auth/RequireAuth';
@@ -109,7 +109,7 @@ function Preferences() {
         isOnboarding ? 'Đã hoàn tất thiết lập sở thích' : 'Đã lưu hồ sơ số đo & sở thích',
         'success',
       );
-      if (isOnboarding) router.replace(safeReturnTo(returnTo, '/(tabs)/rentals'));
+      if (isOnboarding) router.replace(safeReturnTo(returnTo, '/(tabs)' as Href));
     } catch (cause) {
       show(getApiErrorMessage(cause, 'Không thể lưu sở thích'), 'error');
     } finally {
@@ -122,7 +122,7 @@ function Preferences() {
     try {
       await userApi.completeOnboarding();
       await refreshUser();
-      router.replace(safeReturnTo(returnTo, '/(tabs)/rentals'));
+      router.replace(safeReturnTo(returnTo, '/(tabs)' as Href));
     } catch (cause) {
       show(getApiErrorMessage(cause, 'Không thể hoàn tất onboarding'), 'error');
     } finally {

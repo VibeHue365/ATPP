@@ -2,7 +2,8 @@ import logging
 import os
 
 from .clip_engine import InvalidImageError, download_image
-from .product_describer import describe_product
+from .gemini_attributes import analyze as analyze_with_gemini
+from .product_describer import describe_product, listing_from_attributes, merge_attributes
 from .schemas import DraftAttribute, ProductDraftRequest, ProductDraftResponse
 
 
@@ -25,8 +26,16 @@ def draft_from_photos(request: ProductDraftRequest) -> ProductDraftResponse:
         raise InvalidImageError("Không tải được ảnh sản phẩm.")
 
     draft = describe_product(images)
+    source = "CLIP_ONLY"
+    # Gemini only runs on a confirmed ao dai cover, and any failure keeps the CLIP result.
+    if draft.status == "SUCCESS":
+        extra = analyze_with_gemini(images)
+        if extra:
+            draft = listing_from_attributes(merge_attributes(draft.attributes, extra))
+            source = "GEMINI"
     return ProductDraftResponse(
         status=draft.status,
+        source=source,
         attributes=[
             DraftAttribute(group=a.group, key=a.key, label=a.label, confidence=a.confidence, on_cover=a.on_cover)
             for a in draft.attributes

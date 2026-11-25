@@ -1,5 +1,8 @@
 import { IsEnum, IsOptional, IsString } from 'class-validator';
-import { ConditionStatus, InventoryItemStatus } from '../schemas/inventory-item.schema';
+import {
+  ConditionStatus,
+  InventoryItemStatus,
+} from '../schemas/inventory-item.schema';
 
 export class UpdateInventoryItemDto {
   @IsOptional()

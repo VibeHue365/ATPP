@@ -98,13 +98,13 @@ export const ProfileUserCardHeader: React.FC<ProfileUserCardHeaderProps> = ({
 
           <div className="lume-personal-name-info">
             <div className="lume-personal-name-row">
-              <h2 className="lume-personal-full-name">{user?.fullName || 'Khách hàng LUMÉ'}</h2>
+              <h2 className="lume-personal-full-name">{user?.fullName || 'Khách hàng TàGo'}</h2>
               <span className="lume-personal-role-badge">
                 {user?.roles?.includes('PROVIDER') ? 'Đối tác dịch vụ' : 'Khách hàng'}
               </span>
             </div>
             <p className="lume-personal-join-date">
-              LUMÉ Member từ {user?.createdAt ? new Date(user.createdAt).toLocaleDateString('vi-VN') : 'Gần đây'}
+              TàGo Member từ {user?.createdAt ? new Date(user.createdAt).toLocaleDateString('vi-VN') : 'Gần đây'}
             </p>
           </div>
         </div>

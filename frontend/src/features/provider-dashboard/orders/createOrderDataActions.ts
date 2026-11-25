@@ -1,5 +1,7 @@
 import type { useToast } from '../../../components/feedback/Toast';
 import { bookingsApi } from '../api/providerDashboardApi';
+import { formatLocationAddress } from '../../../utils/addressFormat';
+import { getBookingStatusLabel } from '../../../utils/bookingStatus';
 import type { Order } from '../types';
 import type { useProviderOrderState } from './useProviderOrderState';
 
@@ -88,24 +90,10 @@ export function createOrderDataActions({ setLoadingOrders, setOrders, actionMenu
           totalAmt = Number(b.total ?? 0);
         }
 
-        const statusMap: Record<string, string> = {
-          PENDING: 'CHỜ XỬ LÝ',
-          PENDING_PAYMENT: 'CHỜ THANH TOÁN',
-          DEPOSIT_PAID: 'ĐÃ ĐẶT CỌC',
-          CONFIRMED: 'ĐANG THỰC HIỆN',
-          IN_PROGRESS: 'ĐANG CHỤP',
-          AWAITING_REVIEW: 'CHỜ KHÁCH XÁC NHẬN ẢNH',
-          PICKUP_PENDING: 'CHỜ NHẬN ĐỒ',
-          PICKED_UP: 'ĐANG THUÊ',
-          COMBO_PHOTOS_APPROVED: 'ĐÃ DUYỆT ẢNH • CHỜ TRẢ ĐỒ',
-          RETURN_PENDING: (b.incident?.status === 'PENDING_CUSTOMER') ? 'CHỜ KHÁCH DUYỆT SỰ CỐ' : 'CHỜ KIỂM TRA ĐỒ',
-          RETURNED: 'ĐÃ TRẢ ĐỒ',
-          COMPLETED: 'HOÀN THÀNH',
-          CANCELLED: 'ĐÃ HỦY',
-          DISPUTED: 'ĐANG TRANH CHẤP',
-          PARTIALLY_REFUNDED: 'ĐÃ HOÀN TIỀN MỘT PHẦN',
-          REFUNDED: 'ĐÃ HOÀN TIỀN',
-        };
+        const formattedStatus = getBookingStatusLabel(b.status, {
+          hasPendingIncident: b.incident?.status === 'PENDING_CUSTOMER',
+          uppercase: true,
+        });
 
         const updatedStr = b.updatedAt
           ? new Date(b.updatedAt).toLocaleString('vi-VN', {
@@ -126,7 +114,10 @@ export function createOrderDataActions({ setLoadingOrders, setOrders, actionMenu
 
         return {
           _id: b._id,
-          id: `#${b._id?.slice(-6).toUpperCase()}`,
+          id: b.bookingCode
+            ? `#${b.bookingCode}`
+            : `#${b._id?.slice(-6).toUpperCase()}`,
+          bookingCode: b.bookingCode || '',
           customerName: custName,
           customerEmail: custEmail,
           customerPhone: cust?.phone || cust?.profile?.phoneNumber || b.contactPhone || b.customerPhone || '0901 234 567',
@@ -137,7 +128,7 @@ export function createOrderDataActions({ setLoadingOrders, setOrders, actionMenu
           rawOrderDate: b.createdAt,
           updatedDate: updatedStr,
           total: `${totalAmt.toLocaleString('vi-VN')}đ`,
-          status: statusMap[b.status] || b.status,
+          status: formattedStatus,
           totalAmount: totalAmt,
           items: b.items,
           schedules: b.schedules,
@@ -145,7 +136,29 @@ export function createOrderDataActions({ setLoadingOrders, setOrders, actionMenu
           rawStatus: b.status,
           bookingType: b.bookingType,
           photosApproved: Boolean(b.photosApproved),
-          pickupLocation: b.pickupLocation || b.pickupAddress || b.serviceLocation || 'Đại Nội Huế - Số 23 Đặng Thái Thân, TP. Huế',
+          pickupLocation: (() => {
+            const snapshotLoc = Array.isArray(b.items)
+              ? b.items
+                  .map((it: any) => formatLocationAddress(it?.pickupReturnLocationSnapshot))
+                  .find((addr: string) => Boolean(addr))
+              : '';
+            const provObj = (typeof b.provider === 'object' && b.provider) || (typeof b.providerId === 'object' && b.providerId) || null;
+            const customPickup =
+              provObj?.rentalSettings?.useBusinessAddressForPickup === false
+                ? provObj?.rentalSettings?.pickupLocation
+                : null;
+            const provAddr =
+              formatLocationAddress(customPickup) ||
+              formatLocationAddress(provObj?.address);
+            return (
+              snapshotLoc ||
+              formatLocationAddress(b.pickupLocation) ||
+              formatLocationAddress(b.pickupAddress) ||
+              formatLocationAddress(b.serviceLocation) ||
+              provAddr ||
+              'Tại cửa hàng đối tác'
+            );
+          })(),
           customerNotes: b.customerNotes || b.notes || b.note || 'Chụp ảnh và thuê áo dài cho kỷ niệm tốt nghiệp.',
           pricingSummary: b.pricingSummary,
           paymentSummary: b.paymentSummary,
@@ -154,6 +167,8 @@ export function createOrderDataActions({ setLoadingOrders, setOrders, actionMenu
           cancellation: b.cancellation || null,
           cancellationReason: b.cancellation?.reason || b.cancellationReason || b.cancelReason || '',
           statusTimeline: b.statusTimeline || [],
+          overdueTracking: b.overdueTracking || null,
+          dominoRecovery: b.dominoRecovery || null,
         };
       });
 
@@ -165,6 +180,9 @@ export function createOrderDataActions({ setLoadingOrders, setOrders, actionMenu
           if (prev[i].status !== next[i].status) return true;
           if (prev[i].photosApproved !== next[i].photosApproved) return true;
           if ((prev[i] as any)?.incident?.status !== (next[i] as any)?.incident?.status) return true;
+          if (prev[i].overdueTracking?.minutesOverdue !== next[i].overdueTracking?.minutesOverdue) return true;
+          if (prev[i].overdueTracking?.calculatedLateFee !== next[i].overdueTracking?.calculatedLateFee) return true;
+          if (prev[i].dominoRecovery?.status !== next[i].dominoRecovery?.status) return true;
           const previousScheduleState = (prev[i].schedules || [])
             .map((schedule) => `${schedule._id || ''}:${schedule.status || ''}:${schedule.startsAt || schedule.scheduledDate || ''}`)
             .join('|');

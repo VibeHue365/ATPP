@@ -235,6 +235,10 @@ export const PhotographerPackageDetailLayout: React.FC<PhotographerPackageDetail
                 applicableVouchersCount={props.applicableVouchers?.length}
                 onOpenVoucherPicker={props.onOpenVoucherPicker}
                 onRemoveVoucher={props.onRemoveVoucher}
+                studioStaff={props.studioStaff}
+                effectiveCapacity={props.effectiveCapacity}
+                preferredStaffId={props.preferredStaffId}
+                onSelectPreferredStaff={props.onSelectPreferredStaff}
               />
                {bookingMode === 'SINGLE' && <div className="ppd-duration-panel"><div><span>Thêm thời lượng</span><small>Chỉ áp dụng khi ca sau còn trống liên tục.</small></div><PhotographyDurationControl includedDurationMinutes={includedDurationMinutes} durationMinutes={durationMinutes} overtimeIncrementMinutes={overtimeIncrementMinutes} maxOvertimeMinutes={maxOvertimeMinutes} endTime={endTime} canIncrease={canIncreaseDuration} isCheckingIncrease={isNextDurationQuoteLoading} unavailableReason={increaseUnavailableReason} onDecrease={onDecreaseDuration} onIncrease={onIncreaseDuration} /></div>}
 

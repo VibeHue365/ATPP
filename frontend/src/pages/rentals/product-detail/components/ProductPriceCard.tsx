@@ -1,5 +1,6 @@
 import React from 'react';
 import { MapPin, Shield } from 'lucide-react';
+import { formatLocationAddress } from '../../../../utils/addressFormat';
 import type { ProductDetail } from '../types';
 
 interface ProductPriceCardProps {
@@ -11,10 +12,15 @@ export const ProductPriceCard: React.FC<ProductPriceCardProps> = ({
   product,
   displayPrice,
 }) => {
-  const providerAddress = product.providerId?.address;
-  const addressFormatted = providerAddress
-    ? `${providerAddress.addressLine}, ${providerAddress.ward ? providerAddress.ward + ', ' : ''}${providerAddress.district ? providerAddress.district + ', ' : ''}${providerAddress.city || ''}`
-    : '45 Lê Lợi, Phú Hội, Thành phố Huế, Thừa Thiên Huế';
+  const providerObj = product.providerId as any;
+  const providerAddress = providerObj?.address;
+  const useBusinessAddressForPickup = providerObj?.rentalSettings?.useBusinessAddressForPickup;
+  const pickupLocation =
+    useBusinessAddressForPickup === false ? providerObj?.rentalSettings?.pickupLocation : null;
+  const addressFormatted =
+    formatLocationAddress(pickupLocation) ||
+    formatLocationAddress(providerAddress) ||
+    'Đang cập nhật địa chỉ cửa hàng';
 
   return (
     <>

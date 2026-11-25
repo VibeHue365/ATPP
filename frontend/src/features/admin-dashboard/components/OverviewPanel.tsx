@@ -46,7 +46,7 @@ export const OverviewPanel: React.FC<OverviewPanelProps> = ({ onNavigateTab }) =
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const year = now.getFullYear();
     const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
-    return `01/${month}/${year} - ${lastDay}/${month}/${year} ▾`;
+    return `01/${month}/${year} - ${lastDay}/${month}/${year}`;
   }, []);
 
   return (
@@ -63,7 +63,7 @@ export const OverviewPanel: React.FC<OverviewPanelProps> = ({ onNavigateTab }) =
             )}
           </div>
           <p className="lume-overview-header__subtitle">
-            Theo dõi hiệu suất hoạt động, giao dịch và các vấn đề cần xử lý trên nền tảng Lumé.
+            Theo dõi hiệu suất hoạt động, giao dịch và các vấn đề cần xử lý trên nền tảng TàGo.
           </p>
         </div>
 
@@ -117,9 +117,9 @@ export const OverviewPanel: React.FC<OverviewPanelProps> = ({ onNavigateTab }) =
               onClick={() => onNavigateTab?.('bookings')}
             />
 
-            {/* 2. GMV tháng này */}
+            {/* 2. GMV tổng */}
             <OverviewKpiCard
-              label="GMV tháng này"
+              label="Tổng GMV hệ thống"
               value={formatCurrency(data.kpis.gmv.value)}
               growth={data.kpis.gmv.growth}
               growthType="up-green"
@@ -223,8 +223,11 @@ export const OverviewPanel: React.FC<OverviewPanelProps> = ({ onNavigateTab }) =
             <OverviewComboChart
               period={period}
               onPeriodChange={setPeriod}
+              periodLabel={data.chart.periodLabel}
               summaryBookings={data.chart.summaryBookings}
               summaryGmv={data.chart.summaryGmv}
+              bookingGrowthPct={data.chart.bookingGrowthPct}
+              gmvGrowthPct={data.chart.gmvGrowthPct}
               points={data.chart.points}
               selectedMonth={selectedMonth}
               onMonthChange={setSelectedMonth}

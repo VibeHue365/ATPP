@@ -54,18 +54,19 @@ function createService(
   const findById = jest.fn().mockImplementation(() => {
     const result =
       options.booking === undefined ? bookingDoc() : options.booking;
-    return Object.assign(Promise.resolve(result), {
-      populate: () => Promise.resolve(result),
-      exec: () => Promise.resolve(result),
-    });
+    // getBookingById (code of 24/11/2026) chains two .populate() calls (customer, providers)
+    const chain = (): any =>
+      Object.assign(Promise.resolve(result), {
+        populate: () => chain(),
+        exec: () => Promise.resolve(result),
+      });
+    return chain();
   });
   const bookingModel = {
     findById,
-    find: jest
-      .fn()
-      .mockReturnValue({
-        sort: () => ({ exec: () => Promise.resolve(options.bookings ?? []) }),
-      }),
+    find: jest.fn().mockReturnValue({
+      sort: () => ({ exec: () => Promise.resolve(options.bookings ?? []) }),
+    }),
     db: {
       model: jest.fn((name: string) =>
         name === 'CustomerReview'
@@ -79,19 +80,15 @@ function createService(
   };
   const bookingScheduleModel = {
     find: jest.fn().mockReturnValue(chain(options.schedules ?? [])),
-    findOne: jest
-      .fn()
-      .mockReturnValue({
-        exec: () => Promise.resolve(options.schedule ?? null),
-      }),
+    findOne: jest.fn().mockReturnValue({
+      exec: () => Promise.resolve(options.schedule ?? null),
+    }),
   };
   const providerModel = {
     find: jest.fn().mockResolvedValue(options.providers ?? []),
-    findOne: jest
-      .fn()
-      .mockReturnValue({
-        exec: () => Promise.resolve(options.provider ?? null),
-      }),
+    findOne: jest.fn().mockReturnValue({
+      exec: () => Promise.resolve(options.provider ?? null),
+    }),
   };
   const coordinator = { coordinate: jest.fn().mockResolvedValue(undefined) };
   const service = Object.create(BookingsService.prototype) as BookingsService;
@@ -111,10 +108,10 @@ function createService(
   };
 }
 
-describe('UC-40 View Booking Details (NgocL)', () => {
+describe('UC-39 View Booking Details (NgocL)', () => {
   const id = new Types.ObjectId().toString();
 
-  it('UT-40 UTCID02 returns not found for a missing booking', async () => {
+  it('UT-39 UTCID02 returns not found for a missing booking', async () => {
     const { service } = createService({ booking: null });
 
     await expect(
@@ -122,7 +119,7 @@ describe('UC-40 View Booking Details (NgocL)', () => {
     ).rejects.toThrow(new NotFoundException('Booking not found'));
   });
 
-  it('UT-40 UTCID03 forbids an unrelated user from viewing the booking', async () => {
+  it('UT-39 UTCID03 forbids an unrelated user from viewing the booking', async () => {
     const { service, bookingItemModel } = createService();
 
     await expect(
@@ -133,10 +130,10 @@ describe('UC-40 View Booking Details (NgocL)', () => {
     expect(bookingItemModel.find).not.toHaveBeenCalled();
   });
 
-  it('UT-40 UTCID04 lets the booking provider view details with resolved item names', async () => {
+  it('UT-39 UTCID04 lets the booking provider view details with resolved item names', async () => {
     const { service } = createService({
       providers: [{ _id: providerId }],
-      items: [{ productId: { name: 'Áo dài đỏ' } }],
+      items: [{ _id: new Types.ObjectId(), productId: { name: 'Áo dài đỏ' } }],
     });
 
     const result = await service.getBookingById(
@@ -153,7 +150,7 @@ describe('UC-40 View Booking Details (NgocL)', () => {
     });
   });
 
-  it('UT-40 UTCID05 lets an administrator view any booking', async () => {
+  it('UT-39 UTCID05 lets an administrator view any booking', async () => {
     const { service } = createService();
 
     await expect(
@@ -163,7 +160,7 @@ describe('UC-40 View Booking Details (NgocL)', () => {
     });
   });
 
-  it('UT-40 UTCID06 settles the pending rental deposit refund of a returned booking first', async () => {
+  it('UT-39 UTCID06 settles the pending rental deposit refund of a returned booking first', async () => {
     const { service, coordinator, bookingModel } = createService({
       booking: bookingDoc({
         status: BookingStatus.Returned,
@@ -177,7 +174,7 @@ describe('UC-40 View Booking Details (NgocL)', () => {
     expect(bookingModel.findById).toHaveBeenCalledTimes(2);
   });
 
-  it('UT-40 UTCID07 includes the provider review of the customer', async () => {
+  it('UT-39 UTCID07 includes the provider review of the customer', async () => {
     const review = { rating: 5 };
     const { service } = createService({ review });
 
@@ -189,8 +186,8 @@ describe('UC-40 View Booking Details (NgocL)', () => {
   });
 });
 
-describe('UC-37 Track Booking Status (NgocL)', () => {
-  it('UT-37 UTCID06 returns no booking for a new customer', async () => {
+describe('UC-36 Track Booking Status (NgocL)', () => {
+  it('UT-36 UTCID06 returns no booking for a new customer', async () => {
     const { service, bookingItemModel } = createService({ bookings: [] });
 
     await expect(
@@ -199,7 +196,7 @@ describe('UC-37 Track Booking Status (NgocL)', () => {
     expect(bookingItemModel.find).not.toHaveBeenCalled();
   });
 
-  it('UT-37 UTCID07 lists customer bookings newest first with their items', async () => {
+  it('UT-36 UTCID07 lists customer bookings newest first with their items', async () => {
     const first = bookingDoc();
     const second = bookingDoc();
     const { service, bookingModel } = createService({
@@ -213,7 +210,7 @@ describe('UC-37 Track Booking Status (NgocL)', () => {
     expect(result.map((booking: Row) => booking.items.length)).toEqual([0, 1]);
   });
 
-  it('UT-37 UTCID08 derives the photoshoot time slot from the schedule times', async () => {
+  it('UT-36 UTCID08 derives the photoshoot time slot from the schedule times', async () => {
     const booking = bookingDoc();
     const startsAt = new Date(2026, 10, 2, 9, 0);
     const endsAt = new Date(2026, 10, 2, 11, 30);
@@ -246,7 +243,7 @@ describe('UC-37 Track Booking Status (NgocL)', () => {
   });
 });
 
-describe('UC-38 Edit Booking - photoshoot location change (NgocL)', () => {
+describe('UC-37 Edit Booking - photoshoot location change (NgocL)', () => {
   const bookingId = new Types.ObjectId().toString();
   const scheduleId = new Types.ObjectId().toString();
   const location = {
@@ -256,7 +253,7 @@ describe('UC-38 Edit Booking - photoshoot location change (NgocL)', () => {
     note: ' Cổng Ngọ Môn ',
   };
 
-  it('UT-38 UTCID03 requires a precise replacement location', async () => {
+  it('UT-37 UTCID03 requires a precise replacement location', async () => {
     const { service } = createService();
 
     await expect(
@@ -273,7 +270,7 @@ describe('UC-38 Edit Booking - photoshoot location change (NgocL)', () => {
     );
   });
 
-  it('UT-38 UTCID04 allows only the booking customer to request a change', async () => {
+  it('UT-37 UTCID04 allows only the booking customer to request a change', async () => {
     const { service } = createService({
       booking: bookingDoc({ customerId: new Types.ObjectId() }),
     });
@@ -292,7 +289,7 @@ describe('UC-38 Edit Booking - photoshoot location change (NgocL)', () => {
     );
   });
 
-  it('UT-38 UTCID05 requires a provider-confirmed booking', async () => {
+  it('UT-37 UTCID05 requires a provider-confirmed booking', async () => {
     const { service } = createService({
       booking: bookingDoc({ customerId, status: BookingStatus.PendingPayment }),
     });
@@ -309,7 +306,7 @@ describe('UC-38 Edit Booking - photoshoot location change (NgocL)', () => {
     );
   });
 
-  it('UT-38 UTCID06 rejects a second pending request for the same photoshoot', async () => {
+  it('UT-37 UTCID06 rejects a second pending request for the same photoshoot', async () => {
     const { service } = createService({
       booking: bookingDoc({ customerId }),
       schedule: {
@@ -330,7 +327,7 @@ describe('UC-38 Edit Booking - photoshoot location change (NgocL)', () => {
     );
   });
 
-  it('UT-38 UTCID07 stores a trimmed pending request with GeoJSON coordinates', async () => {
+  it('UT-37 UTCID07 stores a trimmed pending request with GeoJSON coordinates', async () => {
     const schedule: Row = { save: jest.fn().mockResolvedValue(undefined) };
     const { service } = createService({
       booking: bookingDoc({ customerId }),
@@ -354,7 +351,7 @@ describe('UC-38 Edit Booking - photoshoot location change (NgocL)', () => {
     });
   });
 
-  it('UT-38 UTCID08 applies the new address when the provider approves', async () => {
+  it('UT-37 UTCID08 applies the new address when the provider approves', async () => {
     const requestedLocation = {
       address: 'Đại Nội Huế',
       geo: { type: 'Point', coordinates: [107.58, 16.47] },
@@ -384,7 +381,7 @@ describe('UC-38 Edit Booking - photoshoot location change (NgocL)', () => {
     expect(schedule.locationAddress).toBe('Đại Nội Huế');
   });
 
-  it('UT-38 UTCID09 keeps the original address when the provider rejects', async () => {
+  it('UT-37 UTCID09 keeps the original address when the provider rejects', async () => {
     const schedule: Row = {
       locationAddress: 'Phố cổ',
       locationChangeRequest: {
@@ -409,7 +406,7 @@ describe('UC-38 Edit Booking - photoshoot location change (NgocL)', () => {
     expect(schedule.locationAddress).toBe('Phố cổ');
   });
 
-  it('UT-38 UTCID10 returns not found when no pending request exists', async () => {
+  it('UT-37 UTCID10 returns not found when no pending request exists', async () => {
     const { service } = createService({
       provider: { _id: providerId },
       schedule: null,
@@ -427,7 +424,7 @@ describe('UC-38 Edit Booking - photoshoot location change (NgocL)', () => {
     );
   });
 
-  it('UT-38 UTCID11 rejects malformed booking or schedule ids', async () => {
+  it('UT-37 UTCID11 rejects malformed booking or schedule ids', async () => {
     const { service } = createService();
 
     await expect(
@@ -443,10 +440,10 @@ describe('UC-38 Edit Booking - photoshoot location change (NgocL)', () => {
   });
 });
 
-describe('UC-41 View Track Journey - destination search (NgocL)', () => {
+describe('UC-40 View Track Journey - destination search (NgocL)', () => {
   afterEach(() => jest.restoreAllMocks());
 
-  it('UT-41 UTCID06 rejects a destination query longer than 200 characters', () => {
+  it('UT-40 UTCID06 rejects a destination query longer than 200 characters', () => {
     const controller = new GeocodingController({ search: jest.fn() } as any);
 
     expect(() => controller.search('x'.repeat(201))).toThrow(
@@ -454,7 +451,7 @@ describe('UC-41 View Track Journey - destination search (NgocL)', () => {
     );
   });
 
-  it('UT-41 UTCID07 trims the query before searching and accepts 2 characters', async () => {
+  it('UT-40 UTCID07 trims the query before searching and accepts 2 characters', async () => {
     const geocoding = { search: jest.fn().mockResolvedValue([]) };
     const controller = new GeocodingController(geocoding as any);
 
@@ -463,7 +460,7 @@ describe('UC-41 View Track Journey - destination search (NgocL)', () => {
     expect(geocoding.search).toHaveBeenCalledWith('Hu');
   });
 
-  it('UT-41 UTCID08 skips Photon results without coordinates or address', async () => {
+  it('UT-40 UTCID08 skips Photon results without coordinates or address', async () => {
     jest
       .spyOn(global, 'fetch')
       .mockResolvedValueOnce({ ok: false, status: 503 } as Response)
@@ -493,7 +490,7 @@ describe('UC-41 View Track Journey - destination search (NgocL)', () => {
     ]);
   });
 
-  it('UT-41 UTCID09 reports a gateway error when both providers are unavailable', async () => {
+  it('UT-40 UTCID09 reports a gateway error when both providers are unavailable', async () => {
     jest.spyOn(global, 'fetch').mockRejectedValue(new Error('network down'));
 
     await expect(new GeocodingService().search('Hue')).rejects.toBeInstanceOf(

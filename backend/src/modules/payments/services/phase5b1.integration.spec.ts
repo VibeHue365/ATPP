@@ -184,7 +184,9 @@ const oid = () => new Types.ObjectId();
       const firstReloaded = await payments.findById(first._id).lean();
       expect(firstReloaded?.status).toBe(PaymentStatus.Cancelled);
       expect(firstReloaded?.contractBinding).toBeDefined();
-      expect(firstReloaded?.contractIntentKey).toBe(contractIntentKey(expected));
+      expect(firstReloaded?.contractIntentKey).toBe(
+        contractIntentKey(expected),
+      );
 
       // Verify second payment is pending with new key
       expect(second.status).toBe(PaymentStatus.Pending);
@@ -267,7 +269,9 @@ const oid = () => new Types.ObjectId();
           },
         },
       );
-      const paid = await service.confirmPayment(pending.paymentCode, { source: 'SIMULATOR' });
+      const paid = await service.confirmPayment(pending.paymentCode, {
+        source: 'SIMULATOR',
+      });
       expect(paid.status).toBe(PaymentStatus.Success);
       expect((await bookings.findById(bookingId).lean())?.status).toBe(
         BookingStatus.Cancelled,

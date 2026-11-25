@@ -9,11 +9,17 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { router, type Href } from 'expo-router';
+import { router, useFocusEffect, type Href } from 'expo-router';
 import { providerApi } from '@/apis/providerApi';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useNotifications } from '@/contexts/NotificationContext';
+import { resolveRenderableMediaUrl } from '@/utils/media';
+import { appStorage } from '@/utils/storage';
+
+const PROVIDER_ONLINE_PREF_KEY = 'vh_provider_online_display';
 import type {
   ProviderProfile,
   ProviderPerformance,
@@ -37,17 +43,14 @@ import {
   type SizeStockCell,
 } from '@/components/provider/store/InventoryProductMatrixCard';
 import { RfidChipDetailModal } from '@/components/provider/store/RfidChipDetailModal';
-import { AddProductModal } from '@/components/provider/store/AddProductModal';
-import {
-  StoreManagementHubModal,
-  type StoreHubTab,
-} from '@/components/provider/store/StoreManagementHubModal';
+import type { StoreHubTab } from '@/components/provider/store/StoreManagementHubModal';
 import { PhotographyPackageItemCard } from '@/components/provider/store/PhotographyPackageItemCard';
 import { ComboPromotionItemCard } from '@/components/provider/store/ComboPromotionItemCard';
 import {
-  PackageAndComboFormModal,
-  type PackageComboModalMode,
-} from '@/components/provider/store/PackageAndComboFormModal';
+  setPendingPkgComboFormState,
+  setPendingProductFormState,
+  setPendingStoreHubState,
+} from '@/utils/providerFormBridge';
 
 type StoreMainCategoryTab = 'AODAI' | 'PHOTOGRAPHY' | 'COMBO';
 
@@ -58,19 +61,10 @@ const FALLBACK_IMAGES = [
 ];
 
 function resolveImageUrl(rawUrl?: string | null, index = 0): string {
-  if (!rawUrl || typeof rawUrl !== 'string') {
-    return FALLBACK_IMAGES[index % FALLBACK_IMAGES.length];
-  }
-  const baseApi = (
-    process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:3000'
-  ).replace(/\/$/, '');
-  if (rawUrl.startsWith('/')) {
-    return `${baseApi}${rawUrl}`;
-  }
-  if (rawUrl.includes('localhost:3000') || rawUrl.includes('127.0.0.1:3000')) {
-    return rawUrl.replace(/https?:\/\/(localhost|127\.0\.0\.1):3000/, baseApi);
-  }
-  return rawUrl;
+  return (
+    resolveRenderableMediaUrl(rawUrl) ||
+    FALLBACK_IMAGES[index % FALLBACK_IMAGES.length]
+  );
 }
 
 function getColorMeta(colorRaw?: string): { label: string; hex: string } {
@@ -143,8 +137,18 @@ function inferCategoryFilterKey(product: any): string {
 }
 
 export default function ProviderStoreScreen() {
+  const { user } = useAuth();
   const { show } = useToast();
-  const { unreadCount } = useNotifications();
+  const { unreadCount, bookingSyncVersion } = useNotifications();
+  const [headerAvatarFailed, setHeaderAvatarFailed] = useState(false);
+
+  const userAvatarUri = !headerAvatarFailed
+    ? resolveRenderableMediaUrl(user?.avatarUrl)
+    : undefined;
+
+  useEffect(() => {
+    setHeaderAvatarFailed(false);
+  }, [user?.avatarUrl]);
 
   const [profile, setProfile] = useState<ProviderProfile | null>(null);
   const [performance, setPerformance] = useState<ProviderPerformance | null>(null);
@@ -172,12 +176,6 @@ export default function ProviderStoreScreen() {
   const [selectedProduct, setSelectedProduct] =
     useState<EnrichedInventoryProduct | null>(null);
   const [chipModalVisible, setChipModalVisible] = useState(false);
-  const [addModalVisible, setAddModalVisible] = useState(false);
-  const [hubModalVisible, setHubModalVisible] = useState(false);
-  const [hubInitialTab, setHubInitialTab] = useState<StoreHubTab>('SETTINGS');
-  const [pkgComboFormMode, setPkgComboFormMode] =
-    useState<PackageComboModalMode>(null);
-  const [editingPkgOrCombo, setEditingPkgOrCombo] = useState<any | null>(null);
 
   const loadStoreAndInventory = useCallback(async () => {
     try {
@@ -189,6 +187,7 @@ export default function ProviderStoreScreen() {
         pkgRes,
         comboRes,
         campRes,
+        onlinePref,
       ] = await Promise.allSettled([
         providerApi.getMe(),
         providerApi.getOverview(),
@@ -197,11 +196,16 @@ export default function ProviderStoreScreen() {
         providerApi.listPhotographyPackages(),
         providerApi.listCombos(),
         providerApi.getActiveCampaign(),
+        appStorage.get(PROVIDER_ONLINE_PREF_KEY),
       ]);
 
       if (profRes.status === 'fulfilled' && profRes.value) {
         setProfile(profRes.value);
-        setIsOnline(profRes.value.isAcceptingBookings ?? true);
+        if (onlinePref.status === 'fulfilled' && onlinePref.value !== null) {
+          setIsOnline(onlinePref.value !== '0');
+        } else {
+          setIsOnline(profRes.value.isAcceptingBookings ?? true);
+        }
       }
 
       if (overRes.status === 'fulfilled' && overRes.value?.performance) {
@@ -246,27 +250,35 @@ export default function ProviderStoreScreen() {
     void loadStoreAndInventory();
   }, [loadStoreAndInventory]);
 
+  useEffect(() => {
+    if (bookingSyncVersion > 0) {
+      void loadStoreAndInventory();
+    }
+  }, [bookingSyncVersion, loadStoreAndInventory]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadStoreAndInventory();
+      return undefined;
+    }, [loadStoreAndInventory]),
+  );
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     void loadStoreAndInventory();
   }, [loadStoreAndInventory]);
 
-  // Toggle store online status
+  // Toggle store availability display locally without forbidden API fields
   const handleToggleOnline = async () => {
     const nextState = !isOnline;
     setIsOnline(nextState);
-    try {
-      await providerApi.updateProfile({ isAcceptingBookings: nextState });
-      show(
-        nextState
-          ? 'Đã bật trạng thái mở cửa đón khách'
-          : 'Đã tạm ngưng nhận khách trực tiếp',
-        'success',
-      );
-    } catch {
-      setIsOnline(!nextState);
-      show('Không thể cập nhật trạng thái cửa hàng', 'error');
-    }
+    await appStorage.set(PROVIDER_ONLINE_PREF_KEY, nextState ? '1' : '0');
+    show(
+      nextState
+        ? 'Đã bật trạng thái mở cửa đón khách'
+        : 'Đã tạm ngưng nhận khách trực tiếp',
+      'success',
+    );
   };
 
   // Build EnrichedInventoryProduct[] combining real products & inventorySummary
@@ -289,8 +301,8 @@ export default function ProviderStoreScreen() {
             name: rows[0]?.productName || `Mẫu Áo Dài #${idx + 1}`,
             colors: [rows[0]?.color || 'Đỏ Chu Sa'],
             sizes: Array.from(new Set(rows.map((r) => r.size))),
-            basePrice: 850000,
-            depositAmount: 300000,
+            basePrice: 500000,
+            depositAmount: 200000,
             status: 'ACTIVE',
             images: [],
           }));
@@ -370,8 +382,8 @@ export default function ProviderStoreScreen() {
         imageUrl: resolveImageUrl(p.images?.[0], idx),
         colorLabel: colorMeta.label,
         colorHex: colorMeta.hex,
-        basePrice: p.basePrice ?? 850000,
-        depositAmount: p.depositAmount ?? 300000,
+        basePrice: p.basePrice ?? 500000,
+        depositAmount: p.depositAmount ?? 200000,
         isActive: (p.status || 'ACTIVE') === 'ACTIVE',
         sizeMatrix,
         totalChips,
@@ -655,6 +667,34 @@ export default function ProviderStoreScreen() {
     }
   };
 
+  const openStoreHub = (tab: StoreHubTab) => {
+    setPendingStoreHubState({
+      initialTab: tab,
+      profile,
+      onUpdated: () => void loadStoreAndInventory(),
+    });
+    router.push(`/provider/store-hub?tab=${tab}` as Href);
+  };
+
+  const openProductForm = (editingProd: any | null = null) => {
+    setPendingProductFormState({
+      editingProduct: editingProd,
+      onSaved: () => void loadStoreAndInventory(),
+    });
+    router.push('/provider/product-form' as Href);
+  };
+
+  const openPkgComboForm = (mode: 'PACKAGE' | 'COMBO', editingItem: any | null = null) => {
+    setPendingPkgComboFormState({
+      mode,
+      editingItem,
+      products: products.length > 0 ? products : enrichedProducts,
+      packages: photographyPackages,
+      onSaved: () => void loadStoreAndInventory(),
+    });
+    router.push(`/provider/package-combo-form?mode=${mode}` as Href);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       {/* Sticky Top Header */}
@@ -664,7 +704,7 @@ export default function ProviderStoreScreen() {
             <MaterialIcons name="auto-awesome" size={19} color="#BA0049" />
           </View>
           <View>
-            <Text style={styles.headerEyebrow}>LUMÉ PARTNER</Text>
+            <Text style={styles.headerEyebrow}>TÀGO PARTNER PRO</Text>
             <Text style={styles.headerTitle}>Cửa Hàng & Kho</Text>
           </View>
         </View>
@@ -684,7 +724,16 @@ export default function ProviderStoreScreen() {
             onPress={() => router.push('/(tabs)/profile' as Href)}
             accessibilityLabel="Tài khoản"
           >
-            <MaterialIcons name="person" size={18} color="#FFFFFF" />
+            {userAvatarUri ? (
+              <Image
+                source={{ uri: userAvatarUri }}
+                style={styles.profileCircleImg}
+                contentFit="cover"
+                onError={() => setHeaderAvatarFailed(true)}
+              />
+            ) : (
+              <MaterialIcons name="person" size={18} color="#FFFFFF" />
+            )}
           </Pressable>
         </View>
       </View>
@@ -717,13 +766,31 @@ export default function ProviderStoreScreen() {
               performance={performance}
               isOnline={isOnline}
               onToggleOnline={handleToggleOnline}
+              onPressAvatar={() => openStoreHub('SETTINGS')}
             />
 
-            {/* 1b. Quick Store Management Hub Strip (Web Parity: Settings, Vouchers, Packages, Analytics) */}
-            <View style={styles.hubStripRow}>
+            {/* 1b. Quick Store Management Hub Strip (Web Parity: Settings, Staff, Contracts V2, Vouchers, Packages, Analytics) */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.hubStripRow}
+            >
+              <Pressable
+                style={styles.hubActionCard}
+                onPress={() => router.push('/provider/staff' as Href)}
+              >
+                <View style={styles.hubIconCircle}>
+                  <Ionicons name="people-outline" size={17} color="#BA0049" />
+                </View>
+                <Text style={styles.hubActionLabel} numberOfLines={1}>
+                  Thợ chụp
+                </Text>
+              </Pressable>
+
               {(
                 [
                   { tab: 'SETTINGS', label: 'Hồ sơ tiệm', icon: 'settings-outline' },
+                  { tab: 'CONTRACTS', label: 'Hợp đồng V2', icon: 'document-text-outline' },
                   { tab: 'VOUCHERS', label: 'Voucher', icon: 'pricetag-outline' },
                   { tab: 'PACKAGES', label: 'Portfolio', icon: 'images-outline' },
                   { tab: 'ANALYTICS', label: 'Doanh thu', icon: 'stats-chart-outline' },
@@ -732,10 +799,7 @@ export default function ProviderStoreScreen() {
                 <Pressable
                   key={btn.tab}
                   style={styles.hubActionCard}
-                  onPress={() => {
-                    setHubInitialTab(btn.tab);
-                    setHubModalVisible(true);
-                  }}
+                  onPress={() => openStoreHub(btn.tab)}
                 >
                   <View style={styles.hubIconCircle}>
                     <Ionicons name={btn.icon} size={17} color="#BA0049" />
@@ -745,7 +809,7 @@ export default function ProviderStoreScreen() {
                   </Text>
                 </Pressable>
               ))}
-            </View>
+            </ScrollView>
 
             {/* 1c. Segmented Category Control (Kho Cổ Phục | Gói Chụp | Combo) */}
             <View style={styles.segmentedBar}>
@@ -923,6 +987,9 @@ export default function ProviderStoreScreen() {
                               product={item}
                               onPressChipDetails={handleOpenChipDetails}
                               onToggleRentalActive={handleToggleRentalActive}
+                              onEditProduct={(prod) =>
+                                openProductForm(prod.rawProduct ?? prod)
+                              }
                             />
                           ))}
                         </View>
@@ -952,10 +1019,7 @@ export default function ProviderStoreScreen() {
                   </View>
                   <Pressable
                     style={styles.tabAddQuickBtn}
-                    onPress={() => {
-                      setEditingPkgOrCombo(null);
-                      setPkgComboFormMode('PACKAGE');
-                    }}
+                    onPress={() => openPkgComboForm('PACKAGE')}
                   >
                     <Ionicons name="add" size={16} color="#FFFFFF" />
                     <Text style={styles.tabAddQuickBtnText}>Thêm gói</Text>
@@ -973,10 +1037,7 @@ export default function ProviderStoreScreen() {
                     </Text>
                     <Pressable
                       style={styles.resetFilterBtn}
-                      onPress={() => {
-                        setEditingPkgOrCombo(null);
-                        setPkgComboFormMode('PACKAGE');
-                      }}
+                      onPress={() => openPkgComboForm('PACKAGE')}
                     >
                       <Text style={styles.resetFilterBtnText}>
                         + Tạo gói chụp ảnh đầu tiên
@@ -990,10 +1051,7 @@ export default function ProviderStoreScreen() {
                         key={pkg._id || pkg.id}
                         pkg={pkg}
                         onToggleActive={handleTogglePackageActive}
-                        onPressEdit={(item) => {
-                          setEditingPkgOrCombo(item);
-                          setPkgComboFormMode('PACKAGE');
-                        }}
+                        onPressEdit={(item) => openPkgComboForm('PACKAGE', item)}
                         onPressDelete={handleDeletePackage}
                       />
                     ))}
@@ -1025,10 +1083,7 @@ export default function ProviderStoreScreen() {
 
                   <Pressable
                     style={styles.campaignManageBtn}
-                    onPress={() => {
-                      setHubInitialTab('VOUCHERS');
-                      setHubModalVisible(true);
-                    }}
+                    onPress={() => openStoreHub('VOUCHERS')}
                   >
                     <Text style={styles.campaignManageBtnText}>
                       {activeCampaign ? 'Cấu hình' : 'Kích hoạt'}
@@ -1053,10 +1108,7 @@ export default function ProviderStoreScreen() {
                   </View>
                   <Pressable
                     style={styles.tabAddQuickBtn}
-                    onPress={() => {
-                      setEditingPkgOrCombo(null);
-                      setPkgComboFormMode('COMBO');
-                    }}
+                    onPress={() => openPkgComboForm('COMBO')}
                   >
                     <Ionicons name="add" size={16} color="#FFFFFF" />
                     <Text style={styles.tabAddQuickBtnText}>Tạo Combo</Text>
@@ -1074,10 +1126,7 @@ export default function ProviderStoreScreen() {
                     </Text>
                     <Pressable
                       style={styles.resetFilterBtn}
-                      onPress={() => {
-                        setEditingPkgOrCombo(null);
-                        setPkgComboFormMode('COMBO');
-                      }}
+                      onPress={() => openPkgComboForm('COMBO')}
                     >
                       <Text style={styles.resetFilterBtnText}>
                         + Ghép Gói Combo đầu tiên
@@ -1092,10 +1141,7 @@ export default function ProviderStoreScreen() {
                         combo={cb}
                         productsMap={productsMap}
                         packagesMap={packagesMap}
-                        onPressEdit={(item) => {
-                          setEditingPkgOrCombo(item);
-                          setPkgComboFormMode('COMBO');
-                        }}
+                        onPressEdit={(item) => openPkgComboForm('COMBO', item)}
                         onPressDelete={handleDeleteCombo}
                       />
                     ))}
@@ -1127,13 +1173,11 @@ export default function ProviderStoreScreen() {
               ]}
               onPress={() => {
                 if (storeCategoryTab === 'PHOTOGRAPHY') {
-                  setEditingPkgOrCombo(null);
-                  setPkgComboFormMode('PACKAGE');
+                  openPkgComboForm('PACKAGE');
                 } else if (storeCategoryTab === 'COMBO') {
-                  setEditingPkgOrCombo(null);
-                  setPkgComboFormMode('COMBO');
+                  openPkgComboForm('COMBO');
                 } else {
-                  setAddModalVisible(true);
+                  openProductForm(null);
                 }
               }}
             >
@@ -1150,39 +1194,15 @@ export default function ProviderStoreScreen() {
         </View>
       )}
 
-      {/* Modals */}
+      {/* RFID Quick Management Modal (Product/Hub/Combo forms open as full Stack screens) */}
       <RfidChipDetailModal
         visible={chipModalVisible}
         product={selectedProduct}
         onClose={() => setChipModalVisible(false)}
         onUpdated={() => void loadStoreAndInventory()}
-      />
-
-      <AddProductModal
-        visible={addModalVisible}
-        onClose={() => setAddModalVisible(false)}
-        onCreated={() => void loadStoreAndInventory()}
-      />
-
-      <StoreManagementHubModal
-        visible={hubModalVisible}
-        initialTab={hubInitialTab}
-        profile={profile}
-        onClose={() => setHubModalVisible(false)}
-        onUpdated={() => void loadStoreAndInventory()}
-      />
-
-      <PackageAndComboFormModal
-        visible={pkgComboFormMode !== null}
-        mode={pkgComboFormMode}
-        editingItem={editingPkgOrCombo}
-        products={products.length > 0 ? products : enrichedProducts}
-        packages={photographyPackages}
-        onClose={() => {
-          setPkgComboFormMode(null);
-          setEditingPkgOrCombo(null);
-        }}
-        onSaved={() => void loadStoreAndInventory()}
+        onPressEditProduct={(prod) =>
+          openProductForm((prod as any).rawProduct ?? prod)
+        }
       />
     </SafeAreaView>
   );
@@ -1259,6 +1279,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#BA0049',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  profileCircleImg: {
+    width: '100%',
+    height: '100%',
   },
   loadingWrap: {
     flex: 1,
@@ -1283,15 +1308,15 @@ const styles = StyleSheet.create({
   hubStripRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: 8,
+    paddingRight: 4,
   },
   hubActionCard: {
-    flex: 1,
+    minWidth: 78,
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
     paddingVertical: 10,
-    paddingHorizontal: 6,
+    paddingHorizontal: 10,
     borderWidth: 1,
     borderColor: '#E9E8E7',
     alignItems: 'center',

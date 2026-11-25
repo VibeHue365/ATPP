@@ -30,6 +30,7 @@ vi.mock('../src/services/contractService', () => ({
     submitConsent: vi.fn(),
     getProviderMechanism: vi.fn(),
     getProviderAcceptanceStatus: vi.fn(),
+    getMyContracts: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -77,9 +78,16 @@ describe('Phase 7B: Contract Management & Document Access UI Suite', () => {
         expect(screen.getByTestId('booking-contracts-section')).toBeTruthy();
       });
 
-      expect(screen.getByText(/Hợp đồng điện tử/i)).toBeTruthy();
-      expect(screen.getByText(/Mã HĐ: 00000001/i)).toBeTruthy();
-      expect(screen.getByText(/v1/i)).toBeTruthy();
+      // the redesigned section shows the label in more than one place (heading and card)
+      expect(screen.getAllByText(/Hợp đồng điện tử/i).length).toBeGreaterThanOrEqual(1);
+      // the code is now shown by ContractCodeDisplay: label 'Mã hợp đồng:' and a shortened id (head...tail)
+      const code = screen.getByTestId('booking-contract-code-64b0f0000000000000000001').textContent || '';
+      expect(code).toContain('Mã hợp đồng:');
+      expect(code).toContain('64b0f0000...00001');
+      // version is now rendered as 'Phiên bản <strong>1</strong>'
+      expect(
+        screen.getByText((_, el) => el?.tagName === 'SPAN' && /^Phiên bản\s*1$/.test((el.textContent || '').trim())),
+      ).toBeTruthy();
       expect(screen.getByText(/provider_ao_dai_hue/i)).toBeTruthy();
       expect(screen.getByText(/Đã ghi nhận chấp thuận/i)).toBeTruthy();
       expect(screen.getByTestId('view-contract-btn-64b0f0000000000000000001')).toBeTruthy();
@@ -214,7 +222,9 @@ describe('Phase 7B: Contract Management & Document Access UI Suite', () => {
         expect(screen.getByTestId('contract-detail-viewer-modal')).toBeTruthy();
       });
 
-      expect(screen.getByText(/Hợp đồng Điện tử: HD-20261029-0099/i)).toBeTruthy();
+      // the redesigned modal has a generic title; the contract code is shown in its own field
+      expect(screen.getAllByText(/Hợp đồng điện tử/i).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByTestId('modal-contract-code').textContent).toContain('HD-20261029-0099');
       expect(screen.getByTestId('contract-rendered-text').textContent).toContain('Bên A đồng ý cho Bên B thuê trang phục');
       expect(screen.getByText('content_sha256_canonical_abc123')).toBeTruthy();
       expect(screen.getByText('pdf_sha256_immutable_file_789xyz')).toBeTruthy();
@@ -248,7 +258,7 @@ describe('Phase 7B: Contract Management & Document Access UI Suite', () => {
       // Provider badge & disclaimer
       expect(screen.getByText(/Phạm vi đối tác \(Isolated\)/i)).toBeTruthy();
       expect(
-        screen.getByText(/Đối tác chấp thuận trước cơ chế theo quy chế nền tảng VibeHue khi công bố sản phẩm/i),
+        screen.getByText(/Đối tác chấp thuận trước cơ chế theo quy chế nền tảng TàGo khi công bố sản phẩm/i),
       ).toBeTruthy();
 
       // Ensure NO unauthorized signing or revocation buttons exist in viewer
@@ -439,21 +449,16 @@ describe('Phase 7B: Contract Management & Document Access UI Suite', () => {
   });
 
   describe('4. Profile Contracts Tab & Multi-Booking Management', () => {
-    it('loads rental bookings and displays contracts sections', async () => {
-      vi.mocked(httpClient.get).mockResolvedValueOnce([
-        {
-          _id: 'booking_cust_01',
-          bookingCode: 'DH-001',
-          createdAt: '2026-10-29T10:00:00Z',
-          status: 'PAID',
-          items: [{ itemType: 'PRODUCT', productId: 'p1' }],
-        },
-      ]);
-
-      vi.mocked(contractService.listContractsForBooking).mockResolvedValueOnce([
+    // Since the code of 24/11/2026 the tab reads the customer's contracts from one endpoint
+    // (contractService.getMyContracts) instead of loading every booking and its contracts.
+    it('loads the customer contracts and lists them by booking', async () => {
+      vi.mocked(contractService.getMyContracts).mockResolvedValueOnce([
         {
           contractId: 'contract_cust_01',
           bookingId: 'booking_cust_01',
+          bookingCode: 'DH-001',
+          bookingStatus: 'CONFIRMED',
+          bookingCreatedAt: '2026-10-29T10:00:00Z',
           providerId: 'tiem_ao_dai_xua',
           scope: 'PROVIDER',
           legacyStatus: 'ACCEPTED',
@@ -462,29 +467,21 @@ describe('Phase 7B: Contract Management & Document Access UI Suite', () => {
           state: 'ACCEPTED',
           contentHash: 'hash_01',
           bookingFingerprint: 'fp_01',
-        },
+        } as any,
       ]);
 
       render(<ProfileContractsTab />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('profile-contracts-tab')).toBeTruthy();
+        expect(screen.getByTestId('contract-item-card-contract_cust_01')).toBeTruthy();
       });
 
       expect(screen.getByText(/Hợp đồng Điện tử của tôi/i)).toBeTruthy();
       expect(screen.getByText(/Đơn hàng #DH-001/i)).toBeTruthy();
     });
 
-    it('shows empty message when customer has no rental bookings', async () => {
-      vi.mocked(httpClient.get).mockResolvedValueOnce([
-        {
-          _id: 'booking_photo_only',
-          bookingCode: 'DH-PHOTO',
-          createdAt: '2026-10-29T10:00:00Z',
-          status: 'PAID',
-          items: [{ itemType: 'PHOTOSHOOT', photographyPackageId: 'pkg1' }],
-        },
-      ]);
+    it('shows the empty message when the customer has no contract in progress', async () => {
+      vi.mocked(contractService.getMyContracts).mockResolvedValueOnce([]);
 
       render(<ProfileContractsTab />);
 
@@ -492,7 +489,7 @@ describe('Phase 7B: Contract Management & Document Access UI Suite', () => {
         expect(screen.getByTestId('no-contracts-message')).toBeTruthy();
       });
 
-      expect(screen.getByText(/Chưa có hợp đồng điện tử nào/i)).toBeTruthy();
+      expect(screen.getByText(/Chưa có hợp đồng nào đang có hiệu lực/i)).toBeTruthy();
     });
   });
 });

@@ -52,6 +52,7 @@ export const adminDirectoryApi = {
   bookings: (page: number) => list<Booking>('bookings', page),
   banCustomer: (id: string) => httpClient.patch<void>(`/admin/stats/customers/${id}/ban`, {}),
   unbanCustomer: (id: string) => httpClient.patch<void>(`/admin/stats/customers/${id}/unban`, {}),
+  unrestrictCustomer: (id: string) => httpClient.patch<void>(`/admin/stats/customers/${id}/unrestrict`, {}),
   suspendProvider: (id: string, reason?: string) =>
     httpClient.patch<void>(`/admin/providers/${id}/suspend`, { reason }),
   unsuspendProvider: (id: string, reason?: string) =>

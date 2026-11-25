@@ -193,7 +193,7 @@ describe('UC-63 Manage Accounts (HuyLDN)', () => {
     const result = await service.adminUpdateStatus(
       actorId,
       target._id.toString(),
-      { status: UserStatus.Suspended, reason: 'Spam' } as any,
+      { status: UserStatus.Suspended, reason: 'Spam' },
     );
 
     expect(result.status).toBe(UserStatus.Suspended);
@@ -228,7 +228,7 @@ describe('UC-63 Manage Accounts (HuyLDN)', () => {
     const result = await service.adminLockUser(actorId, target._id.toString(), {
       type: AccountLockType.Banned,
       reason: 'Fraud',
-    } as any);
+    });
 
     expect(usersRepository.lockUser).toHaveBeenCalledWith(
       target._id,
@@ -266,7 +266,7 @@ describe('UC-63 Manage Accounts (HuyLDN)', () => {
     const result = await service.adminUnlockUser(
       actorId,
       target._id.toString(),
-      { reason: 'Appeal accepted' } as any,
+      { reason: 'Appeal accepted' },
     );
 
     expect(result.status).toBe(UserStatus.Active);

@@ -144,7 +144,12 @@ export class ProviderOverviewService {
         isCurrentMonth,
       ),
       this.calculateUpcomingSchedules(providerId, startOfToday),
-      this.calculateTasks(providerId, provider.userId, startOfToday, endOfToday),
+      this.calculateTasks(
+        providerId,
+        provider.userId,
+        startOfToday,
+        endOfToday,
+      ),
       this.calculateTopServices(providerId),
       this.calculateRecentActivities(providerId),
       this.calculatePerformance(provider, providerId),
@@ -230,10 +235,7 @@ export class ProviderOverviewService {
               {
                 $subtract: [
                   {
-                    $multiply: [
-                      '$unitPrice',
-                      { $ifNull: ['$quantity', 1] },
-                    ],
+                    $multiply: ['$unitPrice', { $ifNull: ['$quantity', 1] }],
                   },
                   { $ifNull: ['$comboDiscountAmount', 0] },
                 ],
@@ -280,14 +282,15 @@ export class ProviderOverviewService {
 
     // 3. Upcoming schedules count (next 7 days) & today
     const in7Days = new Date(startOfToday.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const upcomingSchedulesCount = await this.bookingScheduleModel.countDocuments({
-      providerId,
-      status: { $in: ['CONFIRMED', 'SCHEDULED', 'HELD'] },
-      $or: [
-        { startsAt: { $gte: startOfToday, $lte: in7Days } },
-        { scheduledDate: { $gte: startOfToday, $lte: in7Days } },
-      ],
-    } as any);
+    const upcomingSchedulesCount =
+      await this.bookingScheduleModel.countDocuments({
+        providerId,
+        status: { $in: ['CONFIRMED', 'SCHEDULED', 'HELD'] },
+        $or: [
+          { startsAt: { $gte: startOfToday, $lte: in7Days } },
+          { scheduledDate: { $gte: startOfToday, $lte: in7Days } },
+        ],
+      } as any);
 
     const todaySchedulesCount = await this.bookingScheduleModel.countDocuments({
       providerId,
@@ -516,10 +519,7 @@ export class ProviderOverviewService {
               {
                 $subtract: [
                   {
-                    $multiply: [
-                      '$unitPrice',
-                      { $ifNull: ['$quantity', 1] },
-                    ],
+                    $multiply: ['$unitPrice', { $ifNull: ['$quantity', 1] }],
                   },
                   { $ifNull: ['$comboDiscountAmount', 0] },
                 ],
@@ -617,16 +617,14 @@ export class ProviderOverviewService {
       const item = s.bookingItemId;
       const cust = b?.customerId;
       const custName =
-        cust?.profile?.fullName ||
-        cust?.email?.split('@')[0] ||
-        'Khách hàng';
+        cust?.profile?.fullName || cust?.email?.split('@')[0] || 'Khách hàng';
       const avatarUrl = cust?.profile?.avatarUrl || null;
 
       const scheduleDate = s.startsAt
         ? new Date(s.startsAt)
         : s.scheduledDate
-        ? new Date(s.scheduledDate)
-        : startOfToday;
+          ? new Date(s.scheduledDate)
+          : startOfToday;
       const timeLabel =
         s.startsAt && s.endsAt
           ? `${this.formatVnTime(new Date(s.startsAt))} - ${this.formatVnTime(new Date(s.endsAt))}`
@@ -680,6 +678,8 @@ export class ProviderOverviewService {
           avatarUrl,
         },
         serviceName,
+        assignedStaffId: s.assignedStaffId?.toString?.() ?? null,
+        assignedStaffSnapshot: s.assignedStaffSnapshot ?? null,
         status: statusStr,
         statusTone,
       });
@@ -855,10 +855,7 @@ export class ProviderOverviewService {
                 {
                   $subtract: [
                     {
-                      $multiply: [
-                        '$unitPrice',
-                        { $ifNull: ['$quantity', 1] },
-                      ],
+                      $multiply: ['$unitPrice', { $ifNull: ['$quantity', 1] }],
                     },
                     { $ifNull: ['$comboDiscountAmount', 0] },
                   ],
@@ -941,6 +938,14 @@ export class ProviderOverviewService {
       const type = b.status;
 
       switch (b.status) {
+        case 'DRAFT':
+          title = `Đơn nháp ${code}`;
+          description = 'Khách hàng đang chuẩn bị hoàn tất đơn đặt lịch';
+          break;
+        case 'PENDING_PAYMENT':
+          title = `Đơn ${code} chờ thanh toán`;
+          description = `Khách ${custName} chưa hoàn tất thanh toán`;
+          break;
         case 'DEPOSIT_PAID':
           title = `${custName} đã đặt cọc đơn ${code}`;
           description = 'Đơn mới đang chờ đối tác xác nhận lịch hẹn';
@@ -948,6 +953,10 @@ export class ProviderOverviewService {
         case 'CONFIRMED':
           title = `Xác nhận thành công đơn ${code}`;
           description = `Lịch hẹn với khách hàng ${custName} đã được cố định`;
+          break;
+        case 'PICKUP_PENDING':
+          title = `Sẵn sàng bàn giao đơn ${code}`;
+          description = `Đang chờ khách ${custName} đến nhận trang phục`;
           break;
         case 'PICKED_UP':
           title = `Khách hàng đã nhận đồ đơn ${code}`;
@@ -961,6 +970,14 @@ export class ProviderOverviewService {
           title = `Đã giao ảnh xem trước đơn ${code}`;
           description = 'Đang chờ khách duyệt và phản hồi ảnh chụp';
           break;
+        case 'COMBO_PHOTOS_APPROVED':
+          title = `Khách đã duyệt ảnh đơn ${code}`;
+          description = `Khách ${custName} đang trong giai đoạn trả trang phục`;
+          break;
+        case 'RETURN_PENDING':
+          title = `Khách hẹn trả đồ đơn ${code}`;
+          description = `Chờ đối tác kiểm tra và xác nhận nhận lại trang phục`;
+          break;
         case 'RETURNED':
           title = `Đã nhận trả trang phục đơn ${code}`;
           description = `Khách ${custName} đã hoàn trả trang phục thuê`;
@@ -972,6 +989,18 @@ export class ProviderOverviewService {
         case 'CANCELLED':
           title = `Đơn hàng ${code} đã bị huỷ`;
           description = 'Ghi nhận huỷ lịch theo chính sách của nền tảng';
+          break;
+        case 'DISPUTED':
+          title = `Đơn ${code} đang tranh chấp`;
+          description = 'Đơn hàng đang được Admin và các bên đối soát';
+          break;
+        case 'PARTIALLY_REFUNDED':
+          title = `Đơn ${code} hoàn tiền một phần`;
+          description = 'Hệ thống đã hoàn tiền một phần theo thỏa thuận/chính sách';
+          break;
+        case 'REFUNDED':
+          title = `Đơn ${code} đã hoàn tiền`;
+          description = 'Khoản tiền cọc/thanh toán đã được hoàn lại cho khách';
           break;
       }
 
@@ -1061,7 +1090,11 @@ export class ProviderOverviewService {
 
   // --- Date Helpers (Asia/Ho_Chi_Minh: UTC+7) ---
 
-  private getVnDateParts(d: Date): { year: number; month: number; day: number } {
+  private getVnDateParts(d: Date): {
+    year: number;
+    month: number;
+    day: number;
+  } {
     const str = d.toLocaleDateString('en-CA', {
       timeZone: 'Asia/Ho_Chi_Minh',
     }); // "YYYY-MM-DD"

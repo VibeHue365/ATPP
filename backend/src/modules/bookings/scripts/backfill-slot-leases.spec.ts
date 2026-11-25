@@ -44,7 +44,9 @@ describe('backfill-slot-leases', () => {
               toArray: async () => mockProviders,
             }),
             updateOne: async (filter: any, update: any) => {
-              const p = mockProviders.find((x) => x._id.toString() === filter._id.toString());
+              const p = mockProviders.find(
+                (x) => x._id.toString() === filter._id.toString(),
+              );
               if (p && update.$set) {
                 Object.assign(p, update.$set);
               }
@@ -57,12 +59,18 @@ describe('backfill-slot-leases', () => {
             find: (filter: any) => ({
               toArray: async () =>
                 mockBookings.filter((b) => {
-                  if (filter.status?.$in && !filter.status.$in.includes(b.status)) return false;
+                  if (
+                    filter.status?.$in &&
+                    !filter.status.$in.includes(b.status)
+                  )
+                    return false;
                   return true;
                 }),
             }),
             findOne: async (filter: any) =>
-              mockBookings.find((b) => b._id.toString() === filter._id.toString()),
+              mockBookings.find(
+                (b) => b._id.toString() === filter._id.toString(),
+              ),
           };
         }
         if (name === 'booking_items') {
@@ -127,7 +135,9 @@ describe('backfill-slot-leases', () => {
           return {
             findOne: async (filter: any) =>
               mockReservations.find(
-                (r) => r.bookingItemId.toString() === filter.bookingItemId.toString(),
+                (r) =>
+                  r.bookingItemId.toString() ===
+                  filter.bookingItemId.toString(),
               ),
           };
         }
@@ -155,8 +165,10 @@ describe('backfill-slot-leases', () => {
             updateOne: async (filter: any, update: any, options: any) => {
               const existing = mockSlotLeases.find(
                 (l) =>
-                  l.inventoryItemId.toString() === filter.inventoryItemId.toString() &&
-                  l.bookingItemId?.toString() === filter.bookingItemId?.toString() &&
+                  l.inventoryItemId.toString() ===
+                    filter.inventoryItemId.toString() &&
+                  l.bookingItemId?.toString() ===
+                    filter.bookingItemId?.toString() &&
                   l.dateStr === filter.dateStr &&
                   l.slotIndex === filter.slotIndex &&
                   l.purpose === filter.purpose,
@@ -384,7 +396,11 @@ describe('backfill-slot-leases', () => {
       useSlotLeases: false,
     });
 
-    mockBookings.push({ _id: bookingId, providerIds: [providerId], status: 'CONFIRMED' });
+    mockBookings.push({
+      _id: bookingId,
+      providerIds: [providerId],
+      status: 'CONFIRMED',
+    });
     mockBookingItems.push({
       _id: new Types.ObjectId(),
       bookingId,
@@ -407,7 +423,9 @@ describe('backfill-slot-leases', () => {
         dryRun: false,
         logger: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
       }),
-    ).rejects.toThrow('MongoDB session and transaction support are strictly required in apply mode');
+    ).rejects.toThrow(
+      'MongoDB session and transaction support are strictly required in apply mode',
+    );
 
     expect(mockSlotLeases).toHaveLength(0);
     expect(mockProviders[0].useSlotLeases).toBe(false);
@@ -451,9 +469,15 @@ describe('backfill-slot-leases', () => {
     expect(result.leasesInserted).toBe(3); // 2 RENTAL + 1 TURNAROUND
     expect(mockSlotLeases).toHaveLength(3);
 
-    const rental1 = mockSlotLeases.find((l) => l.slotIndex === 1 && l.purpose === 'RENTAL');
-    const rental2 = mockSlotLeases.find((l) => l.slotIndex === 2 && l.purpose === 'RENTAL');
-    const turnaround = mockSlotLeases.find((l) => l.slotIndex === 3 && l.purpose === 'TURNAROUND');
+    const rental1 = mockSlotLeases.find(
+      (l) => l.slotIndex === 1 && l.purpose === 'RENTAL',
+    );
+    const rental2 = mockSlotLeases.find(
+      (l) => l.slotIndex === 2 && l.purpose === 'RENTAL',
+    );
+    const turnaround = mockSlotLeases.find(
+      (l) => l.slotIndex === 3 && l.purpose === 'TURNAROUND',
+    );
 
     expect(rental1).toBeDefined();
     expect(rental2).toBeDefined();
@@ -631,7 +655,11 @@ describe('backfill-slot-leases', () => {
       useSlotLeases: false,
     });
 
-    mockBookings.push({ _id: b1, providerIds: [providerId], status: 'CONFIRMED' });
+    mockBookings.push({
+      _id: b1,
+      providerIds: [providerId],
+      status: 'CONFIRMED',
+    });
     mockBookingItems.push({
       _id: new Types.ObjectId(),
       bookingId: b1,

@@ -30,7 +30,10 @@ export enum FitPreference {
 }
 export const CIRCUMFERENCES = ['chest', 'waist', 'hip'] as const;
 export const OPTIONAL_FIT_DIMENSIONS = ['shoulder', 'bicep'] as const;
-export const FIT_DIMENSIONS = [...CIRCUMFERENCES, ...OPTIONAL_FIT_DIMENSIONS] as const;
+export const FIT_DIMENSIONS = [
+  ...CIRCUMFERENCES,
+  ...OPTIONAL_FIT_DIMENSIONS,
+] as const;
 export const MEASUREMENTS = [
   ...FIT_DIMENSIONS,
   'height',
@@ -102,8 +105,14 @@ export class GarmentFitRuleDto {
   @Type(() => EaseRangeDto)
   waist?: EaseRangeDto;
   @IsOptional() @ValidateNested() @Type(() => EaseRangeDto) hip?: EaseRangeDto;
-  @IsOptional() @ValidateNested() @Type(() => EaseRangeDto) shoulder?: EaseRangeDto;
-  @IsOptional() @ValidateNested() @Type(() => EaseRangeDto) bicep?: EaseRangeDto;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => EaseRangeDto)
+  shoulder?: EaseRangeDto;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => EaseRangeDto)
+  bicep?: EaseRangeDto;
 }
 export class StretchAllowanceDto {
   @IsOptional() @IsNumber() @Min(0) @Max(100) chest?: number;
@@ -139,7 +148,9 @@ export class SaveSizeChartDto extends ChartVersionDto {
   // Required fields must be present in every confirmed row. No inferred defaults.
   @IsArray()
   @ArrayUnique()
-  @IsEnum(['chest', 'waist', 'hip', 'shoulder', 'bicep', 'height', 'weight'], { each: true })
+  @IsEnum(['chest', 'waist', 'hip', 'shoulder', 'bicep', 'height', 'weight'], {
+    each: true,
+  })
   requiredMeasurements: Array<Exclude<MeasurementKey, 'length'>>;
   @IsOptional()
   @IsArray()

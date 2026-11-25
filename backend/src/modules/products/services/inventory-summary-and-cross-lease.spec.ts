@@ -1,5 +1,8 @@
 import { Types } from 'mongoose';
-import { InventoryItemStatus, ConditionStatus } from '../schemas/inventory-item.schema';
+import {
+  InventoryItemStatus,
+  ConditionStatus,
+} from '../schemas/inventory-item.schema';
 import { ReservationStatus } from '../schemas/inventory-reservation.schema';
 
 describe('Inventory Service - Summary & Cross-Lease Parity (F.6, F.1, F.2)', () => {
@@ -110,7 +113,9 @@ describe('Inventory Service - Summary & Cross-Lease Parity (F.6, F.1, F.2)', () 
                 bookingId: booking1Id,
                 status: ReservationStatus.Confirmed,
                 reservedFrom: futureDate,
-                reservedTo: new Date(futureDate.getTime() + 24 * 60 * 60 * 1000),
+                reservedTo: new Date(
+                  futureDate.getTime() + 24 * 60 * 60 * 1000,
+                ),
                 expiresAt: null,
               },
             ]),
@@ -223,7 +228,9 @@ describe('Inventory Service - Summary & Cross-Lease Parity (F.6, F.1, F.2)', () 
       ]);
 
       const futureDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
-      const futureDateStr = futureDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+      const futureDateStr = futureDate.toLocaleDateString('en-CA', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+      });
 
       // Legacy reservation
       mockInventoryReservationModel.find.mockReturnValue({
@@ -235,7 +242,9 @@ describe('Inventory Service - Summary & Cross-Lease Parity (F.6, F.1, F.2)', () 
                 bookingId: booking1Id,
                 status: ReservationStatus.Confirmed,
                 reservedFrom: futureDate,
-                reservedTo: new Date(futureDate.getTime() + 24 * 60 * 60 * 1000),
+                reservedTo: new Date(
+                  futureDate.getTime() + 24 * 60 * 60 * 1000,
+                ),
                 expiresAt: null,
               },
             ]),
@@ -307,7 +316,11 @@ describe('Inventory Service - Summary & Cross-Lease Parity (F.6, F.1, F.2)', () 
       const leaseColl = mockConnection.collection('inventory_slot_leases');
       leaseColl.find.mockReturnValue({
         project: jest.fn().mockReturnThis(),
-        toArray: jest.fn().mockRejectedValue(new Error('MongoNetworkError: failed to query slot leases')),
+        toArray: jest
+          .fn()
+          .mockRejectedValue(
+            new Error('MongoNetworkError: failed to query slot leases'),
+          ),
       });
 
       await expect(service.getInventorySummary(userId)).rejects.toThrow(
@@ -385,7 +398,9 @@ describe('Inventory Service - Summary & Cross-Lease Parity (F.6, F.1, F.2)', () 
         busyItemIds.add(item1._id.toString());
       }
 
-      const freeItems = inventoryItems.filter((i) => !busyItemIds.has(i._id.toString()));
+      const freeItems = inventoryItems.filter(
+        (i) => !busyItemIds.has(i._id.toString()),
+      );
       expect(freeItems).toHaveLength(0);
     });
   });

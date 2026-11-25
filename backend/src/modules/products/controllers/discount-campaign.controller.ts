@@ -1,4 +1,12 @@
-import { Controller, Post, Get, Delete, Body, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Delete,
+  Body,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { DiscountCampaignService } from '../services/discount-campaign.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
@@ -12,10 +20,7 @@ export class DiscountCampaignController {
 
   @Post()
   @UseGuards(JwtAuthGuard)
-  async create(
-    @CurrentUser() user: AuthUser,
-    @Body() dto: CreateCampaignDto,
-  ) {
+  async create(@CurrentUser() user: AuthUser, @Body() dto: CreateCampaignDto) {
     return this.campaignService.createCampaign(user.sub, dto);
   }
 

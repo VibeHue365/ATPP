@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type PropsWithChildren,
 } from "react";
@@ -40,6 +41,9 @@ const AuthContext = createContext<AuthValue | null>(null);
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const oauthExchangeMapRef = useRef<Map<string, Promise<SessionUser>>>(
+    new Map(),
+  );
 
   const saveUser = useCallback(async (value: SessionUser | null) => {
     setUser(value);
@@ -159,14 +163,32 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const loginWithOAuthCode = useCallback(
     async (code: string) => {
-      const response = await authApi.exchangeOAuthCode(code);
-      await tokenStorage.replaceTokens(
-        response.accessToken,
-        response.refreshToken,
-      );
-      const next = mapSessionUser(response.user, response.roles);
-      await saveUser(next);
-      return next;
+      const existing = oauthExchangeMapRef.current.get(code);
+      if (existing) {
+        return existing;
+      }
+
+      const promise = (async () => {
+        try {
+          const response = await authApi.exchangeOAuthCode(code);
+          await tokenStorage.replaceTokens(
+            response.accessToken,
+            response.refreshToken,
+          );
+          const next = mapSessionUser(response.user, response.roles);
+          await saveUser(next);
+          setTimeout(() => {
+            oauthExchangeMapRef.current.delete(code);
+          }, 10_000);
+          return next;
+        } catch (err) {
+          oauthExchangeMapRef.current.delete(code);
+          throw err;
+        }
+      })();
+
+      oauthExchangeMapRef.current.set(code, promise);
+      return promise;
     },
     [saveUser],
   );

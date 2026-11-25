@@ -32,26 +32,37 @@ describe('ChatService', () => {
       updateMany: jest.fn(),
     };
     const userModel = { findById: jest.fn() };
+    // A partner id may also be a provider id; the service then chats with its owner.
+    const providerModel = {
+      findById: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(null),
+      }),
+    };
     return {
       service: new ChatService(
         roomModel as never,
         messageModel as never,
         userModel as never,
+        providerModel as never,
       ),
       roomModel,
       messageModel,
       userModel,
+      providerModel,
     };
   }
 
   it('validates room and partner identifiers', async () => {
-    const { service } = create();
+    const { service, userModel } = create();
     await expect(service.getMessages('invalid')).rejects.toBeInstanceOf(
       BadRequestException,
     );
     await expect(
       service.getOrCreateRoom(userId.toString(), 'invalid'),
     ).rejects.toBeInstanceOf(BadRequestException);
+    userModel.findById.mockReturnValue(query({ _id: userId }));
     await expect(
       service.getOrCreateRoom(userId.toString(), userId.toString()),
     ).rejects.toThrow('Cannot chat with yourself');
@@ -99,7 +110,9 @@ describe('ChatService', () => {
   it('creates a message and updates room activity', async () => {
     const { service, roomModel, messageModel } = create();
     const messageId = new Types.ObjectId();
-    roomModel.findById.mockReturnValue(query({ participants: [userId, partnerId] }));
+    roomModel.findById.mockReturnValue(
+      query({ participants: [userId, partnerId] }),
+    );
     messageModel.create.mockResolvedValue({ _id: messageId });
     await service.createMessage(
       roomId.toString(),
@@ -126,7 +139,9 @@ describe('ChatService', () => {
 
   it('marks only other users messages as read', async () => {
     const { service, roomModel, messageModel } = create();
-    roomModel.findById.mockReturnValue(query({ participants: [userId, partnerId] }));
+    roomModel.findById.mockReturnValue(
+      query({ participants: [userId, partnerId] }),
+    );
     await service.markRoomAsRead(roomId.toString(), userId.toString());
     expect(messageModel.updateMany).toHaveBeenCalledWith(
       { roomId, senderId: { $ne: userId }, readBy: { $ne: userId } },

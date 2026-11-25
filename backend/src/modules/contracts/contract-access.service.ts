@@ -33,7 +33,10 @@ export class ContractAccessService {
   ): Promise<void> {
     await contractDb(this.connection)
       .collection('bookings')
-      .updateOne({ _id: bookingId }, { $set: { contractFlowVersion: version } });
+      .updateOne(
+        { _id: bookingId },
+        { $set: { contractFlowVersion: version } },
+      );
   }
 
   async assertBookingReader(
@@ -51,9 +54,17 @@ export class ContractAccessService {
       user.permissions.includes('provider:read')
     )
       return { kind: 'ADMIN' };
-    const rawIds = (booking.providerIds ?? []) as Array<string | Types.ObjectId>;
+    const rawIds = (booking.providerIds ?? []) as Array<
+      string | Types.ObjectId
+    >;
     const searchIds: Types.ObjectId[] = rawIds
-      .map((id) => (id instanceof Types.ObjectId ? id : Types.ObjectId.isValid(id?.toString()) ? new Types.ObjectId(id) : null))
+      .map((id) =>
+        id instanceof Types.ObjectId
+          ? id
+          : Types.ObjectId.isValid(id?.toString())
+            ? new Types.ObjectId(id)
+            : null,
+      )
       .filter((id): id is Types.ObjectId => id !== null);
 
     if (searchIds.length === 0) {
@@ -69,7 +80,7 @@ export class ContractAccessService {
         },
         { projection: { _id: 1 } },
       );
-    if (provider) return { kind: 'PROVIDER', providerId: provider._id as Types.ObjectId };
+    if (provider) return { kind: 'PROVIDER', providerId: provider._id };
     throw new NotFoundException('CONTRACT_NOT_FOUND');
   }
 

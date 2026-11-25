@@ -8,19 +8,26 @@ export type TaskFilterKey = 'ALL' | 'PREPARE_CLOTHES' | 'PICKUP_TODAY' | 'RETURN
 
 interface DailyTasksGridProps {
   kpis?: ProviderKpis;
+  counts?: {
+    prepareCount: number;
+    activeRentalsCount: number;
+    returnsDueCount: number;
+    todaySchedulesCount: number;
+  };
   activeTask?: TaskFilterKey;
   onPressTask?: (type: TaskFilterKey) => void;
 }
 
 export function DailyTasksGrid({
   kpis,
+  counts,
   activeTask = 'ALL',
   onPressTask,
 }: DailyTasksGridProps) {
-  const pendingConfirm = kpis?.pendingConfirmCount ?? 0;
-  const activeRentals = kpis?.activeRentalsCount ?? 0;
-  const returnsDue = kpis?.returnsDueTodayCount ?? 0;
-  const todaySchedules = kpis?.todaySchedulesCount ?? 0;
+  const pendingConfirm = counts?.prepareCount ?? kpis?.pendingConfirmCount ?? 0;
+  const activeRentals = counts?.activeRentalsCount ?? kpis?.activeRentalsCount ?? 0;
+  const returnsDue = counts?.returnsDueCount ?? kpis?.returnsDueTodayCount ?? 0;
+  const todaySchedules = counts?.todaySchedulesCount ?? kpis?.todaySchedulesCount ?? 0;
   const totalTasks = pendingConfirm + activeRentals + returnsDue + todaySchedules;
 
   const cards: Array<{
@@ -36,7 +43,7 @@ export function DailyTasksGrid({
       title: 'Cần chuẩn bị áo',
       count: pendingConfirm,
       badgeLabel: 'Chờ giao',
-      subtext: pendingConfirm > 0 ? `${pendingConfirm} đơn chờ bàn giao` : 'Không có đơn chờ',
+      subtext: pendingConfirm > 0 ? `${pendingConfirm} đơn cần duyệt/giao` : 'Không có đơn chờ',
       icon: (
         <MaterialIcons
           name="checkroom"
@@ -50,7 +57,7 @@ export function DailyTasksGrid({
       title: 'Khách đang thuê đồ',
       count: activeRentals,
       badgeLabel: 'Đang thuê',
-      subtext: activeRentals > 0 ? `${activeRentals} đơn đang mặc chụp` : 'Chưa có đơn đang thuê',
+      subtext: activeRentals > 0 ? `${activeRentals} đơn khách đang giữ` : 'Chưa có đơn đang thuê',
       icon: (
         <Ionicons
           name="bag-handle-outline"
@@ -61,10 +68,10 @@ export function DailyTasksGrid({
     },
     {
       key: 'RETURN_DUE',
-      title: 'Khách hẹn trả đồ',
+      title: 'Trả đồ & Hoàn cọc',
       count: returnsDue,
-      badgeLabel: 'Hẹn trả',
-      subtext: returnsDue > 0 ? `${returnsDue} đơn cần thu hồi` : 'Không có hẹn trả hôm nay',
+      badgeLabel: 'Trả/Cọc',
+      subtext: returnsDue > 0 ? `${returnsDue} đơn cần thu hồi/hoàn cọc` : 'Không có đơn chờ trả/cọc',
       icon: (
         <Ionicons
           name="checkmark-done-circle-outline"

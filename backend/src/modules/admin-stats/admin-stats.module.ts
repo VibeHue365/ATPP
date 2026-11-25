@@ -7,9 +7,15 @@ import { User, UserSchema } from '../users/schemas/user.schema';
 import { Provider, ProviderSchema } from '../providers/schemas/provider.schema';
 import { Product, ProductSchema } from '../products/schemas/product.schema';
 import { Booking, BookingSchema } from '../bookings/schemas/booking.schema';
-import { BookingItem, BookingItemSchema } from '../bookings/schemas/booking-item.schema';
+import {
+  BookingItem,
+  BookingItemSchema,
+} from '../bookings/schemas/booking-item.schema';
 import { Payment, PaymentSchema } from '../payments/schemas/payment.schema';
-import { RefreshToken, RefreshTokenSchema } from '../auth/schemas/refresh-token.schema';
+import {
+  RefreshToken,
+  RefreshTokenSchema,
+} from '../auth/schemas/refresh-token.schema';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { AiModule } from '../ai/ai.module';
 import {
@@ -18,8 +24,14 @@ import {
 } from '../providers/schemas/provider-verification.schema';
 import { Dispute, DisputeSchema } from '../disputes/schemas/dispute.schema';
 import { Review, ReviewSchema } from '../reviews/schemas/review.schema';
-import { ComboPromotion, ComboPromotionSchema } from '../products/schemas/combo-promotion.schema';
-import { InventoryItem, InventoryItemSchema } from '../products/schemas/inventory-item.schema';
+import {
+  ComboPromotion,
+  ComboPromotionSchema,
+} from '../products/schemas/combo-promotion.schema';
+import {
+  InventoryItem,
+  InventoryItemSchema,
+} from '../products/schemas/inventory-item.schema';
 
 @Module({
   imports: [

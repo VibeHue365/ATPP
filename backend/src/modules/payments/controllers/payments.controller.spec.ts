@@ -101,7 +101,7 @@ describe('PaymentsController PayOS webhook', () => {
       await fixture.controller.handlePayOSWebhook({
         ...body,
         data: { orderCode: 123456, status },
-      } as any);
+      });
       expect(fixture.paymentsService.failPayment).toHaveBeenCalledWith(
         'PAY123',
         expect.any(String),
@@ -154,7 +154,12 @@ describe('PaymentsController PayOS webhook', () => {
       await expect(
         fixture.controller.handlePayOSWebhook({
           ...body,
-          data: { orderCode: 123456, status: 'PAID', amount: 500000, currency: 'USD' },
+          data: {
+            orderCode: 123456,
+            status: 'PAID',
+            amount: 500000,
+            currency: 'USD',
+          },
           signature: 'valid-sig',
         } as any),
       ).rejects.toThrow(BadRequestException);
@@ -163,7 +168,12 @@ describe('PaymentsController PayOS webhook', () => {
       await expect(
         fixture.controller.handlePayOSWebhook({
           ...body,
-          data: { orderCode: 123456, status: 'PAID', amount: 499999, currency: 'VND' },
+          data: {
+            orderCode: 123456,
+            status: 'PAID',
+            amount: 499999,
+            currency: 'VND',
+          },
           signature: 'valid-sig',
         } as any),
       ).rejects.toThrow(BadRequestException);
@@ -175,7 +185,9 @@ describe('PaymentsController PayOS webhook', () => {
         get: jest.fn().mockReturnValue('valid-checksum-key'),
       };
       // Mock verifyPayOSSignature to return true
-      (fixture.controller as any).verifyPayOSSignature = jest.fn().mockReturnValue(true);
+      (fixture.controller as any).verifyPayOSSignature = jest
+        .fn()
+        .mockReturnValue(true);
 
       fixture.paymentsRepository.findByOrderCode.mockResolvedValue({
         paymentCode: 'PAY-V2',
@@ -186,16 +198,26 @@ describe('PaymentsController PayOS webhook', () => {
 
       const res = await fixture.controller.handlePayOSWebhook({
         ...body,
-        data: { orderCode: 123456, status: 'PAID', amount: 500000, currency: 'VND' },
+        data: {
+          orderCode: 123456,
+          status: 'PAID',
+          amount: 500000,
+          currency: 'VND',
+        },
         signature: 'valid-sig',
-      } as any);
+      });
 
       expect(res).toEqual({ status: 'success' });
-      expect(fixture.paymentsService.confirmPayment).toHaveBeenCalledWith('PAY-V2', {
-        source: 'WEBHOOK',
-        orderCode: 123456,
-      });
-      expect(fixture.webhookEventRepository.claimVerifiedEvent).toHaveBeenCalledWith(
+      expect(fixture.paymentsService.confirmPayment).toHaveBeenCalledWith(
+        'PAY-V2',
+        {
+          source: 'WEBHOOK',
+          orderCode: 123456,
+        },
+      );
+      expect(
+        fixture.webhookEventRepository.claimVerifiedEvent,
+      ).toHaveBeenCalledWith(
         'payos_123456_PAID',
         { orderCode: 123456, status: 'PAID', amount: 500000, currency: 'VND' },
         null, // signature redacted for V2 minimal audit
@@ -215,7 +237,9 @@ describe('PaymentsController PayOS webhook', () => {
           return '';
         }),
       };
-      expect(() => (fixture.controller as any).ensureSimulatorEnabled()).not.toThrow();
+      expect(() =>
+        (fixture.controller as any).ensureSimulatorEnabled(),
+      ).not.toThrow();
       process.env.NODE_ENV = originalEnv;
     });
 
@@ -228,7 +252,9 @@ describe('PaymentsController PayOS webhook', () => {
           return '';
         }),
       };
-      expect(() => (fixture.controller as any).ensureSimulatorEnabled()).toThrow(NotFoundException);
+      expect(() =>
+        (fixture.controller as any).ensureSimulatorEnabled(),
+      ).toThrow(NotFoundException);
     });
 
     it('allows simulator in production when ENABLE_PAYMENT_SIMULATOR is true', () => {
@@ -240,7 +266,9 @@ describe('PaymentsController PayOS webhook', () => {
           return '';
         }),
       };
-      expect(() => (fixture.controller as any).ensureSimulatorEnabled()).not.toThrow();
+      expect(() =>
+        (fixture.controller as any).ensureSimulatorEnabled(),
+      ).not.toThrow();
     });
   });
 });

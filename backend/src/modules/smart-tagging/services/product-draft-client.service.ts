@@ -2,11 +2,20 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 // CLIP is warmed up when the AI service starts; three photos take about a second.
+// The optional Gemini step is capped at 10 s by the AI service, so 20 s still covers both.
 const DEFAULT_TIMEOUT_MS = 20_000;
 const CLOUDINARY_HOST = 'res.cloudinary.com';
 
 export interface ProductDraftAttribute {
-  group: 'color' | 'pattern' | 'gender' | 'style';
+  // material/motif/occasion are only present when the AI service could ask Gemini.
+  group:
+    | 'color'
+    | 'pattern'
+    | 'gender'
+    | 'style'
+    | 'material'
+    | 'motif'
+    | 'occasion';
   key: string;
   label: string;
   confidence: number;
@@ -15,6 +24,8 @@ export interface ProductDraftAttribute {
 
 export interface ProductDraft {
   status: 'SUCCESS' | 'NOT_AO_DAI' | 'UNAVAILABLE';
+  /** GEMINI: style/fabric/motif/occasion were read too; CLIP_ONLY: colours and pattern only. */
+  source: 'GEMINI' | 'CLIP_ONLY';
   attributes: ProductDraftAttribute[];
   name: string;
   description: string;
@@ -23,6 +34,7 @@ export interface ProductDraft {
 
 const UNAVAILABLE: ProductDraft = {
   status: 'UNAVAILABLE',
+  source: 'CLIP_ONLY',
   attributes: [],
   name: '',
   description: '',
@@ -30,8 +42,9 @@ const UNAVAILABLE: ProductDraft = {
 };
 
 /**
- * UC-C10: asks the AI service (local CLIP, no external API) to suggest a product
- * name, description and colours from the provider's uploaded photos.
+ * UC-C10: asks the AI service to suggest a product name, description and colours from
+ * the provider's uploaded photos (local CLIP, plus Gemini for style/fabric/motif/occasion
+ * when it is configured; the AI service falls back to CLIP on any Gemini failure).
  */
 @Injectable()
 export class ProductDraftClientService {
@@ -40,19 +53,26 @@ export class ProductDraftClientService {
   private readonly cloudName: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.serviceUrl = this.configService.get<string>('AI_SERVICE_URL', 'http://127.0.0.1:8000');
-    this.cloudName = this.configService.get<string>('CLOUDINARY_CLOUD_NAME', '') ?? '';
+    this.serviceUrl = this.configService.get<string>(
+      'AI_SERVICE_URL',
+      'http://127.0.0.1:8000',
+    );
+    this.cloudName =
+      this.configService.get<string>('CLOUDINARY_CLOUD_NAME', '') ?? '';
   }
 
   async draftFromPhotos(imageUrls: string[]): Promise<ProductDraft> {
     this.assertUploadedPhotos(imageUrls);
     try {
-      const response = await fetch(`${this.serviceUrl.replace(/\/$/, '')}/vision/describe-product`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image_urls: imageUrls }),
-        signal: AbortSignal.timeout(this.getTimeoutMs()),
-      });
+      const response = await fetch(
+        `${this.serviceUrl.replace(/\/$/, '')}/vision/describe-product`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image_urls: imageUrls }),
+          signal: AbortSignal.timeout(this.getTimeoutMs()),
+        },
+      );
       if (!response.ok) {
         this.logger.warn(`Product draft AI returned HTTP ${response.status}`);
         return UNAVAILABLE;
@@ -60,6 +80,7 @@ export class ProductDraftClientService {
       const payload = (await response.json()) as Partial<ProductDraft>;
       return {
         status: payload.status ?? 'UNAVAILABLE',
+        source: payload.source === 'GEMINI' ? 'GEMINI' : 'CLIP_ONLY',
         attributes: Array.isArray(payload.attributes) ? payload.attributes : [],
         name: String(payload.name ?? '').slice(0, 200),
         description: String(payload.description ?? '').slice(0, 1000),
@@ -82,20 +103,34 @@ export class ProductDraftClientService {
       try {
         url = new URL(value);
       } catch {
-        throw new BadRequestException('Ảnh gợi ý phải là ảnh đã tải lên hệ thống.');
+        throw new BadRequestException(
+          'Ảnh gợi ý phải là ảnh đã tải lên hệ thống.',
+        );
       }
-      const ownCloud = !this.cloudName || url.pathname.startsWith(`/${this.cloudName}/`);
-      if (url.protocol !== 'https:' || url.hostname !== CLOUDINARY_HOST || !ownCloud) {
-        throw new BadRequestException('Ảnh gợi ý phải là ảnh đã tải lên hệ thống.');
+      const ownCloud =
+        !this.cloudName || url.pathname.startsWith(`/${this.cloudName}/`);
+      if (
+        url.protocol !== 'https:' ||
+        url.hostname !== CLOUDINARY_HOST ||
+        !ownCloud
+      ) {
+        throw new BadRequestException(
+          'Ảnh gợi ý phải là ảnh đã tải lên hệ thống.',
+        );
       }
     }
   }
 
   private getTimeoutMs(): number {
     const configured = Number(
-      this.configService.get<string>('PRODUCT_DRAFT_TIMEOUT_MS', String(DEFAULT_TIMEOUT_MS)),
+      this.configService.get<string>(
+        'PRODUCT_DRAFT_TIMEOUT_MS',
+        String(DEFAULT_TIMEOUT_MS),
+      ),
     );
-    return Number.isFinite(configured) && configured >= 1_000 && configured <= 60_000
+    return Number.isFinite(configured) &&
+      configured >= 1_000 &&
+      configured <= 60_000
       ? configured
       : DEFAULT_TIMEOUT_MS;
   }

@@ -80,7 +80,9 @@ export class EmailQueueService implements OnModuleInit, OnModuleDestroy {
       });
       await this.worker.waitUntilReady();
     } catch (err: any) {
-      this.logger.warn(`Could not initialize EmailQueue worker: ${err?.message}`);
+      this.logger.warn(
+        `Could not initialize EmailQueue worker: ${err?.message}`,
+      );
     }
   }
 
