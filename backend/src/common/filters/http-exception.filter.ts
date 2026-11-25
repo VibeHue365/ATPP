@@ -30,7 +30,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
       statusCode = (exception as any).statusCode;
     }
     const body = this.getExceptionBody(exception);
-    const message = this.normalizeMessage(body);
+    const message =
+      statusCode === HttpStatus.INTERNAL_SERVER_ERROR
+        ? 'Internal server error'
+        : this.normalizeMessage(body);
 
     if (statusCode === HttpStatus.INTERNAL_SERVER_ERROR) {
       console.error(

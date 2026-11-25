@@ -184,7 +184,9 @@ export class AdminStatsController {
     @Query('month') month?: string,
   ) {
     this.checkAdminRole(user);
-    return this.adminStatsService.getAdminStats(period, month);
+    return month
+      ? this.adminStatsService.getAdminStats(period, month)
+      : this.adminStatsService.getAdminStats(period);
   }
 
   @Get('customers')

@@ -1,4 +1,8 @@
-import { ArgumentsHost, BadRequestException } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  BadRequestException,
+  HttpStatus,
+} from '@nestjs/common';
 import { HttpExceptionFilter } from './http-exception.filter';
 import { ErrorCode } from '../exceptions/error-code';
 
@@ -44,6 +48,32 @@ describe('HttpExceptionFilter', () => {
         errorCode: ErrorCode.ValidationError,
         message: 'email must be an email; password must be longer',
         path: '/auth/register',
+      }),
+    );
+  });
+
+  it('does not expose unexpected internal exception details', () => {
+    const json = jest.fn();
+    const status = jest.fn().mockReturnValue({ json });
+    const host = createHost(status, '/unexpected-error');
+    const consoleError = jest.spyOn(console, 'error').mockImplementation();
+
+    try {
+      new HttpExceptionFilter().catch(
+        new Error('Sensitive implementation detail'),
+        host,
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+
+    expect(status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
+    expect(json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        errorCode: ErrorCode.InternalError,
+        message: 'Internal server error',
+        path: '/unexpected-error',
       }),
     );
   });
