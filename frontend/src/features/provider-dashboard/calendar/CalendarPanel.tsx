@@ -33,6 +33,7 @@ import { toLocalDateKey } from '../shared/dateHelpers';
 import type { useProviderCalendarState } from './useProviderCalendarState';
 import './calendarFigma.css';
 import { providerApi } from '../api/providerDashboardApi';
+import { buildProviderScheduleEntries } from './rentalScheduleEntries';
 
 type PhotographerCalendarEvent = {
   id: string;
@@ -230,19 +231,10 @@ export function CalendarPanel({
 
   // Helper map for customer orders by date
   const ordersByDateMap = new Map<string, any[]>();
-  orders.forEach((ord) => {
-    const rawDate = ord.startDate || ord.rawOrderDate || ord.orderDate || ord.createdAt;
-    if (rawDate) {
-      try {
-        const dateKey = toLocalDateKey(new Date(rawDate));
-        if (!ordersByDateMap.has(dateKey)) {
-          ordersByDateMap.set(dateKey, []);
-        }
-        ordersByDateMap.get(dateKey)!.push(ord);
-      } catch {
-        // ignore invalid dates
-      }
-    }
+  buildProviderScheduleEntries(orders).forEach(({ dateKey, order }) => {
+    const dayOrders = ordersByDateMap.get(dateKey) || [];
+    dayOrders.push(order);
+    ordersByDateMap.set(dateKey, dayOrders);
   });
 
   const photographyEventsByDate = new Map<string, PhotographerCalendarEvent[]>();
@@ -518,7 +510,7 @@ export function CalendarPanel({
                   ) : (
                     selectedDateOrders.map((ord: any) => {
                       const isPhoto = ord.bookingType === 'PHOTOGRAPHY' || ord.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY');
-                      const isAoDai = ord.bookingType === 'AODAI_RENTAL' || ord.items?.some((i: any) => i.itemType === 'AODAI_RENTAL');
+                      const isAoDai = ord.bookingType === 'AODAI_RENTAL' || ord.items?.some((i: any) => ['AODAI_RENTAL', 'PRODUCT'].includes(i.itemType));
                       const isCombo = ord.bookingType === 'COMBO' || (isPhoto && isAoDai);
 
                       let iconEl = <Camera size={17} />;
@@ -535,10 +527,14 @@ export function CalendarPanel({
                         label = 'Thuê áo dài';
                       }
 
-                      const timeSlot = ord.schedules?.[0]?.timeSlot || (ord.startDate ? new Date(ord.startDate).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '08:00 - 12:00');
+                      if (ord.scheduleEntryType === 'AODAI_PICKUP') label = 'Giao áo dài cho khách';
+                      if (ord.scheduleEntryType === 'AODAI_RETURN') label = 'Nhận trả áo dài';
+
+                      const scheduleTime = ord.scheduleDate || ord.startDate;
+                      const timeSlot = ord.schedules?.[0]?.timeSlot || (scheduleTime ? new Date(scheduleTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : 'Theo thỏa thuận');
 
                       return (
-                        <div key={ord._id} className={`cal-order-card ${ord.status === 'CANCELLED' ? 'cal-order-card-cancelled' : ''}`}>
+                        <div key={ord.scheduleEntryId || ord._id} className={`cal-order-card ${ord.status === 'CANCELLED' ? 'cal-order-card-cancelled' : ''}`}>
                           <div className="cal-order-left">
                             <div className={`cal-order-icon ${iconClass}`}>
                               {iconEl}
