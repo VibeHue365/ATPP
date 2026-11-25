@@ -85,6 +85,7 @@ export interface BookingDetail {
   statusLabel: string;
   rentalDate: string;
   returnDate: string;
+  daysOverdue?: number;
   createdAt: string;
   updatedAt?: string;
   isPaid: boolean;
@@ -160,6 +161,7 @@ export const BookingManagementPanel: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('Tất cả');
   const [serviceTypeFilter, setServiceTypeFilter] = useState<string>('Tất cả');
   const [regionFilter, setRegionFilter] = useState<string>('Tất cả');
+  const [returnSort, setReturnSort] = useState<string>('DEFAULT');
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
 
   useEffect(() => {
@@ -229,6 +231,7 @@ export const BookingManagementPanel: React.FC = () => {
       if (regionFilter !== 'Tất cả') params.set('city', regionFilter);
       if (dateRange.start) params.set('startDate', dateRange.start);
       if (dateRange.end) params.set('endDate', dateRange.end);
+      if (returnSort !== 'DEFAULT') params.set('returnSort', returnSort);
 
       const res = await httpClient.get<BookingApiResponse>(`/admin/stats/bookings?${params.toString()}`, { signal });
       if (res) {
@@ -254,7 +257,7 @@ export const BookingManagementPanel: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, debouncedSearchQuery, statusFilter, serviceTypeFilter, regionFilter, dateRange, toast]);
+  }, [page, limit, debouncedSearchQuery, statusFilter, serviceTypeFilter, regionFilter, dateRange, returnSort, toast]);
 
   useEffect(() => {
     fetchBookings();
@@ -701,6 +704,21 @@ export const BookingManagementPanel: React.FC = () => {
                   </span>
                   <Calendar size={14} color="#94a3b8" />
                 </div>
+              </div>
+
+              <div className="lume-booking-filter-group">
+                <label>Trả đồ trễ hạn</label>
+                <select
+                  value={returnSort}
+                  onChange={(e) => {
+                    setReturnSort(e.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="DEFAULT">Không lọc</option>
+                  <option value="MOST_OVERDUE">Trễ lâu nhất trước</option>
+                  <option value="NEAREST_OVERDUE">Mới quá hạn trước</option>
+                </select>
               </div>
 
               {/* Button: Xuất dữ liệu */}

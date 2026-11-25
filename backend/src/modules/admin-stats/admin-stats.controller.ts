@@ -221,6 +221,7 @@ export class AdminStatsController {
     @Query('city') city?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('returnSort') returnSort?: string,
   ) {
     this.checkAdminRole(user);
     return this.adminStatsService.getAllBookings(
@@ -232,6 +233,7 @@ export class AdminStatsController {
       city,
       startDate,
       endDate,
+      returnSort,
     );
   }
 

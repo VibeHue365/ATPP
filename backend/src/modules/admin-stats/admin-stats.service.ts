@@ -53,6 +53,7 @@ import {
   InventoryItemDocument,
 } from '../products/schemas/inventory-item.schema';
 import type { AuthUser } from '../../common/decorators/current-user.decorator';
+import { listOverdueRentalBookingIds, type RentalOverdueSort } from '../bookings/services/rental-overdue-query';
 
 @Injectable()
 export class AdminStatsService {
@@ -1266,6 +1267,7 @@ export class AdminStatsService {
     cityFilter?: string,
     startDate?: string,
     endDate?: string,
+    returnSort?: string,
   ) {
     // 1. Calculate overall real metrics across all bookings in MongoDB
     const [allBookingsSummary, allDisputes] = await Promise.all([
@@ -1451,17 +1453,44 @@ export class AdminStatsService {
       }
     }
 
-    const [total, bookings] = await Promise.all([
-      this.bookingModel.countDocuments(filter),
-      this.bookingModel
-        .find(filter)
+    const normalizedReturnSort: RentalOverdueSort | null =
+      returnSort === 'MOST_OVERDUE' || returnSort === 'NEAREST_OVERDUE' ? returnSort : null;
+    let total: number;
+    let bookings: any[];
+    if (normalizedReturnSort) {
+      const overdueRows = await listOverdueRentalBookingIds(this.bookingItemModel, normalizedReturnSort);
+      const overdueRank = new Map(overdueRows.map((row, index) => [row.bookingId.toString(), index]));
+      filter._id = { $in: overdueRows.map((row) => row.bookingId) };
+      const matches = await this.bookingModel.find(filter).select('_id').lean();
+      const orderedIds = matches.map((booking: any) => booking._id).sort(
+        (left: Types.ObjectId, right: Types.ObjectId) =>
+          (overdueRank.get(left.toString()) ?? Number.MAX_SAFE_INTEGER) -
+          (overdueRank.get(right.toString()) ?? Number.MAX_SAFE_INTEGER),
+      );
+      total = orderedIds.length;
+      const pageIds = orderedIds.slice((page - 1) * limit, page * limit);
+      bookings = pageIds.length ? await this.bookingModel
+        .find({ _id: { $in: pageIds } })
         .populate('customerId', 'profile auth')
         .populate('providerIds', 'businessName contact address media')
-        .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit)
-        .lean(),
-    ]);
+        .lean() : [];
+      const pageRank = new Map(pageIds.map((id, index) => [id.toString(), index]));
+      bookings.sort((left: any, right: any) =>
+        (pageRank.get(left._id.toString()) ?? Number.MAX_SAFE_INTEGER) -
+        (pageRank.get(right._id.toString()) ?? Number.MAX_SAFE_INTEGER));
+    } else {
+      [total, bookings] = await Promise.all([
+        this.bookingModel.countDocuments(filter),
+        this.bookingModel
+          .find(filter)
+          .populate('customerId', 'profile auth')
+          .populate('providerIds', 'businessName contact address media')
+          .sort({ createdAt: -1 })
+          .skip((page - 1) * limit)
+          .limit(limit)
+          .lean(),
+      ]);
+    }
 
     const bookingIds = bookings.map((b: any) => b._id);
 
@@ -1518,6 +1547,17 @@ export class AdminStatsService {
       let scheduleDate = '—';
       let scheduleTime = '—';
       const firstItem = bItems[0];
+      const overdueRentalItems = bItems.filter((item: any) => {
+        const dueAt = item.rentalFulfillment?.returnDueAt || item.rentalTo;
+        return dueAt && new Date(dueAt).getTime() < Date.now() &&
+          ['PICKED_UP', 'RETURN_PENDING'].includes(b.status);
+      });
+      const earliestOverdueAt = overdueRentalItems
+        .map((item: any) => new Date(item.rentalFulfillment?.returnDueAt || item.rentalTo))
+        .sort((left: Date, right: Date) => left.getTime() - right.getTime())[0];
+      const daysOverdue = earliestOverdueAt
+        ? Math.max(1, Math.ceil((Date.now() - earliestOverdueAt.getTime()) / 86_400_000))
+        : 0;
       if (firstItem?.rentalFrom) {
         const d = new Date(firstItem.rentalFrom);
         scheduleDate = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
@@ -1547,6 +1587,8 @@ export class AdminStatsService {
       ) {
         issueText =
           b.status === 'DISPUTED' ? 'Khách khiếu nại' : 'Yêu cầu hoàn tiền';
+      } else if (daysOverdue > 0) {
+        issueText = `Quá hạn trả ${daysOverdue} ngày`;
       }
 
       // Determine payment status
@@ -1631,9 +1673,12 @@ export class AdminStatsService {
         status: b.status || 'CONFIRMED',
         statusLabel,
         rentalDate: scheduleDate,
-        returnDate: (b as any).updatedAt
-          ? new Date((b as any).updatedAt).toLocaleDateString('vi-VN')
-          : scheduleDate,
+        returnDate: earliestOverdueAt
+          ? earliestOverdueAt.toLocaleString('vi-VN')
+          : firstItem?.rentalTo
+            ? new Date(firstItem.rentalTo).toLocaleString('vi-VN')
+            : scheduleDate,
+        daysOverdue,
         createdAt: b.createdAt,
         updatedAt: b.updatedAt,
         isPaid,

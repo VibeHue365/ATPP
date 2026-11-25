@@ -7,6 +7,8 @@ export interface RentalOverdueQueryOptions {
   limit?: number;
 }
 
+export type RentalOverdueSort = 'MOST_OVERDUE' | 'NEAREST_OVERDUE';
+
 export function buildRentalOverduePipeline(options: RentalOverdueQueryOptions = {}) {
   const now = options.now ?? new Date();
   const itemMatch: Record<string, unknown> = {
@@ -52,5 +54,19 @@ export async function listOverdueRentals(
       rentalTo: 1,
       daysOverdue: { $max: [1, { $ceil: { $divide: [{ $subtract: [now, '$rentalTo'] }, 86_400_000] } }] },
     } },
+  ]).exec();
+}
+
+export async function listOverdueRentalBookingIds(
+  bookingItemModel: Model<BookingItem>,
+  sort: RentalOverdueSort,
+  options: Omit<RentalOverdueQueryOptions, 'limit'> = {},
+): Promise<Array<{ bookingId: Types.ObjectId; returnDueAt: Date }>> {
+  const direction = sort === 'NEAREST_OVERDUE' ? -1 : 1;
+  return bookingItemModel.aggregate([
+    ...buildRentalOverduePipeline(options),
+    { $group: { _id: '$booking._id', returnDueAt: { $min: '$rentalTo' } } },
+    { $sort: { returnDueAt: direction, _id: 1 } },
+    { $project: { _id: 0, bookingId: '$_id', returnDueAt: 1 } },
   ]).exec();
 }

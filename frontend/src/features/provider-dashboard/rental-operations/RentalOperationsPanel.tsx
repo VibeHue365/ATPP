@@ -30,6 +30,7 @@ import { getImageUrl } from '../shared/mediaHelpers';
 import type { Order } from '../types';
 import traditionalAoDaiImg from '../../../assets/images/onboarding_traditional.webp';
 import { RentalEvidenceImage } from '../../rentals/components/RentalEvidenceImage';
+import { getRentalReturnDueAt, sortRentalOperationItems, type RentalReturnSort } from './rentalOperationSort';
 import './rentalOperationsFigma.css';
 
 const FALLBACK_AODAI_IMAGE = 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=400&q=80';
@@ -71,6 +72,7 @@ export function RentalOperationsPanel({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [timeFilter, setTimeFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [returnSort, setReturnSort] = useState<RentalReturnSort>('DEFAULT');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const rowsPerPage = 6;
 
@@ -109,7 +111,8 @@ export function RentalOperationsPanel({
     rentalOperationItems.forEach(({ item }) => {
       const fulfillment = item.rentalFulfillment || {};
       const status = fulfillment.status || 'PENDING';
-      const returnDueDate = fulfillment.returnDueAt ? parseSafeDate(fulfillment.returnDueAt) : null;
+      const returnDueValue = fulfillment.returnDueAt || item.rentalTo;
+      const returnDueDate = returnDueValue ? parseSafeDate(returnDueValue) : null;
       const returnDue = returnDueDate ? toLocalDateKey(returnDueDate) : null;
 
       if (status === 'PENDING') pending++;
@@ -138,10 +141,11 @@ export function RentalOperationsPanel({
 
   // Filter items
   const filteredItems = useMemo(() => {
-    return rentalOperationItems.filter(({ order, item }) => {
+    const rows = rentalOperationItems.filter(({ order, item }) => {
       const fulfillment = item.rentalFulfillment || {};
       const status = fulfillment.status || 'PENDING';
-      const returnDueDate = fulfillment.returnDueAt ? parseSafeDate(fulfillment.returnDueAt) : null;
+      const returnDueValue = fulfillment.returnDueAt || item.rentalTo;
+      const returnDueDate = returnDueValue ? parseSafeDate(returnDueValue) : null;
       const returnDue = returnDueDate ? toLocalDateKey(returnDueDate) : null;
       const isOverdue = returnDueDate && returnDueDate.getTime() < Date.now() && status === 'PICKED_UP';
 
@@ -169,7 +173,8 @@ export function RentalOperationsPanel({
 
       return true;
     });
-  }, [rentalOperationItems, activeStatusTab, statusFilter, searchQuery, todayKey]);
+    return sortRentalOperationItems(rows, returnSort);
+  }, [rentalOperationItems, activeStatusTab, statusFilter, searchQuery, todayKey, returnSort]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / rowsPerPage));
@@ -188,9 +193,10 @@ export function RentalOperationsPanel({
   const currentItem = activeSelection || rentalOperationItems[0] || null;
 
   // Status mapping helper
-  const getStatusBadge = (fulfillment: any) => {
+  const getStatusBadge = (fulfillment: any, rentalItem?: any) => {
     const status = fulfillment?.status || 'PENDING';
-    const returnDue = fulfillment?.returnDueAt ? parseSafeDate(fulfillment.returnDueAt) : null;
+    const returnDueTimestamp = getRentalReturnDueAt({ ...rentalItem, rentalFulfillment: fulfillment });
+    const returnDue = returnDueTimestamp === Number.MAX_SAFE_INTEGER ? null : new Date(returnDueTimestamp);
     const isDueToday = returnDue && toLocalDateKey(returnDue) === todayKey;
     const isOverdue = returnDue && returnDue.getTime() < Date.now() && status === 'PICKED_UP';
 
@@ -459,6 +465,23 @@ export function RentalOperationsPanel({
             <option value="COMPLETED">Đã hoàn thành</option>
           </select>
 
+          <select
+            value={returnSort}
+            onChange={(e) => {
+              const nextSort = e.target.value as RentalReturnSort;
+              setReturnSort(nextSort);
+              if (nextSort === 'MOST_OVERDUE' || nextSort === 'NEAREST_OVERDUE') setActiveStatusTab('OVERDUE');
+              setCurrentPage(1);
+            }}
+            className="ro-select-filter"
+            aria-label="Sắp xếp hạn trả đồ"
+          >
+            <option value="DEFAULT">Sắp xếp mặc định</option>
+            <option value="RETURN_DUE_ASC">Hạn trả gần nhất</option>
+            <option value="MOST_OVERDUE">Trễ lâu nhất trước</option>
+            <option value="NEAREST_OVERDUE">Mới quá hạn trước</option>
+          </select>
+
           <button
             type="button"
             onClick={() => void fetchOrders()}
@@ -503,7 +526,7 @@ export function RentalOperationsPanel({
                   const key = `${order._id}-${item._id}`;
                   const isSelected = selectedItemKey === key;
                   const fulfillment = item.rentalFulfillment || {};
-                  const statusInfo = getStatusBadge(fulfillment);
+                  const statusInfo = getStatusBadge(fulfillment, item);
                   const isCombo = order.bookingType === 'COMBO' || (order.items && order.items.length > 1);
                   const productName = typeof item.productId === 'object' ? item.productId?.name : item.name || order.productName || 'Áo dài';
                   const productImg = resolveProductImg(item);
@@ -511,7 +534,7 @@ export function RentalOperationsPanel({
                   const color = item.color || 'Trắng';
 
                   const pickupDate = parseSafeDate(fulfillment.pickupDueAt || order.startDate);
-                  const returnDate = parseSafeDate(fulfillment.returnDueAt || order.endDate);
+                  const returnDate = parseSafeDate(fulfillment.returnDueAt || item.rentalTo || order.endDate);
 
                   const customerInitials = order.customerName ? order.customerName.trim().split(/\s+/).map((n: string) => n[0]).join('').slice(-2).toUpperCase() : 'KH';
 
@@ -727,7 +750,7 @@ export function RentalOperationsPanel({
                       color: '#B45309',
                     }}
                   >
-                    {getStatusBadge(currentItem.item.rentalFulfillment).label}
+                    {getStatusBadge(currentItem.item.rentalFulfillment, currentItem.item).label}
                   </span>
                 </div>
                 <div className="ro-summary-meta">
@@ -1036,7 +1059,7 @@ export function RentalOperationsPanel({
                       <strong>Hạn trả áo:</strong> {parseSafeDate(currentItem.order.endDate).toLocaleString('vi-VN')}
                     </div>
                     <div>
-                      <strong>Trạng thái:</strong> {getStatusBadge(currentItem.item.rentalFulfillment).label}
+                      <strong>Trạng thái:</strong> {getStatusBadge(currentItem.item.rentalFulfillment, currentItem.item).label}
                     </div>
                   </div>
                 </div>
