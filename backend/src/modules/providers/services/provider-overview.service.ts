@@ -24,6 +24,8 @@ import {
   ProviderOverviewTask,
   ProviderOverviewTopService,
 } from '../dto/provider-overview.response';
+import { countOverdueRentals } from '../../bookings/services/rental-overdue-query';
+import { sortProviderSchedules } from './provider-schedule-sort';
 
 const VALID_REVENUE_STATUSES = [
   'DEPOSIT_PAID',
@@ -351,13 +353,11 @@ export class ProviderOverviewService {
     ]);
 
     let returnsDueTodayCount = 0;
-    let overdueReturnsCount = 0;
+    const overdueReturnsCount = await countOverdueRentals(this.bookingItemModel, { providerId, now });
     for (const item of returnItems) {
       const rTo = new Date(item.rentalTo);
       if (rTo >= startOfToday && rTo <= endOfToday) {
         returnsDueTodayCount += 1;
-      } else if (rTo < startOfToday) {
-        overdueReturnsCount += 1;
       }
     }
 
@@ -594,7 +594,7 @@ export class ProviderOverviewService {
         ],
       } as any)
       .sort({ startsAt: 1, scheduledDate: 1 })
-      .limit(4)
+      .limit(20)
       .populate({
         path: 'bookingId',
         select: 'bookingCode status customerId',
@@ -612,7 +612,7 @@ export class ProviderOverviewService {
 
     const result: ProviderOverviewScheduleItem[] = [];
 
-    for (const s of rawSchedules as any[]) {
+    for (const s of sortProviderSchedules(rawSchedules as any[]).slice(0, 4)) {
       const b = s.bookingId;
       const item = s.bookingItemId;
       const cust = b?.customerId;
@@ -714,32 +714,10 @@ export class ProviderOverviewService {
     }
 
     // 2. Overdue rentals
-    const overdueReturnsCount = await this.bookingItemModel
-      .aggregate([
-        {
-          $match: {
-            providerId,
-            itemType: 'PRODUCT',
-            rentalTo: { $lt: startOfToday },
-          },
-        },
-        {
-          $lookup: {
-            from: 'bookings',
-            localField: 'bookingId',
-            foreignField: '_id',
-            as: 'booking',
-          },
-        },
-        { $unwind: '$booking' },
-        {
-          $match: {
-            'booking.status': { $in: ['PICKED_UP', 'RETURN_PENDING'] },
-          },
-        },
-        { $count: 'total' },
-      ])
-      .then((res) => res[0]?.total || 0);
+    const overdueReturnsCount = await countOverdueRentals(this.bookingItemModel, {
+      providerId,
+      now: new Date(),
+    });
 
     if (overdueReturnsCount > 0) {
       tasks.push({
