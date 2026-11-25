@@ -127,6 +127,8 @@ type ProductWizardModalProps = Pick<
     handleWizardFinish: () => Promise<void>;
     handleWizardBack: () => void;
     handleWizardNext: () => Promise<void>;
+    /** Edit-mode stepper click; entering step 3 saves new name/description first (with a confirm). */
+    handleWizardGoTo: (step: number) => Promise<void>;
     handlePrepareSizeChart: () => Promise<void>;
   };
 
@@ -135,7 +137,6 @@ export function ProductWizardModal({
   handleWizardCancel,
   editingProduct,
   wizardStep,
-  setWizardStep,
   prodName,
   setProdName,
   prodCategoryId,
@@ -191,6 +192,7 @@ export function ProductWizardModal({
   handleWizardFinish,
   handleWizardBack,
   handleWizardNext,
+  handleWizardGoTo,
   handlePrepareSizeChart,
   savingDraft,
   activeTagCodes,
@@ -547,7 +549,7 @@ export function ProductWizardModal({
                   <button
                     type="button"
                     onClick={() => {
-                      if (editingProduct) setWizardStep(step.n);
+                      if (editingProduct) void handleWizardGoTo(step.n);
                     }}
                     className={`pwm-step-item ${active ? 'active' : ''} ${done ? 'done' : ''} ${
                       editingProduct ? 'clickable' : ''
