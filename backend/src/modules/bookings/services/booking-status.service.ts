@@ -870,11 +870,26 @@ export class BookingStatusService {
         [BookingStatus.PickedUp]: [
           BookingStatus.Returned,
           BookingStatus.ReturnPending,
+          BookingStatus.Overdue,
+          BookingStatus.LostItem,
           BookingStatus.Disputed,
           BookingStatus.InProgress,
         ],
         [BookingStatus.ReturnPending]: [
           BookingStatus.Returned,
+          BookingStatus.Overdue,
+          BookingStatus.LostItem,
+          BookingStatus.Disputed,
+        ],
+        [BookingStatus.Overdue]: [
+          BookingStatus.Returned,
+          BookingStatus.LostItem,
+          BookingStatus.Disputed,
+          BookingStatus.Completed,
+        ],
+        [BookingStatus.LostItem]: [
+          BookingStatus.Returned,
+          BookingStatus.Completed,
           BookingStatus.Disputed,
         ],
         [BookingStatus.Returned]: [

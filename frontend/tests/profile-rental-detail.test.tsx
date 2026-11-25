@@ -184,7 +184,7 @@ describe('Customer Pickup Inspection and Reporting Workflow Suite', () => {
     expect(screen.getAllByText(/Từ chối nhận áo/i).length).toBeGreaterThan(0);
   });
 
-  it('2. READY_FOR_PICKUP displays inspection area and all 3 action buttons', () => {
+  it('2. READY_FOR_PICKUP without handoverPhotos hides inspection area and shows waiting notice', () => {
     const readyBooking = {
       ...mockBookingWithObjectAddress,
       status: 'READY_FOR_PICKUP',
@@ -198,11 +198,9 @@ describe('Customer Pickup Inspection and Reporting Workflow Suite', () => {
       />
     );
 
-    expect(screen.getByText('Kiểm tra áo khi nhận')).toBeDefined();
-    expect(screen.getByText(/Shop chưa cung cấp ảnh bàn giao/i)).toBeDefined();
-    expect(screen.getAllByText(/Áo đúng tình trạng/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Có vấn đề nhưng vẫn nhận/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Từ chối nhận áo/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText('Kiểm tra áo khi nhận')).toBeNull();
+    expect(screen.getByText(/Cửa hàng đang chuẩn bị bàn giao áo dài/i)).toBeDefined();
+    expect(screen.getByText(/Chụp \/ Tải CCCD \(2 mặt\)/i)).toBeDefined();
   });
 
   it('3. Confirm pickup flow calls customer-confirm-pickup and triggers refresh', async () => {

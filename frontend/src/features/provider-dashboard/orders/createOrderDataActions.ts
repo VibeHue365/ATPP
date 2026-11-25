@@ -164,6 +164,8 @@ export function createOrderDataActions({ setLoadingOrders, setOrders, actionMenu
           cancellation: b.cancellation || null,
           cancellationReason: b.cancellation?.reason || b.cancellationReason || b.cancelReason || '',
           statusTimeline: b.statusTimeline || [],
+          overdueTracking: b.overdueTracking || null,
+          dominoRecovery: b.dominoRecovery || null,
         };
       });
 
@@ -175,6 +177,9 @@ export function createOrderDataActions({ setLoadingOrders, setOrders, actionMenu
           if (prev[i].status !== next[i].status) return true;
           if (prev[i].photosApproved !== next[i].photosApproved) return true;
           if ((prev[i] as any)?.incident?.status !== (next[i] as any)?.incident?.status) return true;
+          if (prev[i].overdueTracking?.minutesOverdue !== next[i].overdueTracking?.minutesOverdue) return true;
+          if (prev[i].overdueTracking?.calculatedLateFee !== next[i].overdueTracking?.calculatedLateFee) return true;
+          if (prev[i].dominoRecovery?.status !== next[i].dominoRecovery?.status) return true;
           const previousScheduleState = (prev[i].schedules || [])
             .map((schedule) => `${schedule._id || ''}:${schedule.status || ''}:${schedule.startsAt || schedule.scheduledDate || ''}`)
             .join('|');

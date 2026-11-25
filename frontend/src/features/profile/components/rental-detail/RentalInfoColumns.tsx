@@ -17,6 +17,9 @@ interface RentalInfoColumnsProps {
   rentalPrice?: number;
   cleaningFee?: number;
   depositFee?: number;
+  lateFeeDeducted?: number;
+  depositRefunded?: number;
+  isLostItem?: boolean;
   totalPrice?: number;
   paymentTime?: string;
   onOpenMap?: () => void;
@@ -33,6 +36,9 @@ export const RentalInfoColumns: React.FC<RentalInfoColumnsProps> = ({
   rentalPrice = 0,
   cleaningFee = 0,
   depositFee = 0,
+  lateFeeDeducted = 0,
+  depositRefunded,
+  isLostItem = false,
   totalPrice = 0,
   paymentTime = 'Gần đây',
   onOpenMap,
@@ -192,6 +198,28 @@ export const RentalInfoColumns: React.FC<RentalInfoColumnsProps> = ({
               <span style={{ color: '#231F20', fontWeight: 600 }}>{(depositFee || 0).toLocaleString('vi-VN')}đ</span>
             </div>
 
+            {isLostItem && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#DC2626', fontWeight: 600 }}>
+                <span>Tịch thu cọc (Mất đồ)</span>
+                <span>-{(depositFee || 0).toLocaleString('vi-VN')}đ</span>
+              </div>
+            )}
+
+            {!isLostItem && lateFeeDeducted > 0 && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#DC2626', fontWeight: 600 }}>
+                  <span>Khấu trừ phí quá hạn</span>
+                  <span>-{lateFeeDeducted.toLocaleString('vi-VN')}đ</span>
+                </div>
+                {typeof depositRefunded === 'number' && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#16A34A', fontWeight: 700 }}>
+                    <span>Tiền cọc thực hoàn</span>
+                    <span>{depositRefunded.toLocaleString('vi-VN')}đ</span>
+                  </div>
+                )}
+              </>
+            )}
+
             <div style={{ borderTop: '1px dashed #ECE5DB', margin: '4px 0' }} />
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -279,7 +307,7 @@ export const RentalInfoColumns: React.FC<RentalInfoColumnsProps> = ({
 
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', color: '#4A3F35' }}>
               <Clock size={14} color="#B45309" style={{ marginTop: '2px', flexShrink: 0 }} />
-              <span>Trả áo đúng hạn, quá hạn sẽ tính phí 50.000đ/ngày</span>
+              <span>Trả áo đúng hạn, quá hạn tính lũy tiến +10% cọc / 30 phút (tối đa 50% cọc)</span>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', color: '#4A3F35' }}>

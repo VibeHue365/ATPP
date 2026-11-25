@@ -140,6 +140,24 @@ export class SettlementsService {
       });
       await this.markGenerationSuccess(bookingObjectId);
       await this.auditCreated(created);
+
+      // Tự động cộng khoản phạt quá hạn / bồi thường cọc (nếu có) vào Settlement vừa tạo
+      const overdue = (booking as any).overdueTracking;
+      const overdueComp =
+        overdue?.reversedAt && (overdue?.calculatedLateFee || 0) > 0
+          ? Number(overdue.calculatedLateFee)
+          : booking.status === BookingStatus.LostItem &&
+              (overdue?.walletCreditedAmount || 0) > 0
+            ? Number(overdue.walletCreditedAmount)
+            : 0;
+      if (overdueComp > 0 && created.length > 0) {
+        await this.applyCompensationForBooking(
+          bookingId,
+          created[0].providerId,
+          overdueComp,
+          `Bồi thường cọc quá hạn (+${overdueComp.toLocaleString('vi-VN')}đ)`,
+        );
+      }
     } catch (error) {
       if (!this.isDuplicateKeyError(error)) {
         await this.settlementModel.deleteMany({

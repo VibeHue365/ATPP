@@ -82,6 +82,10 @@
   transition: transform 0.25s ease !important;
 }
 
+.swal2-icon[style*="display: none"] {
+  display: none !important;
+}
+
 .swal2-icon .swal2-icon-content {
   display: flex !important;
   align-items: center !important;
@@ -123,12 +127,18 @@
   border-color: transparent !important;
 }
 
-.swal2-icon.swal2-success [class^='swal2-success-line'] {
-  background-color: #059669 !important;
+.swal2-icon.swal2-success > * {
+  display: none !important;
 }
 
-.swal2-icon.swal2-success .swal2-success-ring {
-  border-color: rgba(5, 150, 105, 0.25) !important;
+.swal2-icon.swal2-success::after {
+  content: '';
+  width: 11px;
+  height: 21px;
+  border-right: 3.5px solid #059669;
+  border-bottom: 3.5px solid #059669;
+  transform: rotate(42deg) translate(-1px, -2px);
+  border-radius: 1.5px;
 }
 
 /* Error Icon */
@@ -139,8 +149,26 @@
   border-color: transparent !important;
 }
 
-.swal2-icon.swal2-error [class^='swal2-x-mark-line'] {
-  background-color: #DC2626 !important;
+.swal2-icon.swal2-error > * {
+  display: none !important;
+}
+
+.swal2-icon.swal2-error::before,
+.swal2-icon.swal2-error::after {
+  content: '';
+  position: absolute;
+  width: 24px;
+  height: 3.5px;
+  background-color: #DC2626;
+  border-radius: 2px;
+}
+
+.swal2-icon.swal2-error::before {
+  transform: rotate(45deg);
+}
+
+.swal2-icon.swal2-error::after {
+  transform: rotate(-45deg);
 }
 
 /* Info Icon */

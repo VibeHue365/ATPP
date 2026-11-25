@@ -1121,7 +1121,9 @@ export class AdminStatsService {
       this.userModel.countDocuments(filter),
       this.userModel
         .find(filter)
-        .select('profile auth.email auth.phone accountStatus createdAt')
+        .select(
+          'profile auth.email auth.phone accountStatus isRestricted restrictedReason restrictedAt createdAt',
+        )
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
@@ -1170,6 +1172,9 @@ export class AdminStatsService {
         phone: customer.auth?.phone || '',
         avatar: avatarUrl,
         status: customer.accountStatus || 'ACTIVE',
+        isRestricted: Boolean(customer.isRestricted),
+        restrictedReason: customer.restrictedReason || null,
+        restrictedAt: customer.restrictedAt || null,
         date: customer.createdAt
           ? new Date(customer.createdAt).toLocaleDateString('vi-VN')
           : '2026-01-01',
@@ -2144,10 +2149,46 @@ export class AdminStatsService {
     await this.userModel.updateOne(
       { _id: new Types.ObjectId(userId) },
       {
-        $set: { accountStatus: 'ACTIVE' },
+        $set: {
+          accountStatus: 'ACTIVE',
+          isRestricted: false,
+          restrictedReason: null,
+          restrictedAt: null,
+        },
       },
     );
     return { success: true, message: 'Khách hàng đã được mở khóa tài khoản' };
+  }
+
+  async unrestrictCustomer(userId: string) {
+    const userObjectId = new Types.ObjectId(userId);
+    await this.userModel.updateOne(
+      { _id: userObjectId },
+      {
+        $set: {
+          isRestricted: false,
+          restrictedReason: null,
+          restrictedAt: null,
+        },
+      },
+    );
+    // Đánh dấu accountRestrictedAt trên các đơn OVERDUE hiện có để cronjob không tự động khóa lại sau khi Admin đã gỡ
+    await this.bookingModel.updateMany(
+      {
+        customerId: userObjectId,
+        status: BookingStatus.Overdue,
+        'overdueTracking.accountRestrictedAt': null,
+      },
+      {
+        $set: {
+          'overdueTracking.accountRestrictedAt': new Date(),
+        },
+      },
+    );
+    return {
+      success: true,
+      message: 'Đã gỡ hạn chế quyền đặt đơn mới cho khách hàng',
+    };
   }
 
   private periodBuckets(period = 'month') {

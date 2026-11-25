@@ -18,6 +18,8 @@ export enum BookingStatus {
   PickedUp = 'PICKED_UP',
   ReturnPending = 'RETURN_PENDING',
   Returned = 'RETURNED',
+  Overdue = 'OVERDUE',
+  LostItem = 'LOST_ITEM',
   /** Photography only: provider has started the shoot session */
   InProgress = 'IN_PROGRESS',
   /** Photography only: shoot done, waiting for customer confirmation (48h window) */
@@ -278,6 +280,29 @@ export class Booking {
   @Prop({ type: [String], default: [] })
   handoverPhotos?: string[];
 
+  /** CCCD khách thuê chụp/lưu khi bàn giao đồ tại quầy (bảo mật private storage) */
+  @Prop({
+    type: {
+      frontImage: { type: String, default: null },
+      backImage: { type: String, default: null },
+      idNumber: { type: String, default: null },
+      fullName: { type: String, default: null },
+      capturedAt: { type: Date, default: null },
+      capturedBy: { type: String, default: 'PROVIDER' },
+      notes: { type: String, default: null },
+    },
+    default: null,
+  })
+  customerIdentityCard?: {
+    frontImage?: string | null;
+    backImage?: string | null;
+    idNumber?: string | null;
+    fullName?: string | null;
+    capturedAt?: Date | null;
+    capturedBy?: string | null;
+    notes?: string | null;
+  } | null;
+
   /** Rental only: customer return evidence photos and note when customer requests return (moving to RETURN_PENDING) */
   @Prop({ type: Object, default: null })
   customerReturnEvidence?: {
@@ -313,6 +338,88 @@ export class Booking {
     compensationAmount?: number;
     notes?: string;
     resolvedAt?: Date;
+  } | null;
+
+  /** Theo dõi đơn quá hạn trả trang phục (Khách A) */
+  @Prop({
+    type: {
+      isOverdue: { type: Boolean, default: false },
+      overdueSince: { type: Date, default: null },
+      minutesOverdue: { type: Number, default: 0 },
+      calculatedLateFee: { type: Number, default: 0 },
+      maxLateFeeCap: { type: Number, default: 0 },
+      notificationsSent: {
+        fifteenMin: { type: Boolean, default: false },
+        oneHour: { type: Boolean, default: false },
+        sixHour: { type: Boolean, default: false },
+        twentyFourHour: { type: Boolean, default: false },
+      },
+      accountRestrictedAt: { type: Date, default: null },
+      lostItemProposedAt: { type: Date, default: null },
+      lostItemConfirmedAt: { type: Date, default: null },
+      lostItemConfirmedBy: { type: String, default: null },
+      contactAttemptsCount: { type: Number, default: 0 },
+      notes: { type: String, default: null },
+      reversedAt: { type: Date, default: null },
+      walletCreditedAt: { type: Date, default: null },
+      walletCreditedAmount: { type: Number, default: 0 },
+      depositRefundedAmount: { type: Number, default: 0 },
+    },
+    default: null,
+  })
+  overdueTracking?: {
+    isOverdue?: boolean;
+    overdueSince?: Date | null;
+    minutesOverdue?: number;
+    calculatedLateFee?: number;
+    maxLateFeeCap?: number;
+    notificationsSent?: {
+      fifteenMin?: boolean;
+      oneHour?: boolean;
+      sixHour?: boolean;
+      twentyFourHour?: boolean;
+    };
+    accountRestrictedAt?: Date | null;
+    lostItemProposedAt?: Date | null;
+    lostItemConfirmedAt?: Date | null;
+    lostItemConfirmedBy?: string | null;
+    contactAttemptsCount?: number;
+    notes?: string | null;
+    reversedAt?: Date | null;
+    walletCreditedAt?: Date | null;
+    walletCreditedAmount?: number;
+    depositRefundedAmount?: number;
+  } | null;
+
+  /** Thuật toán Domino Recovery cứu đơn Khách B */
+  @Prop({
+    type: {
+      hasConflict: { type: Boolean, default: false },
+      sourceOverdueBookingId: { type: Types.ObjectId, ref: 'Booking', default: null },
+      sourceOverdueBookingCode: { type: String, default: null },
+      actionType: { type: String, enum: ['AUTO_SWAP', 'ALTERNATIVE_SELECTION', 'FULL_REFUND', null], default: null },
+      swappedInventoryItemId: { type: Types.ObjectId, ref: 'InventoryItem', default: null },
+      alternativeProductIds: [{ type: Types.ObjectId, ref: 'Product' }],
+      status: { type: String, enum: ['DETECTED', 'SWAPPED', 'OFFERED', 'ACCEPTED_ALTERNATIVE', 'REFUNDED', 'DISMISSED'], default: 'DETECTED' },
+      offeredAt: { type: Date, default: null },
+      expiresAt: { type: Date, default: null },
+      selectedAlternativeId: { type: Types.ObjectId, ref: 'Product', default: null },
+      resolvedAt: { type: Date, default: null },
+    },
+    default: null,
+  })
+  dominoRecovery?: {
+    hasConflict?: boolean;
+    sourceOverdueBookingId?: Types.ObjectId | null;
+    sourceOverdueBookingCode?: string | null;
+    actionType?: 'AUTO_SWAP' | 'ALTERNATIVE_SELECTION' | 'FULL_REFUND' | null;
+    swappedInventoryItemId?: Types.ObjectId | null;
+    alternativeProductIds?: Types.ObjectId[];
+    status?: 'DETECTED' | 'SWAPPED' | 'OFFERED' | 'ACCEPTED_ALTERNATIVE' | 'REFUNDED' | 'DISMISSED';
+    offeredAt?: Date | null;
+    expiresAt?: Date | null;
+    selectedAlternativeId?: Types.ObjectId | null;
+    resolvedAt?: Date | null;
   } | null;
 
   /** Pre-existing damage report submitted by customer during pickup (within 30 minutes) */

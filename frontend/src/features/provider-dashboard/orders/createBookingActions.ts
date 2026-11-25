@@ -317,10 +317,45 @@ export function createBookingActions({ orders, setActionMenuId, setOrders, toast
     }
 
     if (apiStatus === 'PICKUP_PENDING') {
+      let cccdData: any = null;
+      try {
+        cccdData = await httpClient.get(`/api/bookings/${_id}/customer-identity`);
+      } catch {
+        // ignore
+      }
+      const hasCccd = Boolean(cccdData?.hasIdentityCard);
+
       const result = await Swal.fire({
         title: 'Bàn giao trang phục',
         html: `
-          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 0;">
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 0; width: 100%; box-sizing: border-box;">
+            ${
+              !hasCccd
+                ? `
+              <div style="background: #FFFBEB; border: 1.5px solid #FCD34D; border-radius: 8px; padding: 12px; margin-bottom: 14px; text-align: left; width: 100%; box-sizing: border-box;">
+                <div style="font-weight: 700; color: #92400E; font-size: 13px; margin-bottom: 4px;">📌 Bước 1: Chụp/Tải CCCD khách tại quầy (bắt buộc)</div>
+                <div style="font-size: 11px; color: #78350F; margin-bottom: 10px;">Chụp trực tiếp tại quầy khi khách đến nhận áo (bảo mật theo quy chế Sàn TàGo).</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                  <div>
+                    <label style="font-size: 11px; font-weight: 700; color: #374151;">Mặt trước CCCD *</label>
+                    <input id="quick-cccd-front" type="file" accept="image/*" capture="environment" style="font-size: 11px; width: 100%; margin-top: 2px;" />
+                  </div>
+                  <div>
+                    <label style="font-size: 11px; font-weight: 700; color: #374151;">Mặt sau CCCD</label>
+                    <input id="quick-cccd-back" type="file" accept="image/*" capture="environment" style="font-size: 11px; width: 100%; margin-top: 2px;" />
+                  </div>
+                </div>
+              </div>
+              <div style="font-weight: 700; color: #1E293B; font-size: 13px; margin-bottom: 6px; text-align: left; width: 100%;">
+                📌 Bước 2: Tải lên ảnh bàn giao áo dài (tình trạng thực tế)
+              </div>
+            `
+                : `
+              <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; width: 100%; box-sizing: border-box; font-size: 12px; color: #166534; display: flex; align-items: center; gap: 6px;">
+                ✓ Đã có ảnh CCCD của khách thuê (${cccdData?.idNumberMasked || 'Đã mã hóa bảo mật'})
+              </div>
+            `
+            }
             <p style="font-size: 13px; color: #6B7280; margin-bottom: 18px; text-align: center; line-height: 1.5; max-width: 360px;">
               Ảnh chụp rõ nét tình trạng tổng thể, cổ áo, tà áo và các chi tiết quan trọng lúc giao hàng làm bằng chứng đối soát.
             </p>
@@ -415,6 +450,13 @@ export function createBookingActions({ orders, setActionMenuId, setOrders, toast
           }
         },
         preConfirm: () => {
+          if (!hasCccd) {
+            const frontInput = document.getElementById('quick-cccd-front') as HTMLInputElement | null;
+            if (!frontInput?.files?.[0]) {
+              Swal.showValidationMessage('Vui lòng chụp hoặc tải ít nhất ảnh mặt trước CCCD của khách tại quầy (Bước 1)!');
+              return false;
+            }
+          }
           const imgs = document.querySelectorAll('.handover-uploaded-img');
           const urls: string[] = [];
           imgs.forEach((img: any) => {
@@ -424,7 +466,9 @@ export function createBookingActions({ orders, setActionMenuId, setOrders, toast
             Swal.showValidationMessage('Vui lòng tải lên ít nhất 1 hình ảnh bàn giao!');
             return false;
           }
-          return urls;
+          const frontCccdFile = (document.getElementById('quick-cccd-front') as HTMLInputElement | null)?.files?.[0] || null;
+          const backCccdFile = (document.getElementById('quick-cccd-back') as HTMLInputElement | null)?.files?.[0] || null;
+          return { urls, frontCccdFile, backCccdFile };
         }
       });
 
@@ -434,9 +478,20 @@ export function createBookingActions({ orders, setActionMenuId, setOrders, toast
         return;
       }
 
-      const handoverPhotos = result.value;
+      const { urls: handoverPhotos, frontCccdFile, backCccdFile } = result.value;
       const rawHandoverFiles: File[] = (window as any).__handoverRawFiles || [];
       delete (window as any).__handoverRawFiles;
+
+      if (frontCccdFile || backCccdFile) {
+        try {
+          const cccdForm = new FormData();
+          if (frontCccdFile) cccdForm.append('front', frontCccdFile);
+          if (backCccdFile) cccdForm.append('back', backCccdFile);
+          await httpClient.post(`/api/bookings/${_id}/customer-identity`, cccdForm);
+        } catch (cErr) {
+          console.warn('Lưu CCCD tại quầy cảnh báo:', cErr);
+        }
+      }
 
       const targetOrder = orders.find((o) => o._id === _id || o.id === _id);
       const isRentalOrder =

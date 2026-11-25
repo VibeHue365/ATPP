@@ -62,6 +62,8 @@ export const BOOKING_STATUS_CODES = [
   'PICKED_UP',
   'RETURN_PENDING',
   'RETURNED',
+  'OVERDUE',
+  'LOST_ITEM',
   'IN_PROGRESS',
   'AWAITING_REVIEW',
   'COMBO_PHOTOS_APPROVED',
@@ -99,6 +101,14 @@ export const BOOKING_STATUS_META: Record<
   RETURNED: makeMeta('RETURNED', 'Đã trả đồ · Chờ hoàn cọc', 'info', {
     shortLabel: 'Đã trả đồ',
     group: 'ACTIVE',
+  }),
+  OVERDUE: makeMeta('OVERDUE', 'Quá hạn trả đồ', 'danger', {
+    shortLabel: 'Quá hạn',
+    group: 'ACTIVE',
+  }),
+  LOST_ITEM: makeMeta('LOST_ITEM', 'Mất đồ · Tịch thu cọc', 'danger', {
+    shortLabel: 'Mất đồ',
+    group: 'CANCELLED',
   }),
   IN_PROGRESS: makeMeta('IN_PROGRESS', 'Đang thực hiện buổi chụp', 'purple', {
     shortLabel: 'Đang chụp',
@@ -245,6 +255,8 @@ export type CanonicalRentalFulfillmentStatus =
   | 'PICKED_UP'
   | 'CUSTOMER_RETURN_REQUESTED'
   | 'RETURNED'
+  | 'OVERDUE'
+  | 'LOST_ITEM'
   | 'COMPLETED'
   | 'CANCELLED';
 
@@ -261,6 +273,8 @@ export const RENTAL_FULFILLMENT_STATUS_META: Record<
     'warning',
   ),
   RETURNED: makeMeta('RETURNED', 'Đã nhận lại', 'neutral'),
+  OVERDUE: makeMeta('OVERDUE', 'Quá hạn', 'danger'),
+  LOST_ITEM: makeMeta('LOST_ITEM', 'Mất đồ', 'danger'),
   COMPLETED: makeMeta('COMPLETED', 'Hoàn tất', 'success'),
   CANCELLED: makeMeta('CANCELLED', 'Đã hủy', 'danger'),
 };

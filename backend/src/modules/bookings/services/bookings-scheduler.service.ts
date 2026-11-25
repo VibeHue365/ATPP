@@ -36,6 +36,8 @@ import {
 import { NotificationsService } from '../../notifications/notifications.service';
 import { PhotographyHoldService } from './photography-hold.service';
 import { BookingStatusService } from './booking-status.service';
+import { RentalOverdueDominoService } from './rental-overdue-domino.service';
+import { PrivateStorageService } from '../../storage/services/private-storage.service';
 
 @Injectable()
 export class BookingsSchedulerService {
@@ -57,7 +59,101 @@ export class BookingsSchedulerService {
     private readonly bookingStatusService: BookingStatusService,
     @Optional()
     private readonly slotLeaseService?: InventorySlotLeaseService,
+    @Optional()
+    private readonly overdueDominoService?: RentalOverdueDominoService,
+    @Optional()
+    private readonly privateStorage?: PrivateStorageService,
   ) {}
+
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async processOverdueAndDomino() {
+    try {
+      if (this.overdueDominoService) {
+        const count =
+          await this.overdueDominoService.scanAndProcessOverdueBookings();
+        if (count > 0) {
+          this.logger.log(`Đã xử lý ${count} đơn thuê quá hạn.`);
+        }
+        await this.overdueDominoService.processDominoAutoRefunds();
+      }
+    } catch (err) {
+      this.logger.error('Lỗi khi quét đơn quá hạn & Domino trong scheduler:', err);
+    }
+  }
+
+  /**
+   * Tự động xóa file ảnh CCCD sau 1 ngày (24h) kể từ lúc đơn chuyển COMPLETED / CANCELLED
+   * và không có tranh chấp (giữ lại vĩnh viễn cho DISPUTED hoặc LOST_ITEM).
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  async cleanupExpiredCustomerIdentityCards() {
+    try {
+      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const candidates = await this.bookingModel
+        .find({
+          status: { $in: [BookingStatus.Completed, BookingStatus.Cancelled] },
+          updatedAt: { $lte: cutoff },
+          $or: [
+            { 'customerIdentityCard.frontImage': { $exists: true, $ne: null } },
+            { 'customerIdentityCard.backImage': { $exists: true, $ne: null } },
+          ],
+        })
+        .select('_id bookingCode status customerIdentityCard')
+        .lean()
+        .exec();
+
+      if (!candidates.length) return;
+
+      const bucket = 'rental-fulfillment-private';
+      let purgedCount = 0;
+
+      for (const booking of candidates) {
+        const statusUpper = String(booking.status || '').toUpperCase();
+        if (statusUpper === 'DISPUTED' || statusUpper === 'LOST_ITEM') continue;
+
+        const card = (booking as any).customerIdentityCard;
+        if (!card) continue;
+
+        const keys = [card.frontImage, card.backImage].filter(
+          (k): k is string => typeof k === 'string' && k.trim().length > 0,
+        );
+
+        for (const key of keys) {
+          try {
+            await this.privateStorage?.deletePrivateFile(bucket, key);
+          } catch (delErr) {
+            this.logger.warn(
+              `Không thể xóa file CCCD ${key} của đơn ${booking.bookingCode}:`,
+              delErr,
+            );
+          }
+        }
+
+        await this.bookingModel.updateOne(
+          { _id: booking._id },
+          {
+            $set: {
+              'customerIdentityCard.frontImage': null,
+              'customerIdentityCard.backImage': null,
+              'customerIdentityCard.idNumber': null,
+              'customerIdentityCard.purgedAt': new Date(),
+              'customerIdentityCard.purgeReason':
+                'AUTO_PURGE_1_DAY_AFTER_COMPLETION',
+            },
+          },
+        );
+        purgedCount++;
+      }
+
+      if (purgedCount > 0) {
+        this.logger.log(
+          `Đã tự động xóa ảnh CCCD cho ${purgedCount} đơn đã hoàn tất/hủy quá 1 ngày.`,
+        );
+      }
+    } catch (err) {
+      this.logger.error('Lỗi khi chạy cronjob xóa ảnh CCCD tự động:', err);
+    }
+  }
 
   @Cron(CronExpression.EVERY_MINUTE)
   async expireHoldLeases() {

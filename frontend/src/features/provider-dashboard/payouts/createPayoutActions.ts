@@ -2,11 +2,11 @@ import { payoutsApi } from '../api/providerDashboardApi';
 import type { useProviderPayoutsState } from './useProviderPayoutsState';
 
 type Dependencies = Pick<ReturnType<typeof useProviderPayoutsState>,
-  'setPayouts'
+  'setPayouts' | 'setIsLoadingPayouts'
 >;
 
 /** Recreated each render so handlers retain the dashboard's existing closure semantics. */
-export function createPayoutActions({ setPayouts }: Dependencies) {
+export function createPayoutActions({ setPayouts, setIsLoadingPayouts }: Dependencies) {
   const fetchWalletData = async () => {
     try {
       await payoutsApi.getWallet();
@@ -16,6 +16,7 @@ export function createPayoutActions({ setPayouts }: Dependencies) {
   };
 
   const fetchPayouts = async () => {
+    setIsLoadingPayouts(true);
     try {
       let data: any[] = [];
       try {
@@ -33,6 +34,8 @@ export function createPayoutActions({ setPayouts }: Dependencies) {
       fetchWalletData();
     } catch (err: any) {
       console.error('Không thể tải lịch sử quyết toán:', err);
+    } finally {
+      setIsLoadingPayouts(false);
     }
   };
 

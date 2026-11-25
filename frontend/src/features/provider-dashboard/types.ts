@@ -32,7 +32,49 @@ export interface Order {
   bookingCode?: string;
   deliveredPhotos?: string[];
   handoverPhotos?: string[];
+  customerIdentityCard?: {
+    hasIdentityCard?: boolean;
+    frontImage?: string | null;
+    backImage?: string | null;
+    idNumber?: string | null;
+    fullName?: string | null;
+    capturedAt?: string | Date | null;
+    capturedBy?: string | null;
+    notes?: string | null;
+  } | null;
   deliveryDriveUrl?: string;
+  overdueTracking?: {
+    isOverdue?: boolean;
+    overdueSince?: string | Date | null;
+    minutesOverdue?: number;
+    calculatedLateFee?: number;
+    maxLateFeeCap?: number;
+    notificationsSent?: {
+      fifteenMin?: boolean;
+      oneHour?: boolean;
+      sixHour?: boolean;
+      twentyFourHour?: boolean;
+    };
+    accountRestrictedAt?: string | Date | null;
+    lostItemProposedAt?: string | Date | null;
+    lostItemConfirmedAt?: string | Date | null;
+    lostItemConfirmedBy?: string | null;
+    contactAttemptsCount?: number;
+    notes?: string | null;
+  } | null;
+  dominoRecovery?: {
+    hasConflict?: boolean;
+    sourceOverdueBookingId?: string | null;
+    sourceOverdueBookingCode?: string | null;
+    actionType?: 'AUTO_SWAP' | 'ALTERNATIVE_SELECTION' | 'FULL_REFUND' | null;
+    swappedInventoryItemId?: string | null;
+    alternativeProductIds?: string[];
+    status?: 'DETECTED' | 'SWAPPED' | 'OFFERED' | 'ACCEPTED_ALTERNATIVE' | 'REFUNDED' | 'DISMISSED';
+    offeredAt?: string | Date | null;
+    expiresAt?: string | Date | null;
+    selectedAlternativeId?: string | null;
+    resolvedAt?: string | Date | null;
+  } | null;
   pickupDamageReport?: {
     reportedAt: string;
     description: string;

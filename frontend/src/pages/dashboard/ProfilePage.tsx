@@ -112,6 +112,29 @@ export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [restrictionInfo, setRestrictionInfo] = React.useState<{
+    isRestricted?: boolean;
+    restrictedReason?: string | null;
+    restrictedAt?: string | null;
+  } | null>(null);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    httpClient.get<any>('/users/me')
+      .then((me) => {
+        if (isMounted && me) {
+          setRestrictionInfo({
+            isRestricted: Boolean(me.isRestricted),
+            restrictedReason: me.restrictedReason || null,
+            restrictedAt: me.restrictedAt || null,
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id]);
 
   // Active Tab state (synced with URL query param if present)
   const initialTab = (searchParams.get('tab') as ProfileTab) || 'overview';
@@ -738,6 +761,7 @@ export const ProfilePage: React.FC = () => {
                 onViewBookingDetails={(b) => b && setActiveDetailBooking(b)}
                 onContinuePayment={handleContinuePayment}
                 onExplore={() => navigate('/rentals')}
+                restrictionInfo={restrictionInfo}
               />
             )}
 

@@ -15,6 +15,8 @@ export enum RentalFulfillmentStatus {
   PickedUp = 'PICKED_UP',
   CustomerReturnRequested = 'CUSTOMER_RETURN_REQUESTED',
   Returned = 'RETURNED',
+  Overdue = 'OVERDUE',
+  LostItem = 'LOST_ITEM',
   Completed = 'COMPLETED',
   Cancelled = 'CANCELLED',
 }
@@ -61,6 +63,12 @@ export type RentalFulfillmentAction =
   | 'CHARGE_REJECTED'
   | 'DEPOSIT_SETTLED'
   | 'INVENTORY_UPDATED'
+  | 'MARKED_OVERDUE'
+  | 'LOST_ITEM_PROPOSED'
+  | 'LOST_ITEM_CONFIRMED'
+  | 'OVERDUE_REVERSED'
+  | 'DOMINO_SWAPPED'
+  | 'DOMINO_RESOLVED'
   | 'MIGRATED_FROM_LEGACY';
 
 export interface RentalActorSnapshot {
