@@ -44,6 +44,7 @@ import { adminReportedReviewsApi } from '../../features/admin-reviews/api/adminR
 import { adminVerificationApi } from '../../features/admin-verifications/api/adminVerificationApi';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { useToast } from '../../components/feedback/Toast';
+import { httpClient } from '../../services/httpClient';
 import './adminDashboard.css';
 
 type AdminTab =
@@ -89,7 +90,7 @@ type AttentionItem = {
   title: string;
   description: string;
   occurredAt?: string;
-  type: "verification" | "dispute" | "review";
+  type: "verification" | "dispute" | "review" | "overdue";
 };
 
 const OverviewPanel = lazy(() => import('../../features/admin-dashboard/components/OverviewPanel'));
@@ -249,6 +250,10 @@ const attentionStyles = {
   review: {
     label: "ĐÁNH GIÁ",
     className: "admin-refactor-notification__type--review",
+  },
+  overdue: {
+    label: "QUÁ HẠN",
+    className: "admin-refactor-notification__type--dispute",
   },
 };
 
@@ -422,11 +427,12 @@ export default function AdminDashboard() {
     setIsLoadingAttention(true);
     setAttentionError(null);
 
-    const [verificationResult, disputeResult, reviewResult] =
+    const [verificationResult, disputeResult, reviewResult, overdueResult] =
       await Promise.allSettled([
         adminVerificationApi.list(),
         adminDisputesApi.list(),
         adminReportedReviewsApi.list(),
+        httpClient.get<Array<{ id: string; bookingCode: string; productName: string; rentalTo: string; daysOverdue: number }>>('/admin/dashboard/overdue-rentals'),
       ]);
 
     const nextItems: AttentionItem[] = [];
@@ -473,18 +479,35 @@ export default function AdminDashboard() {
         }),
       );
     }
+    if (overdueResult.status === "fulfilled") {
+      overdueResult.value.slice().reverse().forEach((item) =>
+        nextItems.unshift({
+          id: `overdue-${item.id}`,
+          tab: "bookings",
+          type: "overdue",
+          title: `${item.bookingCode} quá hạn trả áo`,
+          description: `${item.productName} đã quá hạn ${item.daysOverdue} ngày.`,
+          occurredAt: item.rentalTo,
+        }),
+      );
+    }
 
     setAttentionItems(nextItems.slice(0, 20));
     const failedSources = [
       verificationResult,
       disputeResult,
       reviewResult,
+      overdueResult,
     ].filter((result) => result.status === "rejected").length;
     if (failedSources > 0) {
-      setAttentionError(`Không thể tải ${failedSources}/3 nguồn thông báo.`);
+      setAttentionError(`Không thể tải ${failedSources}/4 nguồn thông báo.`);
     }
     setIsLoadingAttention(false);
   }, []);
+
+  useEffect(() => {
+    void loadAttention();
+  }, [loadAttention]);
 
   const handleLogout = async () => {
     await logout();

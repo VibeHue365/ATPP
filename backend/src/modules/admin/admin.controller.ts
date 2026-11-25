@@ -21,6 +21,7 @@ import { Product } from '../products/schemas/product.schema';
 import { AnalyticsService } from '../analytics/services/analytics.service';
 import { clampPagination } from '../../common/utils/pagination.util';
 import { RedisService } from '../../common/redis/redis.service';
+import { findAdminOverdueRentals } from './overdue-rental-notifications';
 
 @Controller('admin/dashboard')
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
@@ -57,6 +58,12 @@ export class AdminController {
         ],
       },
     });
+  }
+
+  @Get('overdue-rentals')
+  async getOverdueRentals(@CurrentUser() user: AuthUser) {
+    this.checkAdmin(user);
+    return findAdminOverdueRentals(this.bookingItemModel);
   }
 
   @Get('stats')
