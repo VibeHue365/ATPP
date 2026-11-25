@@ -228,7 +228,7 @@ export const ProviderDashboard: React.FC = () => {
     setCComment, searchCustId, setSearchCustId, trustScoreResult, setTrustScoreResult,
   } = useProviderTrustState();
 
-  const { payouts, setPayouts } = useProviderPayoutsState();
+  const { payouts, setPayouts, isLoadingPayouts, setIsLoadingPayouts } = useProviderPayoutsState();
 
   const {
     businessName, setBusinessName, phone, setPhone, addressLine, setAddressLine, city, setCity,
@@ -343,7 +343,8 @@ export const ProviderDashboard: React.FC = () => {
   });
 
   const { fetchPayouts } = createPayoutActions({
-    setPayouts
+    setPayouts,
+    setIsLoadingPayouts,
   });
 
   const { handleUpdateProfile } = createProfileActions({
@@ -958,7 +959,7 @@ export const ProviderDashboard: React.FC = () => {
         )}
 
         {currentView === 'payouts' && (
-          <PayoutsPanel {...{ isLoadingProvider, payouts, setSelectedBookingId, setIsDetailModalOpen }} />
+          <PayoutsPanel {...{ isLoadingProvider, isLoadingPayouts, payouts, setSelectedBookingId, setIsDetailModalOpen }} />
         )}
 
         {/* ==================== ROLE MANAGEMENT VIEW ==================== */}

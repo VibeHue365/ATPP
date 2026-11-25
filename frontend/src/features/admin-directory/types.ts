@@ -13,6 +13,9 @@ export interface Customer {
   phone: string;
   avatar: string;
   status: 'ACTIVE' | 'BANNED';
+  isRestricted?: boolean;
+  restrictedReason?: string | null;
+  restrictedAt?: string | null;
   date: string;
   bookings: number;
   spent: number;

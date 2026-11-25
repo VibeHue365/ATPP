@@ -165,29 +165,27 @@ export function buildContractTermsLines(
   }
   lines.push('');
 
-  // ĐIỀU 3: QUY ĐỊNH TRẢ TRỄ
-  if (lateReturn) {
-    lines.push('ĐIỀU 3: QUY ĐỊNH HOÀN TRẢ VÀ BIỂU PHÍ TRỄ HẠN');
-    lines.push(
-      '- Hoàn trả trang phục đúng thời hạn và địa điểm quy định tại Phần II của hợp đồng.',
-    );
-    lines.push(
-      `- Thời gian ân hạn: ${lateReturn.gracePeriodHours} giờ kể từ mốc thời gian hoàn trả đã hẹn (trong khoảng thời gian này Bên B không bị tính phí phạt trễ).`,
-    );
-    lines.push(
-      `- Biểu phí phạt trễ hạn: Áp dụng tương ứng theo hình thức thuê (${formatVnd(lateReturn.hourlyLateFee)}/giờ đối với thuê theo giờ, ${formatVnd(lateReturn.dailyLateFee)}/ngày đối với thuê theo ngày), không cộng dồn hai mức phí cùng lúc.`,
-    );
-    lines.push(
-      `- Thời gian trễ tối đa cho phép: ${lateReturn.maxLateDaysAllowed ?? 3} ngày.`,
-    );
-    lines.push(
-      `- Xử lý quá hạn tối đa: Trường hợp trễ quá ${lateReturn.maxLateDaysAllowed ?? 3} ngày mà Bên B chưa hoàn trả và không có thông báo/thỏa thuận gia hạn hợp lệ, vụ việc sẽ được chuyển sang quy trình xử lý vi phạm hợp đồng để thực hiện bồi thường theo Điều 4.`,
-    );
-  } else {
-    lines.push('ĐIỀU 3: THỜI HẠN VÀ QUY ĐỊNH HOÀN TRẢ');
-    lines.push(
-      `- Hoàn trả trang phục đúng thời hạn và địa điểm quy định tại Phần II của hợp đồng. ${policies?.providerRental || 'Thời gian thuê tối đa và quy định phạt quá hạn áp dụng theo chính sách niêm yết.'}`,
-    );
+  // ĐIỀU 3: QUY ĐỊNH TRẢ TRỄ & BẢO VỆ LỊCH HẸN (ĐỒNG BỘ QUY TRÌNH QUÁ HẠN & DOMINO RECOVERY)
+  lines.push(
+    'ĐIỀU 3: QUY ĐỊNH HOÀN TRẢ, BIỂU PHÍ QUÁ HẠN VÀ BẢO VỆ LỊCH HẸN',
+  );
+  lines.push(
+    '- Thời hạn hoàn trả: Bên B có nghĩa vụ hoàn trả trang phục đúng thời hạn và địa điểm quy định tại Phần II của hợp đồng (không áp dụng thời gian ân hạn miễn phí nếu không có thỏa thuận gia hạn hợp lệ trước hạn trả).',
+  );
+  lines.push(
+    '- Biểu phí quá hạn trả trang phục: Kể từ thời điểm quá hạn, hệ thống áp dụng mức phí trễ hạn lũy tiến là +10% tiền đặt cọc cho mỗi 30 phút trễ (làm tròn lên theo từng chu kỳ 30 phút, tối thiểu 1.000 đ/30 phút), với mức trần tối đa bằng 50% tổng tiền đặt cọc của đơn hàng trong giai đoạn chờ hoàn trả.',
+  );
+  lines.push(
+    '- Các mốc cảnh báo và chế tài tài khoản: Hệ thống gửi thông báo nhắc nhở tại mốc 15 phút và 1 giờ quá hạn. Khi quá hạn từ 2 giờ (T+2h) trở lên, tài khoản Bên B bị tạm khóa quyền tạo đơn thuê mới trên nền tảng TàGo cho đến khi hoàn tất trả trang phục và đối soát xong nghĩa vụ quá hạn.',
+  );
+  lines.push(
+    '- Mốc quá hạn 24 giờ và xác nhận mất trang phục (LOST_ITEM): Trường hợp trễ quá 24 giờ mà Bên B chưa hoàn trả trang phục và Bên A đã liên hệ tối thiểu 03 (ba) lần bất thành, Bên A có quyền kích hoạt xác nhận Mất trang phục (LOST_ITEM) theo Điều 4.',
+  );
+  lines.push(
+    '- Bảo vệ lịch hẹn kế tiếp (Cơ chế Domino Recovery): Trường hợp lịch giao trang phục của Bên B bị ảnh hưởng do khách thuê ca trước trả trễ: (i) Bên A / Nền tảng được quyền tự động điều phối trang phục cùng mẫu và kích thước còn trống lịch trong kho để bàn giao đúng hẹn cho Bên B; hoặc (ii) nếu không còn trang phục cùng mẫu/size, hệ thống đề xuất tối đa 03 mẫu tương đương (trong biên độ giá 70%–130%) để Bên B lựa chọn trong vòng 60 phút. Nếu Bên B không đồng ý đổi mẫu hoặc hết 60 phút chưa có phương án thay thế, đơn hàng được hủy và hoàn trả 100% tiền thuê cùng tiền đặt cọc cho Bên B.',
+  );
+  if (!lateReturn && policies?.providerRental) {
+    lines.push(`- Ghi chú vận hành bổ sung từ Shop: ${policies.providerRental}`);
   }
   lines.push('');
 
@@ -272,7 +270,10 @@ export function buildContractTermsLines(
     }
 
     lines.push(
-      '- Cơ sở bồi thường và xử lý tiền cọc: Tiền đặt cọc là khoản bảo đảm thực hiện hợp đồng. Khi phát sinh sự cố, việc xử lý bồi thường và đối trừ tiền cọc được thực hiện theo thỏa thuận thống nhất giữa hai bên trên cơ sở các mức bồi thường đã giao kết; trường hợp giá trị thiệt hại vượt quá tiền cọc, Bên B có trách nhiệm thanh toán bổ sung phần chênh lệch cho Bên A theo quy định thỏa thuận.',
+      '- Cơ sở bồi thường và xử lý tiền cọc: Tiền đặt cọc là khoản bảo đảm thực hiện hợp đồng. Khi Bên B hoàn trả trang phục quá hạn và Bên A xác nhận hoàn tất nhận lại đồ, các bên thống nhất đối trừ khoản phí phạt quá hạn (tối đa 50% tiền cọc theo biểu phí tại Điều 3) từ tiền đặt cọc để chuyển cho Bên A, phần cọc còn dư (nếu có) được hoàn trả về cho Bên B. Trường hợp phát sinh hư hỏng, việc xử lý bồi thường và đối trừ tiền cọc được thực hiện theo thỏa thuận thống nhất giữa hai bên trên cơ sở các mức bồi thường đã giao kết; trường hợp giá trị thiệt hại vượt quá tiền cọc, Bên B có trách nhiệm thanh toán bổ sung phần chênh lệch cho Bên A theo quy định thỏa thuận.',
+    );
+    lines.push(
+      '- Xử lý trường hợp mất trang phục (LOST_ITEM): Khi đơn hàng bị xác nhận mất trang phục sau quá hạn 24 giờ và tối thiểu 03 lần liên hệ bất thành, 100% tiền đặt cọc được chuyển cho Bên A để bù đắp thiệt hại trang phục; tài khoản Bên B bị khóa vĩnh viễn khỏi nền tảng TàGo và hồ sơ hợp đồng điện tử cùng thông tin định danh (CCCD) được sử dụng làm căn cứ giải quyết theo quy định pháp luật hiện hành.',
     );
 
     const rawDispute = (
@@ -292,7 +293,10 @@ export function buildContractTermsLines(
       '- Khi hoàn trả trang phục đúng hạn, nguyên vẹn không hỏng hóc, Bên B sẽ được nhận lại toàn bộ tiền cọc.',
     );
     lines.push(
-      '- Trường hợp trang phục bị mất mát, hư hỏng hoặc trả muộn, Bên B đồng ý bồi thường theo chi phí phục hồi hoặc giá trị bồi hoàn niêm yết của trang phục.',
+      '- Đối soát trả muộn & mất trang phục: Khi Bên B trả muộn và Bên A xác nhận nhận lại đồ, các bên thống nhất đối trừ phí quá hạn (+10% tiền cọc/30 phút, tối đa 50% cọc) từ tiền cọc để chuyển cho Bên A và hoàn phần dư cho Bên B. Trường hợp xác nhận mất trang phục (LOST_ITEM) sau quá hạn 24 giờ và tối thiểu 03 lần liên hệ bất thành, 100% tiền cọc được chuyển cho Bên A và tài khoản Bên B bị khóa vĩnh viễn.',
+    );
+    lines.push(
+      '- Trường hợp trang phục bị mất mát hoặc hư hỏng, Bên B đồng ý bồi thường theo chi phí phục hồi hoặc giá trị bồi hoàn niêm yết của trang phục.',
     );
   }
   lines.push('');

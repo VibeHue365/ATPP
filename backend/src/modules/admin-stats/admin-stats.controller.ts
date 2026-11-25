@@ -276,6 +276,17 @@ export class AdminStatsController {
     return this.adminStatsService.unbanCustomer(id);
   }
 
+  @Patch('customers/:id/unrestrict')
+  @Roles('ADMIN')
+  @Permissions('user:manage')
+  async unrestrictCustomer(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    this.checkAdminRole(user);
+    return this.adminStatsService.unrestrictCustomer(id);
+  }
+
   @Patch('bookings/:id/status')
   @Roles('ADMIN')
   @Permissions('dashboard:read')

@@ -12,10 +12,17 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-import { randomUUID } from 'crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+  randomUUID,
+} from 'crypto';
 import type { Response } from 'express';
+import type { Readable } from 'stream';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../../common/decorators/current-user.decorator';
@@ -30,6 +37,7 @@ import {
   RentalEvidenceDto,
 } from '../dto/rental-fulfillment.dto';
 import { RentalFulfillmentWorkflowService } from '../services/rental-fulfillment-workflow.service';
+import { RentalOverdueDominoService } from '../services/rental-overdue-domino.service';
 
 @Controller(['bookings', 'api/bookings'])
 @UseGuards(JwtAuthGuard)
@@ -37,7 +45,58 @@ export class RentalFulfillmentController {
   constructor(
     private readonly workflow: RentalFulfillmentWorkflowService,
     private readonly privateStorage: PrivateStorageService,
+    private readonly overdueDomino: RentalOverdueDominoService,
   ) {}
+
+  private readonly cccdEncHeader = Buffer.from('TAGO_ENC_V1:');
+
+  private getIdentityEncryptionKey(): Buffer {
+    const rawSecret =
+      process.env.IDENTITY_FINGERPRINT_SECRET ||
+      process.env.JWT_SECRET ||
+      'tago-cccd-default-secret-key';
+    return createHash('sha256').update(rawSecret).digest();
+  }
+
+  private encryptIdentityBuffer(plain: Buffer): Buffer {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv(
+      'aes-256-gcm',
+      this.getIdentityEncryptionKey(),
+      iv,
+    );
+    const encrypted = Buffer.concat([cipher.update(plain), cipher.final()]);
+    const authTag = cipher.getAuthTag();
+    return Buffer.concat([this.cccdEncHeader, iv, authTag, encrypted]);
+  }
+
+  private decryptIdentityBuffer(payload: Buffer): Buffer {
+    const headerLen = this.cccdEncHeader.length;
+    if (
+      payload.length <= headerLen + 28 ||
+      !payload.subarray(0, headerLen).equals(this.cccdEncHeader)
+    ) {
+      return payload;
+    }
+    const iv = payload.subarray(headerLen, headerLen + 12);
+    const authTag = payload.subarray(headerLen + 12, headerLen + 28);
+    const ciphertext = payload.subarray(headerLen + 28);
+    const decipher = createDecipheriv(
+      'aes-256-gcm',
+      this.getIdentityEncryptionKey(),
+      iv,
+    );
+    decipher.setAuthTag(authTag);
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  }
+
+  private async streamToBuffer(stream: Readable): Promise<Buffer> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
 
   @Post(':bookingId/items/:itemId/rental/evidence')
   @UseInterceptors(
@@ -261,6 +320,201 @@ export class RentalFulfillmentController {
     response.setHeader('Cache-Control', 'private, no-store, max-age=0');
     response.setHeader('X-Content-Type-Options', 'nosniff');
     return new StreamableFile(file);
+  }
+
+  @Post(':bookingId/customer-identity')
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'front', maxCount: 1 },
+        { name: 'back', maxCount: 1 },
+      ],
+      {
+        limits: { fileSize: 10 * 1024 * 1024 },
+        storage: memoryStorage(),
+      },
+    ),
+  )
+  async uploadCustomerIdentity(
+    @CurrentUser() user: AuthUser,
+    @Param('bookingId') bookingId: string,
+    @UploadedFiles()
+    files: {
+      front?: Express.Multer.File[];
+      back?: Express.Multer.File[];
+    },
+    @Body()
+    body: {
+      idNumber?: string;
+      fullName?: string;
+      notes?: string;
+      frontBase64?: string;
+      backBase64?: string;
+    },
+  ) {
+    const extensionByMime: Record<string, string> = {
+      'image/jpeg': '.jpg',
+      'image/png': '.png',
+      'image/webp': '.webp',
+    };
+    const bucket = 'rental-fulfillment-private';
+    let frontStorageKey: string | undefined;
+    let backStorageKey: string | undefined;
+
+    const frontFile = files?.front?.[0];
+    if (frontFile) {
+      if (!this.hasValidImageSignature(frontFile)) {
+        throw new UnsupportedMediaTypeException('Ảnh mặt trước không hợp lệ.');
+      }
+      const fileId = randomUUID();
+      const ext = extensionByMime[frontFile.mimetype] || '.jpg';
+      frontStorageKey = `customer-identity/${bookingId}/front_${fileId}${ext}`;
+      await this.privateStorage.uploadPrivateFile(
+        bucket,
+        frontStorageKey,
+        this.encryptIdentityBuffer(frontFile.buffer),
+        'application/octet-stream',
+      );
+    } else if (body?.frontBase64 && body.frontBase64.includes('base64,')) {
+      const match = body.frontBase64.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        const mime = match[1];
+        const buffer = Buffer.from(match[2], 'base64');
+        const fileId = randomUUID();
+        const ext = extensionByMime[mime] || '.jpg';
+        frontStorageKey = `customer-identity/${bookingId}/front_${fileId}${ext}`;
+        await this.privateStorage.uploadPrivateFile(
+          bucket,
+          frontStorageKey,
+          this.encryptIdentityBuffer(buffer),
+          'application/octet-stream',
+        );
+      }
+    }
+
+    const backFile = files?.back?.[0];
+    if (backFile) {
+      if (!this.hasValidImageSignature(backFile)) {
+        throw new UnsupportedMediaTypeException('Ảnh mặt sau không hợp lệ.');
+      }
+      const fileId = randomUUID();
+      const ext = extensionByMime[backFile.mimetype] || '.jpg';
+      backStorageKey = `customer-identity/${bookingId}/back_${fileId}${ext}`;
+      await this.privateStorage.uploadPrivateFile(
+        bucket,
+        backStorageKey,
+        this.encryptIdentityBuffer(backFile.buffer),
+        'application/octet-stream',
+      );
+    } else if (body?.backBase64 && body.backBase64.includes('base64,')) {
+      const match = body.backBase64.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        const mime = match[1];
+        const buffer = Buffer.from(match[2], 'base64');
+        const fileId = randomUUID();
+        const ext = extensionByMime[mime] || '.jpg';
+        backStorageKey = `customer-identity/${bookingId}/back_${fileId}${ext}`;
+        await this.privateStorage.uploadPrivateFile(
+          bucket,
+          backStorageKey,
+          this.encryptIdentityBuffer(buffer),
+          'application/octet-stream',
+        );
+      }
+    }
+
+    return this.workflow.saveCustomerIdentityCard(bookingId, user, {
+      frontStorageKey,
+      backStorageKey,
+      idNumber: body?.idNumber,
+      fullName: body?.fullName,
+      notes: body?.notes,
+    });
+  }
+
+  @Get(':bookingId/customer-identity')
+  async getCustomerIdentity(
+    @CurrentUser() user: AuthUser,
+    @Param('bookingId') bookingId: string,
+  ) {
+    return this.workflow.getCustomerIdentityCard(bookingId, user);
+  }
+
+  @Get(':bookingId/customer-identity/image/:side')
+  async viewCustomerIdentityImage(
+    @CurrentUser() user: AuthUser,
+    @Param('bookingId') bookingId: string,
+    @Param('side') side: string,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<StreamableFile> {
+    if (side !== 'front' && side !== 'back') {
+      throw new BadRequestException('Mặt ảnh CCCD phải là front hoặc back.');
+    }
+    const evidence = await this.workflow.getCustomerIdentityImage(
+      bookingId,
+      side,
+      user,
+    );
+    const stream = await this.privateStorage.readPrivateFile(
+      evidence.bucket,
+      evidence.storageKey,
+    );
+    const rawBuffer = await this.streamToBuffer(stream);
+    const file = this.decryptIdentityBuffer(rawBuffer);
+    response.setHeader('Content-Type', 'image/jpeg');
+    response.setHeader(
+      'Content-Disposition',
+      `inline; filename="cccd-${side}.jpg"`,
+    );
+    response.setHeader('Cache-Control', 'private, no-store, max-age=0');
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    return new StreamableFile(file);
+  }
+
+  @Post(':bookingId/overdue/confirm-lost')
+  async confirmLostItem(
+    @CurrentUser() user: AuthUser,
+    @Param('bookingId') bookingId: string,
+    @Body() body: { reason?: string; contactAttempts?: number },
+  ) {
+    return this.overdueDomino.confirmLostItem(bookingId, user, body || {});
+  }
+
+  @Post(':bookingId/overdue/reverse')
+  async reverseOverdue(
+    @CurrentUser() _user: AuthUser,
+    @Param('bookingId') bookingId: string,
+  ) {
+    return this.overdueDomino.reverseOverdueOnReturn(bookingId);
+  }
+
+  @Post(':bookingId/overdue/simulate')
+  async simulateOverdue(
+    @CurrentUser() user: AuthUser,
+    @Param('bookingId') bookingId: string,
+    @Body() body: { hoursOverdue?: number },
+  ) {
+    return this.overdueDomino.simulateOverdueForDemo(
+      bookingId,
+      user,
+      body?.hoursOverdue,
+    );
+  }
+
+  @Post(':bookingId/domino/choice')
+  async resolveDominoChoice(
+    @CurrentUser() user: AuthUser,
+    @Param('bookingId') bookingId: string,
+    @Body() body: { action: 'SELECT_ALTERNATIVE' | 'REFUND_100%'; alternativeProductId?: string },
+  ) {
+    return this.overdueDomino.resolveDominoCustomerChoice(bookingId, user, body);
+  }
+
+  @Post('overdue/scan')
+  async scanOverdueManually() {
+    const count = await this.overdueDomino.scanAndProcessOverdueBookings();
+    const refunds = await this.overdueDomino.processDominoAutoRefunds();
+    return { success: true, processedOverdueCount: count, autoRefundedDominoCount: refunds };
   }
 
   private hasValidImageSignature(file: Express.Multer.File): boolean {

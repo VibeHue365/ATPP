@@ -23,6 +23,7 @@ import {
   Play,
   Printer,
   Send,
+  Shield,
   ShieldCheck,
   Shirt,
   Sparkles,
@@ -101,6 +102,70 @@ export function OrderDetailDrawer({
   const [locallySubmittedPickupIds, setLocallySubmittedPickupIds] = useState<Set<string>>(new Set());
   const [locallyReturnedIds, setLocallyReturnedIds] = useState<Set<string>>(new Set());
   const [locallySettledIds, setLocallySettledIds] = useState<Set<string>>(new Set());
+  const [identityCardInfo, setIdentityCardInfo] = useState<{
+    hasIdentityCard?: boolean;
+    hasFrontImage?: boolean;
+    hasBackImage?: boolean;
+    fullName?: string | null;
+    idNumberMasked?: string | null;
+  } | null>(null);
+  const [cccdPreviewUrls, setCccdPreviewUrls] = useState<{ front?: string; back?: string }>({});
+
+  useEffect(() => {
+    if (!order?._id) {
+      setIdentityCardInfo(null);
+      setCccdPreviewUrls({});
+      return;
+    }
+    let isSubscribed = true;
+    const createdUrls: string[] = [];
+
+    httpClient
+      .get<any>(`/api/bookings/${order._id}/customer-identity`)
+      .then(async (res) => {
+        if (!isSubscribed) return;
+        setIdentityCardInfo(res || null);
+        if (res?.hasIdentityCard) {
+          const urls: { front?: string; back?: string } = {};
+          if (res.hasFrontImage) {
+            try {
+              const blob = await httpClient.getBlob(`/api/bookings/${order._id}/customer-identity/image/front`);
+              const u = URL.createObjectURL(blob);
+              createdUrls.push(u);
+              urls.front = u;
+            } catch {
+              // ignore
+            }
+          }
+          if (res.hasBackImage) {
+            try {
+              const blob = await httpClient.getBlob(`/api/bookings/${order._id}/customer-identity/image/back`);
+              const u = URL.createObjectURL(blob);
+              createdUrls.push(u);
+              urls.back = u;
+            } catch {
+              // ignore
+            }
+          }
+          if (isSubscribed) {
+            setCccdPreviewUrls(urls);
+          }
+        } else {
+          setCccdPreviewUrls({});
+        }
+      })
+      .catch(() => {
+        if (isSubscribed) {
+          setIdentityCardInfo(null);
+          setCccdPreviewUrls({});
+        }
+      });
+
+    return () => {
+      isSubscribed = false;
+      createdUrls.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [order?._id, (order as any)?.updatedAt]);
 
   // Keyboard shortcut Esc to close
   useEffect(() => {
@@ -300,6 +365,7 @@ export function OrderDetailDrawer({
   const isSingleInUse =
     isSingleRentalItem &&
     (singleFulfillmentStatus === 'PICKED_UP' || rawStatus === 'PICKED_UP') &&
+    !['RETURNED', 'COMPLETED', 'CANCELLED', 'OVERDUE', 'LOST_ITEM'].includes(rawStatus) &&
     singleFulfillmentStatus !== 'CUSTOMER_RETURN_REQUESTED' &&
     !isCustomerReturnPending &&
     !isSingleReturnedAndInspecting &&
@@ -588,25 +654,411 @@ export function OrderDetailDrawer({
     }
   };
 
+  const handleViewCccd = async (bookingId: string) => {
+    try {
+      Swal.fire({
+        title: 'Đang tải ảnh CCCD...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+      const res: any = await httpClient.get(`/api/bookings/${bookingId}/customer-identity`);
+      if (!res?.hasIdentityCard) {
+        Swal.fire({
+          icon: 'info',
+          title: 'Chưa có ảnh CCCD',
+          text: 'Khách hàng chưa tải ảnh CCCD lên đơn hàng này. Vui lòng nhắc khách tải CCCD tại mục "Lịch của tôi > Thuê áo dài" trước khi bàn giao.',
+          confirmButtonColor: '#881337',
+        });
+        return;
+      }
+      let frontUrl = '';
+      let backUrl = '';
+      if (res.hasFrontImage) {
+        const frontBlob = await httpClient.getBlob(`/api/bookings/${bookingId}/customer-identity/image/front`);
+        frontUrl = URL.createObjectURL(frontBlob);
+      }
+      if (res.hasBackImage) {
+        const backBlob = await httpClient.getBlob(`/api/bookings/${bookingId}/customer-identity/image/back`);
+        backUrl = URL.createObjectURL(backBlob);
+      }
+
+      Swal.fire({
+        width: '560px',
+        padding: '22px 24px 24px',
+        html: `
+          <div style="text-align: left; font-family: inherit; color: #1E293B;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 38px; height: 38px; border-radius: 10px; background: #FFF1F2; color: #881337; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                </div>
+                <div>
+                  <h3 style="margin: 0; font-size: 16.5px; font-weight: 800; color: #0F172A;">Căn cước công dân khách thuê</h3>
+                  <p style="margin: 2px 0 0; font-size: 12px; color: #64748B;">Hồ sơ đối soát mã hóa AES-256 • Che bảo mật mặc định</p>
+                </div>
+              </div>
+              <button type="button" id="toggle-provider-cccd-blur" style="background: #FFF1F2; border: 1px solid #FECDD3; color: #881337; border-radius: 8px; padding: 6px 10px; font-size: 11.5px; font-weight: 700; cursor: pointer; white-space: nowrap;">
+                👁 Hiện rõ để đối soát
+              </button>
+            </div>
+
+            <div style="background: #F8FAFC; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; border: 1px solid #E2E8F0; font-size: 12.5px;">
+              <div><strong>Họ và tên:</strong> ${res.fullName || order.customerName || 'Khách thuê'}</div>
+              <div style="font-size: 11.5px; color: #059669; margin-top: 4px;">🔒 Bảo mật theo Nghị định 13/2023/NĐ-CP — Chỉ dùng đối soát đơn thuê giữa Shop &amp; Sàn TàGo.</div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              ${frontUrl ? `
+                <div class="provider-cccd-mask-box" style="position: relative; height: 150px; border-radius: 10px; overflow: hidden; border: 1.5px solid #CBD5E1; background: #0F172A; cursor: pointer;">
+                  <img class="provider-cccd-mask-img" src="${frontUrl}" style="width: 100%; height: 100%; object-fit: cover; filter: blur(11px); transform: scale(1.06); transition: filter 0.2s ease, transform 0.2s ease;" />
+                  <div class="provider-cccd-mask-overlay" style="position: absolute; inset: 0; background: rgba(15,23,42,0.35); display: flex; flex-direction: column; align-items: center; justify-content: center; color: #FFF; font-size: 11.5px; font-weight: 700; text-align: center; padding: 8px;">
+                    <span>🔒 Đã che bảo mật</span>
+                    <span style="font-size: 10.5px; font-weight: 500; opacity: 0.9; margin-top: 2px;">Bấm để đối soát</span>
+                  </div>
+                  <div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.68); color: #fff; font-size: 11px; font-weight: 600; text-align: center; padding: 3px;">Mặt trước</div>
+                </div>
+              ` : '<div style="color: #9CA3AF; font-size: 12px; padding: 20px; text-align: center; border: 1px dashed #CBD5E1; border-radius: 10px;">Chưa có mặt trước</div>'}
+              ${backUrl ? `
+                <div class="provider-cccd-mask-box" style="position: relative; height: 150px; border-radius: 10px; overflow: hidden; border: 1.5px solid #CBD5E1; background: #0F172A; cursor: pointer;">
+                  <img class="provider-cccd-mask-img" src="${backUrl}" style="width: 100%; height: 100%; object-fit: cover; filter: blur(11px); transform: scale(1.06); transition: filter 0.2s ease, transform 0.2s ease;" />
+                  <div class="provider-cccd-mask-overlay" style="position: absolute; inset: 0; background: rgba(15,23,42,0.35); display: flex; flex-direction: column; align-items: center; justify-content: center; color: #FFF; font-size: 11.5px; font-weight: 700; text-align: center; padding: 8px;">
+                    <span>🔒 Đã che bảo mật</span>
+                    <span style="font-size: 10.5px; font-weight: 500; opacity: 0.9; margin-top: 2px;">Bấm để đối soát</span>
+                  </div>
+                  <div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.68); color: #fff; font-size: 11px; font-weight: 600; text-align: center; padding: 3px;">Mặt sau</div>
+                </div>
+              ` : '<div style="color: #9CA3AF; font-size: 12px; padding: 20px; text-align: center; border: 1px dashed #CBD5E1; border-radius: 10px;">Chưa có mặt sau</div>'}
+            </div>
+          </div>
+        `,
+        confirmButtonText: 'Đóng',
+        confirmButtonColor: '#881337',
+        didOpen: (popup) => {
+          let revealed = false;
+          const toggleBtn = popup.querySelector('#toggle-provider-cccd-blur') as HTMLButtonElement | null;
+          const applyState = () => {
+            popup.querySelectorAll('.provider-cccd-mask-img').forEach((el) => {
+              const img = el as HTMLElement;
+              img.style.filter = revealed ? 'none' : 'blur(11px)';
+              img.style.transform = revealed ? 'scale(1)' : 'scale(1.06)';
+            });
+            popup.querySelectorAll('.provider-cccd-mask-overlay').forEach((el) => {
+              (el as HTMLElement).style.display = revealed ? 'none' : 'flex';
+            });
+            if (toggleBtn) {
+              toggleBtn.textContent = revealed ? '🙈 Che lại' : '👁 Hiện rõ để đối soát';
+            }
+          };
+          toggleBtn?.addEventListener('click', () => {
+            revealed = !revealed;
+            applyState();
+          });
+          popup.querySelectorAll('.provider-cccd-mask-box').forEach((box) => {
+            box.addEventListener('click', () => {
+              revealed = !revealed;
+              applyState();
+            });
+          });
+        },
+        didClose: () => {
+          if (frontUrl) URL.revokeObjectURL(frontUrl);
+          if (backUrl) URL.revokeObjectURL(backUrl);
+        },
+      });
+    } catch (err: any) {
+      Swal.fire({ icon: 'error', title: 'Lỗi', text: err?.message || 'Không thể tải ảnh CCCD.' });
+    }
+  };
+
+  const handleConfirmLostItem = async (bookingId: string) => {
+    try {
+      const result = await Swal.fire({
+        title: 'Xác nhận mất trang phục (LOST_ITEM)?',
+        html: `
+          <div style="text-align: left; font-size: 13px; color: #374151;">
+            <p style="color: #991B1B; font-weight: 600; margin-bottom: 10px;">
+              ⚠️ Cảnh báo: Thao tác này sẽ áp dụng chế tài nghiêm ngặt đối với khách thuê:
+            </p>
+            <ul style="padding-left: 18px; margin-bottom: 12px; line-height: 1.6; color: #4B5563;">
+              <li>Tịch thu toàn bộ tiền cọc chuyển vào ví thanh toán của Shop.</li>
+              <li>Khóa vĩnh viễn tài khoản của khách (Blacklist).</li>
+              <li>Trang phục sẽ được ẩn khỏi kho để không nhận đơn mới.</li>
+              <li>Hồ sơ CCCD và hợp đồng điện tử có chữ ký SHA-256 được lưu vết để chuyển cơ quan chức năng theo Điều 175 BLHS nếu cần thiết.</li>
+            </ul>
+            <div style="margin-bottom: 10px;">
+              <label style="display: block; font-weight: 700; font-size: 12px; margin-bottom: 4px; color: #1E293B;">
+                Số lần đã liên hệ khách thất bại (tối thiểu 3 lần):
+              </label>
+              <input id="lost-contact-count" type="number" min="3" value="3" style="width: 100%; padding: 6px 10px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 13px; box-sizing: border-box;" />
+            </div>
+            <div>
+              <label style="display: block; font-weight: 700; font-size: 12px; margin-bottom: 4px; color: #1E293B;">
+                Ghi chú / Lý do mất đồ:
+              </label>
+              <textarea id="lost-reason-note" placeholder="Ví dụ: Gọi 3 lần thuê bao không liên lạc được, quá 24h không trả áo." rows="3" style="width: 100%; padding: 6px 10px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 12px; box-sizing: border-box;"></textarea>
+            </div>
+          </div>
+        `,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#DC2626',
+        cancelButtonColor: '#6B7280',
+        confirmButtonText: 'Xác nhận Mất đồ & Tịch thu cọc',
+        cancelButtonText: 'Hủy',
+        preConfirm: () => {
+          const countInput = document.getElementById('lost-contact-count') as HTMLInputElement | null;
+          const noteInput = document.getElementById('lost-reason-note') as HTMLTextAreaElement | null;
+          const count = Number(countInput?.value || 3);
+          if (count < 3) {
+            Swal.showValidationMessage('Theo quy chế sàn TàGo, Shop phải liên hệ khách tối thiểu 3 lần!');
+            return false;
+          }
+          return {
+            contactAttempts: count,
+            reason: noteInput?.value?.trim() || 'Khách không trả áo và không thể liên lạc được.',
+          };
+        },
+      });
+
+      if (!result.isConfirmed || !result.value) return;
+
+      Swal.fire({
+        title: 'Đang xử lý tịch thu cọc & chế tài...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      await httpClient.post(`/api/bookings/${bookingId}/overdue/confirm-lost`, result.value);
+      toast.success('Đã xác nhận mất trang phục và tịch thu tiền cọc chuyển vào ví Shop!');
+      Swal.close();
+
+      if (fetchOrders) await fetchOrders(true, true);
+      try {
+        const fresh: any = await httpClient.get(`/api/bookings/${bookingId}`);
+        if (fresh && onSelectOrderRef.current) {
+          onSelectOrderRef.current({
+            ...order,
+            ...fresh,
+            rawStatus: fresh.status || 'LOST_ITEM',
+            overdueTracking: fresh.overdueTracking || (order as any).overdueTracking || null,
+            dominoRecovery: fresh.dominoRecovery || (order as any).dominoRecovery || null,
+          });
+        }
+      } catch {
+        // ignore
+      }
+    } catch (err: any) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Lỗi',
+        text: err?.response?.data?.message || err?.message || 'Không thể xác nhận mất đồ.',
+      });
+    }
+  };
+
+  const handleSimulateOverdue = async (bookingId: string) => {
+    try {
+      const res = await Swal.fire({
+        title: '⚡ Demo: Giả lập đơn quá hạn',
+        html: `
+          <div style="text-align: left; font-size: 13px; color: #374151; line-height: 1.5;">
+            <p style="margin: 0 0 12px;">Chọn mốc thời gian trễ để kiểm thử ngay luồng phạt quá hạn (+10% tiền cọc / 30 phút, trần 50% cọc) trước Hội đồng:</p>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <label style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #E5E7EB; border-radius: 8px; cursor: pointer; background: #FFFBEB;">
+                <input type="radio" name="sim-hours" value="1" checked />
+                <span><strong>Trễ 1 giờ (T+1h)</strong> — Tính phạt quá hạn, chưa khóa tài khoản</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #E5E7EB; border-radius: 8px; cursor: pointer; background: #FEF2F2;">
+                <input type="radio" name="sim-hours" value="3" />
+                <span><strong>Trễ 3 giờ (T+3h)</strong> — Phạt chạm trần + Khóa quyền đặt đơn mới</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #E5E7EB; border-radius: 8px; cursor: pointer; background: #FEF2F2;">
+                <input type="radio" name="sim-hours" value="25" />
+                <span><strong>Trễ 25 giờ (T+25h)</strong> — Kích hoạt đề xuất Mất đồ (LOST_ITEM)</span>
+              </label>
+            </div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonColor: '#D97706',
+        cancelButtonColor: '#6B7280',
+        confirmButtonText: 'Chạy giả lập ngay',
+        cancelButtonText: 'Hủy',
+        preConfirm: () => {
+          const checked = document.querySelector('input[name="sim-hours"]:checked') as HTMLInputElement | null;
+          return Number(checked?.value || 1);
+        },
+      });
+      if (!res.isConfirmed) return;
+
+      Swal.fire({
+        title: 'Đang giả lập & quét phạt...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      const simRes: any = await httpClient.post(`/api/bookings/${bookingId}/overdue/simulate`, {
+        hoursOverdue: res.value,
+      });
+
+      if (fetchOrders) await fetchOrders(true, true);
+      try {
+        const fresh: any = await httpClient.get(`/api/bookings/${bookingId}`);
+        if (fresh && onSelectOrderRef.current) {
+          onSelectOrderRef.current({
+            ...order,
+            ...fresh,
+            rawStatus: fresh.status || 'COMPLETED',
+            overdueTracking: fresh.overdueTracking || null,
+            dominoRecovery: fresh.dominoRecovery || (order as any).dominoRecovery || null,
+          });
+        }
+      } catch {
+        // ignore
+      }
+
+      const fee = simRes?.overdueTracking?.calculatedLateFee || 0;
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Đã kích hoạt trạng thái QUÁ HẠN!',
+        text: `Đơn hàng đã chuyển OVERDUE. Phí phạt hiện tại: ${fee.toLocaleString('vi-VN')}đ.`,
+        confirmButtonColor: '#881337',
+      });
+    } catch (err: any) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Không thể giả lập',
+        text: err?.response?.data?.message || err?.message || 'Chỉ hỗ trợ ở môi trường Demo/Dev.',
+      });
+    }
+  };
+
+  const handleReverseOverdue = async (bookingId: string) => {
+    try {
+      const depositTotal = Number((order as any)?.deposit || (order as any)?.depositTotal || order?.pricingSummary?.depositTotal || 0);
+      const lateFee = Math.min(Number((order as any)?.overdueTracking?.calculatedLateFee || 0), depositTotal);
+      const refundAmt = Math.max(0, depositTotal - lateFee);
+
+      const res = await Swal.fire({
+        title: 'Đối soát & Hoàn tác quá hạn',
+        html: `
+          <div style="text-align: left; font-size: 13px; color: #374151; line-height: 1.6;">
+            <p style="margin: 0 0 12px;">Khách đã mang áo dài đến trả. Hệ thống sẽ thực hiện đối soát dòng tiền thực tế như sau:</p>
+            <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px;">
+              <div style="display: flex; justify-content: space-between;">
+                <span>Tiền cọc gốc đang ký quỹ:</span>
+                <strong>${depositTotal.toLocaleString('vi-VN')}đ</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; color: #DC2626;">
+                <span>Khấu trừ phạt trễ (+vào ví Shop):</span>
+                <strong>-${lateFee.toLocaleString('vi-VN')}đ</strong>
+              </div>
+              <div style="border-top: 1px dashed #CBD5E1; margin: 4px 0;"></div>
+              <div style="display: flex; justify-content: space-between; color: #16A34A; font-size: 14px;">
+                <span><strong>Hoàn lại cọc dư cho Khách:</strong></span>
+                <strong>${refundAmt.toLocaleString('vi-VN')}đ</strong>
+              </div>
+            </div>
+            <p style="margin: 10px 0 0; font-size: 12px; color: #64748B;">Đồng thời mở khóa tài khoản khách hàng và đưa áo về trạng thái giặt ủi.</p>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonColor: '#16A34A',
+        cancelButtonColor: '#6B7280',
+        confirmButtonText: 'Xác nhận trừ tiền & hoàn tất',
+        cancelButtonText: 'Hủy',
+      });
+      if (!res.isConfirmed) return;
+
+      Swal.fire({
+        title: 'Đang đối soát ví & hoàn cọc...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      const response: any = await httpClient.post(`/api/bookings/${bookingId}/overdue/reverse`, {});
+      const deducted = response?.lateFeeDeducted ?? lateFee;
+      const refunded = response?.depositRefunded ?? refundAmt;
+
+      if (fetchOrders) await fetchOrders(true, true);
+      try {
+        const fresh: any = await httpClient.get(`/api/bookings/${bookingId}`);
+        if (fresh && onSelectOrderRef.current) {
+          onSelectOrderRef.current({
+            ...order,
+            ...fresh,
+            rawStatus: fresh.status || 'COMPLETED',
+            overdueTracking: fresh.overdueTracking || null,
+            dominoRecovery: fresh.dominoRecovery || (order as any).dominoRecovery || null,
+          });
+        }
+      } catch {
+        // ignore
+      }
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'Đã đối soát trừ tiền thành công!',
+        html: `
+          <div style="font-size: 13px; color: #374151; line-height: 1.6;">
+            <div>• Đã cộng <strong>+${deducted.toLocaleString('vi-VN')}đ</strong> tiền phạt vào <strong>Ví Shop</strong>.</div>
+            <div>• Đã hoàn trả <strong>${refunded.toLocaleString('vi-VN')}đ</strong> tiền cọc dư về <strong>Khách hàng</strong>.</div>
+          </div>
+        `,
+        confirmButtonColor: '#16A34A',
+      });
+    } catch (err: any) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Lỗi',
+        text: err?.response?.data?.message || err?.message || 'Không thể hoàn tác quá hạn.',
+      });
+    }
+  };
+
   const handleSubmitPickupEvidence = async () => {
     if (!order?._id) return;
     const targetItem = singleRentalItem || order.items?.[0];
     if (!targetItem?._id) return;
     if (isSendingPickupEvidence || (rentalItems.length > 0 && allRentalHandoverEvidenceSubmitted)) return;
 
+    let cccdData: any = null;
+    try {
+      cccdData = await httpClient.get(`/api/bookings/${order._id}/customer-identity`);
+    } catch {
+      // ignore
+    }
+    const hasCccd = Boolean(cccdData?.hasIdentityCard);
+
     const result = await Swal.fire({
-      title: 'Chụp ảnh bàn giao áo',
+      title: 'Bàn giao áo dài tại quầy',
       html: `
-        <p style="margin: -2px 8px 18px; color: #6b7280; font-size: 14px; line-height: 1.55;">
-          Chụp rõ áo và phụ kiện trước khi bàn giao. Khách sẽ xem ảnh này để xác nhận nhận áo.
-        </p>
-        <label for="pickup-evidence-input" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 142px; padding: 18px; border: 1.5px dashed #b98a94; border-radius: 14px; background: #fff8f8; cursor: pointer; box-sizing: border-box;">
-          <span style="width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #fbe9ed; color: #8e1b2e;"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
-          <strong style="margin-top: 10px; color: #4a2430; font-size: 14px;">Chọn ảnh từ thiết bị</strong>
-          <span style="margin-top: 5px; color: #8c827a; font-size: 12px;">JPG, PNG hoặc WEBP • Tối đa 5 ảnh</span>
-          <input id="pickup-evidence-input" type="file" accept="image/jpeg,image/png,image/webp" multiple style="display: none;" />
-        </label>
-        <div id="pickup-evidence-summary" style="min-height: 20px; margin-top: 10px;"></div>
+        <div style="text-align: left; font-size: 13px;">
+          ${hasCccd ? `
+            <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; font-size: 12px; color: #166534; display: flex; align-items: center; justify-content: space-between;">
+              <span>✅ <strong>Khách đã tải CCCD:</strong> ${cccdData?.idNumberMasked || '*** (Đã xác thực)'}</span>
+              <span style="font-size: 11px; background: #DCFCE7; padding: 2px 6px; border-radius: 4px;">Đã xác thực</span>
+            </div>
+          ` : `
+            <div style="background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; font-size: 12px; color: #92400E;">
+              ⚠️ <strong>Khách chưa tải ảnh CCCD trên ứng dụng.</strong> Vui lòng nhắc khách mở mục <em>Lịch của tôi &gt; Thuê áo dài</em> để tải CCCD trước khi xác nhận bàn giao.
+            </div>
+          `}
+
+          <strong style="color: #1F2937; font-size: 12.5px; display: block; margin-bottom: 6px;">
+            👗 Ảnh tình trạng áo dài lúc bàn giao *
+          </strong>
+          <p style="margin: -2px 0 10px; color: #6b7280; font-size: 12px; line-height: 1.4;">
+            Chụp rõ áo và phụ kiện trước khi bàn giao. Khách sẽ xem ảnh này để xác nhận nhận áo.
+          </p>
+          <label for="pickup-evidence-input" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 110px; padding: 14px; border: 1.5px dashed #b98a94; border-radius: 12px; background: #fff8f8; cursor: pointer; box-sizing: border-box;">
+            <span style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #fbe9ed; color: #8e1b2e;"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
+            <strong style="margin-top: 8px; color: #4a2430; font-size: 13px;">Chọn ảnh áo bàn giao từ thiết bị</strong>
+            <span style="margin-top: 4px; color: #8c827a; font-size: 11px;">JPG, PNG hoặc WEBP • Tối đa 5 ảnh</span>
+            <input id="pickup-evidence-input" type="file" accept="image/jpeg,image/png,image/webp" multiple style="display: none;" />
+          </label>
+          <div id="pickup-evidence-summary" style="min-height: 20px; margin-top: 8px;"></div>
+        </div>
       `,
       showCancelButton: true,
       confirmButtonText: 'Gửi ảnh bàn giao',
@@ -624,7 +1076,7 @@ export function OrderDetailDrawer({
           if (!files.length) return;
 
           const label = document.createElement('div');
-          label.textContent = `Đã chọn ${files.length} ảnh sẵn sàng gửi`;
+          label.textContent = `Đã chọn ${files.length} ảnh áo bàn giao`;
           label.style.cssText = 'margin: 2px 0 9px; color: #8e1b2e; font-size: 12px; font-weight: 700; text-align: center;';
           summary.appendChild(label);
 
@@ -645,20 +1097,25 @@ export function OrderDetailDrawer({
         const input = document.getElementById('pickup-evidence-input') as HTMLInputElement | null;
         const files = Array.from(input?.files || []);
         if (!files.length) {
-          Swal.showValidationMessage('Vui lòng chọn ít nhất một ảnh bàn giao.');
+          Swal.showValidationMessage('Vui lòng chọn ít nhất một ảnh bàn giao áo dài.');
           return false;
         }
         if (files.length > 5) {
           Swal.showValidationMessage('Tối đa 5 ảnh cho một lần bàn giao.');
           return false;
         }
-        return files;
+
+        return {
+          evidenceFiles: files,
+        };
       },
     });
-    if (!result.isConfirmed) return;
+    if (!result.isConfirmed || !result.value) return;
 
     setIsSendingPickupEvidence(true);
     try {
+      const { evidenceFiles } = result.value;
+
       const pendingHandoverItems = rentalItems.filter(
         (it: any) => !locallySubmittedPickupIds.has(it._id) && !hasSubmittedPickupEvidence(it)
       );
@@ -667,7 +1124,7 @@ export function OrderDetailDrawer({
       let lastFileIds: string[] = [];
       for (const item of itemsToSubmit) {
         const formData = new FormData();
-        (result.value as File[]).forEach((file) => formData.append('images', file));
+        evidenceFiles.forEach((file: File) => formData.append('images', file));
         const uploaded = await httpClient.post<{ files: Array<{ fileId: string }> }>(
           `/api/bookings/${order._id}/items/${item._id}/rental/evidence`,
           formData,
@@ -1621,6 +2078,204 @@ export function OrderDetailDrawer({
                   </div>
                 )}
 
+                {/* Overdue Alert Banner (Khách A) */}
+                {(rawStatus === 'OVERDUE' || ((order as any).overdueTracking?.isOverdue && !['COMPLETED', 'CANCELLED', 'RETURNED', 'LOST_ITEM'].includes(rawStatus))) && (
+                  <div
+                    style={{
+                      backgroundColor: '#FEF2F2',
+                      border: '1.5px solid #FCA5A5',
+                      borderRadius: '12px',
+                      padding: '16px',
+                      marginBottom: '14px',
+                      boxShadow: '0 2px 8px rgba(220, 38, 38, 0.08)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <AlertTriangle size={18} color="#DC2626" />
+                        <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#991B1B' }}>
+                          ĐƠN THUÊ QUÁ HẠN TRẢ ÁO DÀI
+                        </span>
+                      </div>
+                      <span
+                        style={{
+                          backgroundColor: '#FEE2E2',
+                          color: '#B91C1C',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          border: '1px solid #FECACA',
+                        }}
+                      >
+                        Trễ {Math.floor(((order as any).overdueTracking?.minutesOverdue || 0) / 60)}h {((order as any).overdueTracking?.minutesOverdue || 0) % 60}m
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: '12.5px', color: '#450A0A', lineHeight: 1.5, marginBottom: '12px' }}>
+                      <div>• <strong>Phí quá hạn đang tính:</strong> +10% tiền cọc / 30 phút. Phạt hiện tại: <span style={{ color: '#DC2626', fontWeight: 700 }}>{((order as any).overdueTracking?.calculatedLateFee || 0).toLocaleString('vi-VN')}đ</span> (trần tối đa 50% cọc: {((order as any).overdueTracking?.maxLateFeeCap || 0).toLocaleString('vi-VN')}đ).</div>
+                      <div>• <strong>Khóa quyền tạo đơn (T+2h):</strong> {(order as any).overdueTracking?.accountRestrictedAt ? <span style={{ color: '#DC2626', fontWeight: 600 }}>✓ Đã khóa tài khoản khách</span> : <span style={{ color: '#D97706' }}>Tự động khóa nếu trễ ≥ 2h</span>}</div>
+                      <div>• <strong>Đề xuất mất đồ (T+24h):</strong> {(order as any).overdueTracking?.lostItemProposedAt ? <span style={{ color: '#DC2626', fontWeight: 600 }}>⚠️ Đã kích hoạt đề xuất LOST_ITEM</span> : <span style={{ color: '#6B7280' }}>Chờ kích hoạt nếu trễ ≥ 24h</span>}</div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => void handleConfirmLostItem(order._id)}
+                        style={{
+                          backgroundColor: '#DC2626',
+                          color: '#FFF',
+                          border: 'none',
+                          padding: '7px 14px',
+                          borderRadius: '8px',
+                          fontSize: '12.5px',
+                          fontWeight: 650,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        <XCircle size={14} />
+                        <span>Xác nhận mất đồ (LOST_ITEM)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleReverseOverdue(order._id)}
+                        style={{
+                          backgroundColor: '#FFF',
+                          color: '#166534',
+                          border: '1px solid #86EFAC',
+                          padding: '7px 14px',
+                          borderRadius: '8px',
+                          fontSize: '12.5px',
+                          fontWeight: 650,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        <CheckCircle size={14} />
+                        <span>Khách trả áo (Hoàn tác quá hạn)</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Completed Overdue Settlement Summary Banner (Provider) */}
+                {(() => {
+                  const isCompletedOrder = ['COMPLETED', 'RETURNED'].includes(rawStatus);
+                  const resolvedLateFee = Number(
+                    (order as any).overdueTracking?.calculatedLateFee ?? order.pricingSummary?.lateFee ?? 0,
+                  );
+                  const wasOverdue = Boolean((order as any).overdueTracking?.isOverdue) || resolvedLateFee > 0;
+                  if (!isCompletedOrder || !wasOverdue) return null;
+
+                  const depositTotal = Number(order.pricingSummary?.depositTotal ?? 0);
+                  const rawDepositRefunded = (order as any).overdueTracking?.depositRefundedAmount;
+                  const resolvedDepositRefund =
+                    typeof rawDepositRefunded === 'number' && rawDepositRefunded > 0
+                      ? rawDepositRefunded
+                      : Math.max(0, depositTotal - resolvedLateFee);
+                  const minutesOverdue = Number((order as any).overdueTracking?.minutesOverdue || 0);
+
+                  return (
+                    <div
+                      style={{
+                        backgroundColor: '#FFFBEB',
+                        border: '1.5px solid #FCD34D',
+                        borderRadius: '12px',
+                        padding: '14px 16px',
+                        marginBottom: '14px',
+                        boxShadow: '0 2px 8px rgba(217, 119, 6, 0.06)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', gap: '8px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <AlertTriangle size={17} color="#D97706" />
+                          <span style={{ fontSize: '13.5px', fontWeight: 750, color: '#92400E' }}>
+                            ĐỐI SOÁT PHÍ QUÁ HẠN (ĐƠN ĐÃ HOÀN TẤT)
+                          </span>
+                        </div>
+                        {minutesOverdue > 0 && (
+                          <span style={{ fontSize: '11px', fontWeight: 700, color: '#B45309', backgroundColor: '#FEF3C7', padding: '2px 8px', borderRadius: '6px', border: '1px solid #FDE68A' }}>
+                            Trễ {Math.floor(minutesOverdue / 60)}h {minutesOverdue % 60}m
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '12.5px', color: '#78350F', lineHeight: 1.55 }}>
+                        <div>
+                          • Đơn hàng này từng quá hạn trả áo và đã được khấu trừ{' '}
+                          <strong style={{ color: '#B45309' }}>-{resolvedLateFee.toLocaleString('vi-VN')}đ</strong> tiền phạt từ tiền cọc của khách (đã cộng vào ví Shop).
+                        </div>
+                        <div>
+                          • Phần tiền cọc còn lại đã hoàn trả về cho khách hàng:{' '}
+                          <strong style={{ color: '#15803D' }}>{resolvedDepositRefund.toLocaleString('vi-VN')}đ</strong>.
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Lost Item Banner */}
+                {rawStatus === 'LOST_ITEM' && (
+                  <div
+                    style={{
+                      backgroundColor: '#450A0A',
+                      color: '#FFF',
+                      borderRadius: '12px',
+                      padding: '16px',
+                      marginBottom: '14px',
+                      boxShadow: '0 2px 10px rgba(69, 10, 10, 0.2)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                      <XCircle size={20} color="#F87171" />
+                      <span style={{ fontSize: '14px', fontWeight: 700, color: '#FECACA' }}>
+                        ĐƠN HÀNG ĐÃ XÁC NHẬN MẤT TRANG PHỤC (LOST_ITEM)
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '12.5px', color: '#FCA5A5', lineHeight: 1.5 }}>
+                      Toàn bộ tiền cọc đã được chuyển vào ví Shop để bù đắp giá trị áo dài. Tài khoản khách hàng đã bị khóa vĩnh viễn (Blacklist). Hồ sơ hợp đồng điện tử và CCCD của khách đã được lưu vết đối soát.
+                    </div>
+                  </div>
+                )}
+
+                {/* Domino Recovery Banner (Khách B) */}
+                {(order as any).dominoRecovery?.hasConflict && (
+                  <div
+                    style={{
+                      backgroundColor: (order as any).dominoRecovery?.status === 'SWAPPED' ? '#F0FDF4' : '#FFFBEB',
+                      border: `1.5px solid ${(order as any).dominoRecovery?.status === 'SWAPPED' ? '#86EFAC' : '#FCD34D'}`,
+                      borderRadius: '12px',
+                      padding: '14px 16px',
+                      marginBottom: '14px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <Sparkles size={16} color={(order as any).dominoRecovery?.status === 'SWAPPED' ? '#16A34A' : '#D97706'} />
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: (order as any).dominoRecovery?.status === 'SWAPPED' ? '#166534' : '#92400E' }}>
+                        DOMINO RECOVERY CHO KHÁCH THUÊ CA TIẾP THEO
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: (order as any).dominoRecovery?.status === 'SWAPPED' ? '#15803D' : '#78350F', lineHeight: 1.5 }}>
+                      {(order as any).dominoRecovery?.status === 'SWAPPED' && (
+                        <span>✓ Đã tự động điều phối chiếc áo cùng mẫu &amp; size mới tinh trống lịch cho đơn hàng này (Auto-Swap thành công).</span>
+                      )}
+                      {(order as any).dominoRecovery?.status === 'OFFERED' && (
+                        <span>⚠️ Áo ca trước trễ hạn. Hệ thống đã mở đề xuất Top 3 mẫu tương đương cho Khách B (Đếm ngược 60 phút tự động hoàn tiền 100% nếu Shop không kịp bàn giao).</span>
+                      )}
+                      {(order as any).dominoRecovery?.status === 'ACCEPTED_ALTERNATIVE' && (
+                        <span>✓ Khách hàng đã chọn đổi sang mẫu áo tương đương thay thế.</span>
+                      )}
+                      {(order as any).dominoRecovery?.status === 'REFUNDED' && (
+                        <span>✓ Đơn hàng đã tự động hoàn tiền 100% cọc + phí thuê do trang phục ca trước không thể phục vụ.</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Reschedule Alert Banner */}
                 {(pendingRescheduleItem || order.items?.some((i: any) => i?.rescheduleRequest?.status === 'PENDING') || (order as any).hasRescheduleDemo) && (
                   <div className="p-reschedule-box">
@@ -1879,6 +2534,162 @@ export function OrderDetailDrawer({
                     <div className="p-info-item">
                       <span className="info-label">Địa điểm chụp &amp; Giao nhận</span>
                       <span className="info-val">{order.pickupLocation || 'Tại cửa hàng nhà cung cấp'}</span>
+                    </div>
+                    <div className="p-info-item" style={{ gridColumn: '1 / -1' }}>
+                      <span className="info-label">CCCD / Giấy tờ tùy thân</span>
+                      <div className="info-val" style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          {identityCardInfo?.hasIdentityCard || order.customerIdentityCard?.hasIdentityCard || order.customerIdentityCard?.frontImage ? (
+                            <span style={{ color: '#16A34A', fontWeight: 600, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#F0FDF4', border: '1px solid #BBF7D0', padding: '3px 8px', borderRadius: '6px' }}>
+                              <CheckCircle size={13} color="#16A34A" />
+                              <span>
+                                Đã xác thực CCCD
+                                {identityCardInfo?.fullName ? ` • ${identityCardInfo.fullName}` : ''}
+                              </span>
+                            </span>
+                          ) : (
+                            <span style={{ color: '#D97706', fontSize: '12px', fontWeight: 500, background: '#FFFBEB', border: '1px solid #FDE68A', padding: '3px 8px', borderRadius: '6px' }}>
+                              Khách chưa tải CCCD
+                            </span>
+                          )}
+                          {(identityCardInfo?.hasIdentityCard || cccdPreviewUrls.front || cccdPreviewUrls.back) && (
+                            <button
+                              type="button"
+                              onClick={() => void handleViewCccd(order._id)}
+                              style={{
+                                background: '#FFF1F2',
+                                border: '1px solid #FECDD3',
+                                color: '#9F1239',
+                                borderRadius: '6px',
+                                padding: '3px 9px',
+                                fontSize: '11.5px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                              }}
+                              title="Xem phóng to thông tin và ảnh CCCD đối soát bảo mật"
+                            >
+                              <Shield size={12} />
+                              <span>Xem phóng to</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {(cccdPreviewUrls.front || cccdPreviewUrls.back) && (
+                          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                            {cccdPreviewUrls.front && (
+                              <div
+                                onClick={() => void handleViewCccd(order._id)}
+                                title="Bấm để xem ảnh lớn"
+                                style={{
+                                  position: 'relative',
+                                  width: '138px',
+                                  height: '88px',
+                                  borderRadius: '8px',
+                                  overflow: 'hidden',
+                                  border: '1.5px solid #E2E8F0',
+                                  backgroundColor: '#0F172A',
+                                  cursor: 'pointer',
+                                  boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+                                }}
+                              >
+                                <img
+                                  src={cccdPreviewUrls.front}
+                                  alt="CCCD mặt trước"
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(7px)', transform: 'scale(1.08)' }}
+                                />
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    inset: 0,
+                                    background: 'rgba(15, 23, 42, 0.3)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#FFFFFF',
+                                    fontSize: '10.5px',
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  🔒 Đã che • Bấm xem
+                                </div>
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    bottom: 0,
+                                    left: 0,
+                                    right: 0,
+                                    background: 'rgba(15, 23, 42, 0.72)',
+                                    color: '#FFFFFF',
+                                    fontSize: '10.5px',
+                                    fontWeight: 600,
+                                    textAlign: 'center',
+                                    padding: '2px 4px',
+                                  }}
+                                >
+                                  Mặt trước
+                                </div>
+                              </div>
+                            )}
+                            {cccdPreviewUrls.back && (
+                              <div
+                                onClick={() => void handleViewCccd(order._id)}
+                                title="Bấm để xem ảnh lớn"
+                                style={{
+                                  position: 'relative',
+                                  width: '138px',
+                                  height: '88px',
+                                  borderRadius: '8px',
+                                  overflow: 'hidden',
+                                  border: '1.5px solid #E2E8F0',
+                                  backgroundColor: '#0F172A',
+                                  cursor: 'pointer',
+                                  boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+                                }}
+                              >
+                                <img
+                                  src={cccdPreviewUrls.back}
+                                  alt="CCCD mặt sau"
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(7px)', transform: 'scale(1.08)' }}
+                                />
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    inset: 0,
+                                    background: 'rgba(15, 23, 42, 0.3)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#FFFFFF',
+                                    fontSize: '10.5px',
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  🔒 Đã che • Bấm xem
+                                </div>
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    bottom: 0,
+                                    left: 0,
+                                    right: 0,
+                                    background: 'rgba(15, 23, 42, 0.72)',
+                                    color: '#FFFFFF',
+                                    fontSize: '10.5px',
+                                    fontWeight: 600,
+                                    textAlign: 'center',
+                                    padding: '2px 4px',
+                                  }}
+                                >
+                                  Mặt sau
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -3430,6 +4241,52 @@ export function OrderDetailDrawer({
                 >
                   <CheckCircle size={14} />
                   <span>{isConfirmingNoIncident ? 'Đang xử lý...' : '✓ Không có sự cố (Hoàn cọc)'}</span>
+                </button>
+              </>
+            )}
+
+            {['PICKED_UP', 'RETURN_PENDING', 'OVERDUE'].includes(rawStatus) && (
+              <button
+                type="button"
+                onClick={() => void handleSimulateOverdue(order._id)}
+                style={{
+                  backgroundColor: '#FFFBEB',
+                  color: '#B45309',
+                  border: '1px solid #FCD34D',
+                  padding: '7px 12px',
+                  borderRadius: '8px',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                }}
+                title="Giả lập đơn trễ hạn để test luồng trừ tiền trước Hội đồng"
+              >
+                <span>⚡ Demo: Giả lập trễ hạn</span>
+              </button>
+            )}
+
+            {rawStatus === 'OVERDUE' && (
+              <>
+                <button
+                  type="button"
+                  className="p-drawer-danger-btn"
+                  onClick={() => void handleConfirmLostItem(order._id)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <XCircle size={14} />
+                  <span>Xác nhận mất đồ (LOST_ITEM)</span>
+                </button>
+                <button
+                  type="button"
+                  className="p-drawer-primary-btn"
+                  onClick={() => void handleReverseOverdue(order._id)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#16A34A', borderColor: '#16A34A' }}
+                >
+                  <CheckCircle size={14} />
+                  <span>Khách trả áo (Hoàn tác)</span>
                 </button>
               </>
             )}

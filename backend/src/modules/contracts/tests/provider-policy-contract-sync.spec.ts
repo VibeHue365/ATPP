@@ -121,17 +121,17 @@ describe('P0 Verification: Provider Policy Sync into Contract Terms & PDF Genera
       'Bảo quản nơi khô ráo, tránh ánh nắng trực tiếp.',
     );
 
-    // Group B: Late Return (Reference to Part II, faithful to approved numbers)
-    expect(fullText).toContain('ĐIỀU 3: QUY ĐỊNH HOÀN TRẢ VÀ BIỂU PHÍ TRỄ HẠN');
-    expect(fullText).toContain('Phần II');
-    expect(fullText).toContain('Thời gian ân hạn: 2 giờ');
+    // Group B: Late Return & Domino Recovery (Synchronized with overdue/domino rules)
     expect(fullText).toContain(
-      'Biểu phí phạt trễ hạn: Áp dụng tương ứng theo hình thức thuê',
+      'ĐIỀU 3: QUY ĐỊNH HOÀN TRẢ, BIỂU PHÍ QUÁ HẠN VÀ BẢO VỆ LỊCH HẸN',
     );
-    expect(fullText).toMatch(/20\.000\s*đ\/giờ/);
-    expect(fullText).toMatch(/100\.000\s*đ\/ngày/);
-    expect(fullText).toContain('Thời gian trễ tối đa cho phép: 3 ngày.');
-    expect(fullText).toContain('chuyển sang quy trình xử lý vi phạm hợp đồng');
+    expect(fullText).toContain('Phần II');
+    expect(fullText).toContain('không áp dụng thời gian ân hạn miễn phí');
+    expect(fullText).toContain('+10% tiền đặt cọc cho mỗi 30 phút trễ');
+    expect(fullText).toContain('mức trần tối đa bằng 50% tổng tiền đặt cọc');
+    expect(fullText).toContain('tạm khóa quyền tạo đơn thuê mới');
+    expect(fullText).toContain('LOST_ITEM');
+    expect(fullText).toContain('Domino Recovery');
     expect(fullText).not.toContain('tự động coi là mất');
 
     // Group C: Damage Compensation (Clear basis, concrete calculations, NO technical placeholders)

@@ -1312,10 +1312,9 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
               const bType = booking.bookingType || 'PHOTOGRAPHY';
               const depositTotal = booking.pricingSummary?.depositTotal ?? 0;
               const grandTotalRaw = booking.pricingSummary?.grandTotal || booking.paymentSummary?.totalPaid || 0;
-              const subTotalRaw = booking.pricingSummary?.subTotal || grandTotalRaw;
-              const discountAmount = booking.pricingSummary?.discountAmount ?? 0;
-
-              const subTotal = Math.max(0, subTotalRaw - depositTotal);
+              const subTotal =
+                booking.pricingSummary?.subTotal ??
+                Math.max(0, grandTotalRaw - depositTotal);
 
               if (bType === 'PHOTOGRAPHY') {
                 const photoBasePrice = grandTotalRaw || subTotal;
@@ -1346,10 +1345,10 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                       <span style={{ fontWeight: 600, color: '#D97706' }}>{formatCurrency(depositTotal)}</span>
                     </div>
                   )}
-                  {discountAmount > 0 && (
+                  {booking.pricingSummary?.discountAmount > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#27AE60' }}>
                       <span style={{ color: '#27AE60' }}>Giảm giá:</span>
-                      <span style={{ fontWeight: 600, color: '#27AE60' }}>-{formatCurrency(discountAmount)}</span>
+                      <span style={{ fontWeight: 600, color: '#27AE60' }}>-{formatCurrency(booking.pricingSummary.discountAmount)}</span>
                     </div>
                   )}
                 </>
@@ -1368,7 +1367,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                 {formatCurrency(
                   (booking.bookingType || 'PHOTOGRAPHY') === 'PHOTOGRAPHY'
                     ? (booking.pricingSummary?.grandTotal || booking.paymentSummary?.totalPaid)
-                    : (Math.max(0, (booking.pricingSummary?.subTotal || booking.pricingSummary?.grandTotal || 0) - (booking.pricingSummary?.depositTotal ?? 0)) + (booking.pricingSummary?.depositTotal ?? 0) + (booking.pricingSummary?.serviceFee ?? 0) - (booking.pricingSummary?.discountAmount ?? 0))
+                    : (booking.pricingSummary?.grandTotal || ((booking.pricingSummary?.subTotal ?? 0) + (booking.pricingSummary?.depositTotal ?? 0) + (booking.pricingSummary?.serviceFee ?? 0) - (booking.pricingSummary?.discountAmount ?? 0)))
                 )}
               </span>
             </div>

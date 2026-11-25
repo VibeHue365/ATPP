@@ -1060,4 +1060,136 @@ export class RentalFulfillmentWorkflowService {
   ): RentalActorSnapshot {
     return { id: user.sub, role };
   }
+
+  async resolveBookingAccess(bookingId: string, user: AuthUser) {
+    if (!Types.ObjectId.isValid(bookingId) || !Types.ObjectId.isValid(user.sub)) {
+      throw new BadRequestException('Mã đơn hoặc tài khoản không hợp lệ.');
+    }
+    const booking = await this.bookingModel
+      .findById(new Types.ObjectId(bookingId))
+      .lean()
+      .exec();
+    if (!booking) throw new NotFoundException('Không tìm thấy đơn hàng.');
+
+    if (this.isAdmin(user)) {
+      return { booking, role: 'ADMIN' };
+    }
+    if (booking.customerId?.toString() === user.sub) {
+      return { booking, role: 'CUSTOMER' };
+    }
+    const provider = await this.providerModel
+      .findOne({
+        _id: { $in: booking.providerIds },
+        userId: new Types.ObjectId(user.sub),
+      })
+      .lean()
+      .exec();
+    if (provider) {
+      return { booking, role: 'PROVIDER', providerId: provider._id };
+    }
+    throw new ForbiddenException(
+      'Bạn không có quyền truy cập thông tin danh tính của đơn hàng này.',
+    );
+  }
+
+  async saveCustomerIdentityCard(
+    bookingId: string,
+    user: AuthUser,
+    data: {
+      frontStorageKey?: string;
+      backStorageKey?: string;
+      idNumber?: string;
+      fullName?: string;
+      notes?: string;
+    },
+  ) {
+    const { booking, role } = await this.resolveBookingAccess(bookingId, user);
+    const existingCard =
+      (booking as any).customerIdentityCard &&
+      typeof (booking as any).customerIdentityCard === 'object'
+        ? (booking as any).customerIdentityCard
+        : {};
+
+    const nextCard: Record<string, any> = {
+      ...existingCard,
+      capturedAt: new Date(),
+      capturedBy: role,
+    };
+    if (data.frontStorageKey) nextCard.frontImage = data.frontStorageKey;
+    if (data.backStorageKey) nextCard.backImage = data.backStorageKey;
+    if (data.idNumber !== undefined)
+      nextCard.idNumber = data.idNumber?.trim() || null;
+    if (data.fullName !== undefined)
+      nextCard.fullName = data.fullName?.trim() || null;
+    if (data.notes !== undefined) nextCard.notes = data.notes?.trim() || null;
+
+    await this.bookingModel.updateOne(
+      { _id: booking._id },
+      { $set: { customerIdentityCard: nextCard } },
+    );
+    return {
+      success: true,
+      message: 'Đã lưu thông tin CCCD khách hàng an toàn.',
+    };
+  }
+
+  async getCustomerIdentityCard(bookingId: string, user: AuthUser) {
+    const { booking } = await this.resolveBookingAccess(bookingId, user);
+    const card = (booking as any).customerIdentityCard;
+    if (!card || (!card.frontImage && !card.backImage)) {
+      return {
+        hasIdentityCard: false,
+        idNumberMasked: null,
+        fullName: null,
+        capturedAt: null,
+        capturedBy: null,
+        hasFrontImage: false,
+        hasBackImage: false,
+      };
+    }
+    const rawId = card.idNumber || '';
+    const idNumberMasked =
+      rawId.length >= 8
+        ? `${rawId.slice(0, 3)}******${rawId.slice(-3)}`
+        : rawId
+          ? '******'
+          : null;
+
+    return {
+      hasIdentityCard: true,
+      hasFrontImage: Boolean(card.frontImage),
+      hasBackImage: Boolean(card.backImage),
+      idNumberMasked,
+      idNumber: rawId || null,
+      fullName: card.fullName || null,
+      capturedAt: card.capturedAt || null,
+      capturedBy: card.capturedBy || null,
+      notes: card.notes || null,
+      frontUrl: card.frontImage
+        ? `/api/bookings/${bookingId}/customer-identity/image/front`
+        : null,
+      backUrl: card.backImage
+        ? `/api/bookings/${bookingId}/customer-identity/image/back`
+        : null,
+    };
+  }
+
+  async getCustomerIdentityImage(
+    bookingId: string,
+    side: 'front' | 'back',
+    user: AuthUser,
+  ) {
+    const { booking } = await this.resolveBookingAccess(bookingId, user);
+    const card = (booking as any).customerIdentityCard;
+    const storageKey = side === 'front' ? card?.frontImage : card?.backImage;
+    if (!storageKey) {
+      throw new NotFoundException(
+        `Không tìm thấy ảnh mặt ${side === 'front' ? 'trước' : 'sau'} CCCD.`,
+      );
+    }
+    return {
+      bucket: 'rental-fulfillment-private',
+      storageKey,
+    };
+  }
 }

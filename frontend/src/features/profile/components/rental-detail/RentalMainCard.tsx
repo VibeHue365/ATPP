@@ -468,34 +468,36 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({
           </div>
         </div>
 
-        {/* Due Date Alert Banner */}
-        <div
-          style={{
-            backgroundColor: '#FFF7EE',
-            border: '1px solid #FED7AA',
-            borderRadius: '12px',
-            padding: '12px 18px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '16px',
-            flexWrap: 'wrap'
-          }}
-        >
-          <div>
-            <span style={{ fontSize: '11px', color: '#9A3412', fontWeight: 600, display: 'block' }}>Hạn trả</span>
-            <span style={{ fontSize: '14.5px', fontWeight: 800, color: '#231F20' }}>
-              {rentalData.dueTime}
-            </span>
-          </div>
+        {/* Due Date Alert Banner (chỉ hiện khi đơn chưa kết thúc) */}
+        {!['COMPLETED', 'CANCELLED', 'RETURNED', 'LOST_ITEM'].includes(rentalData.status) && (
+          <div
+            style={{
+              backgroundColor: '#FFF7EE',
+              border: '1px solid #FED7AA',
+              borderRadius: '12px',
+              padding: '12px 18px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '16px',
+              flexWrap: 'wrap'
+            }}
+          >
+            <div>
+              <span style={{ fontSize: '11px', color: '#9A3412', fontWeight: 600, display: 'block' }}>Hạn trả</span>
+              <span style={{ fontSize: '14.5px', fontWeight: 800, color: '#231F20' }}>
+                {rentalData.dueTime}
+              </span>
+            </div>
 
-          <div style={{ textAlign: 'right' }}>
-            <span style={{ fontSize: '11px', color: '#C2410C', fontWeight: 700, display: 'block' }}>Còn lại</span>
-            <span style={{ fontSize: '17px', fontWeight: 900, color: '#EA580C' }}>
-              {rentalData.remainingTime}
-            </span>
+            <div style={{ textAlign: 'right' }}>
+              <span style={{ fontSize: '11px', color: '#C2410C', fontWeight: 700, display: 'block' }}>Còn lại</span>
+              <span style={{ fontSize: '17px', fontWeight: 900, color: '#EA580C' }}>
+                {rentalData.remainingTime}
+              </span>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* 3. Phần nổi lên về kiểm tra và bàn giao trang phục ở phần tổng quan */}
@@ -608,7 +610,7 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({
                   return (
                     <div
                       key={index}
-                      onClick={() => pickupInspection.onViewPhoto?.(resolvedUrl)}
+                      onClick={pickupInspection.onViewPhoto ? () => pickupInspection.onViewPhoto?.(resolvedUrl) : undefined}
                       style={{
                         width: '76px',
                         height: '76px',
@@ -616,11 +618,10 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({
                         overflow: 'hidden',
                         border: '1.5px solid #FCD34D',
                         boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
-                        cursor: 'pointer',
+                        cursor: pickupInspection.onViewPhoto ? 'pointer' : 'default',
                         position: 'relative',
                         backgroundColor: '#F8F5F1'
                       }}
-                      title="Bấm để xem ảnh lớn"
                     >
                       {fileId && pickupInspection.bookingId && pickupInspection.itemId ? (
                         <RentalEvidenceImage

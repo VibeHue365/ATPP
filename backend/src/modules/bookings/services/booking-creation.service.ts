@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   Inject,
@@ -446,6 +447,7 @@ export class BookingCreationService {
     session.startTransaction();
 
     const customerId = new Types.ObjectId(userIdStr);
+    await this.assertCustomerNotRestricted(customerId);
     const bookingCode = `B${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
 
     let subTotal = 0;
@@ -1424,6 +1426,7 @@ export class BookingCreationService {
   ): Promise<BookingDocument> {
     const session = await this.bookingsRepository.startSession();
     session.startTransaction();
+    await this.assertCustomerNotRestricted(customerId);
 
     const {
       productId,
@@ -2039,6 +2042,7 @@ export class BookingCreationService {
   ): Promise<BookingDocument> {
     const session = await this.bookingsRepository.startSession();
     session.startTransaction();
+    await this.assertCustomerNotRestricted(customerId);
 
     const {
       packageId,
@@ -2250,6 +2254,29 @@ export class BookingCreationService {
       throw err;
     } finally {
       await session.endSession();
+    }
+  }
+
+  private async assertCustomerNotRestricted(
+    customerId: Types.ObjectId | string,
+  ): Promise<void> {
+    try {
+      const userModel = this.bookingModel?.db?.model('User');
+      if (!userModel) return;
+      const userDoc: any = await userModel
+        .findById(customerId)
+        .select('isRestricted restrictedReason accountStatus')
+        .lean()
+        .exec();
+      if (userDoc?.isRestricted || userDoc?.accountStatus === 'BANNED') {
+        throw new ForbiddenException(
+          userDoc.restrictedReason ||
+            'Tài khoản của bạn đang bị hạn chế đặt đơn mới do có đơn thuê trang phục quá hạn chưa hoàn tất xử lý. Vui lòng liên hệ sàn TàGo để được hỗ trợ.',
+        );
+      }
+    } catch (err) {
+      if (err instanceof ForbiddenException) throw err;
+      // if model not registered or in isolated unit test, ignore
     }
   }
 }

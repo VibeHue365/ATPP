@@ -42,8 +42,9 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
   const item = booking?.items?.[0] || {};
   const pkgObj = item.photographyPackageId && typeof item.photographyPackageId === 'object' ? item.photographyPackageId : null;
   const provider =
-    (booking?.providerIds && booking.providerIds[0] && typeof booking.providerIds[0] === 'object' ? booking.providerIds[0] : null) ||
     (item.providerId && typeof item.providerId === 'object' ? item.providerId : null) ||
+    (pkgObj?.providerId && typeof pkgObj.providerId === 'object' ? pkgObj.providerId : null) ||
+    (booking?.providerIds && booking.providerIds[0] && typeof booking.providerIds[0] === 'object' ? booking.providerIds[0] : null) ||
     {};
 
   const title = pkgObj?.name || item.packageSnapshot?.name || item.name || 'Gói Chụp Ảnh Nghệ Thuật';

@@ -3649,7 +3649,8 @@ export class BookingsService implements OnApplicationBootstrap {
     }
 
     if (userId) {
-      const isAdmin = roles?.includes('ADMIN') || roles?.includes('admin');
+      const isAdmin =
+        roles?.some((r) => String(r).toUpperCase() === 'ADMIN') || false;
       // customerId has been populated into a User object, so extract _id safely
       const customerIdRaw =
         (booking.customerId as any)?._id || booking.customerId;
@@ -3659,8 +3660,8 @@ export class BookingsService implements OnApplicationBootstrap {
         userId: new Types.ObjectId(userId),
       });
       const userProviderIds = userProviders.map((p) => p._id.toString());
-      const isProvider = booking.providerIds.some((id) =>
-        userProviderIds.includes(id.toString()),
+      const isProvider = booking.providerIds.some((p: any) =>
+        userProviderIds.includes(((p as any)?._id || p).toString()),
       );
 
       if (!isAdmin && !isCustomer && !isProvider) {
@@ -4236,6 +4237,8 @@ export class BookingsService implements OnApplicationBootstrap {
       ],
       [BookingStatus.PickedUp]: [
         BookingStatus.ReturnPending,
+        BookingStatus.Overdue,
+        BookingStatus.LostItem,
         BookingStatus.Disputed,
         BookingStatus.Returned,
         BookingStatus.InProgress,
@@ -4243,8 +4246,21 @@ export class BookingsService implements OnApplicationBootstrap {
       ],
       [BookingStatus.ReturnPending]: [
         BookingStatus.Returned,
+        BookingStatus.Overdue,
+        BookingStatus.LostItem,
         BookingStatus.InProgress,
         BookingStatus.AwaitingReview,
+        BookingStatus.Disputed,
+      ],
+      [BookingStatus.Overdue]: [
+        BookingStatus.Returned,
+        BookingStatus.LostItem,
+        BookingStatus.Disputed,
+        BookingStatus.Completed,
+      ],
+      [BookingStatus.LostItem]: [
+        BookingStatus.Returned,
+        BookingStatus.Completed,
         BookingStatus.Disputed,
       ],
       [BookingStatus.Returned]: [
