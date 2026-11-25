@@ -143,6 +143,7 @@ export class RentalFulfillmentWorkflowService {
       note: input.note,
       conditionNote: input.conditionNote,
     });
+    await this.emitBookingRefresh(access.bookingId);
     return updated;
   }
 
@@ -591,6 +592,39 @@ export class RentalFulfillmentWorkflowService {
       bookingCode: booking.bookingCode,
       status: nextStatus || booking.status,
     }, recipientUserIds);
+  }
+
+  private async emitBookingRefresh(bookingId: Types.ObjectId): Promise<void> {
+    if (!this.notificationsService) return;
+    try {
+      const booking = await this.bookingModel
+        .findById(bookingId)
+        .select({ bookingCode: 1, status: 1, customerId: 1, providerIds: 1 })
+        .lean()
+        .exec();
+      if (!booking) return;
+
+      const recipientUserIds = booking.customerId ? [booking.customerId.toString()] : [];
+      const providerIds = (booking.providerIds || []).map((id: any) => (id?._id || id).toString());
+      if (providerIds.length > 0) {
+        const providers = await this.providerModel
+          .find({ _id: { $in: providerIds } })
+          .select({ userId: 1 })
+          .lean()
+          .exec();
+        providers.forEach((provider) => {
+          if (provider.userId) recipientUserIds.push(provider.userId.toString());
+        });
+      }
+
+      this.notificationsService.emitBookingUpdate({
+        bookingId: bookingId.toString(),
+        bookingCode: booking.bookingCode,
+        status: booking.status,
+      }, recipientUserIds);
+    } catch (error) {
+      console.warn(`Failed to emit booking refresh after pickup evidence ${bookingId}:`, error);
+    }
   }
 
   private requireOperationalBooking(status: BookingStatus, action: string): void {

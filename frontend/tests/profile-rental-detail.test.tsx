@@ -204,6 +204,26 @@ describe('Customer Pickup Inspection and Reporting Workflow Suite', () => {
     expect(screen.getAllByText(/Từ chối nhận áo/i).length).toBeGreaterThan(0);
   });
 
+  it('reconciles private pickup evidence when the booking payload has no handover photos', async () => {
+    const readyBooking = {
+      ...mockBookingWithObjectAddress,
+      status: 'READY_FOR_PICKUP',
+      handoverPhotos: [],
+    };
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('/rental/evidence')) {
+        return Promise.resolve({ pickup: [{ fileId: 'private-pickup-1', type: 'IMAGE' }] });
+      }
+      return Promise.resolve(null);
+    });
+
+    render(<ProfileRentalDetailPage booking={readyBooking} onBack={() => {}} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Ảnh bàn giao từ Shop \(1 ảnh\):/i)).toBeDefined();
+    });
+  });
+
   it('3. Confirm pickup flow calls customer-confirm-pickup and triggers refresh', async () => {
     const onRefreshBooking = vi.fn();
     mockPost.mockImplementation((url: string) => {

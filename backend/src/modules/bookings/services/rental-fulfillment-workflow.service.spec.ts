@@ -18,7 +18,7 @@ describe('RentalFulfillmentWorkflowService', () => {
   const customerId = new Types.ObjectId();
   const providerUserId = new Types.ObjectId();
   const otherProviderUserId = new Types.ObjectId();
-  const booking = { _id: bookingId, customerId, status: 'CONFIRMED' };
+  const booking = { _id: bookingId, customerId, providerIds: [providerId], bookingCode: 'BK-001', status: 'CONFIRMED' };
   const item = {
     _id: itemId,
     bookingId,
@@ -28,7 +28,7 @@ describe('RentalFulfillmentWorkflowService', () => {
   };
   const providerUser = { sub: providerUserId.toString(), roles: ['PROVIDER'] } as any;
 
-  function setup(providerMatch = true) {
+  function setup(providerMatch = true, withNotifications = false) {
     const inventoryItemModel = {
       updateOne: jest.fn(() => ({ exec: async () => ({ modifiedCount: 1 }) })),
       updateMany: jest.fn(() => ({ exec: async () => ({ modifiedCount: 1 }) })),
@@ -56,6 +56,7 @@ describe('RentalFulfillmentWorkflowService', () => {
     };
     const providerModel = {
       findOne: jest.fn(() => query(providerMatch ? { _id: providerId } : null)),
+      find: jest.fn(() => query([{ _id: providerId, userId: providerUserId }])),
     };
     const evidenceModel = {
       find: jest.fn(() => query([])),
@@ -76,6 +77,7 @@ describe('RentalFulfillmentWorkflowService', () => {
     const timeEngineService = {
       calculateReturnAvailableFrom: jest.fn().mockReturnValue(new Date('2026-11-20T10:00:00.000Z')),
     };
+    const notifications = { emitBookingUpdate: jest.fn() };
 
     return {
       service: new RentalFulfillmentWorkflowService(
@@ -88,6 +90,8 @@ describe('RentalFulfillmentWorkflowService', () => {
         { settleBooking: jest.fn() } as any,
         slotLeaseService as any,
         timeEngineService as any,
+        undefined,
+        withNotifications ? notifications as any : undefined,
       ),
       fulfillment,
       evidenceModel,
@@ -96,6 +100,7 @@ describe('RentalFulfillmentWorkflowService', () => {
       itemModel,
       slotLeaseService,
       timeEngineService,
+      notifications,
     };
   }
 
@@ -139,6 +144,18 @@ describe('RentalFulfillmentWorkflowService', () => {
     expect(evidenceModel.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ fileId: { $in: ['owned-file'] }, consumedAt: null }),
       expect.objectContaining({ $set: expect.objectContaining({ consumedFor: 'PICKUP' }) }),
+    );
+  });
+
+  it('notifies the customer to refresh after the shop submits pickup evidence', async () => {
+    const { service, evidenceModel, notifications } = setup(true, true);
+    evidenceModel.find.mockReturnValue(query([{ fileId: 'owned-file' }]));
+
+    await service.markPickedUp(bookingId.toString(), itemId.toString(), providerUser, { fileIds: ['owned-file'] });
+
+    expect(notifications.emitBookingUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ bookingId: bookingId.toString(), bookingCode: 'BK-001' }),
+      expect.arrayContaining([customerId.toString(), providerUserId.toString()]),
     );
   });
   it('passes an allowed final inventory state only after authorization', async () => {

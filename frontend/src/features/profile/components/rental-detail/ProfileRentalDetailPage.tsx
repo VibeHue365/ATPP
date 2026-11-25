@@ -72,6 +72,27 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
   }, [socket, booking?._id, fetchIncidentDetails, onRefreshBooking]);
 
   const item = booking?.items?.[0] || {};
+  const bookingId = booking?._id?.toString() || '';
+  const itemId = item?._id?.toString() || '';
+  const evidenceKey = `${bookingId}:${itemId}`;
+  const [pickupEvidenceSummary, setPickupEvidenceSummary] = React.useState<{ key: string; files: any[] }>({ key: '', files: [] });
+
+  React.useEffect(() => {
+    if (!bookingId || !itemId) return;
+    let active = true;
+    httpClient
+      .get<{ pickup?: any[] }>(`/api/bookings/${bookingId}/items/${itemId}/rental/evidence`)
+      .then((summary) => {
+        if (active) setPickupEvidenceSummary({ key: evidenceKey, files: summary?.pickup || [] });
+      })
+      .catch(() => {
+        if (active) setPickupEvidenceSummary({ key: evidenceKey, files: [] });
+      });
+    return () => {
+      active = false;
+    };
+  }, [bookingId, itemId, evidenceKey, booking?.updatedAt]);
+
   const isPhoto = item.itemType === 'PHOTOGRAPHY_PACKAGE';
   const pkgObj = item.photographyPackageId && typeof item.photographyPackageId === 'object' ? item.photographyPackageId : null;
   const prodObj = !isPhoto && item.productId && typeof item.productId === 'object' ? item.productId : null;
@@ -603,10 +624,9 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
   ];
 
   // Photos
-  const bookingId = booking?._id?.toString() || '';
-  const itemId = item?._id?.toString() || '';
-
-  const pickupFiles = item?.rentalFulfillment?.pickupEvidence?.files || [];
+  const persistedPickupFiles = item?.rentalFulfillment?.pickupEvidence?.files || [];
+  const reconciledPickupFiles = pickupEvidenceSummary.key === evidenceKey ? pickupEvidenceSummary.files : [];
+  const pickupFiles = persistedPickupFiles.length > 0 ? persistedPickupFiles : reconciledPickupFiles;
   const returnFiles = item?.rentalFulfillment?.returnEvidence?.files || [];
 
   const photos: any[] = [];
