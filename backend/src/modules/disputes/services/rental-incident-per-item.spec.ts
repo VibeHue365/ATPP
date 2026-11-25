@@ -612,7 +612,7 @@ describe('Rental Incident Per-Item Isolation & Workflow Guards', () => {
     let controller: RentalFulfillmentController;
 
     beforeEach(() => {
-      controller = new RentalFulfillmentController(null as any, null as any);
+      controller = new RentalFulfillmentController(null as any, null as any, null as any);
     });
 
     it('throws BadRequestException for proposeCharge', () => {

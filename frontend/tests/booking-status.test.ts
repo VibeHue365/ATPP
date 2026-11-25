@@ -24,8 +24,8 @@ import {
 } from '../src/features/provider-dashboard/orders/orderHelpers';
 
 describe('bookingStatus canonical helpers', () => {
-  it('covers all 16 canonical booking statuses with Vietnamese labels', () => {
-    expect(BOOKING_STATUS_CODES).toHaveLength(16);
+  it('covers all 18 canonical booking statuses with Vietnamese labels', () => {
+    expect(BOOKING_STATUS_CODES).toHaveLength(18);
     for (const code of BOOKING_STATUS_CODES) {
       const meta = BOOKING_STATUS_META[code];
       expect(meta.code).toBe(code);
@@ -47,6 +47,8 @@ describe('bookingStatus canonical helpers', () => {
     expect(getBookingStatusGroup('COMPLETED')).toBe('COMPLETED');
     expect(getBookingStatusGroup('REFUNDED')).toBe('DISPUTED');
     expect(getBookingStatusGroup('DISPUTED')).toBe('DISPUTED');
+    expect(getBookingStatusGroup('OVERDUE')).toBe('ACTIVE');
+    expect(getBookingStatusGroup('LOST_ITEM')).toBe('CANCELLED');
 
     expect(getBookingStatusLabel('RETURN_PENDING', { hasPendingIncident: true })).toBe(
       'Chờ khách duyệt sự cố',
@@ -69,7 +71,7 @@ describe('bookingStatus canonical helpers', () => {
   });
 
   it('covers non-booking status domains cleanly', () => {
-    expect(Object.keys(RENTAL_FULFILLMENT_STATUS_META)).toHaveLength(7);
+    expect(Object.keys(RENTAL_FULFILLMENT_STATUS_META)).toHaveLength(9);
     expect(Object.keys(PAYMENT_TX_STATUS_META)).toEqual(
       expect.arrayContaining(['PENDING', 'PROCESSING', 'SUCCESS', 'PAID', 'FAILED', 'CANCELLED']),
     );

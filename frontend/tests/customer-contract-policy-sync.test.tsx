@@ -111,12 +111,13 @@ describe('P0 Verification: Customer Contract A4 Preview reflects Approved Provid
     expect(fullText).toContain('Xịt nước hoa trực tiếp lên tơ tằm; Dùng kim băng kim loại làm tưa lụa; Tự ý cắt chỉ hoặc sửa chữa phom dáng.');
     expect(fullText).toContain('Bảo quản nơi khô ráo, tránh ánh nắng trực tiếp.');
 
-    // Group B: Late Return
-    expect(fullText).toContain('QUY ĐỊNH HOÀN TRẢ VÀ BIỂU PHÍ TRỄ HẠN');
-    expect(fullText).toContain('2 giờ');
-    expect(fullText).toMatch(/20\.000\s*đ\/giờ/);
-    expect(fullText).toMatch(/100\.000\s*đ\/ngày/);
-    expect(fullText).toContain('3 ngày');
+    // Group B: Late Return follows the platform-wide overdue rules (late fee, account restriction, LOST_ITEM, Domino)
+    expect(fullText).toContain('QUY ĐỊNH HOÀN TRẢ, BIỂU PHÍ QUÁ HẠN VÀ BẢO VỆ LỊCH HẸN');
+    expect(fullText).toContain('+10% tiền đặt cọc cho mỗi 30 phút trễ');
+    expect(fullText).toContain('mức trần tối đa bằng 50% tổng tiền đặt cọc');
+    expect(fullText).toContain('2 giờ (T+2h)');
+    expect(fullText).toContain('Mất trang phục (LOST_ITEM)');
+    expect(fullText).toContain('Cơ chế Domino Recovery');
 
     // Group C: Damage Compensation
     expect(fullText).toContain('BỒI THƯỜNG HƯ HỎNG, MẤT MÁT');
