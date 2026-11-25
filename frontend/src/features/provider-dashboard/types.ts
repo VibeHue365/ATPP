@@ -89,6 +89,14 @@ export interface Product {
   moderationStatus?: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED' | 'HIDDEN';
   moderationReason?: string | null;
   taggingDecisionVersion?: number;
+  rentalPriceSuggestion?: {
+    rentalCount: number;
+    condition: 'NEW' | 'GOOD' | 'MINOR_DAMAGE' | 'LOCKED' | 'RETIRED' | null;
+    eligible: boolean;
+    discountPercent: number;
+    suggestedPrice: number | null;
+    reason: string | null;
+  };
 }
 
 export interface PortfolioItem {

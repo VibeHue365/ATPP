@@ -37,6 +37,7 @@ import {
   PriceTargetType,
   PriceVersion,
 } from '../schemas/price-version.schema';
+import { buildRentalPriceSuggestion, RentalCondition } from './rental-price-suggestion';
 
 @Injectable()
 export class ProductsService implements OnModuleInit {
@@ -437,12 +438,52 @@ export class ProductsService implements OnModuleInit {
       user.provider.providerId,
     );
 
+    const insights = await this.getRentalPriceInsights(result.items.map((product) => product._id));
     const items = result.items.map((product) => {
       const plain = product.toObject() as any;
+      const insight = insights.get(product._id.toString());
+      plain.rentalPriceSuggestion = buildRentalPriceSuggestion(
+        plain.basePrice,
+        insight?.rentalCount ?? 0,
+        insight?.condition ?? null,
+      );
       return this.attachCampaign(plain, campaign);
     });
 
     return { items, total: result.total };
+  }
+
+  private async getRentalPriceInsights(productIds: Types.ObjectId[]) {
+    const result = new Map<string, { rentalCount: number; condition: RentalCondition | null }>();
+    if (productIds.length === 0 || !this.connection.db) return result;
+    const [rentalRows, conditionRows] = await Promise.all([
+      this.connection.db.collection('booking_items').aggregate([
+        { $match: { productId: { $in: productIds }, itemType: 'PRODUCT' } },
+        { $lookup: { from: 'bookings', localField: 'bookingId', foreignField: '_id', as: 'booking' } },
+        { $unwind: '$booking' },
+        { $match: { 'booking.status': { $in: ['PICKED_UP', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'] } } },
+        { $group: { _id: '$productId', rentalCount: { $sum: { $ifNull: ['$quantity', 1] } } } },
+      ]).toArray(),
+      this.connection.db.collection('inventory_items').aggregate([
+        { $match: { productId: { $in: productIds }, variantRemovedAt: null } },
+        { $addFields: { conditionRank: { $switch: { branches: [
+          { case: { $eq: ['$conditionStatus', 'RETIRED'] }, then: 5 },
+          { case: { $eq: ['$conditionStatus', 'LOCKED'] }, then: 4 },
+          { case: { $eq: ['$conditionStatus', 'MINOR_DAMAGE'] }, then: 3 },
+          { case: { $eq: ['$conditionStatus', 'GOOD'] }, then: 2 },
+        ], default: 1 } } } },
+        { $sort: { conditionRank: -1 } },
+        { $group: { _id: '$productId', condition: { $first: '$conditionStatus' } } },
+      ]).toArray(),
+    ]);
+    for (const row of rentalRows) result.set(row._id.toString(), { rentalCount: row.rentalCount, condition: null });
+    for (const row of conditionRows) {
+      const key = row._id.toString();
+      const current = result.get(key) ?? { rentalCount: 0, condition: null };
+      current.condition = row.condition as RentalCondition;
+      result.set(key, current);
+    }
+    return result;
   }
 
   async getMyProductPriceHistory(

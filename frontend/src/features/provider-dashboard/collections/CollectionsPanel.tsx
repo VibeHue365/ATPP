@@ -650,6 +650,15 @@ export function CollectionsPanel({
                             <div className="ps-card-deposit" style={{ color: p.replacementValue ? '#047857' : '#9CA3AF', fontSize: '11px', fontWeight: 600 }}>
                               Bồi hoàn HĐ: {p.replacementValue ? `${p.replacementValue.toLocaleString('vi-VN')}đ` : 'Chưa có'}
                             </div>
+                            {p.rentalPriceSuggestion?.eligible && (
+                              <button
+                                type="button"
+                                onClick={(event) => { event.stopPropagation(); openEditModal(p); }}
+                                style={{ marginTop: 6, border: '1px solid #F59E0B', borderRadius: 6, background: '#FFFBEB', color: '#92400E', padding: '4px 7px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                              >
+                                Đề xuất giảm {p.rentalPriceSuggestion.discountPercent}% sau {p.rentalPriceSuggestion.rentalCount} lượt thuê
+                              </button>
+                            )}
                           </div>
 
                           <button

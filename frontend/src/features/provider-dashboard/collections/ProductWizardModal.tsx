@@ -662,6 +662,18 @@ export function ProductWizardModal({
                   </div>
                 </div>
 
+                {editingProduct?.rentalPriceSuggestion?.eligible && editingProduct.rentalPriceSuggestion.suggestedPrice != null && (
+                  <div style={{ margin: '0 0 16px', padding: '12px 14px', borderRadius: 10, border: '1px solid #F59E0B', background: '#FFFBEB', color: '#78350F' }}>
+                    <strong>Đề xuất điều chỉnh giá sau {editingProduct.rentalPriceSuggestion.rentalCount} lượt thuê</strong>
+                    <p style={{ margin: '5px 0 10px', fontSize: 12.5 }}>
+                      Tình trạng kho: {editingProduct.rentalPriceSuggestion.condition}. Hệ thống đề xuất giảm {editingProduct.rentalPriceSuggestion.discountPercent}% còn {editingProduct.rentalPriceSuggestion.suggestedPrice.toLocaleString('vi-VN')}đ/ngày. Đây chỉ là đề xuất, Shop có thể sửa lại giá trước khi lưu.
+                    </p>
+                    <button type="button" onClick={() => setProdBasePrice(String(editingProduct.rentalPriceSuggestion!.suggestedPrice))} style={{ border: 0, borderRadius: 7, padding: '7px 11px', background: '#92400E', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>
+                      Áp dụng giá đề xuất
+                    </button>
+                  </div>
+                )}
+
                 {/* Replacement Value Row */}
                 <div className="pwm-form-row">
                   <div className="pwm-form-group" style={{ flex: '1 1 100%' }}>
