@@ -1509,7 +1509,7 @@ export function ProductWizardModal({
                     <h4>2. Thiết lập biến thể &amp; Tồn kho</h4>
                     <p>Tạo các biến thể (size, màu sắc, chất liệu) và khai báo số lượng hiện có trong kho.</p>
                     <p className="pwm-size-chart-step-hint">
-                      Chọn size và màu, kiểm tra ma trận biến thể, rồi lưu nháp để nhập số đo hoặc tải ảnh bảng size ngay tại bước này.
+                      Chọn size và màu, kiểm tra danh sách biến thể, rồi lưu nháp để nhập số đo hoặc tải ảnh bảng size ngay tại bước này.
                     </p>
                   </div>
 
@@ -1613,11 +1613,11 @@ export function ProductWizardModal({
                   <div className="pwm-matrix-card" inert={Boolean(createdDraftId)}>
                     <div className="pwm-matrix-header">
                       <div className="pwm-matrix-header-info">
-                        <h4>Ma trận biến thể ({variants.length})</h4>
+                        <h4>Danh sách biến thể ({variants.length})</h4>
                         <p>
                           {variants.length > 0
                             ? 'Bạn có thể trực tiếp đổi Màu, Kích cỡ, Chất liệu, chỉnh số lượng hoặc xóa bất kỳ biến thể nào.'
-                            : 'Chưa có biến thể nào. Chọn kích cỡ và màu sắc ở trên để sinh tự động, hoặc bấm "Thêm biến thể thủ công".'}
+                            : 'Chưa có biến thể nào. Chọn kích cỡ và màu sắc ở trên để tạo tự động, hoặc bấm "Thêm biến thể thủ công".'}
                         </p>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1636,10 +1636,10 @@ export function ProductWizardModal({
                           type="button"
                           onClick={handleRegenerateMatrix}
                           className="pwm-matrix-regen-btn"
-                          title="Sinh lại tổ hợp biến thể từ thuộc tính đã chọn"
+                          title="Tạo lại đủ các tổ hợp size × màu × chất liệu đã chọn ở trên. Số lượng đã nhập được giữ nguyên."
                         >
                           <RefreshCw size={13} />
-                          <span>Sinh lại ma trận</span>
+                          <span>Tạo lại bảng biến thể</span>
                         </button>
                       </div>
                     </div>
