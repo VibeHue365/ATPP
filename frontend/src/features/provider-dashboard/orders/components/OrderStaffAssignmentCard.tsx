@@ -271,7 +271,7 @@ export const OrderStaffAssignmentCard: React.FC<
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' }}>
             {schedule.checkedInAt && (
               <span
                 style={{
@@ -286,6 +286,38 @@ export const OrderStaffAssignmentCard: React.FC<
                 Check-in: {formatTime(schedule.checkedInAt)}
               </span>
             )}
+            {schedule.checkInPhotoUrl && (
+              <a
+                href={schedule.checkInPhotoUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  background: '#FFFFFF',
+                  color: '#8E1B2E',
+                  border: '1px solid #F0DADC',
+                  padding: '2px 8px 2px 3px',
+                  borderRadius: '999px',
+                  textDecoration: 'none',
+                }}
+              >
+                <img
+                  src={schedule.checkInPhotoUrl}
+                  alt="Ảnh check-in"
+                  style={{
+                    width: '18px',
+                    height: '18px',
+                    borderRadius: '999px',
+                    objectFit: 'cover',
+                  }}
+                />
+                <span>Ảnh check-in</span>
+              </a>
+            )}
             {schedule.shootFinishedAt && (
               <span
                 style={{
@@ -297,7 +329,7 @@ export const OrderStaffAssignmentCard: React.FC<
                   borderRadius: '999px',
                 }}
               >
-                Chụp xong: {formatTime(schedule.shootFinishedAt)}
+                Check-out: {formatTime(schedule.shootFinishedAt)}
               </span>
             )}
           </div>

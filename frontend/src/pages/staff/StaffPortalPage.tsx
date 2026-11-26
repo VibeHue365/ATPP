@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
@@ -7,14 +7,16 @@ import {
   CheckCircle2,
   Clock,
   ExternalLink,
+  Image as ImageIcon,
   LogOut,
   MapPin,
   MessageSquare,
   Phone,
-  Play,
   Plus,
   RefreshCw,
+  RotateCcw,
   Trash2,
+  Upload,
   User,
   X,
 } from 'lucide-react';
@@ -123,13 +125,154 @@ export const StaffPortalPage: React.FC = () => {
     };
   }, []);
 
-  // Field action modal (check-in / finish-shoot with optional note)
+  // Field action modal (check-in with photo / check-out with optional note)
   const [actionModal, setActionModal] = useState<{
     mode: 'check-in' | 'finish-shoot';
     item: StaffScheduleItem;
   } | null>(null);
   const [fieldNote, setFieldNote] = useState('');
+  const [showFinishNote, setShowFinishNote] = useState(false);
+  const [checkInFile, setCheckInFile] = useState<File | null>(null);
+  const [checkInPreviewUrl, setCheckInPreviewUrl] = useState<string | null>(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const [submittingAction, setSubmittingAction] = useState(false);
+  const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+
+  const stopCameraStream = useCallback(() => {
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach((track) => track.stop());
+      cameraStreamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setCameraActive(false);
+  }, []);
+
+  const clearCheckInPhoto = useCallback(() => {
+    setCheckInFile(null);
+    setCheckInPreviewUrl((prev) => {
+      if (prev && prev.startsWith('blob:') && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+        URL.revokeObjectURL(prev);
+      }
+      return null;
+    });
+  }, []);
+
+  const closeActionModal = useCallback(() => {
+    stopCameraStream();
+    clearCheckInPhoto();
+    setCameraError(null);
+    setFieldNote('');
+    setShowFinishNote(false);
+    setActionModal(null);
+  }, [clearCheckInPhoto, stopCameraStream]);
+
+  useEffect(() => {
+    return () => {
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach((track) => track.stop());
+        cameraStreamRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (cameraActive && videoRef.current && cameraStreamRef.current) {
+      videoRef.current.srcObject = cameraStreamRef.current;
+      void videoRef.current.play().catch(() => {});
+    }
+  }, [cameraActive]);
+
+  const handleOpenCamera = async () => {
+    setCameraError(null);
+    if (
+      typeof navigator === 'undefined' ||
+      !navigator.mediaDevices ||
+      typeof navigator.mediaDevices.getUserMedia !== 'function'
+    ) {
+      setCameraError(
+        'Trình duyệt không hỗ trợ mở camera trực tiếp. Bạn vui lòng bấm "Chụp / Chọn ảnh từ thiết bị".',
+      );
+      return;
+    }
+    try {
+      stopCameraStream();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false,
+      });
+      cameraStreamRef.current = stream;
+      clearCheckInPhoto();
+      setCameraActive(true);
+    } catch {
+      setCameraError(
+        'Không thể truy cập camera (chưa cấp quyền hoặc không tìm thấy camera). Bạn có thể chọn ảnh từ thiết bị.',
+      );
+    }
+  };
+
+  const handleCaptureFromCamera = () => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) {
+      toast.error('Camera chưa sẵn sàng, vui lòng thử lại sau giây lát.');
+      return;
+    }
+    const maxDim = 1600;
+    const scale = Math.min(1, maxDim / Math.max(video.videoWidth, video.videoHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          toast.error('Không thể chụp ảnh từ camera.');
+          return;
+        }
+        const file = new File([blob], `checkin-${Date.now()}.jpg`, {
+          type: 'image/jpeg',
+        });
+        clearCheckInPhoto();
+        setCheckInFile(file);
+        if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+          setCheckInPreviewUrl(URL.createObjectURL(file));
+        }
+        stopCameraStream();
+      },
+      'image/jpeg',
+      0.86,
+    );
+  };
+
+  const handleSelectPhotoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Chỉ hỗ trợ ảnh định dạng JPG, PNG hoặc WEBP.');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error('Dung lượng ảnh tối đa 8MB.');
+      return;
+    }
+    stopCameraStream();
+    setCameraError(null);
+    clearCheckInPhoto();
+    setCheckInFile(file);
+    if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+      setCheckInPreviewUrl(URL.createObjectURL(file));
+    }
+  };
 
   // Strict role guard: only STAFF may access /staff
   useEffect(() => {
@@ -272,22 +415,29 @@ export const StaffPortalPage: React.FC = () => {
     try {
       setSubmittingAction(true);
       if (actionModal.mode === 'check-in') {
+        if (!checkInFile) {
+          toast.error('Vui lòng chụp ảnh xác nhận đã đến điểm hẹn trước khi check-in.');
+          return;
+        }
+        const uploaded = await staffPortalApi.uploadCheckInPhoto(checkInFile);
+        if (!uploaded?.url) {
+          throw new Error('Không thể tải ảnh xác nhận check-in lên máy chủ.');
+        }
         await staffPortalApi.checkIn(actionModal.item.scheduleId, {
-          ...(fieldNote.trim() ? { note: fieldNote.trim() } : {}),
+          photoUrl: uploaded.url,
         });
         toast.success(
-          `Đã check-in bắt đầu chụp đơn ${actionModal.item.bookingCode}.`,
+          `Đã gửi ảnh check-in và bắt đầu chụp đơn ${actionModal.item.bookingCode}.`,
         );
       } else {
         await staffPortalApi.finishShoot(actionModal.item.scheduleId, {
           ...(fieldNote.trim() ? { note: fieldNote.trim() } : {}),
         });
         toast.success(
-          `Đã báo hoàn thành buổi chụp đơn ${actionModal.item.bookingCode}.`,
+          `Đã check-out hoàn thành buổi chụp đơn ${actionModal.item.bookingCode}.`,
         );
       }
-      setActionModal(null);
-      setFieldNote('');
+      closeActionModal();
       await loadData(scope);
     } catch (err: any) {
       toast.error(err?.message || 'Không thể cập nhật tác nghiệp lịch chụp.');
@@ -693,11 +843,15 @@ export const StaffPortalPage: React.FC = () => {
                     </div>
                   )}
 
-                  {(item.checkedInAt || item.shootFinishedAt || item.staffFieldNote) && (
+                  {(item.checkedInAt ||
+                    item.checkInPhotoUrl ||
+                    item.shootFinishedAt ||
+                    item.staffFieldNote) && (
                     <div
                       style={{
                         display: 'flex',
                         flexWrap: 'wrap',
+                        alignItems: 'center',
                         gap: '8px',
                         fontSize: '12px',
                         color: '#4A3F35',
@@ -716,6 +870,16 @@ export const StaffPortalPage: React.FC = () => {
                           Check-in: {formatDateTime(item.checkedInAt)}
                         </span>
                       )}
+                      {item.checkInPhotoUrl && (
+                        <button
+                          type="button"
+                          className="staff-checkin-thumb-btn"
+                          onClick={() => setPreviewPhotoUrl(item.checkInPhotoUrl || null)}
+                        >
+                          <img src={item.checkInPhotoUrl} alt="Ảnh check-in" />
+                          <span>Ảnh check-in</span>
+                        </button>
+                      )}
                       {item.shootFinishedAt && (
                         <span
                           style={{
@@ -726,12 +890,12 @@ export const StaffPortalPage: React.FC = () => {
                             fontWeight: 700,
                           }}
                         >
-                          Hoàn thành chụp: {formatDateTime(item.shootFinishedAt)}
+                          Check-out: {formatDateTime(item.shootFinishedAt)}
                         </span>
                       )}
                       {item.staffFieldNote && (
                         <span>
-                          · <strong>Nhật ký thợ:</strong> {item.staffFieldNote}
+                          · <strong>Ghi chú thợ:</strong> {item.staffFieldNote}
                         </span>
                       )}
                     </div>
@@ -759,11 +923,15 @@ export const StaffPortalPage: React.FC = () => {
                           type="button"
                           className="staff-btn-primary"
                           onClick={() => {
+                            clearCheckInPhoto();
+                            stopCameraStream();
+                            setCameraError(null);
                             setFieldNote('');
+                            setShowFinishNote(false);
                             setActionModal({ mode: 'check-in', item });
                           }}
                         >
-                          <Play size={14} />
+                          <Camera size={14} />
                           <span>Check-in bắt đầu chụp</span>
                         </button>
                       )}
@@ -814,11 +982,12 @@ export const StaffPortalPage: React.FC = () => {
                           className="staff-btn-success"
                           onClick={() => {
                             setFieldNote('');
+                            setShowFinishNote(false);
                             setActionModal({ mode: 'finish-shoot', item });
                           }}
                         >
                           <CheckCircle2 size={14} />
-                          <span>Báo đã chụp xong</span>
+                          <span>Check-out · Báo đã chụp xong</span>
                         </button>
                       )}
                     </div>
@@ -832,7 +1001,7 @@ export const StaffPortalPage: React.FC = () => {
         )}
       </main>
 
-      {/* Check-in / Finish Shoot Modal */}
+      {/* Check-in (Photo Verification) / Check-out (Quick Confirm + Optional Note) Modal */}
       {actionModal && (
         <div
           style={{
@@ -854,7 +1023,7 @@ export const StaffPortalPage: React.FC = () => {
               background: '#FFFFFF',
               borderRadius: '16px',
               width: '100%',
-              maxWidth: '460px',
+              maxWidth: '470px',
               padding: '22px 24px',
               display: 'flex',
               flexDirection: 'column',
@@ -866,50 +1035,171 @@ export const StaffPortalPage: React.FC = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
+                gap: '12px',
               }}
             >
               <strong style={{ fontSize: '16px' }}>
                 {actionModal.mode === 'check-in'
                   ? `Check-in bắt đầu chụp — ${actionModal.item.bookingCode}`
-                  : `Báo hoàn thành ca chụp — ${actionModal.item.bookingCode}`}
+                  : `Check-out hoàn thành chụp — ${actionModal.item.bookingCode}`}
               </strong>
               <button
                 type="button"
-                onClick={() => setActionModal(null)}
+                aria-label="Đóng hộp thoại"
+                onClick={closeActionModal}
                 style={{ background: 'none', border: 'none', cursor: 'pointer' }}
               >
                 <X size={18} />
               </button>
             </div>
 
-            <p style={{ margin: 0, fontSize: '13px', color: '#6B5E54' }}>
+            <p style={{ margin: 0, fontSize: '13px', color: '#6B5E54', lineHeight: 1.5 }}>
               {actionModal.mode === 'check-in'
-                ? 'Thao tác này sẽ chuyển đơn hàng sang ĐANG THỰC HIỆN (IN_PROGRESS) và gửi thông báo tới khách hàng.'
-                : 'Thao tác này sẽ báo cho chủ Studio hậu kỳ & bàn giao ảnh cho khách hàng.'}
+                ? 'Chụp ảnh tại điểm hẹn để xác nhận bạn đã đến nơi. Hệ thống sẽ chuyển đơn sang ĐANG THỰC HIỆN và gửi thông báo tới khách hàng.'
+                : 'Bấm xác nhận để kết thúc ca chụp ngay và báo Chủ Studio hậu kỳ, bàn giao ảnh cho khách.'}
             </p>
 
-            <textarea
-              rows={3}
-              placeholder={
-                actionModal.mode === 'check-in'
-                  ? 'Ghi chú tại điểm hẹn (tuỳ chọn)...'
-                  : 'Ghi chú bàn giao file gốc cho Studio (tuỳ chọn)...'
-              }
-              value={fieldNote}
-              onChange={(e) => setFieldNote(e.target.value)}
-              style={{
-                border: '1px solid #D8CAB9',
-                borderRadius: '10px',
-                padding: '10px 12px',
-                fontSize: '13px',
-              }}
-            />
+            {actionModal.mode === 'check-in' ? (
+              <div className="staff-checkin-capture">
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  capture="environment"
+                  aria-label="Tải ảnh xác nhận check-in"
+                  onChange={handleSelectPhotoFile}
+                  style={{ display: 'none' }}
+                />
+
+                {cameraActive ? (
+                  <div className="staff-camera-box">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="staff-camera-video"
+                    />
+                    <div className="staff-camera-actions">
+                      <button
+                        type="button"
+                        className="staff-btn-outline"
+                        onClick={stopCameraStream}
+                      >
+                        Đóng camera
+                      </button>
+                      <button
+                        type="button"
+                        className="staff-btn-primary"
+                        onClick={handleCaptureFromCamera}
+                      >
+                        <Camera size={15} />
+                        <span>Chụp ngay</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : checkInFile ? (
+                  <div className="staff-checkin-preview">
+                    {checkInPreviewUrl ? (
+                      <img src={checkInPreviewUrl} alt="Ảnh check-in tại điểm hẹn" />
+                    ) : (
+                      <div className="staff-checkin-preview-fallback">
+                        <ImageIcon size={22} />
+                        <span>{checkInFile.name}</span>
+                      </div>
+                    )}
+                    <div className="staff-checkin-preview-bar">
+                      <span className="staff-checkin-preview-badge">
+                        <CheckCircle2 size={14} /> Đã có ảnh xác nhận
+                      </span>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          type="button"
+                          className="staff-btn-outline"
+                          onClick={() => void handleOpenCamera()}
+                        >
+                          <RotateCcw size={13} />
+                          <span>Chụp lại</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="staff-btn-outline"
+                          onClick={() => photoInputRef.current?.click()}
+                        >
+                          <Upload size={13} />
+                          <span>Đổi ảnh</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="staff-checkin-empty">
+                    <div className="staff-checkin-empty-icon">
+                      <Camera size={24} />
+                    </div>
+                    <strong>Chụp ảnh xác nhận đã đến điểm hẹn *</strong>
+                    <span>Ảnh sẽ được lưu để xác thực thời điểm bắt đầu ca chụp.</span>
+                    <div className="staff-checkin-empty-actions">
+                      <button
+                        type="button"
+                        className="staff-btn-primary"
+                        onClick={() => void handleOpenCamera()}
+                      >
+                        <Camera size={14} />
+                        <span>Mở camera chụp ảnh</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="staff-btn-outline"
+                        onClick={() => photoInputRef.current?.click()}
+                      >
+                        <Upload size={14} />
+                        <span>Chọn ảnh từ thiết bị</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {cameraError && (
+                  <p className="staff-camera-error">{cameraError}</p>
+                )}
+              </div>
+            ) : (
+              <div className="staff-checkout-optional-note">
+                {!showFinishNote ? (
+                  <button
+                    type="button"
+                    className="staff-note-toggle-btn"
+                    onClick={() => setShowFinishNote(true)}
+                  >
+                    <Plus size={14} />
+                    <span>Thêm ghi chú (không bắt buộc)</span>
+                  </button>
+                ) : (
+                  <textarea
+                    rows={2}
+                    placeholder="Ghi chú bàn giao file gốc cho Studio (tuỳ chọn)..."
+                    value={fieldNote}
+                    onChange={(e) => setFieldNote(e.target.value)}
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      border: '1px solid #D8CAB9',
+                      borderRadius: '10px',
+                      padding: '10px 12px',
+                      fontSize: '13px',
+                    }}
+                  />
+                )}
+              </div>
+            )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
               <button
                 type="button"
                 className="staff-btn-outline"
-                onClick={() => setActionModal(null)}
+                disabled={submittingAction}
+                onClick={closeActionModal}
               >
                 Hủy
               </button>
@@ -920,12 +1210,83 @@ export const StaffPortalPage: React.FC = () => {
                     ? 'staff-btn-primary'
                     : 'staff-btn-success'
                 }
-                disabled={submittingAction}
+                disabled={
+                  submittingAction ||
+                  (actionModal.mode === 'check-in' && !checkInFile)
+                }
+                style={
+                  actionModal.mode === 'check-in' && !checkInFile
+                    ? { opacity: 0.5, cursor: 'not-allowed' }
+                    : undefined
+                }
               >
-                {submittingAction ? 'Đang gửi...' : 'Xác nhận'}
+                {submittingAction
+                  ? 'Đang xử lý...'
+                  : actionModal.mode === 'check-in'
+                    ? 'Xác nhận Check-in'
+                    : 'Xác nhận Check-out'}
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Full-size Check-in Photo Preview Modal */}
+      {previewPhotoUrl && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(18, 14, 12, 0.78)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1300,
+            padding: '20px',
+          }}
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setPreviewPhotoUrl(null)}
+        >
+          <div
+            style={{ position: 'relative', maxWidth: '92vw', maxHeight: '88vh' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              aria-label="Đóng ảnh"
+              onClick={() => setPreviewPhotoUrl(null)}
+              style={{
+                position: 'absolute',
+                top: '-14px',
+                right: '-14px',
+                width: '34px',
+                height: '34px',
+                borderRadius: '999px',
+                border: 'none',
+                background: '#FFFFFF',
+                color: '#231F20',
+                cursor: 'pointer',
+                display: 'grid',
+                placeItems: 'center',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+              }}
+            >
+              <X size={18} />
+            </button>
+            <img
+              src={previewPhotoUrl}
+              alt="Ảnh xác nhận check-in"
+              style={{
+                display: 'block',
+                maxWidth: '90vw',
+                maxHeight: '84vh',
+                borderRadius: '14px',
+                objectFit: 'contain',
+                background: '#111',
+              }}
+            />
+          </div>
         </div>
       )}
 

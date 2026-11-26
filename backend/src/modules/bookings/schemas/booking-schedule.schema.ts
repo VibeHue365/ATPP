@@ -96,6 +96,9 @@ export class BookingSchedule {
   @Prop({ type: Date, default: null })
   checkedInAt?: Date | null;
 
+  @Prop({ type: String, default: null, trim: true })
+  checkInPhotoUrl?: string | null;
+
   @Prop({ type: Date, default: null })
   shootFinishedAt?: Date | null;
 

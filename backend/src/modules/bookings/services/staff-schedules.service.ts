@@ -406,6 +406,7 @@ export class StaffSchedulesService {
         checkedInAt: sch.checkedInAt
           ? new Date(sch.checkedInAt).toISOString()
           : null,
+        checkInPhotoUrl: sch.checkInPhotoUrl ?? null,
         shootFinishedAt: sch.shootFinishedAt
           ? new Date(sch.shootFinishedAt).toISOString()
           : null,
@@ -436,7 +437,7 @@ export class StaffSchedulesService {
   async checkIn(
     userIdStr: string,
     scheduleIdStr: string,
-    dto: StaffCheckInDto = {},
+    dto: Partial<StaffCheckInDto> = {},
   ) {
     const { staff, studio } = await this.resolveActiveStaff(userIdStr);
     if (!Types.ObjectId.isValid(scheduleIdStr)) {
@@ -500,9 +501,17 @@ export class StaffSchedulesService {
       );
     }
 
+    const cleanPhotoUrl = dto.photoUrl?.trim() || '';
+    if (!cleanPhotoUrl) {
+      throw new BadRequestException(
+        'Vui lòng chụp ảnh xác nhận đã đến điểm hẹn trước khi check-in.',
+      );
+    }
+
     const now = new Date();
     const cleanNote = dto.note?.trim() || null;
     schedule.checkedInAt = now;
+    schedule.checkInPhotoUrl = cleanPhotoUrl;
     if (cleanNote) {
       schedule.staffFieldNote = cleanNote;
     }
@@ -517,8 +526,8 @@ export class StaffSchedulesService {
           changedAt: now,
           changedBy: new Types.ObjectId(userIdStr),
           note: cleanNote
-            ? `Thợ chụp ${staff.name} đã check-in bắt đầu chụp: ${cleanNote}`
-            : `Thợ chụp ${staff.name} đã check-in bắt đầu chụp.`,
+            ? `Thợ chụp ${staff.name} đã check-in xác nhận có mặt kèm ảnh: ${cleanNote}`
+            : `Thợ chụp ${staff.name} đã chụp ảnh check-in xác nhận có mặt tại điểm hẹn.`,
         },
       ];
       await booking.save();
@@ -532,18 +541,26 @@ export class StaffSchedulesService {
         await this.notificationsService.createNotification(
           custId,
           'Thợ chụp đã check-in tại điểm hẹn',
-          `Thợ chụp ${staff.name} đã bắt đầu buổi chụp cho đơn ${booking.bookingCode}.`,
+          `Thợ chụp ${staff.name} đã gửi ảnh xác nhận có mặt và bắt đầu buổi chụp cho đơn ${booking.bookingCode}.`,
           NotificationType.Booking,
-          { bookingId: booking._id, scheduleId: schedule._id },
+          {
+            bookingId: booking._id,
+            scheduleId: schedule._id,
+            checkInPhotoUrl: cleanPhotoUrl,
+          },
         );
       }
       if (studio?.userId) {
         await this.notificationsService.createNotification(
           studio.userId.toString(),
           'Nhân sự đã check-in buổi chụp',
-          `Thợ ${staff.name} đã check-in bắt đầu chụp đơn ${booking.bookingCode}.`,
+          `Thợ ${staff.name} đã gửi ảnh check-in xác nhận có mặt đơn ${booking.bookingCode}.`,
           NotificationType.Booking,
-          { bookingId: booking._id, scheduleId: schedule._id },
+          {
+            bookingId: booking._id,
+            scheduleId: schedule._id,
+            checkInPhotoUrl: cleanPhotoUrl,
+          },
         );
       }
     } catch {
@@ -556,6 +573,7 @@ export class StaffSchedulesService {
       bookingCode: booking.bookingCode,
       bookingStatus: booking.status,
       checkedInAt: schedule.checkedInAt.toISOString(),
+      checkInPhotoUrl: schedule.checkInPhotoUrl ?? null,
       staffFieldNote: schedule.staffFieldNote ?? null,
     };
   }
@@ -670,6 +688,7 @@ export class StaffSchedulesService {
       checkedInAt: schedule.checkedInAt
         ? new Date(schedule.checkedInAt).toISOString()
         : null,
+      checkInPhotoUrl: schedule.checkInPhotoUrl ?? null,
       shootFinishedAt: schedule.shootFinishedAt.toISOString(),
       staffFieldNote: schedule.staffFieldNote ?? null,
     };

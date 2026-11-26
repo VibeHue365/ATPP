@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Linking,
   Modal,
   Pressable,
@@ -13,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { router, type Href } from 'expo-router';
 import { chatApi } from '@/apis/chatApi';
 import {
@@ -25,6 +27,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { getApiErrorMessage } from '@/utils/apiError';
 import { openExternalDirections } from '@/utils/geo';
+import { prepareImageUploadPart } from '@/utils/imageUpload';
 
 type ScopeKey = 'today' | 'upcoming' | 'completed' | 'all';
 
@@ -92,12 +95,16 @@ export function StaffPortalScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [chatOpeningId, setChatOpeningId] = useState<string | null>(null);
 
-  // Field check-in / finish-shoot note modal state
+  // Field check-in (photo) / check-out (quick confirm + optional note) modal state
   const [actionModal, setActionModal] = useState<{
     mode: 'check-in' | 'finish-shoot';
     item: StaffScheduleItem;
   } | null>(null);
   const [fieldNote, setFieldNote] = useState('');
+  const [showFinishNote, setShowFinishNote] = useState(false);
+  const [checkInAsset, setCheckInAsset] =
+    useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
   const [submittingAction, setSubmittingAction] = useState(false);
 
   // Self-managed busy/blocked slots modal state
@@ -184,23 +191,83 @@ export function StaffPortalScreen() {
     void openExternalDirections({ lat, lng, label, destLabel: label });
   };
 
+  const closeActionModal = () => {
+    setActionModal(null);
+    setFieldNote('');
+    setShowFinishNote(false);
+    setCheckInAsset(null);
+  };
+
+  const handleTakeCheckInPhoto = async () => {
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        show('Vui lòng cấp quyền máy ảnh để chụp ảnh check-in tại điểm hẹn', 'error');
+        return;
+      }
+      const res = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        quality: 0.75,
+      });
+      if (!res.canceled && res.assets?.[0]) {
+        setCheckInAsset(res.assets[0]);
+      }
+    } catch {
+      show('Không thể mở máy ảnh. Bạn có thể chọn ảnh từ thư viện.', 'error');
+    }
+  };
+
+  const handlePickCheckInPhoto = async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        show('Vui lòng cấp quyền truy cập thư viện ảnh', 'error');
+        return;
+      }
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.75,
+      });
+      if (!res.canceled && res.assets?.[0]) {
+        setCheckInAsset(res.assets[0]);
+      }
+    } catch {
+      show('Không thể chọn ảnh từ thư viện.', 'error');
+    }
+  };
+
   const handleSubmitFieldAction = async () => {
     if (!actionModal) return;
+    if (actionModal.mode === 'check-in' && !checkInAsset) {
+      show('Vui lòng chụp ảnh xác nhận đã đến điểm hẹn trước khi check-in', 'error');
+      return;
+    }
     setSubmittingAction(true);
     try {
-      const note = fieldNote.trim() || undefined;
-      if (actionModal.mode === 'check-in') {
-        await staffPortalApi.checkIn(actionModal.item.scheduleId, { note });
-        show('Check-in & bắt đầu ca chụp thành công!', 'success');
+      if (actionModal.mode === 'check-in' && checkInAsset) {
+        const part = await prepareImageUploadPart(
+          checkInAsset,
+          `checkin-${Date.now()}.jpg`,
+        );
+        const formData = new FormData();
+        formData.append('file', part);
+        const uploaded = await staffPortalApi.uploadCheckInPhoto(formData);
+        if (!uploaded?.url) {
+          throw new Error('Không thể tải ảnh xác nhận check-in lên máy chủ');
+        }
+        await staffPortalApi.checkIn(actionModal.item.scheduleId, {
+          photoUrl: uploaded.url,
+        });
+        show('Đã gửi ảnh check-in & bắt đầu ca chụp thành công!', 'success');
       } else {
+        const note = fieldNote.trim() || undefined;
         await staffPortalApi.finishShoot(actionModal.item.scheduleId, { note });
         show(
-          'Đã ghi nhận hoàn tất ca chụp! Chủ Studio sẽ tải & trả ảnh chỉnh sửa cho khách.',
+          'Đã check-out hoàn tất ca chụp! Chủ Studio sẽ hậu kỳ & trả ảnh cho khách.',
           'success',
         );
       }
-      setActionModal(null);
-      setFieldNote('');
+      closeActionModal();
       await loadData(true);
     } catch (err) {
       show(
@@ -619,7 +686,7 @@ export function StaffPortalScreen() {
                     </View>
                   )}
 
-                  {(item.checkedInAt || item.shootFinishedAt) && (
+                  {(item.checkedInAt || item.checkInPhotoUrl || item.shootFinishedAt) && (
                     <View style={styles.timestampRow}>
                       {item.checkedInAt ? (
                         <View style={styles.tsPill}>
@@ -629,11 +696,23 @@ export function StaffPortalScreen() {
                           </Text>
                         </View>
                       ) : null}
+                      {item.checkInPhotoUrl ? (
+                        <Pressable
+                          style={styles.photoPill}
+                          onPress={() => setPreviewPhotoUrl(item.checkInPhotoUrl || null)}
+                        >
+                          <Image
+                            source={{ uri: item.checkInPhotoUrl }}
+                            style={styles.photoPillThumb}
+                          />
+                          <Text style={styles.photoPillText}>Ảnh check-in</Text>
+                        </Pressable>
+                      ) : null}
                       {item.shootFinishedAt ? (
                         <View style={styles.tsPill}>
                           <Ionicons name="camera" size={13} color="#1D4ED8" />
                           <Text style={[styles.tsText, { color: '#1D4ED8' }]}>
-                            Xong chụp: {formatDateTimeShort(item.shootFinishedAt)}
+                            Check-out: {formatDateTimeShort(item.shootFinishedAt)}
                           </Text>
                         </View>
                       ) : null}
@@ -652,10 +731,12 @@ export function StaffPortalScreen() {
                           style={styles.checkInBtn}
                           onPress={() => {
                             setFieldNote('');
+                            setShowFinishNote(false);
+                            setCheckInAsset(null);
                             setActionModal({ mode: 'check-in', item });
                           }}
                         >
-                          <Ionicons name="play-circle-outline" size={17} color="#FFFFFF" />
+                          <Ionicons name="camera-outline" size={17} color="#FFFFFF" />
                           <Text style={styles.actionBtnText}>
                             Check-in & Bắt đầu chụp
                           </Text>
@@ -679,11 +760,13 @@ export function StaffPortalScreen() {
                           style={styles.finishBtn}
                           onPress={() => {
                             setFieldNote('');
+                            setShowFinishNote(false);
+                            setCheckInAsset(null);
                             setActionModal({ mode: 'finish-shoot', item });
                           }}
                         >
                           <Ionicons name="checkmark-done-outline" size={17} color="#FFFFFF" />
-                          <Text style={styles.actionBtnText}>Hoàn tất ca chụp</Text>
+                          <Text style={styles.actionBtnText}>Check-out · Hoàn tất ca chụp</Text>
                         </Pressable>
                       )}
                     </View>
@@ -700,66 +783,186 @@ export function StaffPortalScreen() {
         visible={Boolean(actionModal)}
         transparent
         animationType="fade"
-        onRequestClose={() => setActionModal(null)}
+        onRequestClose={closeActionModal}
       >
         <View style={styles.modalOverlay}>
           <Pressable
             style={StyleSheet.absoluteFill}
-            onPress={() => setActionModal(null)}
+            onPress={closeActionModal}
           />
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>
               {actionModal?.mode === 'check-in'
-                ? 'Xác nhận Check-in & Bắt đầu chụp'
-                : 'Xác nhận Hoàn tất buổi chụp'}
+                ? 'Chụp ảnh Check-in xác nhận có mặt'
+                : 'Xác nhận Check-out hoàn tất chụp'}
             </Text>
             <Text style={styles.modalSub}>
               Đơn #{actionModal?.item.bookingCode} —{' '}
               {actionModal?.item.packageName}
             </Text>
 
-            {actionModal?.mode === 'finish-shoot' && (
-              <View style={styles.noticeBox}>
-                <Ionicons name="information-circle-outline" size={16} color="#0369A1" />
-                <Text style={styles.noticeText}>
-                  Sau khi xác nhận xong chụp, Chủ Studio sẽ đảm nhận hậu kỳ & giao file ảnh cho khách.
-                </Text>
+            {actionModal?.mode === 'check-in' ? (
+              <View style={styles.checkInPhotoBox}>
+                {checkInAsset ? (
+                  <View style={styles.checkInPreviewCard}>
+                    <Image
+                      source={{ uri: checkInAsset.uri }}
+                      style={styles.checkInPreviewImage}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.checkInPreviewBar}>
+                      <View style={styles.checkInReadyRow}>
+                        <Ionicons name="checkmark-circle" size={15} color="#047857" />
+                        <Text style={styles.checkInReadyText}>Đã có ảnh xác nhận</Text>
+                      </View>
+                      <View style={styles.checkInRetakeRow}>
+                        <Pressable
+                          style={styles.smallOutlineBtn}
+                          onPress={() => void handleTakeCheckInPhoto()}
+                        >
+                          <Ionicons name="camera-outline" size={14} color="#BA0049" />
+                          <Text style={styles.smallOutlineBtnText}>Chụp lại</Text>
+                        </Pressable>
+                        <Pressable
+                          style={styles.smallOutlineBtn}
+                          onPress={() => void handlePickCheckInPhoto()}
+                        >
+                          <Ionicons name="images-outline" size={14} color="#475569" />
+                          <Text style={[styles.smallOutlineBtnText, { color: '#475569' }]}>
+                            Thư viện
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.checkInEmptyBox}>
+                    <View style={styles.checkInIconCircle}>
+                      <Ionicons name="camera" size={24} color="#BA0049" />
+                    </View>
+                    <Text style={styles.checkInEmptyTitle}>
+                      Chụp ảnh tại điểm hẹn để xác nhận đã đến *
+                    </Text>
+                    <Text style={styles.checkInEmptyHint}>
+                      Hệ thống sẽ lưu ảnh xác thực và thông báo cho khách hàng.
+                    </Text>
+                    <View style={styles.checkInPickRow}>
+                      <Pressable
+                        style={styles.takePhotoBtn}
+                        onPress={() => void handleTakeCheckInPhoto()}
+                      >
+                        <Ionicons name="camera-outline" size={16} color="#FFFFFF" />
+                        <Text style={styles.takePhotoBtnText}>Chụp ảnh ngay</Text>
+                      </Pressable>
+                      <Pressable
+                        style={styles.galleryBtn}
+                        onPress={() => void handlePickCheckInPhoto()}
+                      >
+                        <Ionicons name="images-outline" size={16} color="#475569" />
+                        <Text style={styles.galleryBtnText}>Thư viện</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
               </View>
-            )}
+            ) : (
+              <>
+                <View style={styles.noticeBox}>
+                  <Ionicons name="information-circle-outline" size={16} color="#0369A1" />
+                  <Text style={styles.noticeText}>
+                    Bấm xác nhận ngay để kết thúc ca chụp. Chủ Studio sẽ nhận thông báo hậu kỳ & giao ảnh cho khách.
+                  </Text>
+                </View>
 
-            <Text style={styles.inputLabel}>GHI CHÚ HIỆN TRƯỜNG (TÙY CHỌN)</Text>
-            <TextInput
-              value={fieldNote}
-              onChangeText={setFieldNote}
-              placeholder={
-                actionModal?.mode === 'check-in'
-                  ? 'Ví dụ: Đã gặp khách tại cổng Ngọ Môn...'
-                  : 'Ví dụ: Đã chụp đủ 150 file gốc, bàn giao thẻ nhớ cho Studio...'
-              }
-              placeholderTextColor="#94A3B8"
-              style={styles.noteInput}
-              multiline
-              maxLength={400}
-            />
+                {!showFinishNote ? (
+                  <Pressable
+                    style={styles.noteToggleBtn}
+                    onPress={() => setShowFinishNote(true)}
+                  >
+                    <Ionicons name="add-circle-outline" size={15} color="#475569" />
+                    <Text style={styles.noteToggleText}>
+                      Thêm ghi chú (không bắt buộc)
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <>
+                    <Text style={styles.inputLabel}>GHI CHÚ BÀN GIAO (TÙY CHỌN)</Text>
+                    <TextInput
+                      value={fieldNote}
+                      onChangeText={setFieldNote}
+                      placeholder="Ví dụ: Đã chụp đủ 150 file gốc, bàn giao thẻ nhớ cho Studio..."
+                      placeholderTextColor="#94A3B8"
+                      style={styles.noteInput}
+                      multiline
+                      maxLength={400}
+                    />
+                  </>
+                )}
+              </>
+            )}
 
             <View style={styles.modalBtns}>
               <Pressable
                 style={styles.modalCancelBtn}
                 disabled={submittingAction}
-                onPress={() => setActionModal(null)}
+                onPress={closeActionModal}
               >
                 <Text style={styles.modalCancelText}>Đóng</Text>
               </Pressable>
               <Pressable
-                style={[styles.modalConfirmBtn, submittingAction && { opacity: 0.7 }]}
-                disabled={submittingAction}
+                style={[
+                  styles.modalConfirmBtn,
+                  actionModal?.mode === 'finish-shoot' && { backgroundColor: '#047857' },
+                  (submittingAction ||
+                    (actionModal?.mode === 'check-in' && !checkInAsset)) && {
+                    opacity: 0.5,
+                  },
+                ]}
+                disabled={
+                  submittingAction ||
+                  (actionModal?.mode === 'check-in' && !checkInAsset)
+                }
                 onPress={() => void handleSubmitFieldAction()}
               >
                 <Text style={styles.modalConfirmText}>
-                  {submittingAction ? 'Đang gửi...' : 'Xác nhận'}
+                  {submittingAction
+                    ? 'Đang gửi...'
+                    : actionModal?.mode === 'check-in'
+                      ? 'Xác nhận Check-in'
+                      : 'Xác nhận Check-out'}
                 </Text>
               </Pressable>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Full-screen Check-in Photo Preview Modal */}
+      <Modal
+        visible={Boolean(previewPhotoUrl)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreviewPhotoUrl(null)}
+      >
+        <View style={styles.photoModalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setPreviewPhotoUrl(null)}
+          />
+          <View style={styles.photoModalBody}>
+            {previewPhotoUrl ? (
+              <Image
+                source={{ uri: previewPhotoUrl }}
+                style={styles.photoModalImg}
+                resizeMode="contain"
+              />
+            ) : null}
+            <Pressable
+              style={styles.photoModalClose}
+              onPress={() => setPreviewPhotoUrl(null)}
+            >
+              <Ionicons name="close" size={20} color="#111418" />
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -1553,5 +1756,198 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#92400E',
     lineHeight: 17,
+  },
+  photoPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FFF0F5',
+    borderWidth: 1,
+    borderColor: '#F3C4D5',
+    paddingLeft: 3,
+    paddingRight: 9,
+    paddingVertical: 2.5,
+    borderRadius: Radius.pill,
+  },
+  photoPillThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+  },
+  photoPillText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 11,
+    color: '#BA0049',
+  },
+  checkInPhotoBox: {
+    marginTop: 2,
+  },
+  checkInEmptyBox: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#E2D4DA',
+    backgroundColor: '#FFF9FB',
+    borderRadius: 14,
+    padding: 16,
+    alignItems: 'center',
+    gap: 6,
+  },
+  checkInIconCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#FFE4EE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkInEmptyTitle: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 13.5,
+    color: '#111418',
+    textAlign: 'center',
+  },
+  checkInEmptyHint: {
+    fontFamily: FontFamily.body,
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 17,
+  },
+  checkInPickRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 6,
+    width: '100%',
+  },
+  takePhotoBtn: {
+    flex: 1.35,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 40,
+    borderRadius: 11,
+    backgroundColor: '#BA0049',
+  },
+  takePhotoBtnText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 12.5,
+    color: '#FFFFFF',
+  },
+  galleryBtn: {
+    flex: 0.9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    height: 40,
+    borderRadius: 11,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  galleryBtnText: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: 12.5,
+    color: '#475569',
+  },
+  checkInPreviewCard: {
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+  },
+  checkInPreviewImage: {
+    width: '100%',
+    height: 190,
+    backgroundColor: '#0F172A',
+  },
+  checkInPreviewBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  checkInReadyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  checkInReadyText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 12,
+    color: '#047857',
+  },
+  checkInRetakeRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  smallOutlineBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+  },
+  smallOutlineBtnText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 11.5,
+    color: '#BA0049',
+  },
+  noteToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#CBD5E1',
+    backgroundColor: '#F8FAFC',
+  },
+  noteToggleText: {
+    fontFamily: FontFamily.bodySemiBold,
+    fontSize: 12,
+    color: '#475569',
+  },
+  photoModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  photoModalBody: {
+    width: '100%',
+    maxWidth: 420,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  photoModalImg: {
+    width: '100%',
+    height: 420,
+    borderRadius: 14,
+  },
+  photoModalClose: {
+    position: 'absolute',
+    top: -12,
+    right: -6,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
