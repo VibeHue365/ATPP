@@ -437,7 +437,7 @@ export const ProviderDashboard: React.FC = () => {
 
   const {
     fetchInventoryData, handleRemoveVariant, handleDeleteInventoryItem, handleCreateInventoryItem,
-    handleUpdateInventoryItem, handleQuickUpdateStatus, handleAdjustVariantQuantity,
+    handleUpdateInventoryItem, handleQuickUpdateStatus, handleAdjustVariantQuantity, handleBulkMarkAvailable,
   } = createInventoryActions({
     setIsLoadingInventory,
     invPage,
@@ -771,12 +771,8 @@ export const ProviderDashboard: React.FC = () => {
       fetchInventoryData();
     }
   }, [currentView, collectionTab]);
-
-  useEffect(() => {
-    if (currentView === 'collections' && collectionTab === 'inventory') {
-      fetchInventoryData({ silent: true, itemsOnly: true });
-    }
-  }, [debouncedInvSearch, invSortBy, invStatusFilter, invConditionFilter, invPage]);
+  // Inventory search, filters, sorting and paging run client-side in InventoryItemGroups,
+  // so changing them no longer refetches the item list.
 
   const roleFilteredOrders = React.useMemo(() => {
     if (hasAodaiCapability && !hasPhotographyCapability) {
@@ -849,7 +845,7 @@ export const ProviderDashboard: React.FC = () => {
       .reduce((sum, o) => sum + (o.totalAmount ?? 0), 0);
   }, [orders]);
 
-  const renderInventoryView = () => <InventoryPanel {...{ inventorySummary, invSummaryPage, invSearch, setInvSearch, invStatusFilter, setInvStatusFilter, invConditionFilter, setInvConditionFilter, invSortBy, setInvSortBy, isLoadingInventory, variantBusy, setVariantEditRow, setVariantEditQty, handleRemoveVariant, setInvSummaryPage, inventoryItems, setEditInvItem, setEditInvStatus, setEditInvCondition, setEditInvNotes, setIsEditInventoryOpen, handleDeleteInventoryItem, handleQuickUpdateStatus, invTotal, invLimit, invPage, setInvPage }} />;
+  const renderInventoryView = () => <InventoryPanel {...{ inventorySummary, invSummaryPage, invSearch, setInvSearch, invStatusFilter, setInvStatusFilter, invConditionFilter, setInvConditionFilter, invSortBy, setInvSortBy, isLoadingInventory, variantBusy, setVariantEditRow, setVariantEditQty, handleRemoveVariant, setInvSummaryPage, inventoryItems, setEditInvItem, setEditInvStatus, setEditInvCondition, setEditInvNotes, setIsEditInventoryOpen, handleDeleteInventoryItem, handleQuickUpdateStatus, handleBulkMarkAvailable, invTotal, invLimit, invPage, setInvPage }} />;
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: 'var(--font-body)', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-light-bg)' }}>

@@ -4,7 +4,7 @@ import { useState } from 'react';
 /** Called unconditionally by the dashboard so tab changes do not reset this state. */
 export function useProviderInventoryState() {
   const [invSearch, setInvSearch] = useState('');
-  const [invSortBy, setInvSortBy] = useState('newest');
+  const [invSortBy, setInvSortBy] = useState('need_action');
   const [invStatusFilter, setInvStatusFilter] = useState('');
   const [invConditionFilter, setInvConditionFilter] = useState('');
   const [invPage, setInvPage] = useState(1);

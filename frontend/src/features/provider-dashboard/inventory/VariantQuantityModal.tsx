@@ -41,7 +41,7 @@ export function VariantQuantityModal({
               required
             />
             <span style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
-              Tăng lên thì hệ thống nhập thêm hiện vật mới. Giảm xuống thì thanh lý bớt, ưu tiên hàng hỏng và hàng đang bảo trì — chiếc nào đang có lịch thuê sẽ được giữ lại và báo cho bạn.
+              Tăng lên thì hệ thống nhập thêm hiện vật mới. Giảm xuống thì ngừng cho thuê bớt, ưu tiên hàng hỏng và hàng đang bảo trì — chiếc nào đang có lịch thuê sẽ được giữ lại và báo cho bạn.
               {' '}Đặt <b>0</b> nghĩa là <b>hết hàng</b>: khách vẫn thấy biến thể này nhưng không đặt được, sau này nhập thêm là bán lại bình thường.
             </span>
           </div>

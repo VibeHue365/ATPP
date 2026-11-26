@@ -634,7 +634,7 @@ export class InventoryService {
 
     if (item.conditionStatus === ConditionStatus.Retired) {
       throw new BadRequestException(
-        'Hiện vật đã thanh lý, không thể cập nhật.',
+        'Áo đã ngừng cho thuê, không thể cập nhật.',
       );
     }
 
@@ -666,7 +666,7 @@ export class InventoryService {
       const blocked = await this.findBlockedItemIds([item]);
       if (blocked.size > 0) {
         throw new BadRequestException(
-          'Áo đang có lịch thuê hoạt động, không thể thanh lý.',
+          'Áo đang có lịch thuê hoạt động, không thể ngừng cho thuê.',
         );
       }
     }
@@ -710,7 +710,7 @@ export class InventoryService {
     const blocked = await this.findBlockedItemIds([item]);
     if (blocked.size > 0) {
       throw new BadRequestException(
-        'Áo đang có lịch thuê hoạt động, không thể thanh lý.',
+        'Áo đang có lịch thuê hoạt động, không thể ngừng cho thuê.',
       );
     }
 
@@ -718,7 +718,7 @@ export class InventoryService {
     item.conditionStatus = ConditionStatus.Retired;
     await item.save();
 
-    return { message: 'Thanh lý hiện vật thành công.' };
+    return { message: 'Đã ngừng cho thuê áo này.' };
   }
 
   /**
@@ -826,8 +826,8 @@ export class InventoryService {
       return {
         message:
           shortfall > 0
-            ? `Đã thanh lý ${chosen.length} chiếc. Còn ${shortfall} chiếc không thể thanh lý vì đang có lịch thuê.`
-            : `Đã thanh lý ${chosen.length} chiếc của biến thể ${label}.`,
+            ? `Đã ngừng cho thuê ${chosen.length} chiếc. Còn ${shortfall} chiếc không thể ngừng cho thuê vì đang có lịch thuê.`
+            : `Đã ngừng cho thuê ${chosen.length} chiếc của biến thể ${label}.`,
         quantity: newQuantity,
         created: [],
         retired: chosen.map((item) => item.sku),

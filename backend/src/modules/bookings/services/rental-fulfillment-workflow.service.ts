@@ -399,7 +399,7 @@ export class RentalFulfillmentWorkflowService {
     );
     if (hasBlockedStatus) {
       throw new ConflictException(
-        'Hiện vật đang ở trạng thái bảo trì, hư hại hoặc thanh lý, không thể mở kho hoặc hoàn tất giặt ủi.',
+        'Hiện vật đang ở trạng thái bảo trì, hư hại hoặc đã ngừng cho thuê, không thể mở kho hoặc hoàn tất giặt ủi.',
       );
     }
 

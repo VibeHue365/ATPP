@@ -105,28 +105,37 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
 describe('Provider dashboard behavior', () => {
   for (const [version, Dashboard] of versions) {
     describe(version, () => {
-      it('keeps inventory filters and pagination on the items-only refresh path', async () => {
-        mocks.responses['/inventory'] = { items: [{ _id: 'inventory-test', sku: 'AO-01', productId: { name: 'Áo mẫu' }, size: 'M', color: 'WHITE', status: 'AVAILABLE', conditionStatus: 'GOOD' }], total: 21 };
+      it('loads every inventory item once and filters the detail tab without refetching', async () => {
+        mocks.responses['/inventory'] = { items: [
+          { _id: 'inventory-a', sku: 'AO-01', productId: { _id: 'product-a', name: 'Áo mẫu' }, size: 'M', color: 'WHITE', status: 'AVAILABLE', conditionStatus: 'GOOD' },
+          { _id: 'inventory-b', sku: 'AO-02', productId: { _id: 'product-a', name: 'Áo mẫu' }, size: 'M', color: 'WHITE', status: 'CLEANING', conditionStatus: 'GOOD' },
+        ], total: 2 };
         const view = render(<Dashboard />);
         await settle();
         fireEvent.click(within(view.container.querySelector('aside')!).getByRole('button', { name: 'Bộ sưu tập', exact: true }));
         await settle();
         fireEvent.click(view.getByRole('button', { name: 'Tồn kho', exact: true }));
         await settle();
+        fireEvent.click(view.getByRole('tab', { name: 'Sản phẩm chi tiết' }));
+        await settle();
+
+        const listRequests = mocks.requests.filter(r => r.path.startsWith('/inventory?'));
+        const query = new URLSearchParams(listRequests.at(-1)!.path.split('?')[1]);
+        expect(query.get('page')).toBe('1');
+        expect(Number(query.get('limit'))).toBeGreaterThanOrEqual(1000);
+        expect(query.get('status')).toBe('');
+
         const summaryRequests = mocks.requests.filter(r => r.path === '/inventory/summary').length;
         const productRequests = mocks.requests.filter(r => r.path.startsWith('/products/my-listings')).length;
-        fireEvent.change(view.getByPlaceholderText('Tìm theo SKU hoặc tên áo dài...'), { target: { value: '  áo & đỏ  ' } });
+        fireEvent.change(view.getByPlaceholderText('Tìm theo SKU hoặc tên áo dài...'), { target: { value: 'ao mau' } });
         await act(async () => { await new Promise(resolve => setTimeout(resolve, 350)); });
         await settle();
-        fireEvent.change(view.getAllByRole('combobox')[0], { target: { value: 'AVAILABLE' } });
+        fireEvent.change(view.getAllByRole('combobox')[0], { target: { value: 'CLEANING' } });
         await settle();
-        fireEvent.click(view.getByRole('button', { name: 'Trang sau', exact: true }));
-        await settle();
-        const latest = mocks.requests.filter(r => r.path.startsWith('/inventory?')).at(-1)!;
-        const query = new URLSearchParams(latest.path.split('?')[1]);
-        expect(query.get('search')).toBe('áo & đỏ');
-        expect(query.get('status')).toBe('AVAILABLE');
-        expect(query.get('page')).toBe('2');
+
+        expect(view.getByRole('button', { name: /^AO-02 — / })).toBeDefined();
+        expect(view.queryByRole('button', { name: /^AO-01 — / })).toBeNull();
+        expect(mocks.requests.filter(r => r.path.startsWith('/inventory?'))).toHaveLength(listRequests.length);
         expect(mocks.requests.filter(r => r.path === '/inventory/summary')).toHaveLength(summaryRequests);
         expect(mocks.requests.filter(r => r.path.startsWith('/products/my-listings'))).toHaveLength(productRequests);
       });

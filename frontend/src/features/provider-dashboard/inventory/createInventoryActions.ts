@@ -6,6 +6,7 @@ import { inventoryApi, productsApi } from '../api/providerDashboardApi';
 import type { useProductWizardState } from '../collections/useProductWizardState';
 import { colorLabels } from '../constants';
 import { variantKeyOf, variantLabelOf } from './inventoryHelpers';
+import type { InventoryItem } from './inventoryGrouping';
 import type { useProviderInventoryState } from './useProviderInventoryState';
 
 type Dependencies = Pick<ReturnType<typeof useProviderInventoryState>,
@@ -19,10 +20,15 @@ type Dependencies = Pick<ReturnType<typeof useProviderInventoryState>,
   loadEditInvSummary: (productId: string) => Promise<void>;
 };
 
+/**
+ * The "Sản phẩm chi tiết" tab groups items by variant on the client, so it needs every item at once
+ * (a server page of 10 would split a variant). Search, filters and sorting run client-side.
+ */
+const INVENTORY_FETCH_LIMIT = 2000;
+
 /** Recreated each render so handlers retain the dashboard's existing closure semantics. */
 export function createInventoryActions({
-  setIsLoadingInventory, invPage, debouncedInvSearch, invStatusFilter, invConditionFilter, invSortBy,
-  invLimit, setInventoryItems, setInvTotal, setInventorySummary, setMyProductsList, toast,
+  setIsLoadingInventory, setInventoryItems, setInvTotal, setInventorySummary, setMyProductsList, toast,
   addInvProductId, addInvMaterial, addInvSize, addInvColor, addInvQuantity, addInvCondition,
   addInvNotes, myProductsList, setIsAddInventoryOpen, setAddInvProductId, setAddInvSize, setAddInvColor,
   setAddInvMaterial, setAddInvQuantity, setAddInvCondition, setAddInvNotes, editingProduct,
@@ -32,9 +38,8 @@ export function createInventoryActions({
 }: Dependencies) {
   const fetchInventoryData = async (options?: { silent?: boolean; itemsOnly?: boolean; page?: number }) => {
     if (!options?.silent) setIsLoadingInventory(true);
-    const pageToLoad = options?.page ?? invPage;
     try {
-      const res: any = await inventoryApi.listFiltered(encodeURIComponent(debouncedInvSearch), invStatusFilter, invConditionFilter, invSortBy, pageToLoad, invLimit);
+      const res: any = await inventoryApi.listFiltered('', '', '', 'newest', 1, INVENTORY_FETCH_LIMIT);
       setInventoryItems(res?.items || []);
       setInvTotal(res?.total || 0);
 
@@ -154,12 +159,35 @@ export function createInventoryActions({
     }
   };
 
+  /** Marks several washed/repaired items as available with one toast and one refresh. */
+  const handleBulkMarkAvailable = async (items: InventoryItem[]) => {
+    const targets = (items || []).filter(Boolean);
+    if (targets.length === 0) return;
+    let updated = 0;
+    const failed: string[] = [];
+    for (const item of targets) {
+      try {
+        await inventoryApi.updateItem(item._id, {
+          status: 'AVAILABLE',
+          conditionStatus: item.conditionStatus,
+          notes: item.notes,
+        });
+        updated += 1;
+      } catch {
+        failed.push(item.sku || item._id);
+      }
+    }
+    if (updated > 0) toast.success(`Đã chuyển ${updated} hiện vật sang "Sẵn sàng"!`);
+    if (failed.length > 0) toast.error(`Không cập nhật được ${failed.length} hiện vật: ${failed.join(', ')}`);
+    await fetchInventoryData({ silent: true });
+  };
+
   const handleDeleteInventoryItem = async (itemId: string) => {
     const result = await ConfirmModal.delete(
-      'Xác nhận thanh lý hiện vật?',
-      'Hiện vật này sẽ được chuyển sang trạng thái RETIRED và không thể cho thuê tiếp.',
+      'Ngừng cho thuê áo này?',
+      'Áo sẽ không còn trong kho và khách không đặt được nữa. Lịch sử thuê vẫn được giữ.',
       {
-        confirmButtonText: 'Đồng ý thanh lý',
+        confirmButtonText: 'Đồng ý ngừng cho thuê',
         cancelButtonText: 'Hủy bỏ',
       }
     );
@@ -167,10 +195,10 @@ export function createInventoryActions({
     if (result.isConfirmed) {
       try {
         await inventoryApi.deleteItem(itemId);
-        toast.success('Thanh lý hiện vật thành công!');
+        toast.success('Đã ngừng cho thuê áo này!');
         fetchInventoryData({ silent: true });
       } catch (err: any) {
-        toast.error(err.message || 'Lỗi xảy ra khi thanh lý hiện vật.');
+        toast.error(err.message || 'Lỗi xảy ra khi ngừng cho thuê áo.');
       }
     }
   };
@@ -201,7 +229,7 @@ export function createInventoryActions({
       const confirm = await Swal.fire({
         title: target === 0 ? 'Đưa biến thể về HẾT HÀNG?' : 'Xác nhận giảm số lượng?',
         html:
-          `Sẽ thanh lý <b>${willRetire}</b> chiếc của <b>${variantLabelOf(variantEditRow)}</b>.` +
+          `Sẽ ngừng cho thuê <b>${willRetire}</b> chiếc của <b>${variantLabelOf(variantEditRow)}</b>.` +
           (target === 0
             ? '<br/><br/>Biến thể vẫn còn trên sản phẩm nhưng khách sẽ không đặt được. Bạn có thể nhập thêm hàng bất cứ lúc nào.'
             : ''),
@@ -226,7 +254,7 @@ export function createInventoryActions({
       if (res?.shortfall > 0) {
         await Swal.fire({
           title: 'Đã xử lý một phần',
-          html: `${res.message}<br/><br/><b>Không thể thanh lý:</b><br/>${res.skipped
+          html: `${res.message}<br/><br/><b>Không thể ngừng cho thuê:</b><br/>${res.skipped
             .map((s: any) => `${s.sku} — ${s.reason}`)
             .join('<br/>')}`,
           icon: 'warning',
@@ -252,7 +280,7 @@ export function createInventoryActions({
     const label = variantLabelOf(row);
     const result = await ConfirmModal.delete(
       'Xóa biến thể này?',
-      `Sẽ gỡ hẳn ${label} khỏi sản phẩm "${row.productName}" và thanh lý ${row.total} chiếc. Khách hàng sẽ không còn thấy biến thể này để đặt hàng.`,
+      `Sẽ gỡ hẳn ${label} khỏi sản phẩm "${row.productName}" và ngừng cho thuê ${row.total} chiếc. Khách hàng sẽ không còn thấy biến thể này để đặt hàng.`,
       {
         confirmButtonText: 'Xóa biến thể',
         cancelButtonText: 'Hủy bỏ',
@@ -276,6 +304,6 @@ export function createInventoryActions({
 
   return {
     fetchInventoryData, handleRemoveVariant, handleDeleteInventoryItem, handleCreateInventoryItem,
-    handleUpdateInventoryItem, handleQuickUpdateStatus, handleAdjustVariantQuantity,
+    handleUpdateInventoryItem, handleQuickUpdateStatus, handleAdjustVariantQuantity, handleBulkMarkAvailable,
   };
 }
