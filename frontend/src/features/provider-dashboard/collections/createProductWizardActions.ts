@@ -307,6 +307,10 @@ export function createProductWizardActions({
   };
 
   const validateWizardStep1 = () => {
+    if (prodName && !prodCategoryId) {
+      toast.error('Vui lòng chọn danh mục cho áo dài');
+      return false;
+    }
     if (!prodName || !prodCategoryId || prodBasePrice === '' || prodDepositAmount === '') {
       toast.error('Vui lòng điền đầy đủ thông tin bắt buộc ở bước 1');
       return false;

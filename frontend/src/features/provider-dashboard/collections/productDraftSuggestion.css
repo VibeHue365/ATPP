@@ -185,66 +185,8 @@
   border-radius: 999px;
 }
 
-/* Style / occasion chips the provider can change (UC-C10 with Gemini). */
-.pdraft-choices {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 10px;
-  border-top: 1px solid #f1e4e7;
-}
-
-.pdraft-choice-note {
-  margin: 0;
-  color: #6b7280;
-  font-size: 12px;
-}
-
-.pdraft-choice-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-
-.pdraft-choice-row .pdraft-label {
-  margin: 0 4px 0 0;
-  min-width: 130px;
-}
-
-.pdraft-choice {
-  padding: 4px 12px;
-  border: 1px solid #e7c6cd;
-  border-radius: 999px;
-  background: #fff;
-  color: #4b5563;
-  font-size: 12px;
-  cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-.pdraft-choice:hover:not(:disabled) {
-  border-color: #881337;
-  color: #881337;
-}
-
-.pdraft-choice.is-on {
-  border-color: #881337;
-  background: #881337;
-  color: #fff;
-}
-
-.pdraft-choice:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
 @media (max-width: 640px) {
   .pdraft-row {
     flex-direction: column;
-  }
-
-  .pdraft-choice-row .pdraft-label {
-    min-width: 100%;
   }
 }

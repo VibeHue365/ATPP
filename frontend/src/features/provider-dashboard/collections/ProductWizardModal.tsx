@@ -616,6 +616,9 @@ export function ProductWizardModal({
                       className="pwm-select"
                       required
                     >
+                      <option value="" disabled>
+                        -- Chọn danh mục --
+                      </option>
                       {categories.map((c) => (
                         <option key={c._id || c.id} value={c._id || c.id}>
                           {c.name}
