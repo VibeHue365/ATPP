@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
@@ -12,6 +12,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { ProviderStaffStatus } from '../schemas/provider-staff.schema';
 
@@ -157,15 +158,27 @@ export class AddProviderStaffBlockDto {
 
 export class UpdateProviderCapacityDto {
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
+  @Transform(({ value }) => {
+    if (value === undefined) return undefined;
+    if (value === null || value === '') return null;
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? value : parsed;
+  })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsInt({ message: 'Số ca đồng thời phải là số nguyên' })
   @Min(1, { message: 'Số ca đồng thời tối thiểu là 1' })
   @Max(30, { message: 'Số ca đồng thời tối đa là 30' })
   maxConcurrentSessions?: number | null;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
+  @Transform(({ value }) => {
+    if (value === undefined) return undefined;
+    if (value === null || value === '') return null;
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? value : parsed;
+  })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsInt({ message: 'Số ca tối đa trong ngày phải là số nguyên' })
   @Min(1, { message: 'Số ca tối đa trong ngày phải từ 1 trở lên' })
   @Max(100, { message: 'Số ca tối đa trong ngày không vượt quá 100' })
   maxDailySessions?: number | null;

@@ -164,7 +164,7 @@ export class PhotographyQuoteService {
           startMin: session.startMinutes,
           endMin: session.endMinutes,
         })),
-        { preferredStaffId: dto.preferredStaffId ?? null },
+        { preferredStaffId: null, deferStaffAssignment: true },
       );
       if (!staffEvaluation.valid) {
         for (const err of staffEvaluation.errors) {

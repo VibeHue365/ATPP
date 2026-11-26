@@ -4417,6 +4417,72 @@ export class BookingsService implements OnApplicationBootstrap {
       );
     }
 
+    let staffAssignedDuringConfirm = false;
+    let preAssignedPhotoSchedules: any[] = [];
+    if (
+      nextStatus === BookingStatus.Confirmed &&
+      this.staffAvailabilityService
+    ) {
+      const activePhotoSchedules = await this.bookingScheduleModel
+        .find({
+          bookingId: booking._id,
+          scheduleType: BookingScheduleType.Photoshoot,
+          status: {
+            $in: [
+              BookingScheduleStatus.Confirmed,
+              BookingScheduleStatus.Held,
+              BookingScheduleStatus.Scheduled,
+            ],
+          },
+        })
+        .select('_id providerId assignedStaffId assignedStaffSnapshot')
+        .lean()
+        .exec();
+
+      if (activePhotoSchedules.length > 0) {
+        if (assignedStaffId) {
+          await this.staffAvailabilityService.assignStaffToBooking(
+            bookingIdStr,
+            assignedStaffId,
+            userId || 'provider',
+            roles,
+            'Chủ Studio phân công thợ khi chấp nhận lịch chụp',
+          );
+          staffAssignedDuringConfirm = true;
+          const refreshedBooking = await this.bookingModel
+            .findById(booking._id)
+            .select('statusTimeline')
+            .lean()
+            .exec();
+          if (refreshedBooking?.statusTimeline) {
+            booking.statusTimeline = refreshedBooking.statusTimeline as any;
+          }
+        } else if (currentStatus === BookingStatus.DepositPaid) {
+          const unassignedSchedules = activePhotoSchedules.filter(
+            (sch: any) => !sch.assignedStaffId,
+          );
+          if (unassignedSchedules.length > 0) {
+            for (const sch of unassignedSchedules) {
+              const provId =
+                (sch as any).providerId || booking.providerIds?.[0] || null;
+              if (!provId) continue;
+              const ctx =
+                await this.staffAvailabilityService.loadProviderCapacityContext(
+                  new Types.ObjectId(provId.toString()),
+                );
+              if (ctx.activeStaffCount > 0) {
+                throw new BadRequestException(
+                  'Vui lòng chọn thợ chụp phụ trách đang rảnh trước khi chấp nhận lịch chụp.',
+                );
+              }
+            }
+          } else {
+            preAssignedPhotoSchedules = activePhotoSchedules;
+          }
+        }
+      }
+    }
+
     if (nextStatus === BookingStatus.InProgress) {
       booking.status = nextStatus;
     }
@@ -4936,17 +5002,29 @@ export class BookingsService implements OnApplicationBootstrap {
     }
 
     if (
+      currentStatus === BookingStatus.DepositPaid &&
       nextStatus === BookingStatus.Confirmed &&
-      assignedStaffId &&
-      this.staffAvailabilityService
+      !staffAssignedDuringConfirm &&
+      preAssignedPhotoSchedules.length > 0
     ) {
-      await this.staffAvailabilityService.assignStaffToBooking(
-        bookingIdStr,
-        assignedStaffId,
-        userId || 'provider',
-        roles,
-        'Chủ Studio phân công thợ khi xác nhận đơn',
-      );
+      try {
+        const notifiedStaffUsers = new Set<string>();
+        for (const sch of preAssignedPhotoSchedules) {
+          const linkedUserId = (sch as any)?.assignedStaffSnapshot?.linkedUserId;
+          if (linkedUserId && !notifiedStaffUsers.has(String(linkedUserId))) {
+            notifiedStaffUsers.add(String(linkedUserId));
+            await this.notificationsService.createNotification(
+              String(linkedUserId),
+              'Lịch chụp đã được Chủ Studio xác nhận',
+              `Đơn ${booking.bookingCode} đã được Chủ Studio duyệt. Bạn đã có thể Check-in bắt đầu chụp khi đến giờ hẹn.`,
+              NotificationType.Booking,
+              { bookingId: booking._id, scheduleId: (sch as any)._id },
+            );
+          }
+        }
+      } catch (e) {
+        console.error('Failed to notify pre-assigned staff on CONFIRMED:', e);
+      }
     }
 
     for (const pid of booking.providerIds ?? []) {
@@ -4954,6 +5032,21 @@ export class BookingsService implements OnApplicationBootstrap {
     }
 
     return booking;
+  }
+
+  async getAvailableStaffForBooking(
+    bookingIdStr: string,
+    actorUserId: string,
+    actorRoles?: string[],
+  ) {
+    if (!this.staffAvailabilityService) {
+      throw new NotFoundException('Dịch vụ kiểm tra thợ chụp chưa được bật.');
+    }
+    return this.staffAvailabilityService.getAvailableStaffForBooking(
+      bookingIdStr,
+      actorUserId,
+      actorRoles,
+    );
   }
 
   async getAvailableStaffForSchedule(
@@ -6122,8 +6215,15 @@ export class BookingsService implements OnApplicationBootstrap {
     bookedSlots: { date: string; timeSlot: string; bookingItemId: string }[];
     totalActiveStaff?: number;
     maxConcurrentSessions?: number | null;
+    maxDailySessions?: number | null;
     effectiveCapacity?: number;
     slotAvailability?: any[];
+    dailyAvailability?: Array<{
+      date: string;
+      used: number;
+      limit: number;
+      remaining: number;
+    }>;
   }> {
     const idStr =
       typeof providerId === 'string'
