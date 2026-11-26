@@ -152,6 +152,12 @@ describe('ProfileRentalDetailPage address object regression test', () => {
 });
 
 describe('Customer Pickup Inspection and Reporting Workflow Suite', () => {
+  // Rental pickup actions require the customer's CCCD to be on file first.
+  const bookingWithCccd: any = {
+    ...mockBookingWithObjectAddress,
+    customerIdentityCard: { hasIdentityCard: true, idNumberMasked: '********1234' },
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockGet.mockImplementation((url: string) => {
@@ -223,6 +229,20 @@ describe('Customer Pickup Inspection and Reporting Workflow Suite', () => {
     });
   });
 
+  it('blocks pickup confirmation until the customer has uploaded a CCCD', async () => {
+    render(<ProfileRentalDetailPage booking={mockBookingWithObjectAddress} onBack={() => {}} />);
+
+    expect(screen.getByText(/trước khi xác nhận nhận áo dài hoặc thao tác bàn giao/i)).toBeDefined();
+    fireEvent.click(screen.getAllByText(/Áo đúng tình trạng/i)[0]);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText('Xác nhận đã nhận áo')).toBeNull();
+    expect(mockPost).not.toHaveBeenCalledWith(
+      expect.stringContaining('/customer-confirm-pickup'),
+      expect.anything(),
+    );
+  });
+
   it('3. Confirm pickup flow calls customer-confirm-pickup and triggers refresh', async () => {
     const onRefreshBooking = vi.fn();
     mockPost.mockImplementation((url: string) => {
@@ -234,7 +254,7 @@ describe('Customer Pickup Inspection and Reporting Workflow Suite', () => {
 
     render(
       <ProfileRentalDetailPage
-        booking={mockBookingWithObjectAddress}
+        booking={bookingWithCccd}
         onBack={() => {}}
         onRefreshBooking={onRefreshBooking}
       />
@@ -277,7 +297,7 @@ describe('Customer Pickup Inspection and Reporting Workflow Suite', () => {
 
     render(
       <ProfileRentalDetailPage
-        booking={mockBookingWithObjectAddress}
+        booking={bookingWithCccd}
         onBack={() => {}}
         onRefreshBooking={onRefreshBooking}
       />
@@ -344,7 +364,7 @@ describe('Customer Pickup Inspection and Reporting Workflow Suite', () => {
 
     render(
       <ProfileRentalDetailPage
-        booking={mockBookingWithObjectAddress}
+        booking={bookingWithCccd}
         onBack={() => {}}
         onRefreshBooking={onRefreshBooking}
       />
@@ -406,7 +426,7 @@ describe('Customer Pickup Inspection and Reporting Workflow Suite', () => {
 
     render(
       <ProfileRentalDetailPage
-        booking={mockBookingWithObjectAddress}
+        booking={bookingWithCccd}
         onBack={() => {}}
       />
     );
@@ -544,7 +564,7 @@ describe('Customer Pickup Inspection and Reporting Workflow Suite', () => {
 
     render(
       <ProfileRentalDetailPage
-        booking={mockBookingWithObjectAddress}
+        booking={bookingWithCccd}
         onBack={() => {}}
       />
     );
