@@ -42,7 +42,7 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
   const isIncidentAccepted = incident?.status === 'ACCEPTED';
   const canCancel = !isPendingCustomerIncident && !isDisputed && ['PENDING_PAYMENT', 'WAITING_PAYMENT', 'CONFIRMED', 'DEPOSIT_PAID', 'PICKUP_PENDING', 'READY_FOR_PICKUP'].includes(currentStatus);
   const isPickupStage = ['PICKUP_PENDING', 'READY_FOR_PICKUP', 'CONFIRMED', 'DEPOSIT_PAID'].includes(currentStatus);
-  const canReturn = !isPendingCustomerIncident && !isDisputed && ['PICKED_UP', 'IN_PROGRESS', 'RENTING'].includes(currentStatus);
+  const canReturn = !isPendingCustomerIncident && !isDisputed && ['PICKED_UP', 'IN_PROGRESS', 'RENTING', 'OVERDUE'].includes(currentStatus);
   const isReturnPending = currentStatus === 'RETURN_PENDING';
   const isReturned = currentStatus === 'RETURNED' || currentStatus === 'COMBO_PHOTOS_APPROVED';
   const isCompleted = currentStatus === 'COMPLETED';

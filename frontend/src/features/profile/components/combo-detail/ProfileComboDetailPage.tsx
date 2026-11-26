@@ -1413,7 +1413,7 @@ export const ProfileComboDetailPage: React.FC<ProfileComboDetailPageProps> = ({
             </button>
           )}
 
-          {rawStatus === 'COMBO_PHOTOS_APPROVED' && (
+          {['COMBO_PHOTOS_APPROVED', 'OVERDUE'].includes(rawStatus) && (
             <button
               type="button"
               onClick={() => setIsReturnModalOpen(true)}

@@ -7055,7 +7055,8 @@ export class BookingsService implements OnApplicationBootstrap {
       booking.status !== BookingStatus.PickedUp &&
       booking.status !== BookingStatus.InProgress &&
       booking.status !== BookingStatus.ReturnPending &&
-      booking.status !== BookingStatus.ComboPhotosApproved
+      booking.status !== BookingStatus.ComboPhotosApproved &&
+      booking.status !== BookingStatus.Overdue
     ) {
       throw new BadRequestException(
         `Không thể yêu cầu trả áo khi đơn hàng đang ở trạng thái ${booking.status}. Đơn hàng phải đang ở trạng thái Đang thuê (PICKED_UP) hoặc Đã duyệt ảnh (COMBO_PHOTOS_APPROVED).`,

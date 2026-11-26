@@ -548,6 +548,42 @@ export class RentalOverdueDominoService {
   /**
    * 5. Nhánh hoàn tác (Rollback): Khách A xuất hiện trả đồ trước khi có phán quyết cuối.
    */
+  async settleIfFullyReturned(bookingId: string): Promise<boolean> {
+    const booking = await this.bookingModel
+      .findById(bookingId)
+      .select({ status: 1, overdueTracking: 1 })
+      .lean()
+      .exec();
+    if (
+      !booking ||
+      (booking.status !== BookingStatus.Overdue &&
+        !(booking as any).overdueTracking?.isOverdue)
+    ) {
+      return false;
+    }
+
+    const items = await this.bookingItemModel
+      .find({
+        bookingId: booking._id,
+        itemType: BookingItemType.Product,
+      })
+      .select({ 'rentalFulfillment.status': 1 })
+      .lean()
+      .exec();
+    if (!items.length) return false;
+
+    const allReturned = items.every((item: any) =>
+      [
+        RentalFulfillmentStatus.Returned,
+        RentalFulfillmentStatus.Completed,
+      ].includes(item.rentalFulfillment?.status),
+    );
+    if (!allReturned) return false;
+
+    await this.reverseOverdueOnReturn(bookingId);
+    return true;
+  }
+
   async reverseOverdueOnReturn(bookingId: string): Promise<any> {
     const booking = await this.bookingModel.findById(bookingId).exec();
     if (!booking) throw new NotFoundException('Không tìm thấy đơn hàng.');

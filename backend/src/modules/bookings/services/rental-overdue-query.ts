@@ -20,7 +20,7 @@ export function buildRentalOverduePipeline(options: RentalOverdueQueryOptions = 
     { $match: itemMatch },
     { $lookup: { from: 'bookings', localField: 'bookingId', foreignField: '_id', as: 'booking' } },
     { $unwind: '$booking' },
-    { $match: { 'booking.status': { $in: ['PICKED_UP', 'RETURN_PENDING'] } } },
+    { $match: { 'booking.status': { $in: ['PICKED_UP', 'RETURN_PENDING', 'OVERDUE'] } } },
   ];
 }
 

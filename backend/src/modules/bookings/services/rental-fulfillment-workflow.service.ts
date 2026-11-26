@@ -34,6 +34,7 @@ import {
   TimeSlotEngineService,
 } from './time-slot-engine.service';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { RentalOverdueDominoService } from './rental-overdue-domino.service';
 import {
   assertRentalEvidenceUploadWindow,
   RENTAL_EVIDENCE_RETENTION_MS,
@@ -72,6 +73,8 @@ export class RentalFulfillmentWorkflowService {
     private readonly providerScheduleModel?: Model<ProviderSchedule>,
     @Optional()
     private readonly notificationsService?: NotificationsService,
+    @Optional()
+    private readonly overdueDominoService?: RentalOverdueDominoService,
   ) {}
 
   private async getProviderScheduleConfig(
@@ -209,6 +212,15 @@ export class RentalFulfillmentWorkflowService {
       note: input.note,
       conditionNote: input.conditionNote,
     });
+
+    // Overdue returns use their own late-fee/refund settlement once every
+    // rental item has physically been received by the shop.
+    if (this.overdueDominoService) {
+      const settled = await this.overdueDominoService.settleIfFullyReturned(
+        access.bookingId.toString(),
+      );
+      if (settled) return updated;
+    }
 
     // markReturned chỉ chuyển hiện vật sang trạng thái chờ kiểm tra (ReturnedPendingInspection).
     // Tuyệt đối KHÔNG tự chuyển sang CLEANING và KHÔNG gọi refund coordinator trước khi shop kiểm tra.
@@ -967,6 +979,7 @@ export class RentalFulfillmentWorkflowService {
       BookingStatus.ReturnPending,
       BookingStatus.Returned,
       BookingStatus.ComboPhotosApproved,
+      BookingStatus.Overdue,
     ];
     if (!allowed.includes(status)) {
       throw new BadRequestException(

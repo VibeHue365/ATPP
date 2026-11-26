@@ -31,7 +31,12 @@ describe('RentalFulfillmentWorkflowService', () => {
     roles: ['PROVIDER'],
   } as any;
 
-  function setup(providerMatch = true, withNotifications = false) {
+  function setup(
+    providerMatch = true,
+    withNotifications = false,
+    bookingOverride: Record<string, unknown> = {},
+    overdueDomino?: { settleIfFullyReturned: jest.Mock },
+  ) {
     const inventoryItemModel = {
       updateOne: jest.fn(() => ({ exec: async () => ({ modifiedCount: 1 }) })),
       updateMany: jest.fn(() => ({ exec: async () => ({ modifiedCount: 1 }) })),
@@ -50,7 +55,7 @@ describe('RentalFulfillmentWorkflowService', () => {
       updateOne: jest.fn(() => ({ exec: async () => ({ modifiedCount: 1 }) })),
     };
     const bookingModel = {
-      findById: jest.fn(() => query(booking)),
+      findById: jest.fn(() => query({ ...booking, ...bookingOverride })),
     };
     const itemModel = {
       findOne: jest.fn(() => query(item)),
@@ -85,6 +90,10 @@ describe('RentalFulfillmentWorkflowService', () => {
         ...input,
         status: 'RETURNED',
       })),
+      requestCustomerReturn: jest.fn(async (input) => ({
+        ...input,
+        status: 'CUSTOMER_RETURN_REQUESTED',
+      })),
       confirmNoIncident: jest.fn(async (input) => ({
         ...input,
         status: 'RETURNED',
@@ -114,6 +123,7 @@ describe('RentalFulfillmentWorkflowService', () => {
         timeEngineService as any,
         undefined,
         withNotifications ? notifications as any : undefined,
+        overdueDomino as any,
       ),
       fulfillment,
       evidenceModel,
@@ -230,6 +240,47 @@ describe('RentalFulfillmentWorkflowService', () => {
   });
 
   describe('markReturned & markCleaningCompleted Guards and Turnaround Lifecycle', () => {
+    it('allows an overdue customer to request return through the normal item workflow', async () => {
+      const { service, fulfillment, evidenceModel } = setup(
+        true,
+        false,
+        { status: 'OVERDUE' },
+      );
+      evidenceModel.find.mockReturnValue(query([{ fileId: 'return-file' }]));
+
+      await service.requestCustomerReturn(
+        bookingId.toString(),
+        itemId.toString(),
+        { sub: customerId.toString(), roles: ['CUSTOMER'] } as any,
+        { fileIds: ['return-file'] },
+      );
+
+      expect(fulfillment.requestCustomerReturn).toHaveBeenCalled();
+    });
+
+    it('settles overdue fees after the shop receives the final returned item', async () => {
+      const overdueDomino = {
+        settleIfFullyReturned: jest.fn().mockResolvedValue(true),
+      };
+      const { service } = setup(
+        true,
+        false,
+        { status: 'OVERDUE' },
+        overdueDomino,
+      );
+
+      await service.markReturned(
+        bookingId.toString(),
+        itemId.toString(),
+        providerUser,
+        { fileIds: [] },
+      );
+
+      expect(overdueDomino.settleIfFullyReturned).toHaveBeenCalledWith(
+        bookingId.toString(),
+      );
+    });
+
     it('markReturned does not set CLEANING, confirmNoIncident calculates availableFrom and sets status CLEANING with operationalAvailableFrom', async () => {
       const { service, inventoryItemModel, evidenceModel } = setup(true);
       evidenceModel.find.mockReturnValue(query([{ fileId: 'return-file' }]));

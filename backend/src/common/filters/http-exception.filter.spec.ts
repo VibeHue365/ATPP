@@ -2,6 +2,7 @@ import {
   ArgumentsHost,
   BadRequestException,
   HttpStatus,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { HttpExceptionFilter } from './http-exception.filter';
 import { ErrorCode } from '../exceptions/error-code';
@@ -74,6 +75,27 @@ describe('HttpExceptionFilter', () => {
         errorCode: ErrorCode.InternalError,
         message: 'Internal server error',
         path: '/unexpected-error',
+      }),
+    );
+  });
+
+  it('preserves safe operational messages for unavailable services', () => {
+    const json = jest.fn();
+    const status = jest.fn().mockReturnValue({ json });
+    const host = createHost(status, '/provider-verifications/id/ocr');
+
+    new HttpExceptionFilter().catch(
+      new ServiceUnavailableException(
+        'Dịch vụ OCR tạm thời không khả dụng. Vui lòng thử lại sau.',
+      ),
+      host,
+    );
+
+    expect(status).toHaveBeenCalledWith(HttpStatus.SERVICE_UNAVAILABLE);
+    expect(json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+        message: 'Dịch vụ OCR tạm thời không khả dụng. Vui lòng thử lại sau.',
       }),
     );
   });

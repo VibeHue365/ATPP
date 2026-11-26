@@ -8,6 +8,7 @@ import {
   Injectable,
   NotFoundException,
   InternalServerErrorException,
+  ServiceUnavailableException,
   StreamableFile,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
@@ -673,7 +674,9 @@ export class ProviderVerificationService {
         await session.endSession();
       }
       if (!request)
-        throw new InternalServerErrorException('Unable to queue OCR request');
+        throw new ServiceUnavailableException(
+          'Không thể xếp hàng xử lý OCR. Vui lòng thử lại sau.',
+        );
       await this.writeAudit(
         actor,
         'RUN_PROVIDER_VERIFICATION_OCR',
@@ -1781,11 +1784,13 @@ export class ProviderVerificationService {
       return this.parseTesseractTsv(tsv);
     } catch (error) {
       if (this.isMissingTesseractError(error)) {
-        throw new InternalServerErrorException(
-          'Tesseract OCR is not installed or TESSERACT_CMD is invalid',
+        throw new ServiceUnavailableException(
+          'Dịch vụ OCR chưa được cấu hình. Vui lòng thử lại sau.',
         );
       }
-      throw new InternalServerErrorException('OCR processing failed');
+      throw new ServiceUnavailableException(
+        'Dịch vụ OCR xử lý thất bại. Vui lòng kiểm tra ảnh và thử lại.',
+      );
     } finally {
       await rm(inputPath, { force: true }).catch(() => undefined);
       await rm(outputPath, { force: true }).catch(() => undefined);
@@ -1844,7 +1849,9 @@ export class ProviderVerificationService {
             : 0,
       };
     } catch {
-      throw new InternalServerErrorException('Remote OCR service failed');
+      throw new ServiceUnavailableException(
+        'Dịch vụ OCR tạm thời không khả dụng. Vui lòng thử lại sau.',
+      );
     }
   }
 
@@ -1939,7 +1946,10 @@ export class ProviderVerificationService {
   }
 
   private ocrErrorCode(error: unknown): string {
-    if (error instanceof InternalServerErrorException) {
+    if (
+      error instanceof InternalServerErrorException ||
+      error instanceof ServiceUnavailableException
+    ) {
       return 'OCR_SERVICE_UNAVAILABLE';
     }
     return 'OCR_PROCESSING_FAILED';

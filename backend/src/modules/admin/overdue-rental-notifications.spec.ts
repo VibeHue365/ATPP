@@ -17,7 +17,7 @@ describe('findAdminOverdueRentals', () => {
 
     expect(aggregate.mock.calls[0][0]).toEqual(expect.arrayContaining([
       { $match: { itemType: 'PRODUCT', rentalTo: { $ne: null, $lt: now } } },
-      { $match: { 'booking.status': { $in: ['PICKED_UP', 'RETURN_PENDING'] } } },
+      { $match: { 'booking.status': { $in: ['PICKED_UP', 'RETURN_PENDING', 'OVERDUE'] } } },
     ]));
     expect(result[0]).toMatchObject({ id: 'item-1', bookingCode: 'BK001', daysOverdue: 5 });
   });

@@ -9,6 +9,13 @@ describe('rental overdue query', () => {
     const providerMatch = buildRentalOverduePipeline({ now, providerId })[0].$match as any;
     expect(globalMatch.rentalTo).toEqual({ $ne: null, $lt: now });
     expect(providerMatch).toMatchObject({ ...globalMatch, providerId });
+    expect(buildRentalOverduePipeline({ now })).toContainEqual({
+      $match: {
+        'booking.status': {
+          $in: ['PICKED_UP', 'RETURN_PENDING', 'OVERDUE'],
+        },
+      },
+    });
   });
 
   it('returns the aggregation count', async () => {

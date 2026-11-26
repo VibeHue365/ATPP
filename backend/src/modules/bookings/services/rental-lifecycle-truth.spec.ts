@@ -610,6 +610,45 @@ describe('Rental Lifecycle Single Source of Truth & Role Separation (Requirement
       );
     });
 
+    it('allows the customer to request a return after the booking becomes OVERDUE', async () => {
+      const booking = {
+        _id: new Types.ObjectId(bookingId),
+        customerId: new Types.ObjectId(customerId),
+        status: BookingStatus.Overdue,
+        statusTimeline: [],
+        bookingType: BookingType.AoDaiRental,
+        overdueTracking: { isOverdue: true, calculatedLateFee: 50000 },
+        save: jest.fn().mockResolvedValue({}),
+      };
+      mockBookingModel.findById.mockResolvedValue(booking);
+      const item = {
+        _id: new Types.ObjectId(itemIdA),
+        bookingId: booking._id,
+        itemType: BookingItemType.Product,
+        rentalFulfillment: { status: RentalFulfillmentStatus.PickedUp },
+      };
+      mockBookingItemModel.find.mockReturnValue(query([item]));
+
+      await bookingsService.customerReturn(
+        bookingId,
+        customerId,
+        ['CUSTOMER'],
+        'Trả áo quá hạn',
+        ['photo-overdue.jpg'],
+        itemIdA,
+      );
+
+      expect(mockBookingItemModel.updateOne).toHaveBeenCalledWith(
+        { _id: item._id },
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            'rentalFulfillment.status':
+              RentalFulfillmentStatus.CustomerReturnRequested,
+          }),
+        }),
+      );
+    });
+
     it('Criteria 3: Shop cannot mark returned when item is still in PICKED_UP status (409 Conflict)', async () => {
       mockBookingItemModel.findOne.mockReturnValue({
         lean: () => ({
