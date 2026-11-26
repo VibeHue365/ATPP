@@ -58,23 +58,25 @@ export class RentalOverdueDominoService {
    * 1. Quét và cập nhật trạng thái đơn quá hạn (Khách A).
    * Chạy định kỳ bởi cronjob scheduler.
    */
-  async scanAndProcessOverdueBookings(): Promise<number> {
+  async scanAndProcessOverdueBookings(targetBookingId?: string): Promise<number> {
     const now = new Date();
     // Tìm các đơn thuê đang ở PICKED_UP hoặc RETURN_PENDING hoặc OVERDUE
-    const activeRentals = await this.bookingModel
-      .find({
-        status: {
-          $in: [
-            BookingStatus.PickedUp,
-            BookingStatus.ReturnPending,
-            BookingStatus.Overdue,
-          ],
-        },
-        bookingType: {
-          $in: [BookingType.AoDaiRental, BookingType.Combo],
-        },
-      })
-      .exec();
+    const query: any = {
+      status: {
+        $in: [
+          BookingStatus.PickedUp,
+          BookingStatus.ReturnPending,
+          BookingStatus.Overdue,
+        ],
+      },
+      bookingType: {
+        $in: [BookingType.AoDaiRental, BookingType.Combo],
+      },
+    };
+    if (targetBookingId && Types.ObjectId.isValid(targetBookingId)) {
+      query._id = new Types.ObjectId(targetBookingId);
+    }
+    const activeRentals = await this.bookingModel.find(query).exec();
 
     let processedCount = 0;
     if (activeRentals.length === 0) return 0;
@@ -133,8 +135,15 @@ export class RentalOverdueDominoService {
             : rawNotif || {}),
         };
 
+        const hasCustomerReturned =
+          booking.status === BookingStatus.ReturnPending ||
+          Boolean((booking as any).customerReturnEvidence?.submittedAt);
         let isFirstOverdue = false;
-        if (booking.status !== BookingStatus.Overdue && booking.status !== BookingStatus.LostItem) {
+        if (
+          !hasCustomerReturned &&
+          booking.status !== BookingStatus.Overdue &&
+          booking.status !== BookingStatus.LostItem
+        ) {
           booking.status = BookingStatus.Overdue;
           isFirstOverdue = true;
           (booking as any).statusTimeline = (booking as any).statusTimeline || [];
@@ -668,15 +677,38 @@ export class RentalOverdueDominoService {
       booking.pricingSummary.lateFee = calculatedLateFee;
     }
 
+    const wasRestrictedByOverdue =
+      Boolean(tracking.accountRestrictedAt) ||
+      Number(tracking.minutesOverdue || 0) >= 120;
+    let restrictedUntilDate: Date | null = null;
+
+    if (wasRestrictedByOverdue) {
+      restrictedUntilDate = new Date(now.getTime() + 72 * 60 * 60 * 1000);
+      await this.applyPostReturnRestriction(
+        booking.customerId.toString(),
+        booking.bookingCode,
+        restrictedUntilDate,
+      );
+    }
+
+    const restrictedUntilLabel = restrictedUntilDate
+      ? restrictedUntilDate.toLocaleString('vi-VN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        })
+      : null;
+
     (booking as any).statusTimeline = (booking as any).statusTimeline || [];
     (booking as any).statusTimeline.push({
       status: BookingStatus.Completed,
       changedAt: now,
-      note: `Khách đã trả áo & hoàn tất đơn. Đối soát quá hạn: Trừ phí trễ ${calculatedLateFee.toLocaleString('vi-VN')}đ (đã cộng ví Shop), hoàn lại cọc dư ${remainingDepositRefund.toLocaleString('vi-VN')}đ cho khách và mở khóa tài khoản.`,
+      note: wasRestrictedByOverdue
+        ? `Khách đã trả áo & hoàn tất đơn. Đối soát quá hạn: Trừ phí trễ ${calculatedLateFee.toLocaleString('vi-VN')}đ (đã cộng ví Shop), hoàn lại cọc dư ${remainingDepositRefund.toLocaleString('vi-VN')}đ cho khách. Tiếp tục áp dụng phạt tạm khóa đặt đơn mới 3 ngày (đến ${restrictedUntilLabel}).`
+        : `Khách đã trả áo & hoàn tất đơn. Đối soát quá hạn: Trừ phí trễ ${calculatedLateFee.toLocaleString('vi-VN')}đ (đã cộng ví Shop), hoàn lại cọc dư ${remainingDepositRefund.toLocaleString('vi-VN')}đ cho khách.`,
     });
-
-    // Mở khóa tài khoản khách hàng nếu từng bị hạn chế
-    await this.unrestrictUserAccount(booking.customerId.toString());
 
     // Khôi phục áo vào trạng thái giặt ủi
     try {
@@ -741,8 +773,12 @@ export class RentalOverdueDominoService {
 
     await this.sendNotificationSafe(
       booking.customerId.toString(),
-      'Đã hoàn tất trả áo và mở khóa tài khoản',
-      `Đơn hàng #${booking.bookingCode} đã được nhận lại. Phí trễ ${calculatedLateFee.toLocaleString('vi-VN')}đ được trừ vào cọc, tiền cọc dư ${remainingDepositRefund.toLocaleString('vi-VN')}đ đã được hoàn lại. Tài khoản của bạn đã hoạt động bình thường.`,
+      wasRestrictedByOverdue
+        ? 'Đã hoàn tất trả áo (Tài khoản tạm khóa 3 ngày)'
+        : 'Đã hoàn tất trả áo và đối soát cọc',
+      wasRestrictedByOverdue
+        ? `Đơn hàng #${booking.bookingCode} đã được nhận lại. Phí trễ ${calculatedLateFee.toLocaleString('vi-VN')}đ được trừ vào cọc, tiền cọc dư ${remainingDepositRefund.toLocaleString('vi-VN')}đ đã được hoàn lại. Do trễ hạn quá 2 giờ, tài khoản vẫn bị tạm khóa quyền đặt đơn mới trong 3 ngày (đến ${restrictedUntilLabel}).`
+        : `Đơn hàng #${booking.bookingCode} đã được nhận lại. Phí trễ ${calculatedLateFee.toLocaleString('vi-VN')}đ được trừ vào cọc, tiền cọc dư ${remainingDepositRefund.toLocaleString('vi-VN')}đ đã được hoàn lại.`,
       booking._id,
     );
 
@@ -913,7 +949,7 @@ export class RentalOverdueDominoService {
     };
     await booking.save();
 
-    await this.scanAndProcessOverdueBookings();
+    await this.scanAndProcessOverdueBookings(bookingId);
     const fresh = await this.bookingModel.findById(bookingId).lean().exec();
 
     return {
@@ -1055,6 +1091,36 @@ export class RentalOverdueDominoService {
     }
   }
 
+  private async applyPostReturnRestriction(
+    userId: string,
+    bookingCode: string,
+    restrictedUntil: Date,
+  ): Promise<void> {
+    try {
+      const userModel = this.bookingModel.db.model('User');
+      const untilLabel = restrictedUntil.toLocaleString('vi-VN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      });
+      await userModel.updateOne(
+        { _id: new Types.ObjectId(userId) },
+        {
+          $set: {
+            isRestricted: true,
+            restrictedReason: `Tài khoản bị tạm khóa quyền tạo đơn mới trong 3 ngày (đến ${untilLabel}) do trả đơn #${bookingCode} trễ hạn quá 2 giờ.`,
+            restrictedAt: new Date(),
+            restrictedUntil,
+          },
+        },
+      );
+    } catch (err) {
+      this.logger.warn(`Lỗi áp dụng hạn chế 3 ngày sau trả đồ cho ${userId}:`, err);
+    }
+  }
+
   private async unrestrictUserAccount(userId: string): Promise<void> {
     try {
       const userModel = this.bookingModel.db.model('User');
@@ -1065,6 +1131,7 @@ export class RentalOverdueDominoService {
             isRestricted: false,
             restrictedReason: null,
             restrictedAt: null,
+            restrictedUntil: null,
           },
         },
       );

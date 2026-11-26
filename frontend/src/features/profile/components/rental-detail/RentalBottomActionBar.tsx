@@ -18,6 +18,7 @@ interface RentalBottomActionBarProps {
   onConfirmComplete?: () => void;
   onContinuePayment?: () => void;
   canCustomerConfirmCompletion?: boolean;
+  hasSubmittedReturn?: boolean;
 }
 
 export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
@@ -33,6 +34,7 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
   onConfirmComplete,
   onContinuePayment,
   canCustomerConfirmCompletion = false,
+  hasSubmittedReturn = false,
 }) => {
   const currentStatus = status || 'CONFIRMED';
   const isPendingCustomerIncident =
@@ -42,8 +44,8 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
   const isIncidentAccepted = incident?.status === 'ACCEPTED';
   const canCancel = !isPendingCustomerIncident && !isDisputed && ['PENDING_PAYMENT', 'WAITING_PAYMENT', 'CONFIRMED', 'DEPOSIT_PAID', 'PICKUP_PENDING', 'READY_FOR_PICKUP'].includes(currentStatus);
   const isPickupStage = ['PICKUP_PENDING', 'READY_FOR_PICKUP', 'CONFIRMED', 'DEPOSIT_PAID'].includes(currentStatus);
-  const canReturn = !isPendingCustomerIncident && !isDisputed && ['PICKED_UP', 'IN_PROGRESS', 'RENTING', 'OVERDUE'].includes(currentStatus);
-  const isReturnPending = currentStatus === 'RETURN_PENDING';
+  const canReturn = !hasSubmittedReturn && !isPendingCustomerIncident && !isDisputed && ['PICKED_UP', 'IN_PROGRESS', 'RENTING', 'OVERDUE'].includes(currentStatus);
+  const isReturnPending = currentStatus === 'RETURN_PENDING' || (hasSubmittedReturn && currentStatus === 'OVERDUE');
   const isReturned = currentStatus === 'RETURNED' || currentStatus === 'COMBO_PHOTOS_APPROVED';
   const isCompleted = currentStatus === 'COMPLETED';
 

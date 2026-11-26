@@ -32,6 +32,7 @@ interface ProfileOverviewTabProps {
     isRestricted?: boolean;
     restrictedReason?: string | null;
     restrictedAt?: string | null;
+    restrictedUntil?: string | null;
   } | null;
 }
 
@@ -104,7 +105,26 @@ export const ProfileOverviewTab: React.FC<ProfileOverviewTabProps> = ({
               <strong>Lý do vi phạm:</strong> {restrictionInfo.restrictedReason || 'Bạn đã vi phạm chính sách trả trang phục đúng hạn trên sàn TàGo (trễ hạn trả quá 2 giờ).'}
             </p>
             <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: '#991B1B', lineHeight: 1.5 }}>
-              <strong>Thời hạn gỡ khóa:</strong> Tài khoản sẽ bị tạm khóa quyền đặt đơn mới <strong>cho đến khi bạn hoàn tất trả áo dài &amp; đối soát phí trễ hạn tại cửa hàng</strong> (hoặc được Quản trị viên xem xét gỡ hạn chế).
+              <strong>Thời hạn gỡ khóa:</strong>{' '}
+              {restrictionInfo.restrictedUntil ? (
+                <>
+                  Hệ thống sẽ tự động mở khóa quyền đặt đơn vào lúc{' '}
+                  <strong>
+                    {new Date(restrictionInfo.restrictedUntil).toLocaleString('vi-VN', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                    })}
+                  </strong>{' '}
+                  (sau 3 ngày kể từ khi hoàn tất trả áo), hoặc liên hệ Quản trị viên để được xem xét gỡ sớm.
+                </>
+              ) : (
+                <>
+                  Tài khoản đang bị tạm khóa quyền đặt đơn mới và sẽ tiếp tục bị hạn chế thêm <strong>3 ngày (72 giờ)</strong> sau khi bạn hoàn tất trả áo dài &amp; đối soát tại cửa hàng (hoặc được Quản trị viên xem xét gỡ sớm).
+                </>
+              )}
             </p>
           </div>
         </div>

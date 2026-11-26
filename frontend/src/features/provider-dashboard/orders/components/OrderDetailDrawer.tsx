@@ -457,7 +457,7 @@ export function OrderDetailDrawer({
       if (rawStatus === 'PENDING' || rawStatus === 'PENDING_PAYMENT') return 0;
       if (rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') return 0;
       if (rawStatus === 'PICKUP_PENDING') return 1;
-      if (rawStatus === 'PICKED_UP' || rawStatus === 'IN_PROGRESS') return 2;
+      if (rawStatus === 'PICKED_UP' || rawStatus === 'IN_PROGRESS' || rawStatus === 'OVERDUE') return 2;
       if (rawStatus === 'RETURN_PENDING') return 3;
       if (rawStatus === 'RETURNED' || rawStatus === 'COMBO_PHOTOS_APPROVED') return 4;
       return 0;
@@ -477,7 +477,7 @@ export function OrderDetailDrawer({
     if (rawStatus === 'PENDING' || rawStatus === 'PENDING_PAYMENT') return 0;
     if (rawStatus === 'DEPOSIT_PAID' || rawStatus === 'CONFIRMED') return 1;
     if (rawStatus === 'PICKUP_PENDING') return 2;
-    if (rawStatus === 'PICKED_UP') return 3;
+    if (rawStatus === 'PICKED_UP' || rawStatus === 'OVERDUE') return 3;
     if (rawStatus === 'IN_PROGRESS') return 3;
     if (rawStatus === 'AWAITING_REVIEW') return 4;
     if (rawStatus === 'COMBO_PHOTOS_APPROVED') return 6; // Đã duyệt ảnh -> đang chờ trả áo & nhận lại
@@ -934,89 +934,6 @@ export function OrderDetailDrawer({
     }
   };
 
-  const handleReverseOverdue = async (bookingId: string) => {
-    try {
-      const depositTotal = Number((order as any)?.deposit || (order as any)?.depositTotal || order?.pricingSummary?.depositTotal || 0);
-      const lateFee = Math.min(Number((order as any)?.overdueTracking?.calculatedLateFee || 0), depositTotal);
-      const refundAmt = Math.max(0, depositTotal - lateFee);
-
-      const res = await Swal.fire({
-        title: 'Đối soát & Hoàn tác quá hạn',
-        html: `
-          <div style="text-align: left; font-size: 13px; color: #374151; line-height: 1.6;">
-            <p style="margin: 0 0 12px;">Khách đã mang áo dài đến trả. Hệ thống sẽ thực hiện đối soát dòng tiền thực tế như sau:</p>
-            <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px;">
-              <div style="display: flex; justify-content: space-between;">
-                <span>Tiền cọc gốc đang ký quỹ:</span>
-                <strong>${depositTotal.toLocaleString('vi-VN')}đ</strong>
-              </div>
-              <div style="display: flex; justify-content: space-between; color: #DC2626;">
-                <span>Khấu trừ phạt trễ (+vào ví Shop):</span>
-                <strong>-${lateFee.toLocaleString('vi-VN')}đ</strong>
-              </div>
-              <div style="border-top: 1px dashed #CBD5E1; margin: 4px 0;"></div>
-              <div style="display: flex; justify-content: space-between; color: #16A34A; font-size: 14px;">
-                <span><strong>Hoàn lại cọc dư cho Khách:</strong></span>
-                <strong>${refundAmt.toLocaleString('vi-VN')}đ</strong>
-              </div>
-            </div>
-            <p style="margin: 10px 0 0; font-size: 12px; color: #64748B;">Đồng thời mở khóa tài khoản khách hàng và đưa áo về trạng thái giặt ủi.</p>
-          </div>
-        `,
-        showCancelButton: true,
-        confirmButtonColor: '#16A34A',
-        cancelButtonColor: '#6B7280',
-        confirmButtonText: 'Xác nhận trừ tiền & hoàn tất',
-        cancelButtonText: 'Hủy',
-      });
-      if (!res.isConfirmed) return;
-
-      Swal.fire({
-        title: 'Đang đối soát ví & hoàn cọc...',
-        allowOutsideClick: false,
-        didOpen: () => Swal.showLoading(),
-      });
-
-      const response: any = await httpClient.post(`/api/bookings/${bookingId}/overdue/reverse`, {});
-      const deducted = response?.lateFeeDeducted ?? lateFee;
-      const refunded = response?.depositRefunded ?? refundAmt;
-
-      if (fetchOrders) await fetchOrders(true, true);
-      try {
-        const fresh: any = await httpClient.get(`/api/bookings/${bookingId}`);
-        if (fresh && onSelectOrderRef.current) {
-          onSelectOrderRef.current({
-            ...order,
-            ...fresh,
-            rawStatus: fresh.status || 'COMPLETED',
-            overdueTracking: fresh.overdueTracking || null,
-            dominoRecovery: fresh.dominoRecovery || (order as any).dominoRecovery || null,
-          });
-        }
-      } catch {
-        // ignore
-      }
-
-      await Swal.fire({
-        icon: 'success',
-        title: 'Đã đối soát trừ tiền thành công!',
-        html: `
-          <div style="font-size: 13px; color: #374151; line-height: 1.6;">
-            <div>• Đã cộng <strong>+${deducted.toLocaleString('vi-VN')}đ</strong> tiền phạt vào <strong>Ví Shop</strong>.</div>
-            <div>• Đã hoàn trả <strong>${refunded.toLocaleString('vi-VN')}đ</strong> tiền cọc dư về <strong>Khách hàng</strong>.</div>
-          </div>
-        `,
-        confirmButtonColor: '#16A34A',
-      });
-    } catch (err: any) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Lỗi',
-        text: err?.response?.data?.message || err?.message || 'Không thể hoàn tác quá hạn.',
-      });
-    }
-  };
-
   const handleSubmitPickupEvidence = async () => {
     if (!order?._id) return;
     const targetItem = singleRentalItem || order.items?.[0];
@@ -1294,49 +1211,6 @@ export function OrderDetailDrawer({
     }
   };
 
-  const handleConfirmAllNoIncident = async () => {
-    if (!order?._id || !rentalItems.length) return;
-    const returnedItems = rentalItems.filter(
-      (item) => item.rentalFulfillment?.status === 'RETURNED' &&
-        !['FULLY_RELEASED', 'PARTIALLY_DEDUCTED', 'FULLY_DEDUCTED'].includes(item.rentalFulfillment?.depositSettlementStatus),
-    );
-    if (!returnedItems.length) return;
-
-    const res = await Swal.fire({
-      title: 'Xác nhận không có sự cố?',
-      text: 'Áo dài và phụ kiện nguyên vẹn. Hệ thống sẽ tạo yêu cầu hoàn cọc cho khách hàng và chuyển trang phục sang trạng thái Giặt ủi (CLEANING).',
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: '✓ Xác nhận hoàn cọc',
-      cancelButtonText: 'Kiểm tra lại',
-      confirmButtonColor: '#059669',
-      cancelButtonColor: '#6B7280',
-    });
-
-    if (!res.isConfirmed) return;
-
-    setIsConfirmingNoIncident(true);
-    try {
-      for (const item of returnedItems) {
-        await httpClient.post(
-          `/api/bookings/${order._id}/items/${item._id}/rental/confirm-no-incident`,
-          { note: 'Không có sự cố từ thanh tác vụ nhanh' }
-        );
-        setLocallySettledIds((prev) => new Set(prev).add(item._id));
-      }
-      toast.success('Đã xác nhận không có sự cố và hoàn tất thủ tục hoàn cọc cho khách hàng!');
-      if (fetchOrders) await fetchOrders(true, true);
-      const fresh = await httpClient.get<any>('/api/bookings/' + order._id);
-      if (fresh && onSelectOrderRef.current) {
-        onSelectOrderRef.current(fresh);
-      }
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || err?.message || 'Không thể xác nhận hoàn cọc.');
-    } finally {
-      setIsConfirmingNoIncident(false);
-    }
-  };
-
   const handleCleaningCompleted = async (itemToProcess?: any) => {
     const targetItem = itemToProcess || singleRentalItem;
     if (!order?._id || !targetItem?._id) return;
@@ -1596,7 +1470,7 @@ export function OrderDetailDrawer({
 
     if (isAoDai || isCombo) {
       // 2. Mốc 2: Chuẩn bị trang phục tại cửa hàng
-      const isReady = Boolean(rf?.readyAt) || ['PICKUP_PENDING', 'PICKED_UP', 'IN_PROGRESS', 'AWAITING_REVIEW', 'COMBO_PHOTOS_APPROVED', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(rawStatus);
+      const isReady = Boolean(rf?.readyAt) || ['PICKUP_PENDING', 'PICKED_UP', 'IN_PROGRESS', 'OVERDUE', 'AWAITING_REVIEW', 'COMBO_PHOTOS_APPROVED', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(rawStatus);
       const isPreparing = rawStatus === 'CONFIRMED' || rawStatus === 'DEPOSIT_PAID';
       list.push({
         time: rf?.readyAt
@@ -1615,7 +1489,7 @@ export function OrderDetailDrawer({
       });
 
       // 3. Mốc 3: Khách nhận áo dài & Bàn giao đồ (Check-in nhận áo)
-      const isPickedUp = Boolean(rf?.pickedUpAt) || ['PICKED_UP', 'IN_PROGRESS', 'AWAITING_REVIEW', 'COMBO_PHOTOS_APPROVED', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(rawStatus);
+      const isPickedUp = Boolean(rf?.pickedUpAt) || ['PICKED_UP', 'IN_PROGRESS', 'OVERDUE', 'AWAITING_REVIEW', 'COMBO_PHOTOS_APPROVED', 'RETURN_PENDING', 'RETURNED', 'COMPLETED'].includes(rawStatus);
       const isAwaitingPickup = rawStatus === 'PICKUP_PENDING';
       const pickupEvidenceCount = rf?.pickupEvidence?.files?.length || 0;
       list.push({
@@ -2151,26 +2025,6 @@ export function OrderDetailDrawer({
                       >
                         <XCircle size={14} />
                         <span>Xác nhận mất đồ (LOST_ITEM)</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleReverseOverdue(order._id)}
-                        style={{
-                          backgroundColor: '#FFF',
-                          color: '#166534',
-                          border: '1px solid #86EFAC',
-                          padding: '7px 14px',
-                          borderRadius: '8px',
-                          fontSize: '12.5px',
-                          fontWeight: 650,
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                        }}
-                      >
-                        <CheckCircle size={14} />
-                        <span>Khách trả áo (Hoàn tác quá hạn)</span>
                       </button>
                     </div>
                   </div>
@@ -3912,32 +3766,18 @@ export function OrderDetailDrawer({
               </>
             )}
 
-            {/* 3. Shop đã nhận lại áo (RETURNED) -> Chọn: Không có sự cố hoặc Báo sự cố */}
+            {/* 3. Shop đã nhận lại áo (RETURNED) -> Báo sự cố nếu có */}
             {isSingleRentalItem && isSingleReturnedAndInspecting && (
-              <>
-                <button
-                  type="button"
-                  className="p-drawer-danger-btn"
-                  onClick={() => onOpenIncidentReport(order)}
-                  style={{ padding: '8px 14px', fontSize: '13px' }}
-                  title="Yêu cầu đền bù sự cố hư hỏng hoặc vi phạm"
-                >
-                  <AlertTriangle size={14} />
-                  <span>⚠️ Yêu cầu đền bù</span>
-                </button>
-                <button
-                  type="button"
-                  className="p-drawer-primary-btn"
-                  style={{ backgroundColor: '#059669', border: 'none', color: '#FFFFFF' }}
-                  // This handler's optional argument is a booking item, not a
-                  // React click event.  Invoke it explicitly for this footer action.
-                  onClick={() => void handleConfirmNoIncident()}
-                  disabled={isConfirmingNoIncident}
-                >
-                  <CheckCircle size={14} />
-                  <span>{isConfirmingNoIncident ? 'Đang xử lý...' : '✓ Không có sự cố (Hoàn cọc)'}</span>
-                </button>
-              </>
+              <button
+                type="button"
+                className="p-drawer-danger-btn"
+                onClick={() => onOpenIncidentReport(order)}
+                style={{ padding: '8px 14px', fontSize: '13px' }}
+                title="Yêu cầu đền bù sự cố hư hỏng hoặc vi phạm"
+              >
+                <AlertTriangle size={14} />
+                <span>⚠️ Yêu cầu đền bù</span>
+              </button>
             )}
 
             {isSingleRentalItem && hasIncidentPending && (
@@ -4234,28 +4074,16 @@ export function OrderDetailDrawer({
               rentalItems.length > 0 &&
               rentalItems.every((i) => ['RETURNED', 'COMPLETED'].includes(i.rentalFulfillment?.status)) &&
               rentalItems.some((i) => i.rentalFulfillment?.status === 'RETURNED' && !['FULLY_RELEASED', 'PARTIALLY_DEDUCTED', 'FULLY_DEDUCTED'].includes(i.rentalFulfillment?.depositSettlementStatus)) && (
-              <>
-                <button
-                  type="button"
-                  className="p-drawer-danger-btn"
-                  onClick={() => onOpenIncidentReport(order)}
-                  style={{ padding: '8px 14px', fontSize: '13px' }}
-                  title="Yêu cầu đền bù sự cố hư hỏng hoặc vi phạm"
-                >
-                  <AlertTriangle size={14} />
-                  <span>⚠️ Yêu cầu đền bù</span>
-                </button>
-                <button
-                  type="button"
-                  className="p-drawer-primary-btn"
-                  style={{ backgroundColor: '#059669', border: 'none', color: '#FFFFFF' }}
-                  onClick={() => void handleConfirmAllNoIncident()}
-                  disabled={isConfirmingNoIncident}
-                >
-                  <CheckCircle size={14} />
-                  <span>{isConfirmingNoIncident ? 'Đang xử lý...' : '✓ Không có sự cố (Hoàn cọc)'}</span>
-                </button>
-              </>
+              <button
+                type="button"
+                className="p-drawer-danger-btn"
+                onClick={() => onOpenIncidentReport(order)}
+                style={{ padding: '8px 14px', fontSize: '13px' }}
+                title="Yêu cầu đền bù sự cố hư hỏng hoặc vi phạm"
+              >
+                <AlertTriangle size={14} />
+                <span>⚠️ Yêu cầu đền bù</span>
+              </button>
             )}
 
             {['PICKED_UP', 'RETURN_PENDING', 'OVERDUE'].includes(rawStatus) && (
@@ -4282,26 +4110,15 @@ export function OrderDetailDrawer({
             )}
 
             {rawStatus === 'OVERDUE' && (
-              <>
-                <button
-                  type="button"
-                  className="p-drawer-danger-btn"
-                  onClick={() => void handleConfirmLostItem(order._id)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                >
-                  <XCircle size={14} />
-                  <span>Xác nhận mất đồ (LOST_ITEM)</span>
-                </button>
-                <button
-                  type="button"
-                  className="p-drawer-primary-btn"
-                  onClick={() => void handleReverseOverdue(order._id)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#16A34A', borderColor: '#16A34A' }}
-                >
-                  <CheckCircle size={14} />
-                  <span>Khách trả áo (Hoàn tác)</span>
-                </button>
-              </>
+              <button
+                type="button"
+                className="p-drawer-danger-btn"
+                onClick={() => void handleConfirmLostItem(order._id)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <XCircle size={14} />
+                <span>Xác nhận mất đồ (LOST_ITEM)</span>
+              </button>
             )}
 
             {rawStatus === 'RETURNED' && !isSingleRentalItem && !isOrderCompleted && !isSingleCleaning && !hasIncidentPending && !hasDispute && (

@@ -171,9 +171,7 @@ describe('UC-27 Smart Combo Recommendation (DaiBLL)', () => {
     expect(suggest).not.toHaveBeenCalled();
   });
 
-  // Known defect UT-DEF-27-01: product and photography_package have no validation decorators, so the global
-  // ValidationPipe (whitelist + forbidNonWhitelisted) rejects every request sent by the provider combo form.
-  it.failing(
+  it(
     'UT-27 UTCID27 accepts the combo suggestion request sent by the provider combo form',
     async () => {
       const pipe = new ValidationPipe({

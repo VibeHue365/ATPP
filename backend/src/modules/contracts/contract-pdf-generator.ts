@@ -176,7 +176,7 @@ export function buildContractTermsLines(
     '- Biểu phí quá hạn trả trang phục: Kể từ thời điểm quá hạn, hệ thống áp dụng mức phí trễ hạn lũy tiến là +10% tiền đặt cọc cho mỗi 30 phút trễ (làm tròn lên theo từng chu kỳ 30 phút, tối thiểu 1.000 đ/30 phút), với mức trần tối đa bằng 50% tổng tiền đặt cọc của đơn hàng trong giai đoạn chờ hoàn trả.',
   );
   lines.push(
-    '- Các mốc cảnh báo và chế tài tài khoản: Hệ thống gửi thông báo nhắc nhở tại mốc 15 phút và 1 giờ quá hạn. Khi quá hạn từ 2 giờ (T+2h) trở lên, tài khoản Bên B bị tạm khóa quyền tạo đơn thuê mới trên nền tảng TàGo cho đến khi hoàn tất trả trang phục và đối soát xong nghĩa vụ quá hạn.',
+    '- Các mốc cảnh báo và chế tài tài khoản: Hệ thống gửi thông báo nhắc nhở tại mốc 15 phút và 1 giờ quá hạn. Khi quá hạn từ 2 giờ (T+2h) trở lên, tài khoản Bên B bị tạm khóa quyền tạo đơn thuê mới trên nền tảng TàGo và tiếp tục duy trì thời hạn phạt tạm khóa 03 (ba) ngày kể từ khi hoàn tất trả trang phục và đối soát xong nghĩa vụ quá hạn.',
   );
   lines.push(
     '- Mốc quá hạn 24 giờ và xác nhận mất trang phục (LOST_ITEM): Trường hợp trễ quá 24 giờ mà Bên B chưa hoàn trả trang phục và Bên A đã liên hệ tối thiểu 03 (ba) lần bất thành, Bên A có quyền kích hoạt xác nhận Mất trang phục (LOST_ITEM) theo Điều 4.',

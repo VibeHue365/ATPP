@@ -4,7 +4,9 @@ import {
   IsString,
   IsNumber,
   IsArray,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class ProductInfoDto {
   @IsOptional()
@@ -83,8 +85,15 @@ export class PhotographyPackageInfoDto {
 }
 
 export class ComboSuggestionRequestDto {
-  product: ProductInfoDto;
-  photography_package: PhotographyPackageInfoDto;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ProductInfoDto)
+  product?: ProductInfoDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PhotographyPackageInfoDto)
+  photography_package?: PhotographyPackageInfoDto;
 
   @IsOptional()
   @IsString()

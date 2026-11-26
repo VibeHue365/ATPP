@@ -2265,13 +2265,36 @@ export class BookingCreationService {
       if (!userModel) return;
       const userDoc: any = await userModel
         .findById(customerId)
-        .select('isRestricted restrictedReason accountStatus')
+        .select('isRestricted restrictedReason restrictedUntil accountStatus')
         .lean()
         .exec();
-      if (userDoc?.isRestricted || userDoc?.accountStatus === 'BANNED') {
+      if (userDoc?.accountStatus === 'BANNED') {
         throw new ForbiddenException(
           userDoc.restrictedReason ||
-            'Tài khoản của bạn đang bị hạn chế đặt đơn mới do có đơn thuê trang phục quá hạn chưa hoàn tất xử lý. Vui lòng liên hệ sàn TàGo để được hỗ trợ.',
+            'Tài khoản của bạn đã bị khóa vĩnh viễn theo quy chế sàn TàGo.',
+        );
+      }
+      if (userDoc?.isRestricted) {
+        if (
+          userDoc.restrictedUntil &&
+          new Date(userDoc.restrictedUntil).getTime() <= Date.now()
+        ) {
+          await userModel.updateOne(
+            { _id: new Types.ObjectId(customerId.toString()) },
+            {
+              $set: {
+                isRestricted: false,
+                restrictedReason: null,
+                restrictedAt: null,
+                restrictedUntil: null,
+              },
+            },
+          );
+          return;
+        }
+        throw new ForbiddenException(
+          userDoc.restrictedReason ||
+            'Tài khoản của bạn đang bị tạm khóa quyền đặt đơn mới do vi phạm quá hạn trả áo dài.',
         );
       }
     } catch (err) {

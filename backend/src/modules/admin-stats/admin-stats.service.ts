@@ -2338,6 +2338,7 @@ export class AdminStatsService {
           isRestricted: false,
           restrictedReason: null,
           restrictedAt: null,
+          restrictedUntil: null,
         },
       },
     );
@@ -2353,6 +2354,7 @@ export class AdminStatsService {
           isRestricted: false,
           restrictedReason: null,
           restrictedAt: null,
+          restrictedUntil: null,
         },
       },
     );

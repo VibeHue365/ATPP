@@ -786,10 +786,18 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
   const handleReturnSubmit = async (data: { evidencePhotos: string[]; note?: string }) => {
     if (!booking?._id) return;
     await httpClient.post(`/bookings/${booking._id}/customer-return`, data);
+    const lateFee = Number(
+      booking?.overdueTracking?.calculatedLateFee ?? booking?.pricingSummary?.lateFee ?? 0,
+    );
+    const remainingDeposit = Math.max(0, depositFee - lateFee);
+    const modalText =
+      lateFee > 0
+        ? `Cửa hàng ${storeName} đã nhận được thông báo kèm ảnh bằng chứng trả áo. Nhân viên sẽ kiểm tra, đối soát phí quá hạn (-${lateFee.toLocaleString('vi-VN')}đ) và hoàn cọc còn lại (${remainingDeposit.toLocaleString('vi-VN')}đ) cho bạn.`
+        : `Cửa hàng ${storeName} đã nhận được thông báo kèm ảnh bằng chứng trả áo. Nhân viên sẽ kiểm tra và đối soát hoàn cọc ${depositFee.toLocaleString('vi-VN')}đ cho bạn.`;
     await Swal.fire({
       icon: 'success',
       title: 'Đã gửi thông báo trả áo!',
-      text: `Cửa hàng ${storeName} đã nhận được thông báo kèm ảnh bằng chứng trả áo. Nhân viên sẽ kiểm tra và đối soát hoàn cọc ${depositFee.toLocaleString('vi-VN')}đ cho bạn.`,
+      text: modalText,
       confirmButtonColor: '#8E1B2E',
     });
     onRefreshBooking?.();
@@ -919,6 +927,31 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
     } finally {
       setRespondingIncident(false);
     }
+  };
+
+  const openPickupWithCccdGuard = (mode: PickupModalMode) => {
+    const hasUploadedCccd = Boolean(
+      identityCardInfo?.hasIdentityCard ||
+        booking?.customerIdentityCard?.hasIdentityCard ||
+        booking?.customerIdentityCard?.frontImage,
+    );
+    if (!isPhoto && !hasUploadedCccd) {
+      void Swal.fire({
+        icon: 'warning',
+        title: 'Yêu cầu xác thực CCCD',
+        text: 'Vui lòng gửi ảnh Căn cước công dân (2 mặt) trước khi xác nhận nhận áo dài hoặc thao tác bàn giao.',
+        showCancelButton: true,
+        confirmButtonText: 'Gửi CCCD ngay',
+        cancelButtonText: 'Đóng',
+        confirmButtonColor: '#8E1B2E',
+      }).then((res) => {
+        if (res.isConfirmed) {
+          void handleUploadCccd();
+        }
+      });
+      return;
+    }
+    setPickupModalMode(mode);
   };
 
   // Handle pickup modal submit for CONFIRM, DAMAGE, and REJECT flows
@@ -1444,9 +1477,11 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
                     bookingId,
                     itemId,
                     isSubmitting: isSubmittingPickup,
-                    onConfirm: () => setPickupModalMode('CONFIRM'),
-                    onReportDamage: () => setPickupModalMode('DAMAGE'),
-                    onReject: () => setPickupModalMode('REJECT'),
+                    requiresCccd: !isPhoto && !hasCccd,
+                    onUploadCccd: () => void handleUploadCccd(),
+                    onConfirm: () => openPickupWithCccdGuard('CONFIRM'),
+                    onReportDamage: () => openPickupWithCccdGuard('DAMAGE'),
+                    onReject: () => openPickupWithCccdGuard('REJECT'),
                   }
                   : undefined
               }
@@ -1925,15 +1960,20 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
         onSupport={handleSupport}
         onReturn={handleReturn}
         onOpenMap={handleOpenMap}
-        onConfirmPickup={() => setPickupModalMode('CONFIRM')}
-        onReportDamage={() => setPickupModalMode('DAMAGE')}
-        onRejectHandover={() => setPickupModalMode('REJECT')}
+        onConfirmPickup={() => openPickupWithCccdGuard('CONFIRM')}
+        onReportDamage={() => openPickupWithCccdGuard('DAMAGE')}
+        onRejectHandover={() => openPickupWithCccdGuard('REJECT')}
         isSubmittingPickup={isSubmittingPickup}
         onConfirmComplete={handleConfirmComplete}
         onAgreeIncident={handleAgreeIncident}
         onDisagreeIncident={handleDisagreeIncident}
         onContinuePayment={() => onContinuePayment?.(booking?._id)}
         canCustomerConfirmCompletion={Boolean(booking?.canCustomerConfirmCompletion)}
+        hasSubmittedReturn={Boolean(
+          booking?.customerReturnEvidence?.submittedAt ||
+            booking?.customerReturnEvidence?.evidencePhotos?.length ||
+            item?.rentalFulfillment?.returnedAt,
+        )}
       />
 
       {/* 6. Modal Báo cáo hiện trạng / Xác nhận / Từ chối nhận áo */}
@@ -1956,6 +1996,9 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
         storeName={storeName}
         storeAddress={storeAddress}
         depositAmount={depositFee}
+        lateFee={Number(
+          booking?.overdueTracking?.calculatedLateFee ?? booking?.pricingSummary?.lateFee ?? 0,
+        )}
         onClose={() => setIsReturnModalOpen(false)}
         onOpenMap={handleOpenMap}
         onSubmit={handleReturnSubmit}
