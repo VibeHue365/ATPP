@@ -63,6 +63,7 @@ export interface StaffScheduleItem {
   customerNote?: string | null;
   scheduleNotes?: string | null;
   checkedInAt?: string | null;
+  checkInPhotoUrl?: string | null;
   shootFinishedAt?: string | null;
   staffFieldNote?: string | null;
   canCheckIn: boolean;
@@ -90,6 +91,7 @@ export interface StaffCheckInResponse {
   bookingCode: string;
   bookingStatus: string;
   checkedInAt: string;
+  checkInPhotoUrl: string | null;
   staffFieldNote: string | null;
 }
 
@@ -108,6 +110,7 @@ export interface StaffFinishShootResponse {
   bookingCode: string;
   bookingStatus: string;
   checkedInAt: string | null;
+  checkInPhotoUrl?: string | null;
   shootFinishedAt: string;
   staffFieldNote: string | null;
 }
@@ -133,9 +136,16 @@ export const staffPortalApi = {
     );
   },
 
+  uploadCheckInPhoto: (formData: FormData) =>
+    httpClient.post<never, { url: string }>(
+      '/api/staff/check-in-photo',
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    ),
+
   checkIn: (
     scheduleId: string,
-    dto: { note?: string; latitude?: number; longitude?: number } = {},
+    dto: { photoUrl: string; note?: string; latitude?: number; longitude?: number },
   ) =>
     httpClient.post<never, StaffCheckInResponse>(
       `/api/staff/schedules/${encodeURIComponent(scheduleId)}/check-in`,

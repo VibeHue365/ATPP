@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsIn,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
@@ -33,6 +34,11 @@ export class StaffSchedulesQueryDto {
 }
 
 export class StaffCheckInDto {
+  @IsString({ message: 'Ảnh xác nhận check-in không hợp lệ.' })
+  @IsNotEmpty({ message: 'Vui lòng chụp ảnh xác nhận đã đến điểm hẹn trước khi check-in.' })
+  @MaxLength(2000)
+  photoUrl: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(500)

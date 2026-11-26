@@ -8,10 +8,30 @@ const mockLogout = jest.fn().mockResolvedValue(undefined);
 const mockCreateRoom = jest.fn();
 const mockGetProfile = jest.fn();
 const mockGetMySchedules = jest.fn();
+const mockUploadCheckInPhoto = jest.fn();
 const mockCheckIn = jest.fn();
 const mockFinishShoot = jest.fn();
 const mockAddBlockedSlot = jest.fn();
 const mockRemoveBlockedSlot = jest.fn();
+const mockRequestCameraPerm = jest.fn();
+const mockLaunchCamera = jest.fn();
+const mockRequestMediaPerm = jest.fn();
+const mockLaunchGallery = jest.fn();
+
+jest.mock('expo-image-picker', () => ({
+  requestCameraPermissionsAsync: (...args: any[]) => mockRequestCameraPerm(...args),
+  launchCameraAsync: (...args: any[]) => mockLaunchCamera(...args),
+  requestMediaLibraryPermissionsAsync: (...args: any[]) => mockRequestMediaPerm(...args),
+  launchImageLibraryAsync: (...args: any[]) => mockLaunchGallery(...args),
+}));
+
+jest.mock('@/utils/imageUpload', () => ({
+  prepareImageUploadPart: jest.fn(async (asset: any) => ({
+    uri: asset.uri,
+    name: 'checkin.jpg',
+    type: 'image/jpeg',
+  })),
+}));
 
 jest.mock('expo-router', () => ({
   router: {
@@ -40,6 +60,7 @@ jest.mock('@/apis/staffPortalApi', () => ({
   staffPortalApi: {
     getProfile: (...args: any[]) => mockGetProfile(...args),
     getMySchedules: (...args: any[]) => mockGetMySchedules(...args),
+    uploadCheckInPhoto: (...args: any[]) => mockUploadCheckInPhoto(...args),
     checkIn: (...args: any[]) => mockCheckIn(...args),
     finishShoot: (...args: any[]) => mockFinishShoot(...args),
     addBlockedSlot: (...args: any[]) => mockAddBlockedSlot(...args),
@@ -84,7 +105,18 @@ describe('Mobile StaffPortalScreen (Isolated STAFF)', () => {
       },
     });
     mockCreateRoom.mockResolvedValue({ id: 'room-77' });
-    mockCheckIn.mockResolvedValue({ bookingStatus: 'IN_PROGRESS' });
+    mockRequestCameraPerm.mockResolvedValue({ granted: true });
+    mockLaunchCamera.mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file:///tmp/checkin.jpg', mimeType: 'image/jpeg', fileName: 'checkin.jpg' }],
+    });
+    mockUploadCheckInPhoto.mockResolvedValue({
+      url: 'https://cdn.test/staff-checkins/mobile-arrival.jpg',
+    });
+    mockCheckIn.mockResolvedValue({
+      bookingStatus: 'IN_PROGRESS',
+      checkInPhotoUrl: 'https://cdn.test/staff-checkins/mobile-arrival.jpg',
+    });
     mockFinishShoot.mockResolvedValue({ bookingStatus: 'IN_PROGRESS' });
   });
 
@@ -145,18 +177,25 @@ describe('Mobile StaffPortalScreen (Isolated STAFF)', () => {
       });
     });
 
-    // Check-in workflow
+    // Check-in workflow: capture arrival photo (no note input) -> upload -> checkIn
     await fireEvent.press(view.getByText('Check-in & Bắt đầu chụp'));
     await waitFor(() => {
-      expect(view.getByText('Xác nhận Check-in & Bắt đầu chụp')).toBeTruthy();
+      expect(view.getByText('Chụp ảnh Check-in xác nhận có mặt')).toBeTruthy();
     });
-    await fireEvent.press(view.getByText('Xác nhận'));
+    await fireEvent.press(view.getByText('Chụp ảnh ngay'));
     await waitFor(() => {
-      expect(mockCheckIn).toHaveBeenCalledWith('sched-1', { note: undefined });
+      expect(view.getByText('Đã có ảnh xác nhận')).toBeTruthy();
+    });
+    await fireEvent.press(view.getByText('Xác nhận Check-in'));
+    await waitFor(() => {
+      expect(mockUploadCheckInPhoto).toHaveBeenCalledTimes(1);
+      expect(mockCheckIn).toHaveBeenCalledWith('sched-1', {
+        photoUrl: 'https://cdn.test/staff-checkins/mobile-arrival.jpg',
+      });
     });
   });
 
-  it('executes finishShoot flow and preserves IN_PROGRESS handover notice', async () => {
+  it('executes quick check-out flow without mandatory note and preserves IN_PROGRESS handover notice', async () => {
     mockGetMySchedules.mockResolvedValue({
       staff: { _id: 'staff-1', name: 'Nguyễn Minh Tuấn' },
       studio: null,
@@ -178,6 +217,7 @@ describe('Mobile StaffPortalScreen (Isolated STAFF)', () => {
             fullName: 'Lê Bảo Ngọc',
           },
           checkedInAt: '2026-12-01T07:05:00.000Z',
+          checkInPhotoUrl: 'https://cdn.test/staff-checkins/mobile-arrival.jpg',
           canCheckIn: false,
           canFinishShoot: true,
         },
@@ -187,14 +227,16 @@ describe('Mobile StaffPortalScreen (Isolated STAFF)', () => {
     const view = await render(<StaffPortalScreen />);
 
     await waitFor(() => {
-      expect(view.getByText('Hoàn tất ca chụp')).toBeTruthy();
+      expect(view.getByText('Check-out · Hoàn tất ca chụp')).toBeTruthy();
+      expect(view.getByText('Ảnh check-in')).toBeTruthy();
     });
 
-    await fireEvent.press(view.getByText('Hoàn tất ca chụp'));
+    await fireEvent.press(view.getByText('Check-out · Hoàn tất ca chụp'));
     await waitFor(() => {
-      expect(view.getByText('Xác nhận Hoàn tất buổi chụp')).toBeTruthy();
+      expect(view.getByText('Xác nhận Check-out hoàn tất chụp')).toBeTruthy();
+      expect(view.getByText('Thêm ghi chú (không bắt buộc)')).toBeTruthy();
     });
-    await fireEvent.press(view.getByText('Xác nhận'));
+    await fireEvent.press(view.getByText('Xác nhận Check-out'));
     await waitFor(() => {
       expect(mockFinishShoot).toHaveBeenCalledWith('sched-2', { note: undefined });
     });

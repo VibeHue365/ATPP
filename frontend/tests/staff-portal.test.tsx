@@ -112,13 +112,19 @@ vi.mock('../src/services/httpClient', () => {
       };
     }
 
+    if (method === 'POST' && path === '/api/staff/check-in-photo') {
+      return { url: 'https://cdn.test/staff-checkins/arrival.jpg' };
+    }
+
     if (method === 'POST' && path === '/api/staff/schedules/sch-1/check-in') {
+      const payload = (body || {}) as Record<string, any>;
       mocks.schedulesState = mocks.schedulesState.map((s) =>
         s.scheduleId === 'sch-1'
           ? {
               ...s,
               bookingStatus: 'IN_PROGRESS',
               checkedInAt: '2026-12-20T01:05:00Z',
+              checkInPhotoUrl: payload.photoUrl ?? null,
               canCheckIn: false,
               canFinishShoot: true,
             }
@@ -130,6 +136,7 @@ vi.mock('../src/services/httpClient', () => {
         bookingCode: 'TG-2026-888',
         bookingStatus: 'IN_PROGRESS',
         checkedInAt: '2026-12-20T01:05:00Z',
+        checkInPhotoUrl: payload.photoUrl ?? null,
         staffFieldNote: null,
       };
     }
@@ -248,31 +255,48 @@ describe('StaffPortalPage (Phase 3 Isolated Staff View)', () => {
     expect(bodyText).not.toContain('Đặt cọc');
     expect(bodyText).not.toContain('Tổng tiền');
 
-    // Step 1: Check-in
+    // Step 1: Check-in requires arrival photo (no note textarea)
     fireEvent.click(screen.getByRole('button', { name: /Check-in bắt đầu chụp/i }));
-    fireEvent.change(screen.getByPlaceholderText(/Ghi chú tại điểm hẹn/i), {
-      target: { value: 'Đã gặp khách' },
+    expect(screen.queryByPlaceholderText(/Ghi chú tại điểm hẹn/i)).toBeNull();
+    const confirmCheckInBtn = screen.getByRole('button', {
+      name: /Xác nhận Check-in/i,
+    }) as HTMLButtonElement;
+    expect(confirmCheckInBtn.disabled).toBe(true);
+
+    const fileInput = screen.getByLabelText(/Tải ảnh xác nhận check-in/i);
+    const fakePhoto = new File(['fake-jpeg'], 'arrival.jpg', {
+      type: 'image/jpeg',
     });
+    fireEvent.change(fileInput, { target: { files: [fakePhoto] } });
+    expect(confirmCheckInBtn.disabled).toBe(false);
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /^Xác nhận$/i }));
+      fireEvent.click(confirmCheckInBtn);
     });
+
+    const uploadReq = mocks.requests.find(
+      (r) => r.method === 'POST' && r.path === '/api/staff/check-in-photo',
+    );
+    expect(uploadReq).toBeTruthy();
 
     const checkInReq = mocks.requests.find(
       (r) =>
         r.method === 'POST' && r.path === '/api/staff/schedules/sch-1/check-in',
     );
     expect(checkInReq).toBeTruthy();
-    expect(checkInReq?.body).toEqual({ note: 'Đã gặp khách' });
-
-    // Step 2: Finish shoot becomes available
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Báo đã chụp xong/i })).toBeTruthy();
+    expect(checkInReq?.body).toEqual({
+      photoUrl: 'https://cdn.test/staff-checkins/arrival.jpg',
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Báo đã chụp xong/i }));
+    // Step 2: Check-out becomes available (direct confirm without note required)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Check-out · Báo đã chụp xong/i })).toBeTruthy();
+      expect(screen.getByRole('button', { name: /Ảnh check-in/i })).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Check-out · Báo đã chụp xong/i }));
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /^Xác nhận$/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Xác nhận Check-out/i }));
     });
 
     const finishReq = mocks.requests.find(
@@ -281,6 +305,7 @@ describe('StaffPortalPage (Phase 3 Isolated Staff View)', () => {
         r.path === '/api/staff/schedules/sch-1/finish-shoot',
     );
     expect(finishReq).toBeTruthy();
+    expect(finishReq?.body).toEqual({});
   });
 
   it('redirects non-STAFF users (e.g. PROVIDER) away from /staff', async () => {

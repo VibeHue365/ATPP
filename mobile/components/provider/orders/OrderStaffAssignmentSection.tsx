@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -63,6 +64,7 @@ export function OrderStaffAssignmentSection({
   const [loadingSupervision, setLoadingSupervision] = useState(false);
   const [supervisionData, setSupervisionData] =
     useState<StaffChatSupervisionResponse | null>(null);
+  const [checkInPreviewOpen, setCheckInPreviewOpen] = useState(false);
 
   useEffect(() => {
     setPickerOpen(false);
@@ -186,10 +188,43 @@ export function OrderStaffAssignmentSection({
             {(schedule.checkedInAt || schedule.shootFinishedAt) && (
               <Text style={styles.progressText}>
                 {schedule.shootFinishedAt
-                  ? '✓ Thợ đã báo hoàn tất ca chụp'
-                  : '✓ Thợ đã check-in tại điểm chụp'}
+                  ? '✓ Thợ đã check-out hoàn tất ca chụp'
+                  : '✓ Thợ đã chụp ảnh check-in tại điểm chụp'}
               </Text>
             )}
+            {schedule.checkInPhotoUrl ? (
+              <Pressable
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  alignSelf: 'flex-start',
+                  gap: 6,
+                  marginTop: 5,
+                  paddingLeft: 3,
+                  paddingRight: 9,
+                  paddingVertical: 3,
+                  borderRadius: 999,
+                  backgroundColor: '#FFF0F5',
+                  borderWidth: 1,
+                  borderColor: '#F3C4D5',
+                }}
+                onPress={() => setCheckInPreviewOpen(true)}
+              >
+                <Image
+                  source={{ uri: schedule.checkInPhotoUrl }}
+                  style={{ width: 20, height: 20, borderRadius: 10 }}
+                />
+                <Text
+                  style={{
+                    fontFamily: FontFamily.bodyBold,
+                    fontSize: 11,
+                    color: '#BA0049',
+                  }}
+                >
+                  Xem ảnh check-in
+                </Text>
+              </Pressable>
+            ) : null}
             {schedule.staffFieldNote ? (
               <Text style={styles.fieldNote}>
                 Ghi chú thợ: {schedule.staffFieldNote}
@@ -378,6 +413,53 @@ export function OrderStaffAssignmentSection({
                 })}
               </ScrollView>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={checkInPreviewOpen && Boolean(schedule.checkInPhotoUrl)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCheckInPreviewOpen(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(15, 23, 42, 0.85)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20,
+          }}
+        >
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setCheckInPreviewOpen(false)}
+          />
+          <View style={{ width: '100%', maxWidth: 420, position: 'relative' }}>
+            {schedule.checkInPhotoUrl ? (
+              <Image
+                source={{ uri: schedule.checkInPhotoUrl }}
+                style={{ width: '100%', height: 420, borderRadius: 14 }}
+                resizeMode="contain"
+              />
+            ) : null}
+            <Pressable
+              style={{
+                position: 'absolute',
+                top: -12,
+                right: -6,
+                width: 34,
+                height: 34,
+                borderRadius: 17,
+                backgroundColor: '#FFFFFF',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onPress={() => setCheckInPreviewOpen(false)}
+            >
+              <Ionicons name="close" size={20} color="#111418" />
+            </Pressable>
           </View>
         </View>
       </Modal>

@@ -270,20 +270,33 @@ describe('StaffSchedulesService & STAFF Role Isolation (Phase 2)', () => {
       service.finishShoot(staffUserId.toString(), scheduleId.toString(), {}),
     ).rejects.toThrow(BadRequestException);
 
-    // Check-in transitions to IN_PROGRESS
+    // Reject check-in without arrival confirmation photo
+    await expect(
+      service.checkIn(staffUserId.toString(), scheduleId.toString(), {}),
+    ).rejects.toThrow(BadRequestException);
+
+    // Check-in with arrival photo transitions to IN_PROGRESS
     const checkInRes = await service.checkIn(
       staffUserId.toString(),
       scheduleId.toString(),
-      { note: 'Đã gặp khách tại cổng Ngọ Môn' },
+      { photoUrl: 'https://cdn.test/staff-checkins/arrival-1.jpg' },
     );
     expect(checkInRes.bookingStatus).toBe(BookingStatus.InProgress);
+    expect(checkInRes.checkInPhotoUrl).toBe(
+      'https://cdn.test/staff-checkins/arrival-1.jpg',
+    );
     expect(scheduleDoc.checkedInAt).toBeInstanceOf(Date);
+    expect(scheduleDoc.checkInPhotoUrl).toBe(
+      'https://cdn.test/staff-checkins/arrival-1.jpg',
+    );
     expect(bookingDoc.status).toBe(BookingStatus.InProgress);
     expect(notificationsService.createNotification).toHaveBeenCalledTimes(2);
 
     // Reject duplicate check-in
     await expect(
-      service.checkIn(staffUserId.toString(), scheduleId.toString(), {}),
+      service.checkIn(staffUserId.toString(), scheduleId.toString(), {
+        photoUrl: 'https://cdn.test/staff-checkins/arrival-2.jpg',
+      }),
     ).rejects.toThrow(BadRequestException);
 
     // Finish shoot preserves IN_PROGRESS (owner handles photo delivery -> AWAITING_REVIEW)
@@ -293,6 +306,9 @@ describe('StaffSchedulesService & STAFF Role Isolation (Phase 2)', () => {
       { note: 'Đã chụp đủ 180 ảnh gốc' },
     );
     expect(finishRes.bookingStatus).toBe(BookingStatus.InProgress);
+    expect(finishRes.checkInPhotoUrl).toBe(
+      'https://cdn.test/staff-checkins/arrival-1.jpg',
+    );
     expect(bookingDoc.status).toBe(BookingStatus.InProgress);
     expect(scheduleDoc.shootFinishedAt).toBeInstanceOf(Date);
     expect(scheduleDoc.staffFieldNote).toContain('Đã chụp đủ 180 ảnh gốc');
@@ -336,6 +352,9 @@ describe('StaffSchedulesService & STAFF Role Isolation (Phase 2)', () => {
       check(StaffSchedulesController, 'getMySchedules', ['STAFF']),
     ).toBe(true);
     expect(
+      check(StaffSchedulesController, 'uploadCheckInPhoto', ['STAFF']),
+    ).toBe(true);
+    expect(
       check(StaffSchedulesController, 'addMyBlockedSlot', ['STAFF']),
     ).toBe(true);
     expect(
@@ -345,6 +364,9 @@ describe('StaffSchedulesService & STAFF Role Isolation (Phase 2)', () => {
     // PROVIDER blocked from StaffSchedulesController
     expect(() =>
       check(StaffSchedulesController, 'getMySchedules', ['PROVIDER']),
+    ).toThrow(ForbiddenException);
+    expect(() =>
+      check(StaffSchedulesController, 'uploadCheckInPhoto', ['PROVIDER']),
     ).toThrow(ForbiddenException);
     expect(() =>
       check(StaffSchedulesController, 'addMyBlockedSlot', ['PROVIDER']),
@@ -584,9 +606,12 @@ describe('StaffSchedulesService & STAFF Role Isolation (Phase 2)', () => {
     const comboRes = await comboCheckInFixture.service.checkIn(
       staffUserId.toString(),
       comboSchedId.toString(),
-      { note: 'Khách đã mặc áo dài, bắt đầu chụp' },
+      { photoUrl: 'https://cdn.test/staff-checkins/combo-arrival.jpg' },
     );
     expect(comboRes.bookingStatus).toBe(BookingStatus.InProgress);
+    expect(comboRes.checkInPhotoUrl).toBe(
+      'https://cdn.test/staff-checkins/combo-arrival.jpg',
+    );
     expect(comboBookingDoc.status).toBe(BookingStatus.InProgress);
   });
 });

@@ -178,6 +178,38 @@ export const AssignedStaffContactCard: React.FC<AssignedStaffContactCardProps> =
               Thợ đã check-in ({formatTimeShort(photoshootSchedule.checkedInAt)})
             </span>
           )}
+          {photoshootSchedule?.checkInPhotoUrl && (
+            <a
+              href={photoshootSchedule.checkInPhotoUrl}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                fontSize: '11.5px',
+                fontWeight: 700,
+                padding: '2px 10px 2px 4px',
+                borderRadius: '999px',
+                backgroundColor: '#FFFFFF',
+                color: '#8E1B2E',
+                border: '1px solid #F0DADC',
+                textDecoration: 'none',
+              }}
+            >
+              <img
+                src={photoshootSchedule.checkInPhotoUrl}
+                alt="Ảnh xác nhận check-in"
+                style={{
+                  width: '18px',
+                  height: '18px',
+                  borderRadius: '999px',
+                  objectFit: 'cover',
+                }}
+              />
+              <span>Xem ảnh check-in</span>
+            </a>
+          )}
           {photoshootSchedule?.shootFinishedAt && (
             <span
               style={{
