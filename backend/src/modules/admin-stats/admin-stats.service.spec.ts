@@ -585,4 +585,42 @@ describe('AdminStatsService (VS-103, VS-104, VS-105)', () => {
       );
     });
   });
+
+  describe('Admin booking filters', () => {
+    it('filters bookings by providers in the selected city', async () => {
+      const providerId = new Types.ObjectId();
+      bookingModel.find
+        .mockReturnValueOnce({ lean: jest.fn().mockResolvedValue([]) })
+        .mockReturnValueOnce({
+          populate: jest.fn().mockReturnThis(),
+          sort: jest.fn().mockReturnThis(),
+          skip: jest.fn().mockReturnThis(),
+          limit: jest.fn().mockReturnThis(),
+          lean: jest.fn().mockResolvedValue([]),
+        });
+      bookingModel.countDocuments.mockResolvedValue(0);
+      disputeModel.find.mockReturnValue({
+        lean: jest.fn().mockResolvedValue([]),
+      });
+      providerModel.find.mockReturnValue({
+        lean: jest.fn().mockResolvedValue([{ _id: providerId }]),
+      });
+
+      await service.getAllBookings(
+        1,
+        10,
+        undefined,
+        undefined,
+        undefined,
+        'TP. Hồ Chí Minh',
+      );
+
+      const cityQuery = providerModel.find.mock.calls[0][0];
+      expect(cityQuery['address.city']).toBeInstanceOf(RegExp);
+      expect(cityQuery['address.city'].test('Hồ Chí Minh')).toBe(true);
+      expect(bookingModel.countDocuments).toHaveBeenCalledWith({
+        providerIds: { $in: [providerId] },
+      });
+    });
+  });
 });

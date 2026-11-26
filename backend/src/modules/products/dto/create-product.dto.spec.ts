@@ -64,12 +64,11 @@ describe('CreateProductDto (UC-16 Add AoDai, UC-19 Set Costume Deposit)', () => 
   });
 
   it('enforces market bounds for basePrice, depositAmount, hourlyPrice, and replacementValue', async () => {
-    await expect(errorFields({ basePrice: 40000 })).resolves.toEqual([
+    await expect(errorFields({ basePrice: 0 })).resolves.toEqual([
       'basePrice',
     ]);
-    await expect(errorFields({ basePrice: 12000000 })).resolves.toEqual([
-      'basePrice',
-    ]);
+    await expect(errorFields({ basePrice: 40000 })).resolves.toEqual([]);
+    await expect(errorFields({ basePrice: 12000000 })).resolves.toEqual([]);
     await expect(errorFields({ depositAmount: 6000000 })).resolves.toEqual([
       'depositAmount',
     ]);

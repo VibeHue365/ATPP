@@ -313,8 +313,8 @@ export function createProductWizardActions({
     }
     const base = Number(prodBasePrice);
     const deposit = Number(prodDepositAmount);
-    if (!Number.isInteger(base) || base < 50000 || base > 10000000 || base % 1000 !== 0) {
-      toast.error('Giá thuê/ngày phải từ 50.000đ đến 10.000.000đ và là bội số 1.000đ');
+    if (!Number.isInteger(base) || base <= 0) {
+      toast.error('Giá thuê/ngày phải là số nguyên dương (VNĐ)');
       return false;
     }
     if (!Number.isInteger(deposit) || deposit < 0 || deposit > 5000000 || deposit % 1000 !== 0) {
@@ -500,7 +500,7 @@ export function createProductWizardActions({
       );
       setIsModalOpen(false);
       resetProductForm();
-      fetchProducts();
+      await fetchProducts();
     } catch (err: any) {
       toast.error(err.message || 'Thao tác thất bại.');
     }

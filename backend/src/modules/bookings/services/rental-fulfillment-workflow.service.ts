@@ -610,11 +610,20 @@ export class RentalFulfillmentWorkflowService {
     user: AuthUser,
   ) {
     const access = await this.requireAuthorizedViewer(bookingId, itemId, user);
+    const now = new Date();
+    const retentionCutoff = new Date(
+      now.getTime() - RENTAL_EVIDENCE_RETENTION_MS,
+    );
     const evidence = await this.evidenceUploadModel
       .findOne({
         fileId,
         bookingId: access.bookingId,
         bookingItemId: access.itemId,
+        expiresAt: { $gt: now },
+        $or: [
+          { consumedAt: null },
+          { consumedAt: { $gt: retentionCutoff } },
+        ],
       })
       .lean()
       .exec();
@@ -627,11 +636,17 @@ export class RentalFulfillmentWorkflowService {
    * reconcile a handover after the booking list was refreshed. */
   async getEvidenceSummary(bookingId: string, itemId: string, user: AuthUser) {
     const access = await this.requireAuthorizedViewer(bookingId, itemId, user);
+    const now = new Date();
+    const retentionCutoff = new Date(
+      now.getTime() - RENTAL_EVIDENCE_RETENTION_MS,
+    );
     const uploads = await this.evidenceUploadModel
       .find({
         bookingId: access.bookingId,
         bookingItemId: access.itemId,
         consumedFor: { $in: ['PICKUP', 'RETURN'] },
+        consumedAt: { $gt: retentionCutoff },
+        expiresAt: { $gt: now },
       })
       .select('fileId mimeType createdAt consumedFor')
       .sort({ createdAt: 1 })

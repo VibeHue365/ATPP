@@ -83,6 +83,9 @@ export const productsApi = {
   listFiltered<T = unknown>(encodedSearch: string, sortBy: string, page: number, limit: number, sizes: string, colors: string, ...args: Tail<Parameters<typeof httpClient.get<T>>>) {
     return httpClient.get<T>(`/products/my-listings?search=${encodedSearch}&sortBy=${sortBy}&page=${page}&limit=${limit}&sizes=${sizes}&colors=${colors}`, ...args);
   },
+  getMyListing<T = unknown>(productId: string, ...args: Tail<Parameters<typeof httpClient.get<T>>>) {
+    return httpClient.get<T>(`/products/my-listings/${productId}`, ...args);
+  },
   listCategories<T = unknown>(...args: Tail<Parameters<typeof httpClient.get<T>>>) {
     return httpClient.get<T>(`/products/categories`, ...args);
   },

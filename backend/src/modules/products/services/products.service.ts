@@ -456,8 +456,8 @@ export class ProductsService implements OnModuleInit {
     const items = result.items.map((product) => {
       const plain = product.toObject() as any;
       const insight = insights.get(product._id.toString());
-      plain.rentalPriceSuggestion = buildRentalPriceSuggestion(
-        plain.basePrice,
+      plain.rentalPriceSuggestion = this.buildProviderRentalPriceSuggestion(
+        plain,
         insight?.rentalCount ?? 0,
         insight?.condition ?? null,
       );
@@ -465,6 +465,87 @@ export class ProductsService implements OnModuleInit {
     });
 
     return { items, total: result.total };
+  }
+
+  async getMyProduct(userId: string, productId: string): Promise<any> {
+    if (!Types.ObjectId.isValid(productId)) {
+      throw new NotFoundException('Product not found');
+    }
+    const user = await this.usersRepository.findUserById(
+      new Types.ObjectId(userId),
+    );
+    if (!user?.provider?.providerId) {
+      throw new BadRequestException('User is not a provider');
+    }
+
+    const product = await this.productsRepository.findById(
+      new Types.ObjectId(productId),
+    );
+    if (!product) throw new NotFoundException('Product not found');
+    const plain = product.toObject() as any;
+    const ownerId = (plain.providerId?._id ?? plain.providerId)?.toString();
+    if (ownerId !== user.provider.providerId.toString()) {
+      throw new NotFoundException('Product not found');
+    }
+
+    const insights = await this.getRentalPriceInsights([product._id]);
+    const insight = insights.get(product._id.toString());
+    plain.rentalPriceSuggestion = this.buildProviderRentalPriceSuggestion(
+      plain,
+      insight?.rentalCount ?? 0,
+      insight?.condition ?? null,
+    );
+    const campaign = await this.campaignService.getActiveCampaign(
+      user.provider.providerId,
+    );
+    return this.attachCampaign(plain, campaign);
+  }
+
+  async getRentalPriceSuggestionEntries(productIds: Types.ObjectId[]) {
+    const uniqueIds = [
+      ...new Map(productIds.map((id) => [id.toString(), id])).values(),
+    ];
+    if (!uniqueIds.length) return [];
+    const [products, insights] = await Promise.all([
+      Promise.all(uniqueIds.map((id) => this.productsRepository.findById(id))),
+      this.getRentalPriceInsights(uniqueIds),
+    ]);
+
+    return products.filter(Boolean).map((product) => {
+      const plain = product!.toObject() as any;
+      const productId = product!._id.toString();
+      const insight = insights.get(productId);
+      return {
+        productId,
+        providerId: (plain.providerId?._id ?? plain.providerId)?.toString(),
+        name: plain.name,
+        suggestion: this.buildProviderRentalPriceSuggestion(
+          plain,
+          insight?.rentalCount ?? 0,
+          insight?.condition ?? null,
+        ),
+      };
+    });
+  }
+
+  private buildProviderRentalPriceSuggestion(
+    product: any,
+    rentalCount: number,
+    condition: RentalCondition | null,
+  ) {
+    const suggestion = buildRentalPriceSuggestion(
+      product.basePrice,
+      rentalCount,
+      condition,
+    );
+    const reviewedMilestones = Array.isArray(
+      product.rentalPriceReviewedMilestones,
+    )
+      ? product.rentalPriceReviewedMilestones.map(Number)
+      : [];
+    return reviewedMilestones.includes(rentalCount)
+      ? { ...suggestion, eligible: false }
+      : suggestion;
   }
 
   private async getRentalPriceInsights(productIds: Types.ObjectId[]) {
@@ -487,13 +568,21 @@ export class ProductsService implements OnModuleInit {
           { case: { $eq: ['$conditionStatus', 'GOOD'] }, then: 2 },
         ], default: 1 } } } },
         { $sort: { conditionRank: -1 } },
-        { $group: { _id: '$productId', condition: { $first: '$conditionStatus' } } },
+        {
+          $group: {
+            _id: '$productId',
+            condition: { $first: '$conditionStatus' },
+            itemCount: { $sum: 1 },
+          },
+        },
       ]).toArray(),
     ]);
     for (const row of rentalRows) result.set(row._id.toString(), { rentalCount: row.rentalCount, condition: null });
     for (const row of conditionRows) {
       const key = row._id.toString();
       const current = result.get(key) ?? { rentalCount: 0, condition: null };
+      const itemCount = typeof row.itemCount === 'number' && row.itemCount > 0 ? row.itemCount : 1;
+      current.rentalCount = Math.floor(current.rentalCount / itemCount);
       current.condition = row.condition as RentalCondition;
       result.set(key, current);
     }
@@ -1075,6 +1164,34 @@ export class ProductsService implements OnModuleInit {
 
     // Mọi thay đổi về thông tin, hình ảnh, giá thuê hay giá trị bồi hoàn hợp đồng
     // đều bắt buộc phải được Ban Quản trị phê duyệt lại nhằm ngăn ngừa hành vi gian lận.
+    if (
+      dto.basePrice !== undefined &&
+      dto.basePrice !== product.basePrice
+    ) {
+      const insights = await this.getRentalPriceInsights([product._id]);
+      const insight = insights.get(product._id.toString());
+      const currentSuggestion = this.buildProviderRentalPriceSuggestion(
+        typeof (product as any).toObject === 'function'
+          ? (product as any).toObject()
+          : product,
+        insight?.rentalCount ?? 0,
+        insight?.condition ?? null,
+      );
+      if (
+        currentSuggestion.eligible &&
+        currentSuggestion.reminderNumber !== null
+      ) {
+        updateData.rentalPriceReviewedMilestones = [
+          ...new Set([
+            ...((product as any).rentalPriceReviewedMilestones ?? []).map(
+              Number,
+            ),
+            currentSuggestion.rentalCount,
+          ]),
+        ];
+      }
+    }
+
     updateData.moderationStatus = ProductModerationStatus.PendingReview;
     updateData.moderationReason = null;
     updateData.moderatedAt = null;
@@ -1361,14 +1478,9 @@ export class ProductsService implements OnModuleInit {
   }): void {
     const { basePrice, depositAmount, hourlyPrice, replacementValue } = params;
 
-    if (
-      !Number.isInteger(basePrice) ||
-      basePrice < 50000 ||
-      basePrice > 10000000 ||
-      basePrice % 1000 !== 0
-    ) {
+    if (!Number.isInteger(basePrice) || basePrice <= 0) {
       throw new BadRequestException(
-        'Giá thuê ngày phải là bội số 1.000đ trong khoảng 50.000đ – 10.000.000đ',
+        'Giá thuê ngày phải là số nguyên dương (VNĐ)',
       );
     }
 

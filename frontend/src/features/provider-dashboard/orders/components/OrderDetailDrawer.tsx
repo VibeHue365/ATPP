@@ -77,6 +77,18 @@ const formatBookingDate = (value: unknown) => {
   }).format(date);
 };
 
+const escapeHtml = (value: unknown) =>
+  String(value ?? '').replace(/[&<>'"]/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    "'": '&#39;',
+    '"': '&quot;',
+  })[character] || character);
+
+const getRentalItemName = (item: any, index: number) =>
+  item?.name || item?.productId?.name || `Áo dài #${index + 1}`;
+
 export function OrderDetailDrawer({
   order,
   orders,
@@ -291,10 +303,9 @@ export function OrderDetailDrawer({
       fulfillment?.history?.some((entry: any) => entry?.action === 'PICKUP_EVIDENCE_SUBMITTED'),
     );
   };
-  // The API may store provider handover uploads on the booking snapshot
-  // (`handoverPhotos`) rather than on each rentalFulfillment item. Treat both
-  // shapes as submitted so the handover action cannot be shown twice.
-  const hasBookingHandoverEvidence = Boolean(
+  // Legacy single-item bookings may only have booking-level handover photos.
+  // Multi-item bookings must prove evidence per item and cannot use this fallback.
+  const hasBookingHandoverEvidence = rentalItems.length <= 1 && Boolean(
     Array.isArray((order as any)?.handoverPhotos) && (order as any).handoverPhotos.length > 0,
   );
   const allRentalHandoverEvidenceSubmitted =
@@ -1030,6 +1041,31 @@ export function OrderDetailDrawer({
       // ignore
     }
     const hasCccd = Boolean(cccdData?.hasIdentityCard);
+    const pendingHandoverItems = rentalItems.filter(
+      (item: any) => !locallySubmittedPickupIds.has(item._id) && !hasSubmittedPickupEvidence(item),
+    );
+    const itemsToSubmit = pendingHandoverItems.length > 0 ? pendingHandoverItems : [targetItem];
+    const itemUploadSections = itemsToSubmit.map((item: any, index: number) => {
+      const itemName = escapeHtml(getRentalItemName(item, index));
+      const itemSize = escapeHtml(item?.variant?.size || item?.size || item?.selectedSize || '');
+      const itemCode = escapeHtml(item?.sku || item?.inventoryItemId?.sku || '');
+      return `
+        <div class="pickup-evidence-step" data-step-index="${index}" style="display: none; padding: 14px; border: 1px solid #eadde0; border-radius: 12px; background: #fff;">
+          <div style="margin-bottom: 8px; color: #4a2430; font-size: 12.5px; font-weight: 700;">
+            Áo ${index + 1}/${itemsToSubmit.length}: ${itemName}${itemSize ? ` • Size ${itemSize}` : ''}${itemCode ? ` • Mã ${itemCode}` : ''}
+          </div>
+          <label for="pickup-evidence-input-${index}" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 94px; padding: 12px; border: 1.5px dashed #b98a94; border-radius: 10px; background: #fff8f8; cursor: pointer; box-sizing: border-box;">
+            <span style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #fbe9ed; color: #8e1b2e;">📷</span>
+            <strong style="margin-top: 6px; color: #4a2430; font-size: 12px;">Chọn ảnh riêng cho áo này</strong>
+            <span style="margin-top: 3px; color: #8c827a; font-size: 10.5px;">1–5 ảnh JPG, PNG hoặc WEBP</span>
+            <input id="pickup-evidence-input-${index}" type="file" accept="image/jpeg,image/png,image/webp" multiple style="display: none;" />
+          </label>
+          <div id="pickup-evidence-summary-${index}" style="min-height: 18px; margin-top: 7px;"></div>
+        </div>
+      `;
+    }).join('');
+    let activeItemIndex = 0;
+    let renderActiveItem = () => undefined;
 
     const result = await Swal.fire({
       title: 'Bàn giao áo dài tại quầy',
@@ -1050,88 +1086,139 @@ export function OrderDetailDrawer({
             👗 Ảnh tình trạng áo dài lúc bàn giao *
           </strong>
           <p style="margin: -2px 0 10px; color: #6b7280; font-size: 12px; line-height: 1.4;">
-            Chụp rõ áo và phụ kiện trước khi bàn giao. Khách sẽ xem ảnh này để xác nhận nhận áo.
+            Mỗi áo phải có bộ ảnh riêng. Bạn có thể quay lại và chọn ảnh khác trước khi xác nhận gửi ở bước cuối.
           </p>
-          <label for="pickup-evidence-input" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 110px; padding: 14px; border: 1.5px dashed #b98a94; border-radius: 12px; background: #fff8f8; cursor: pointer; box-sizing: border-box;">
-            <span style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #fbe9ed; color: #8e1b2e;"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
-            <strong style="margin-top: 8px; color: #4a2430; font-size: 13px;">Chọn ảnh áo bàn giao từ thiết bị</strong>
-            <span style="margin-top: 4px; color: #8c827a; font-size: 11px;">JPG, PNG hoặc WEBP • Tối đa 5 ảnh</span>
-            <input id="pickup-evidence-input" type="file" accept="image/jpeg,image/png,image/webp" multiple style="display: none;" />
-          </label>
-          <div id="pickup-evidence-summary" style="min-height: 20px; margin-top: 8px;"></div>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin: 0 0 9px; color: #6b7280; font-size: 11.5px;">
+            <span id="pickup-evidence-step-label">Áo 1/${itemsToSubmit.length}</span>
+            <span id="pickup-evidence-step-status">Chưa chọn ảnh</span>
+          </div>
+          <div style="height: 5px; margin-bottom: 12px; overflow: hidden; border-radius: 999px; background: #f3e7e9;">
+            <div id="pickup-evidence-progress" style="width: ${100 / itemsToSubmit.length}%; height: 100%; border-radius: inherit; background: #881337; transition: width .2s ease;"></div>
+          </div>
+          ${itemUploadSections}
         </div>
       `,
       showCancelButton: true,
-      confirmButtonText: 'Gửi ảnh bàn giao',
+      showDenyButton: true,
+      confirmButtonText: itemsToSubmit.length === 1 ? 'Xác nhận gửi ảnh' : 'Tiếp theo →',
+      denyButtonText: '← Quay lại',
       cancelButtonText: 'Hủy',
       confirmButtonColor: '#881337',
+      denyButtonColor: '#64748b',
       cancelButtonColor: '#6b7280',
+      reverseButtons: true,
+      focusConfirm: true,
       buttonsStyling: true,
       didOpen: () => {
-        const input = document.getElementById('pickup-evidence-input') as HTMLInputElement | null;
-        const summary = document.getElementById('pickup-evidence-summary');
-        input?.addEventListener('change', () => {
-          if (!summary) return;
-          const files = Array.from(input.files || []);
-          summary.innerHTML = '';
-          if (!files.length) return;
-
-          const label = document.createElement('div');
-          label.textContent = `Đã chọn ${files.length} ảnh áo bàn giao`;
-          label.style.cssText = 'margin: 2px 0 9px; color: #8e1b2e; font-size: 12px; font-weight: 700; text-align: center;';
-          summary.appendChild(label);
-
-          const previews = document.createElement('div');
-          previews.style.cssText = 'display: flex; justify-content: center; gap: 8px; flex-wrap: wrap;';
-          files.forEach((file) => {
-            const thumbnail = document.createElement('img');
-            thumbnail.src = URL.createObjectURL(file);
-            thumbnail.alt = file.name;
-            thumbnail.title = file.name;
-            thumbnail.style.cssText = 'width: 58px; height: 58px; object-fit: cover; border-radius: 9px; border: 2px solid #f1c9d1; box-shadow: 0 2px 5px rgba(80, 20, 35, .12);';
-            previews.appendChild(thumbnail);
+        renderActiveItem = () => {
+          document.querySelectorAll<HTMLElement>('.pickup-evidence-step').forEach((section, index) => {
+            section.style.display = index === activeItemIndex ? 'block' : 'none';
           });
-          summary.appendChild(previews);
+          const currentInput = document.getElementById(`pickup-evidence-input-${activeItemIndex}`) as HTMLInputElement | null;
+          const selectedCount = currentInput?.files?.length || 0;
+          const stepLabel = document.getElementById('pickup-evidence-step-label');
+          const stepStatus = document.getElementById('pickup-evidence-step-status');
+          const progress = document.getElementById('pickup-evidence-progress') as HTMLDivElement | null;
+          if (stepLabel) stepLabel.textContent = `Áo ${activeItemIndex + 1}/${itemsToSubmit.length}`;
+          if (stepStatus) {
+            stepStatus.textContent = selectedCount > 0 ? `Đã chọn ${selectedCount} ảnh` : 'Chưa chọn ảnh';
+            stepStatus.style.color = selectedCount > 0 ? '#059669' : '#9a6b73';
+          }
+          if (progress) progress.style.width = `${((activeItemIndex + 1) / itemsToSubmit.length) * 100}%`;
+
+          const confirmButton = Swal.getConfirmButton();
+          const denyButton = Swal.getDenyButton();
+          if (confirmButton) {
+            confirmButton.textContent = activeItemIndex === itemsToSubmit.length - 1
+              ? 'Xác nhận gửi ảnh'
+              : 'Tiếp theo →';
+          }
+          if (denyButton) {
+            denyButton.style.visibility = activeItemIndex === 0 ? 'hidden' : 'visible';
+            denyButton.disabled = activeItemIndex === 0;
+          }
+        };
+
+        itemsToSubmit.forEach((_item: any, index: number) => {
+          const input = document.getElementById(`pickup-evidence-input-${index}`) as HTMLInputElement | null;
+          const summary = document.getElementById(`pickup-evidence-summary-${index}`);
+          input?.addEventListener('change', () => {
+            if (!summary) return;
+            const files = Array.from(input.files || []);
+            summary.innerHTML = '';
+            if (!files.length) return;
+
+            const label = document.createElement('div');
+            label.textContent = `Đã chọn ${files.length} ảnh • Bấm lại vùng chọn ảnh để thay đổi`;
+            label.style.cssText = 'margin: 2px 0 7px; color: #8e1b2e; font-size: 11px; font-weight: 700; text-align: center;';
+            summary.appendChild(label);
+
+            const previews = document.createElement('div');
+            previews.style.cssText = 'display: flex; justify-content: center; gap: 7px; flex-wrap: wrap;';
+            files.forEach((file) => {
+              const thumbnail = document.createElement('img');
+              thumbnail.src = URL.createObjectURL(file);
+              thumbnail.alt = file.name;
+              thumbnail.title = file.name;
+              thumbnail.style.cssText = 'width: 52px; height: 52px; object-fit: cover; border-radius: 8px; border: 2px solid #f1c9d1; box-shadow: 0 2px 5px rgba(80, 20, 35, .12);';
+              previews.appendChild(thumbnail);
+            });
+            summary.appendChild(previews);
+            renderActiveItem();
+          });
         });
+        renderActiveItem();
       },
       preConfirm: () => {
-        const input = document.getElementById('pickup-evidence-input') as HTMLInputElement | null;
-        const files = Array.from(input?.files || []);
-        if (!files.length) {
-          Swal.showValidationMessage('Vui lòng chọn ít nhất một ảnh bàn giao áo dài.');
+        const currentInput = document.getElementById(`pickup-evidence-input-${activeItemIndex}`) as HTMLInputElement | null;
+        const currentFiles = Array.from(currentInput?.files || []);
+        if (currentFiles.length === 0) {
+          Swal.showValidationMessage(`Vui lòng chọn ảnh riêng cho áo ${activeItemIndex + 1}.`);
           return false;
         }
-        if (files.length > 5) {
-          Swal.showValidationMessage('Tối đa 5 ảnh cho một lần bàn giao.');
+        if (currentFiles.length > 5) {
+          Swal.showValidationMessage(`Áo ${activeItemIndex + 1} chỉ được tải tối đa 5 ảnh.`);
           return false;
         }
 
-        return {
-          evidenceFiles: files,
-        };
+        if (activeItemIndex < itemsToSubmit.length - 1) {
+          activeItemIndex += 1;
+          Swal.resetValidationMessage();
+          renderActiveItem();
+          return false;
+        }
+
+        const evidenceByItem = itemsToSubmit.map((item: any, index: number) => {
+          const input = document.getElementById(`pickup-evidence-input-${index}`) as HTMLInputElement | null;
+          return { item, files: Array.from(input?.files || []) };
+        });
+
+        return { evidenceByItem };
+      },
+      preDeny: () => {
+        if (activeItemIndex > 0) {
+          activeItemIndex -= 1;
+          Swal.resetValidationMessage();
+          renderActiveItem();
+        }
+        return false;
       },
     });
     if (!result.isConfirmed || !result.value) return;
 
     setIsSendingPickupEvidence(true);
     try {
-      const { evidenceFiles } = result.value;
-
-      const pendingHandoverItems = rentalItems.filter(
-        (it: any) => !locallySubmittedPickupIds.has(it._id) && !hasSubmittedPickupEvidence(it)
-      );
-      const itemsToSubmit = pendingHandoverItems.length > 0 ? pendingHandoverItems : [targetItem];
-
-      let lastFileIds: string[] = [];
-      for (const item of itemsToSubmit) {
+      const { evidenceByItem } = result.value;
+      const submittedFileIds = new Map<string, string[]>();
+      for (const { item, files } of evidenceByItem) {
         const formData = new FormData();
-        evidenceFiles.forEach((file: File) => formData.append('images', file));
+        files.forEach((file: File) => formData.append('images', file));
         const uploaded = await httpClient.post<{ files: Array<{ fileId: string }> }>(
           `/api/bookings/${order._id}/items/${item._id}/rental/evidence`,
           formData,
         );
         const fileIds = (uploaded.files || []).map((file) => file.fileId);
-        lastFileIds = fileIds;
+        submittedFileIds.set(item._id, fileIds);
         await httpClient.post(`/api/bookings/${order._id}/items/${item._id}/rental/picked-up`, {
           fileIds,
         });
@@ -1141,14 +1228,16 @@ export function OrderDetailDrawer({
       toast.success('Đã gửi ảnh bàn giao. Đang chờ khách xác nhận nhận áo.');
       onSelectOrderRef.current({
         ...order,
-        handoverPhotos: lastFileIds,
+        handoverPhotos: Array.from(submittedFileIds.values()).flat(),
         items: (order.items || []).map((item: any) =>
-          itemsToSubmit.some((sub: any) => sub._id === item._id)
+          submittedFileIds.has(item._id)
             ? {
                 ...item,
                 rentalFulfillment: {
                   ...item.rentalFulfillment,
-                  pickupEvidence: { files: lastFileIds.map((fileId) => ({ fileId })) },
+                  pickupEvidence: {
+                    files: (submittedFileIds.get(item._id) || []).map((fileId) => ({ fileId })),
+                  },
                 },
               }
             : item
@@ -1158,6 +1247,7 @@ export function OrderDetailDrawer({
       const fresh = await httpClient.get<any>(`/api/bookings/${order._id}`);
       if (fresh?.items?.some(hasSubmittedPickupEvidence)) onSelectOrderRef.current(fresh);
     } catch (err: any) {
+      await fetchOrders?.(true, true);
       toast.error(err?.response?.data?.message || err?.message || 'Không thể gửi ảnh bàn giao.');
     } finally {
       setIsSendingPickupEvidence(false);

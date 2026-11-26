@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { getPhotoScheduleStartsAt, formatPhotoStartTime, getOrderGroup } from '../src/features/provider-dashboard/orders/orderHelpers';
+import { buildRentalOrderTabs, getRentalOrderMatchLabel, getRentalOrderTabId, orderMatchesRentalFilter, parseRentalOrderTab } from '../src/features/provider-dashboard/orders/rentalOrderFilters';
 import { normalizeVariants, normalizeCategoryIds } from '../src/features/provider-dashboard/collections/productHelpers';
 import { normalizeCancellationRefundRules, buildCancellationPolicySummary } from '../src/features/provider-dashboard/service-profile/policyHelpers';
 import { variantKeyOf, variantLabelOf } from '../src/features/provider-dashboard/inventory/inventoryHelpers';
@@ -88,5 +89,52 @@ describe('Provider business helpers', () => {
     expect(variantKeyOf({ ...row, material: '' })).toEqual({ productId: 'p1', size: 'M', color: 'RED' });
     expect(variantLabelOf(row)).toBe('M / Đỏ / Lụa');
     expect(getOrderGroup('unknown-status')).toBeTypeOf('string');
+  });
+
+  it('builds rental status tabs from individual áo dài items and filters their orders', () => {
+    const today = new Date();
+    today.setHours(23, 59, 0, 0);
+    const future = new Date(today);
+    future.setDate(future.getDate() + 2);
+    const overdue = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const orders = [
+      {
+        _id: 'booking-1',
+        status: 'Đã xác nhận',
+        rawStatus: 'CONFIRMED',
+        items: [
+          { rentalFulfillment: { status: 'PENDING' } },
+          { rentalFulfillment: { status: 'PENDING' } },
+          { rentalFulfillment: { status: 'READY_FOR_PICKUP' } },
+          { rentalFulfillment: { status: 'READY_FOR_PICKUP', pickupEvidence: { files: ['handover.jpg'] } } },
+          { rentalFulfillment: { status: 'PICKED_UP', returnDueAt: today.toISOString() } },
+          { rentalFulfillment: { status: 'PICKED_UP', returnDueAt: future.toISOString() } },
+          { rentalFulfillment: { status: 'PICKED_UP', returnDueAt: overdue.toISOString() } },
+        ],
+      },
+      {
+        _id: 'cancelled-booking',
+        status: 'Đã hủy',
+        rawStatus: 'CANCELLED',
+        items: [
+          { rentalFulfillment: { status: 'PENDING' } },
+          { rentalFulfillment: { status: 'COMPLETED' } },
+        ],
+      },
+    ] as any;
+
+    expect(buildRentalOrderTabs(orders).map(({ label, count }) => ({ label, count }))).toEqual([
+      { label: 'Cần soạn áo', count: 1 },
+      { label: 'Chờ gửi bàn giao', count: 1 },
+      { label: 'Chờ khách xác nhận', count: 1 },
+      { label: 'Đang thuê', count: 1 },
+      { label: 'Cần nhận hôm nay', count: 1 },
+      { label: 'Quá hạn', count: 1 },
+    ]);
+    expect(parseRentalOrderTab(getRentalOrderTabId('RETURN_DUE_TODAY'))).toBe('RETURN_DUE_TODAY');
+    expect(orderMatchesRentalFilter(orders[0], 'RETURN_DUE_TODAY')).toBe(true);
+    expect(getRentalOrderMatchLabel(orders[0], 'PREPARE')).toBe('2/7 áo cần soạn');
+    expect(orderMatchesRentalFilter(orders[1], 'PREPARE')).toBe(false);
+    expect(orderMatchesRentalFilter(orders[1], 'OVERDUE')).toBe(false);
   });
 });

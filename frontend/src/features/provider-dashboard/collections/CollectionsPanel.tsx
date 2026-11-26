@@ -656,7 +656,7 @@ export function CollectionsPanel({
                                 onClick={(event) => { event.stopPropagation(); openEditModal(p); }}
                                 style={{ marginTop: 6, border: '1px solid #F59E0B', borderRadius: 6, background: '#FFFBEB', color: '#92400E', padding: '4px 7px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
                               >
-                                Đề xuất giảm {p.rentalPriceSuggestion.discountPercent}% sau {p.rentalPriceSuggestion.rentalCount} lượt thuê
+                                Đề xuất giảm {p.rentalPriceSuggestion.discountPercent}% (TB {p.rentalPriceSuggestion.rentalCount} lượt/áo)
                               </button>
                             )}
                           </div>

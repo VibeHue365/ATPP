@@ -27,11 +27,13 @@ interface NotificationItem {
 export interface NotificationsPageProps {
   hideBreadcrumb?: boolean;
   variant?: 'customer' | 'provider' | 'admin';
+  onNotificationClick?: (notification: NotificationItem) => void | Promise<void>;
 }
 
 export const NotificationsPage: React.FC<NotificationsPageProps> = ({
   hideBreadcrumb = false,
-  variant = 'customer'
+  variant = 'customer',
+  onNotificationClick,
 }) => {
   const navigate = useNavigate();
   const toast = useToast();
@@ -206,6 +208,10 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
   };
 
   const handleItemClick = (noti: NotificationItem) => {
+    if (onNotificationClick) {
+      void onNotificationClick(noti);
+      return;
+    }
     if (!noti.isRead) {
       handleMarkAsRead(noti._id);
     }

@@ -183,6 +183,25 @@ export function createOrderDataActions({ setLoadingOrders, setOrders, actionMenu
           if (prev[i].overdueTracking?.minutesOverdue !== next[i].overdueTracking?.minutesOverdue) return true;
           if (prev[i].overdueTracking?.calculatedLateFee !== next[i].overdueTracking?.calculatedLateFee) return true;
           if (prev[i].dominoRecovery?.status !== next[i].dominoRecovery?.status) return true;
+          const previousRentalState = (prev[i].items || [])
+            .map((item: any) => [
+              item?._id || '',
+              item?.rentalFulfillment?.status || '',
+              item?.rentalFulfillment?.pickupEvidence?.files?.length || 0,
+              item?.rentalFulfillment?.returnDueAt || item?.rentalTo || '',
+              item?.rescheduleRequest?.status || '',
+            ].join(':'))
+            .join('|');
+          const nextRentalState = (next[i].items || [])
+            .map((item: any) => [
+              item?._id || '',
+              item?.rentalFulfillment?.status || '',
+              item?.rentalFulfillment?.pickupEvidence?.files?.length || 0,
+              item?.rentalFulfillment?.returnDueAt || item?.rentalTo || '',
+              item?.rescheduleRequest?.status || '',
+            ].join(':'))
+            .join('|');
+          if (previousRentalState !== nextRentalState) return true;
           const previousScheduleState = (prev[i].schedules || [])
             .map((schedule) => `${schedule._id || ''}:${schedule.status || ''}:${schedule.startsAt || schedule.scheduledDate || ''}`)
             .join('|');

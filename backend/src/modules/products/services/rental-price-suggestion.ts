@@ -39,7 +39,7 @@ export function buildRentalPriceSuggestion(
     eligible: true,
     discountPercent,
     suggestedPrice,
-    reason: `Sản phẩm đã được thuê ${rentalCount} lần; tình trạng hiện tại: ${resolvedCondition}.`,
+    reason: `Sản phẩm đạt trung bình ${rentalCount} lượt thuê/áo; tình trạng hiện tại: ${resolvedCondition}.`,
     reminderNumber,
   };
 }

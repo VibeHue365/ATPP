@@ -10,10 +10,12 @@ import { OrdersFilterBar } from './components/OrdersFilterBar';
 import { OrdersTable } from './components/OrdersTable';
 import { OrderDetailDrawer } from './components/OrderDetailDrawer';
 import { OrderActionDropdown } from './components/OrderActionDropdown';
+import { RentalOperationsSummary } from './components/RentalOperationsSummary';
+import { parseRentalOrderTab } from './rentalOrderFilters';
 import './ordersFigma.css';
 
 type OrdersPanelProps = Pick<ReturnType<typeof useProviderOrderState>,
-  'setOrderTab' | 'orderTab' | 'orders' | 'setBookingTypeFilter' | 'bookingTypeFilter' | 'loadingOrders' | 'setActionMenuId' | 'actionMenuId' | 'activePage' | 'setActivePage'
+  'setOrderTab' | 'orderTab' | 'orders' | 'setBookingTypeFilter' | 'bookingTypeFilter' | 'orderMonthFilter' | 'setOrderMonthFilter' | 'loadingOrders' | 'setActionMenuId' | 'actionMenuId' | 'activePage' | 'setActivePage'
 > &
   Pick<ReturnType<typeof useProviderSessionState>,
     'setSelectedBookingId' | 'setIsDetailModalOpen'
@@ -24,6 +26,8 @@ type OrdersPanelProps = Pick<ReturnType<typeof useProviderOrderState>,
 {
   toast: ReturnType<typeof useToast>;
   tabs: { label: string; count: number; }[];
+  attentionTabs: { label: string; count: number; }[];
+  filterBaseOrders: Order[];
   hasAodaiCapability: boolean | undefined;
   hasPhotographyCapability: boolean | undefined;
   monthlyRevenue: number;
@@ -31,12 +35,14 @@ type OrdersPanelProps = Pick<ReturnType<typeof useProviderOrderState>,
   resolveRescheduleRequest: (order: Order, item: any, approved: boolean) => Promise<void>;
   changeOrderStatus: (_id: string, apiStatus: string) => Promise<void>;
   onOpenChat: () => void;
-  fetchOrders?: (silent?: boolean, force?: boolean) => Promise<void>;
+  fetchOrders: (silent?: boolean, force?: boolean) => Promise<void>;
 };
 
 export function OrdersPanel({
   toast,
   tabs,
+  attentionTabs,
+  filterBaseOrders,
   setOrderTab,
   orderTab,
   hasAodaiCapability,
@@ -44,6 +50,8 @@ export function OrdersPanel({
   orders,
   setBookingTypeFilter,
   bookingTypeFilter,
+  orderMonthFilter,
+  setOrderMonthFilter,
   monthlyRevenue,
   loadingOrders,
   filteredOrders,
@@ -66,6 +74,7 @@ export function OrdersPanel({
 }: OrdersPanelProps) {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<{ top: number; right: number; bottom: number; left: number } | null>(null);
+  const activeRentalFilter = parseRentalOrderTab(orderTab);
 
   // Synchronize selected order with updated data when an order is selected
   const activeSelectedOrder = React.useMemo(() => {
@@ -137,16 +146,22 @@ export function OrdersPanel({
         onSelectTab={(tab) => setOrderTab(tab)}
       />
 
+      {hasAodaiCapability && <RentalOperationsSummary />}
+
       {/* 3. Filter Controls: Tabs & Service Chips */}
       <OrdersFilterBar
         orderTab={orderTab}
         setOrderTab={setOrderTab}
         bookingTypeFilter={bookingTypeFilter}
         setBookingTypeFilter={setBookingTypeFilter}
+        setActivePage={setActivePage}
         hasAodaiCapability={hasAodaiCapability}
         hasPhotographyCapability={hasPhotographyCapability}
         tabs={tabs}
-        orders={orders}
+        attentionTabs={attentionTabs}
+        orders={filterBaseOrders}
+        orderMonthFilter={orderMonthFilter}
+        setOrderMonthFilter={setOrderMonthFilter}
       />
 
       {/* 4. Split-Panel Layout: Orders Table (Left) + Detail Drawer (Right) */}
@@ -160,6 +175,7 @@ export function OrdersPanel({
             onOpenActionMenu={handleOpenActionMenu}
             activePage={activePage}
             setActivePage={setActivePage}
+            activeRentalFilter={activeRentalFilter}
           />
         </div>
 

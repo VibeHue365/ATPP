@@ -21,6 +21,7 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
   let mockDisputeModel: any;
   let mockNotificationsService: any;
   let mockProviderModel: any;
+  let mockProductsService: any;
 
   const customerId = new Types.ObjectId().toString();
   const otherCustomerId = new Types.ObjectId().toString();
@@ -80,6 +81,11 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
     mockNotificationsService = {
       emitBookingUpdate: jest.fn(),
       createNotification: jest.fn().mockResolvedValue({}),
+      createNotificationOnce: jest.fn().mockResolvedValue({}),
+    };
+
+    mockProductsService = {
+      getRentalPriceSuggestionEntries: jest.fn().mockResolvedValue([]),
     };
 
     mockProviderModel = {
@@ -98,6 +104,7 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
       settlementsService: mockSettlementsService,
       notificationsService: mockNotificationsService,
       providerModel: mockProviderModel,
+      productsService: mockProductsService,
       getCustomerIdStr: (booking: any) => {
         if (!booking?.customerId) return '';
         return (booking.customerId._id || booking.customerId).toString();
@@ -112,6 +119,8 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
       BookingsService.prototype.getBookingStakeholderUserIds.bind(service);
     service.customerConfirmPickup =
       BookingsService.prototype.customerConfirmPickup.bind(service);
+    service.notifyRentalPriceMilestones =
+      BookingsService.prototype.notifyRentalPriceMilestones.bind(service);
     service.customerReportDamage =
       BookingsService.prototype.customerReportDamage.bind(service);
     service.customerRejectHandover =
@@ -130,6 +139,45 @@ describe('BookingsService - Customer Pickup & Handover Contract Verification', (
   });
 
   describe('customerConfirmPickup', () => {
+    it('creates one actionable provider notification at a rental price milestone', async () => {
+      const productId = new Types.ObjectId();
+      const providerUserId = new Types.ObjectId();
+      mockProductsService.getRentalPriceSuggestionEntries.mockResolvedValue([
+        {
+          productId: productId.toString(),
+          providerId: providerId.toString(),
+          name: 'Áo dài Nhật Bình',
+          suggestion: {
+            eligible: true,
+            rentalCount: 10,
+            reminderNumber: 2,
+            discountPercent: 10,
+            suggestedPrice: 450_000,
+          },
+        },
+      ]);
+      mockProviderModel.findById.mockReturnValueOnce({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue({ userId: providerUserId }),
+        }),
+      });
+
+      await service.notifyRentalPriceMilestones([{ productId }]);
+
+      expect(mockNotificationsService.createNotificationOnce).toHaveBeenCalledWith(
+        providerUserId.toString(),
+        `rental-price-review:${productId.toString()}:10`,
+        'Đề xuất xem lại giá thuê áo dài',
+        expect.stringContaining('10 lượt thuê'),
+        'SYSTEM',
+        expect.objectContaining({
+          action: 'REVIEW_RENTAL_PRICE',
+          productId: productId.toString(),
+          rentalCount: 10,
+        }),
+      );
+    });
+
     it('throws NotFoundException if booking not found', async () => {
       mockBookingModel.findById.mockResolvedValue(null);
       await expect(

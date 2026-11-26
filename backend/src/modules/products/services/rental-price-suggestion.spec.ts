@@ -16,7 +16,7 @@ describe('buildRentalPriceSuggestion', () => {
       eligible: true,
       discountPercent: 20,
       suggestedPrice: 400_000,
-      reason: 'Sản phẩm đã được thuê 50 lần; tình trạng hiện tại: MINOR_DAMAGE.',
+      reason: 'Sản phẩm đạt trung bình 50 lượt thuê/áo; tình trạng hiện tại: MINOR_DAMAGE.',
       reminderNumber: 3,
     });
   });

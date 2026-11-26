@@ -197,7 +197,7 @@ export const OverviewMetricCards: React.FC<MetricCardsProps> = ({
       {/* 4. Đang thuê áo dài */}
       <div
         className="po-metric-card"
-        onClick={() => onNavigate?.('rental-operations')}
+        onClick={() => onNavigate?.('orders')}
         role="button"
         tabIndex={0}
         id="card-rented-items"
