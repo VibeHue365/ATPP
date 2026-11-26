@@ -82,31 +82,31 @@ describe('campaign-pricing.util (VIB-43 seasonal discount & surcharge)', () => {
     });
   });
 
-  it('derives the hourly rate from 20% of the daily price (rounded to 1.000đ), then applies the campaign', () => {
+  it('derives the hourly rate from 10% of the daily price (rounded to 1.000đ), then applies the campaign', () => {
     const hourly = resolveHourlyRate(500000, null);
-    expect(hourly).toBe(100000);
-    expect(resolveHourlyRate(50000, null)).toBe(10000);
+    expect(hourly).toBe(50000);
+    expect(resolveHourlyRate(50000, null)).toBe(5000);
     expect(applyCampaignToRate(hourly, tetSurcharge, '2026-12-30')).toBe(
-      120000,
+      60000,
     );
   });
 
   it('caps hourly rental total at the effective daily rate (including campaigns)', () => {
-    // 2h @ 100k = 200k (< 500k daily cap); 6h @ 100k = 600k -> capped at 500k
+    // 2h @ 50k = 100k (< 500k daily cap); 12h @ 50k = 600k -> capped at 500k
     expect(
       calculateHourlyRentalTotal(500000, null, null, '2027-01-10', 2).total,
-    ).toBe(200000);
+    ).toBe(100000);
     expect(
-      calculateHourlyRentalTotal(500000, null, null, '2027-01-10', 6).total,
+      calculateHourlyRentalTotal(500000, null, null, '2027-01-10', 12).total,
     ).toBe(500000);
-    // With +20% surcharge: 120k/h * 6h = 720k -> capped at 600k daily cap
+    // With +20% surcharge: 60k/h * 12h = 720k -> capped at 600k daily cap
     expect(
-      calculateHourlyRentalTotal(500000, null, tetSurcharge, '2026-12-30', 6),
+      calculateHourlyRentalTotal(500000, null, tetSurcharge, '2026-12-30', 12),
     ).toEqual({
       total: 600000,
-      hourlyRate: 120000,
+      hourlyRate: 60000,
       dailyCap: 600000,
-      hours: 6,
+      hours: 12,
     });
   });
 

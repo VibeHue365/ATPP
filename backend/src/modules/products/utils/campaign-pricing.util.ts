@@ -81,7 +81,7 @@ export function resolveHourlyRate(
   }
   const safeBase = Number(basePrice) || 0;
   if (safeBase <= 0) return 0;
-  return Math.max(1000, Math.round((safeBase * 0.2) / 1000) * 1000);
+  return Math.max(1000, Math.round((safeBase * 0.1) / 1000) * 1000);
 }
 
 /** Tổng tiền thuê theo giờ cho 1 ngày, áp trần không vượt quá giá thuê trọn 1 ngày. */
