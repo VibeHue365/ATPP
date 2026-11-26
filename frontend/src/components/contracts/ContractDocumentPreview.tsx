@@ -399,7 +399,7 @@ export const ContractDocumentPreview: React.FC<ContractDocumentPreviewProps> = (
                   <strong>Biểu phí quá hạn trả trang phục:</strong> Kể từ thời điểm quá hạn, hệ thống áp dụng mức phí trễ hạn lũy tiến là <strong>+10% tiền đặt cọc cho mỗi 30 phút trễ</strong> (làm tròn lên theo từng chu kỳ 30 phút, tối thiểu 1.000 đ/30 phút), với <strong>mức trần tối đa bằng 50% tổng tiền đặt cọc</strong> của đơn hàng trong giai đoạn chờ hoàn trả.
                 </li>
                 <li>
-                  <strong>Các mốc cảnh báo và chế tài tài khoản:</strong> Hệ thống gửi thông báo nhắc nhở tại mốc <strong>15 phút</strong> và <strong>1 giờ</strong> quá hạn. Khi quá hạn từ <strong>2 giờ (T+2h)</strong> trở lên, tài khoản Bên B bị <strong>tạm khóa quyền tạo đơn thuê mới</strong> trên nền tảng TàGo cho đến khi hoàn tất trả trang phục và đối soát xong nghĩa vụ quá hạn.
+                  <strong>Các mốc cảnh báo và chế tài tài khoản:</strong> Hệ thống gửi thông báo nhắc nhở tại mốc <strong>15 phút</strong> và <strong>1 giờ</strong> quá hạn. Khi quá hạn từ <strong>2 giờ (T+2h)</strong> trở lên, tài khoản Bên B bị <strong>tạm khóa quyền tạo đơn thuê mới</strong> trên nền tảng TàGo và tiếp tục duy trì thời hạn phạt tạm khóa <strong>03 (ba) ngày (72 giờ)</strong> kể từ khi hoàn tất trả trang phục và đối soát xong nghĩa vụ quá hạn.
                 </li>
                 <li>
                   <strong>Mốc quá hạn 24 giờ và xác nhận mất trang phục (LOST_ITEM):</strong> Trường hợp trễ quá <strong>24 giờ</strong> mà Bên B chưa hoàn trả trang phục và Bên A đã liên hệ tối thiểu <strong>03 (ba) lần</strong> bất thành, Bên A có quyền kích hoạt xác nhận <strong>Mất trang phục (LOST_ITEM)</strong> theo Điều 4.

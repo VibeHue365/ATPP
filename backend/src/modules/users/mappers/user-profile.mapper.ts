@@ -10,6 +10,11 @@ export class UserProfileMapper {
   ): Record<string, unknown> {
     const defaultAddr =
       (user.addresses || []).find((a) => a.isDefault) || user.addresses?.[0];
+    const isRestrictionExpired =
+      Boolean(user.isRestricted) &&
+      Boolean(user.restrictedUntil) &&
+      new Date(user.restrictedUntil as Date).getTime() <= Date.now();
+    const effectiveRestricted = Boolean(user.isRestricted) && !isRestrictionExpired;
     return {
       id: user._id.toString(),
       email: user.auth.email,
@@ -17,9 +22,10 @@ export class UserProfileMapper {
       emailVerified: user.auth.emailVerified,
       phoneVerified: user.auth.phoneVerified,
       status: user.accountStatus,
-      isRestricted: Boolean(user.isRestricted),
-      restrictedReason: user.restrictedReason ?? null,
-      restrictedAt: user.restrictedAt ?? null,
+      isRestricted: effectiveRestricted,
+      restrictedReason: effectiveRestricted ? (user.restrictedReason ?? null) : null,
+      restrictedAt: effectiveRestricted ? (user.restrictedAt ?? null) : null,
+      restrictedUntil: effectiveRestricted ? (user.restrictedUntil ?? null) : null,
       roles,
       hasCompletedOnboarding: user.hasCompletedOnboarding,
       preferences: user.preferences,

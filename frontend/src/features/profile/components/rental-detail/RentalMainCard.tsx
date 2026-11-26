@@ -53,6 +53,8 @@ interface RentalMainCardProps {
     bookingId?: string;
     itemId?: string;
     isSubmitting?: boolean;
+    requiresCccd?: boolean;
+    onUploadCccd?: () => void;
     onConfirm?: () => void;
     onReportDamage?: () => void;
     onReject?: () => void;
@@ -71,7 +73,7 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({
   let activeStep = rentalData.currentStepIndex || 1;
   if (['RETURNED', 'COMPLETED', 'COMBO_PHOTOS_APPROVED'].includes(rawStatus)) {
     activeStep = 4;
-  } else if (['PICKED_UP', 'RENTING', 'IN_PROGRESS', 'RETURN_PENDING'].includes(rawStatus)) {
+  } else if (['PICKED_UP', 'RENTING', 'IN_PROGRESS', 'RETURN_PENDING', 'OVERDUE'].includes(rawStatus)) {
     activeStep = 3;
   } else if (['PICKUP_PENDING', 'READY_FOR_PICKUP'].includes(rawStatus)) {
     activeStep = 2;
@@ -666,6 +668,47 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({
             )}
           </div>
 
+          {/* Yêu cầu gửi CCCD trước khi nhận áo */}
+          {pickupInspection.requiresCccd && (
+            <div
+              style={{
+                backgroundColor: '#FEF2F2',
+                border: '1.5px solid #FCA5A5',
+                borderRadius: '10px',
+                padding: '12px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#991B1B', fontSize: '12.5px', fontWeight: 600, flex: '1 1 240px' }}>
+                <ShieldCheck size={17} color="#DC2626" style={{ flexShrink: 0 }} />
+                <span>Bạn cần gửi ảnh <strong>Căn cước công dân (CCCD)</strong> trước khi xác nhận nhận áo dài hoặc thao tác bàn giao.</span>
+              </div>
+              {pickupInspection.onUploadCccd && (
+                <button
+                  type="button"
+                  onClick={pickupInspection.onUploadCccd}
+                  style={{
+                    backgroundColor: '#8E1B2E',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '7px 14px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                  }}
+                >
+                  Gửi CCCD ngay
+                </button>
+              )}
+            </div>
+          )}
+
           {/* 3 Action Buttons */}
           <div
             style={{
@@ -681,7 +724,8 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({
             <button
               type="button"
               onClick={pickupInspection.onConfirm}
-              disabled={pickupInspection.isSubmitting}
+              disabled={pickupInspection.isSubmitting || pickupInspection.requiresCccd}
+              title={pickupInspection.requiresCccd ? 'Vui lòng gửi CCCD trước khi xác nhận nhận áo' : undefined}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -693,15 +737,16 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({
                 color: '#FFFFFF',
                 fontSize: '12.5px',
                 fontWeight: 750,
-                cursor: pickupInspection.isSubmitting ? 'not-allowed' : 'pointer',
-                boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)',
+                opacity: pickupInspection.requiresCccd ? 0.45 : 1,
+                cursor: (pickupInspection.isSubmitting || pickupInspection.requiresCccd) ? 'not-allowed' : 'pointer',
+                boxShadow: pickupInspection.requiresCccd ? 'none' : '0 2px 6px rgba(5, 150, 105, 0.25)',
                 transition: 'all 0.15s'
               }}
               onMouseOver={(e) => {
-                e.currentTarget.style.backgroundColor = '#047857';
+                if (!pickupInspection.requiresCccd) e.currentTarget.style.backgroundColor = '#047857';
               }}
               onMouseOut={(e) => {
-                e.currentTarget.style.backgroundColor = '#059669';
+                if (!pickupInspection.requiresCccd) e.currentTarget.style.backgroundColor = '#059669';
               }}
             >
               <CheckSquare size={14} />
@@ -712,7 +757,8 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({
             <button
               type="button"
               onClick={pickupInspection.onReportDamage}
-              disabled={pickupInspection.isSubmitting}
+              disabled={pickupInspection.isSubmitting || pickupInspection.requiresCccd}
+              title={pickupInspection.requiresCccd ? 'Vui lòng gửi CCCD trước khi thao tác nhận áo' : undefined}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -724,14 +770,15 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({
                 color: '#92400E',
                 fontSize: '12.5px',
                 fontWeight: 700,
-                cursor: pickupInspection.isSubmitting ? 'not-allowed' : 'pointer',
+                opacity: pickupInspection.requiresCccd ? 0.45 : 1,
+                cursor: (pickupInspection.isSubmitting || pickupInspection.requiresCccd) ? 'not-allowed' : 'pointer',
                 transition: 'all 0.15s'
               }}
               onMouseOver={(e) => {
-                e.currentTarget.style.backgroundColor = '#FDE68A';
+                if (!pickupInspection.requiresCccd) e.currentTarget.style.backgroundColor = '#FDE68A';
               }}
               onMouseOut={(e) => {
-                e.currentTarget.style.backgroundColor = '#FEF3C7';
+                if (!pickupInspection.requiresCccd) e.currentTarget.style.backgroundColor = '#FEF3C7';
               }}
             >
               <AlertTriangle size={14} />
@@ -742,7 +789,8 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({
             <button
               type="button"
               onClick={pickupInspection.onReject}
-              disabled={pickupInspection.isSubmitting}
+              disabled={pickupInspection.isSubmitting || pickupInspection.requiresCccd}
+              title={pickupInspection.requiresCccd ? 'Vui lòng gửi CCCD trước khi thao tác bàn giao' : undefined}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -754,14 +802,15 @@ export const RentalMainCard: React.FC<RentalMainCardProps> = ({
                 color: '#DC2626',
                 fontSize: '12.5px',
                 fontWeight: 700,
-                cursor: pickupInspection.isSubmitting ? 'not-allowed' : 'pointer',
+                opacity: pickupInspection.requiresCccd ? 0.45 : 1,
+                cursor: (pickupInspection.isSubmitting || pickupInspection.requiresCccd) ? 'not-allowed' : 'pointer',
                 transition: 'all 0.15s'
               }}
               onMouseOver={(e) => {
-                e.currentTarget.style.backgroundColor = '#FEE2E2';
+                if (!pickupInspection.requiresCccd) e.currentTarget.style.backgroundColor = '#FEE2E2';
               }}
               onMouseOut={(e) => {
-                e.currentTarget.style.backgroundColor = '#FEF2F2';
+                if (!pickupInspection.requiresCccd) e.currentTarget.style.backgroundColor = '#FEF2F2';
               }}
             >
               <XCircle size={14} />

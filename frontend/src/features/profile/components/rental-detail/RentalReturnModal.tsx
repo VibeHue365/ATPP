@@ -8,6 +8,7 @@ interface RentalReturnModalProps {
   storeName: string;
   storeAddress: string;
   depositAmount: number;
+  lateFee?: number;
   onClose: () => void;
   onOpenMap?: () => void;
   onSubmit: (data: { evidencePhotos: string[]; note?: string }) => Promise<void>;
@@ -19,6 +20,7 @@ export const RentalReturnModal: React.FC<RentalReturnModalProps> = ({
   storeName,
   storeAddress,
   depositAmount,
+  lateFee = 0,
   onClose,
   onOpenMap,
   onSubmit,
@@ -252,11 +254,18 @@ export const RentalReturnModal: React.FC<RentalReturnModalProps> = ({
               )}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px dashed #E5DED5' }}>
-              <span style={{ fontSize: '12px', color: '#7D736B' }}>Tiền cọc sẽ đối soát hoàn lại:</span>
-              <span style={{ fontSize: '14px', fontWeight: 800, color: '#059669' }}>
-                {depositAmount.toLocaleString('vi-VN')}đ
-              </span>
+            <div style={{ paddingTop: '8px', borderTop: '1px dashed #E5DED5' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '12px', color: '#7D736B' }}>Tiền cọc sẽ đối soát hoàn lại:</span>
+                <span style={{ fontSize: '14px', fontWeight: 800, color: '#059669' }}>
+                  {Math.max(0, depositAmount - (lateFee || 0)).toLocaleString('vi-VN')}đ
+                </span>
+              </div>
+              {lateFee > 0 && (
+                <div style={{ fontSize: '11.5px', color: '#B45309', marginTop: '4px', textAlign: 'right' }}>
+                  (Cọc {depositAmount.toLocaleString('vi-VN')}đ − Phí quá hạn {lateFee.toLocaleString('vi-VN')}đ)
+                </div>
+              )}
             </div>
           </div>
 

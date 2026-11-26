@@ -197,6 +197,9 @@ export class User {
   @Prop({ type: Date, default: null })
   restrictedAt?: Date | null;
 
+  @Prop({ type: Date, default: null })
+  restrictedUntil?: Date | null;
+
   @Prop({ type: Boolean, default: false })
   hasCompletedOnboarding: boolean;
 

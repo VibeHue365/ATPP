@@ -116,6 +116,7 @@ export const ProfilePage: React.FC = () => {
     isRestricted?: boolean;
     restrictedReason?: string | null;
     restrictedAt?: string | null;
+    restrictedUntil?: string | null;
   } | null>(null);
 
   React.useEffect(() => {
@@ -127,6 +128,7 @@ export const ProfilePage: React.FC = () => {
             isRestricted: Boolean(me.isRestricted),
             restrictedReason: me.restrictedReason || null,
             restrictedAt: me.restrictedAt || null,
+            restrictedUntil: me.restrictedUntil || null,
           });
         }
       })
