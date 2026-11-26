@@ -154,23 +154,7 @@ export function ProviderSidebar({
             </button>
           )}
 
-          {/* 4. Giao & nhận áo dài */}
-          {hasAodaiCapability && (
-            <button
-              onClick={() => setCurrentView('rental-operations')}
-              className={`p-nav-item ${currentView === 'rental-operations' ? 'active' : ''}`}
-              aria-label="Giao & nhận áo dài"
-              title="Giao & nhận áo dài"
-              type="button"
-            >
-              <div className="p-nav-item-left">
-                <Package size={20} />
-                <span>Giao & nhận áo dài</span>
-              </div>
-            </button>
-          )}
-
-          {/* 5. Sản phẩm & Dịch vụ (Collapsible) */}
+          {/* 4. Sản phẩm & Dịch vụ (Collapsible) */}
           {hasAodaiCapability && (
             <button
               onClick={() => {

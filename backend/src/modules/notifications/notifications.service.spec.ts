@@ -24,6 +24,7 @@ describe('NotificationsService', () => {
       })),
       {
         find: jest.fn(),
+        findOne: jest.fn(),
         findOneAndUpdate: jest.fn(),
         updateMany: jest.fn(),
       },
@@ -172,6 +173,23 @@ describe('NotificationsService', () => {
     );
     expect(to).toHaveBeenCalledTimes(2);
     expect(emit).toHaveBeenCalledWith('new_notification', saved);
+  });
+
+  it('does not create a duplicate business notification for the same key', async () => {
+    const { service, notificationModel } = create();
+    const existing = { _id: notificationId, metadata: { dedupeKey: 'price:1:5' } };
+    notificationModel.findOne.mockReturnValue(executable(existing));
+
+    await expect(
+      service.createNotificationOnce(
+        userId.toString(),
+        'price:1:5',
+        'Review price',
+        'Product reached five rentals.',
+        NotificationType.System,
+      ),
+    ).resolves.toBe(existing);
+    expect(notificationModel).not.toHaveBeenCalled();
   });
 
   it('does not fail persistence when email and websocket delivery fail', async () => {

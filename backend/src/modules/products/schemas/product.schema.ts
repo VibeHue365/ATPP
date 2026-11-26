@@ -92,6 +92,10 @@ export class Product {
   @Prop({ required: true, min: 0 })
   depositAmount: number;
 
+  /** Rental-count milestones whose price recommendation was already handled. */
+  @Prop({ type: [Number], enum: [5, 10, 50], default: [] })
+  rentalPriceReviewedMilestones: number[];
+
   @Prop({ required: false, min: 0 })
   hourlyPrice?: number;
 

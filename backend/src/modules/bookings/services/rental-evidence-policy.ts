@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 
 export const RENTAL_EVIDENCE_UNATTACHED_TTL_MS = 24 * 60 * 60 * 1000;
-export const RENTAL_EVIDENCE_RETENTION_MS = 180 * 24 * 60 * 60 * 1000;
+export const RENTAL_EVIDENCE_RETENTION_MS = 48 * 60 * 60 * 1000;
 const PICKUP_WINDOW_MS = 24 * 60 * 60 * 1000;
 const RETURN_BEFORE_MS = 24 * 60 * 60 * 1000;
 const RETURN_AFTER_MS = 7 * 24 * 60 * 60 * 1000;

@@ -226,6 +226,36 @@ export class NotificationsService {
     return savedNotification;
   }
 
+  /** Persist and deliver a business notification at most once per user/key. */
+  async createNotificationOnce(
+    userId: string,
+    dedupeKey: string,
+    title: string,
+    content: string,
+    type: NotificationType,
+    metadata: Record<string, any> = {},
+  ): Promise<Notification> {
+    const ownerId = new Types.ObjectId(userId);
+    const lookup = {
+      userId: ownerId,
+      'metadata.dedupeKey': dedupeKey,
+    };
+    const existing = await this.notificationModel.findOne(lookup).exec();
+    if (existing) return existing;
+
+    try {
+      return await this.createNotification(userId, title, content, type, {
+        ...metadata,
+        dedupeKey,
+      });
+    } catch (error: any) {
+      if (error?.code !== 11000) throw error;
+      const winner = await this.notificationModel.findOne(lookup).exec();
+      if (!winner) throw error;
+      return winner;
+    }
+  }
+
   /**
    * Emit a real-time `booking_updated` event to both the customer and all provider sockets.
    * This is used by updateBookingStatus so that the Provider Dashboard and customer Profile

@@ -95,8 +95,7 @@ export class CreateProductDto {
   colorImages?: ColorImagesDto[];
 
   @IsInt({ message: 'Giá thuê ngày phải là số nguyên (VNĐ)' })
-  @Min(50000, { message: 'Giá thuê ngày tối thiểu là 50.000đ' })
-  @Max(10000000, { message: 'Giá thuê ngày tối đa là 10.000.000đ' })
+  @Min(1, { message: 'Giá thuê ngày phải lớn hơn 0đ' })
   basePrice: number;
 
   @IsOptional()

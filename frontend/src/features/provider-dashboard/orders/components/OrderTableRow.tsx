@@ -7,6 +7,7 @@ import {
   Shirt,
 } from 'lucide-react';
 import type { Order } from '../types';
+import { getRentalOrderMatchLabel, type RentalOrderFilter } from '../rentalOrderFilters';
 import { getBookingStatusGroup, normalizeBookingStatusCode } from '../../../../utils/bookingStatus';
 
 interface OrderTableRowProps {
@@ -15,6 +16,7 @@ interface OrderTableRowProps {
   isSelected: boolean;
   onSelectOrder: (order: Order) => void;
   onOpenActionMenu: (e: React.MouseEvent, order: Order) => void;
+  activeRentalFilter?: RentalOrderFilter | null;
 }
 
 export function OrderTableRow({
@@ -23,6 +25,7 @@ export function OrderTableRow({
   isSelected,
   onSelectOrder,
   onOpenActionMenu,
+  activeRentalFilter = null,
 }: OrderTableRowProps) {
   // Service Icon & Color
   const serviceConfig = React.useMemo(() => {
@@ -118,6 +121,11 @@ export function OrderTableRow({
     return 'Đã thanh toán';
   }, [order]);
 
+  const rentalMatchLabel = React.useMemo(
+    () => activeRentalFilter ? getRentalOrderMatchLabel(order, activeRentalFilter) : null,
+    [order, activeRentalFilter],
+  );
+
   return (
     <tr
       className={`p-order-row ${isSelected ? 'selected' : ''}`}
@@ -179,10 +187,13 @@ export function OrderTableRow({
 
       {/* 7. Trạng thái */}
       <td style={{ textAlign: 'center' }}>
-        <span className={statusPillClass}>
-          {order.pickupDamageReport && <AlertTriangle size={12} />}
-          <span>{order.pickupDamageReport ? 'Khách báo lỗi' : order.status}</span>
-        </span>
+        <div className="p-order-status-stack">
+          <span className={statusPillClass}>
+            {order.pickupDamageReport && <AlertTriangle size={12} />}
+            <span>{order.pickupDamageReport ? 'Khách báo lỗi' : order.status}</span>
+          </span>
+          {rentalMatchLabel && <span className="p-order-rental-reason">{rentalMatchLabel}</span>}
+        </div>
       </td>
 
       {/* 8. Thao tác */}

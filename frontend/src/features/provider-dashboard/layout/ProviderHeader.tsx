@@ -36,6 +36,7 @@ type ProviderHeaderProps = Pick<ReturnType<typeof useProviderNavigationState>,
   notifications: any[];
   getNotiTypeStyle: (type: string) => { bg: string; color: string; icon: string; };
   handleNotiMarkAsRead: (id: string) => Promise<void>;
+  handleNotificationClick: (notification: any) => void | Promise<void>;
   getNotiTimeAgo: (dateStr: string) => string;
   isSidebarCollapsed?: boolean;
   toggleSidebar?: () => void;
@@ -52,6 +53,7 @@ export function ProviderHeader({
   notifications,
   getNotiTypeStyle,
   handleNotiMarkAsRead,
+  handleNotificationClick,
   getNotiTimeAgo,
   setCurrentView,
   provider,
@@ -201,7 +203,7 @@ export function ProviderHeader({
                     return (
                       <div
                         key={noti._id}
-                        onClick={() => !noti.isRead && handleNotiMarkAsRead(noti._id)}
+                        onClick={() => void handleNotificationClick(noti)}
                         style={{
                           padding: '12px 18px',
                           cursor: 'pointer',

@@ -43,7 +43,13 @@ describe('ProductsService moderation', () => {
     const smartTaggingService = { markAssignmentsStale: jest.fn() };
     const inventoryItemModel = { create: jest.fn().mockResolvedValue({}) };
     const connection = {
-      db: { collection: jest.fn() },
+      db: {
+        collection: jest.fn().mockReturnValue({
+          aggregate: jest.fn().mockReturnValue({
+            toArray: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+      },
       model: jest.fn().mockReturnValue(inventoryItemModel),
     };
     const campaignService = {
@@ -77,6 +83,7 @@ describe('ProductsService moderation', () => {
       productsRepository,
       categoriesService,
       priceVersionModel,
+      connection,
     };
   }
 
@@ -282,6 +289,80 @@ describe('ProductsService moderation', () => {
         effectiveTo: null,
         note: 'Provider cập nhật giá sản phẩm',
       }),
+    );
+  });
+
+  it('marks the current rental-price milestone handled after the provider changes the price', async () => {
+    const existing = {
+      _id: productId,
+      providerId,
+      basePrice: 500000,
+      depositAmount: 100000,
+      rentalPriceReviewedMilestones: [],
+      moderationStatus: ProductModerationStatus.Approved,
+    };
+    const { service, productsRepository, connection } = createService({
+      findById: jest.fn().mockResolvedValue(existing),
+      update: jest.fn().mockResolvedValue({ ...existing, basePrice: 450000 }),
+    });
+    connection.db.collection.mockImplementation((name: string) => ({
+      aggregate: jest.fn().mockReturnValue({
+        toArray: jest.fn().mockResolvedValue(
+          name === 'booking_items'
+            ? [{ _id: productId, rentalCount: 5 }]
+            : [{ _id: productId, condition: 'GOOD' }],
+        ),
+      }),
+    }));
+
+    await service.updateProduct(userId, productId.toString(), {
+      basePrice: 450000,
+    });
+
+    expect(productsRepository.update).toHaveBeenCalledWith(
+      productId,
+      expect.objectContaining({
+        basePrice: 450000,
+        rentalPriceReviewedMilestones: [5],
+      }),
+      { incrementTaggingRevision: false },
+    );
+  });
+
+  it('computes average rentals per inventory item when evaluating price suggestion milestones', async () => {
+    const existing = {
+      _id: productId,
+      providerId,
+      basePrice: 500000,
+      depositAmount: 100000,
+      rentalPriceReviewedMilestones: [],
+      moderationStatus: ProductModerationStatus.Approved,
+    };
+    const { service, productsRepository, connection } = createService({
+      findById: jest.fn().mockResolvedValue(existing),
+      update: jest.fn().mockResolvedValue({ ...existing, basePrice: 450000 }),
+    });
+    connection.db.collection.mockImplementation((name: string) => ({
+      aggregate: jest.fn().mockReturnValue({
+        toArray: jest.fn().mockResolvedValue(
+          name === 'booking_items'
+            ? [{ _id: productId, rentalCount: 10 }]
+            : [{ _id: productId, condition: 'GOOD', itemCount: 2 }],
+        ),
+      }),
+    }));
+
+    await service.updateProduct(userId, productId.toString(), {
+      basePrice: 450000,
+    });
+
+    expect(productsRepository.update).toHaveBeenCalledWith(
+      productId,
+      expect.objectContaining({
+        basePrice: 450000,
+        rentalPriceReviewedMilestones: [5],
+      }),
+      { incrementTaggingRevision: false },
     );
   });
 

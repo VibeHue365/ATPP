@@ -1,6 +1,7 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Order } from '../types';
+import type { RentalOrderFilter } from '../rentalOrderFilters';
 import { OrderTableRow } from './OrderTableRow';
 
 interface OrdersTableProps {
@@ -12,6 +13,7 @@ interface OrdersTableProps {
   activePage: number;
   setActivePage: React.Dispatch<React.SetStateAction<number>>;
   pageSize?: number;
+  activeRentalFilter?: RentalOrderFilter | null;
 }
 
 export function OrdersTable({
@@ -23,6 +25,7 @@ export function OrdersTable({
   activePage,
   setActivePage,
   pageSize = 10,
+  activeRentalFilter = null,
 }: OrdersTableProps) {
   const totalPages = Math.max(1, Math.ceil(orders.length / pageSize));
   const displayedOrders = orders.slice((activePage - 1) * pageSize, activePage * pageSize);
@@ -71,6 +74,7 @@ export function OrdersTable({
                   isSelected={selectedOrder?._id === order._id}
                   onSelectOrder={onSelectOrder}
                   onOpenActionMenu={onOpenActionMenu}
+                  activeRentalFilter={activeRentalFilter}
                 />
               ))
             )}

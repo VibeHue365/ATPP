@@ -21,6 +21,7 @@ import { ProductWizardModal } from '../../features/provider-dashboard/collection
 import { useProductWizardState } from '../../features/provider-dashboard/collections/useProductWizardState';
 import { useProviderCampaignState } from '../../features/provider-dashboard/collections/useProviderCampaignState';
 import { useProviderProductsState } from '../../features/provider-dashboard/collections/useProviderProductsState';
+import { productsApi } from '../../features/provider-dashboard/api/providerDashboardApi';
 import { createProviderDataActions } from '../../features/provider-dashboard/hooks/createProviderDataActions';
 import { createSessionActions } from '../../features/provider-dashboard/hooks/createSessionActions';
 import { useProviderNavigationState } from '../../features/provider-dashboard/hooks/useProviderNavigationState';
@@ -39,6 +40,7 @@ import { createIncidentActions } from '../../features/provider-dashboard/orders/
 import { createOrderDataActions } from '../../features/provider-dashboard/orders/createOrderDataActions';
 import { IncidentReportModal } from '../../features/provider-dashboard/orders/IncidentReportModal';
 import { getOrderGroup } from '../../features/provider-dashboard/orders/orderHelpers';
+import { orderHasRentalItems, orderMatchesRentalFilter, parseRentalOrderTab } from '../../features/provider-dashboard/orders/rentalOrderFilters';
 import { getBookingStatusGroup, normalizeBookingStatusCode } from '../../utils/bookingStatus';
 
 import { useProviderIncidentState } from '../../features/provider-dashboard/orders/useProviderIncidentState';
@@ -73,7 +75,6 @@ const OrdersPanel = React.lazy(() => import('../../features/provider-dashboard/o
 const PayoutsPanel = React.lazy(() => import('../../features/provider-dashboard/payouts/PayoutsPanel').then(m => ({ default: m.PayoutsPanel })));
 const PortfolioPanel = React.lazy(() => import('../../features/provider-dashboard/portfolio/PortfolioPanel').then(m => ({ default: m.PortfolioPanel })));
 const CombosPanel = React.lazy(() => import('../../features/provider-dashboard/combos/CombosPanel').then(m => ({ default: m.CombosPanel })));
-const RentalOperationsPanel = React.lazy(() => import('../../features/provider-dashboard/rental-operations/RentalOperationsPanel').then(m => ({ default: m.RentalOperationsPanel })));
 const ReviewsPanel = React.lazy(() => import('../../features/provider-dashboard/reviews/ReviewsPanel').then(m => ({ default: m.ReviewsPanel })));
 const RolesPanel = React.lazy(() => import('../../features/provider-dashboard/roles/RolesPanel').then(m => ({ default: m.RolesPanel })));
 const ServiceProfilePanel = React.lazy(() => import('../../features/provider-dashboard/service-profile/ServiceProfilePanel').then(m => ({ default: m.ServiceProfilePanel })));
@@ -176,7 +177,7 @@ export const ProviderDashboard: React.FC = () => {
 
   useEffect(() => {
     if (provider) {
-      if (!hasAodaiCapability && (currentView === 'rental-operations' || currentView === 'collections')) {
+      if (!hasAodaiCapability && currentView === 'collections') {
         setCurrentView('overview');
       }
       if (!hasPhotographyCapability && (currentView === 'portfolio' || currentView === 'photography-packages')) {
@@ -280,7 +281,8 @@ export const ProviderDashboard: React.FC = () => {
 
   const {
     orders, setOrders, loadingOrders, setLoadingOrders, orderTab, setOrderTab, bookingTypeFilter,
-    setBookingTypeFilter, activePage, setActivePage, actionMenuId, setActionMenuId,
+    setBookingTypeFilter, orderMonthFilter, setOrderMonthFilter, activePage, setActivePage,
+    actionMenuId, setActionMenuId,
   } = useProviderOrderState();
 
   const {
@@ -675,11 +677,36 @@ export const ProviderDashboard: React.FC = () => {
     fetchProducts: (...args) => fetchProducts(...args)
   });
 
+  const handleProviderNotificationClick = async (notification: any) => {
+    if (!notification?.isRead && notification?._id) {
+      await handleNotiMarkAsRead(notification._id);
+    }
+    setIsNotiOpen(false);
+
+    if (
+      notification?.metadata?.action === 'REVIEW_RENTAL_PRICE' &&
+      notification?.metadata?.productId
+    ) {
+      setCollectionTab('products');
+      setCurrentView('collections');
+      try {
+        const product = await productsApi.getMyListing<any>(
+          notification.metadata.productId,
+        );
+        openEditModal(product);
+      } catch (error: any) {
+        toast.error(
+          error?.message || 'Không thể mở sản phẩm cần xem lại giá.',
+        );
+      }
+    }
+  };
+
   useEffect(() => {
     if (currentView === 'overview') {
       fetchProviderData();
       fetchOrders();
-    } else if (currentView === 'orders' || currentView === 'rental-operations') {
+    } else if (currentView === 'orders') {
       fetchOrders();
     } else if (currentView === 'collections') {
       fetchCategories();
@@ -784,20 +811,52 @@ export const ProviderDashboard: React.FC = () => {
     return orders;
   }, [orders, hasAodaiCapability, hasPhotographyCapability]);
 
-  const tabs = React.useMemo(() => [
-    { label: 'Tất cả', count: roleFilteredOrders.length },
-    { label: 'Chờ xử lý', count: roleFilteredOrders.filter(o => getBookingStatusGroup(o.rawStatus || o.status) === 'PENDING').length },
-    { label: 'Đang thực hiện', count: roleFilteredOrders.filter(o => getBookingStatusGroup(o.rawStatus || o.status) === 'ACTIVE').length },
-    { label: 'Hoàn tất', count: roleFilteredOrders.filter(o => getBookingStatusGroup(o.rawStatus || o.status) === 'COMPLETED').length },
-    { label: 'Đã hủy', count: roleFilteredOrders.filter(o => getBookingStatusGroup(o.rawStatus || o.status) === 'CANCELLED').length },
-    { label: 'Tranh chấp / Hoàn tiền', count: roleFilteredOrders.filter(o => getBookingStatusGroup(o.rawStatus || o.status) === 'DISPUTED').length },
-    { label: 'Yêu cầu đổi lịch', count: roleFilteredOrders.filter(o => o.items?.some((item: any) => item?.rescheduleRequest?.status === 'PENDING')).length },
-  ], [roleFilteredOrders]);
+  const monthFilteredOrders = React.useMemo(() => {
+    if (!orderMonthFilter) return roleFilteredOrders;
+    return roleFilteredOrders.filter((order) => {
+      let date = order.rawOrderDate || order.createdAt
+        ? new Date(order.rawOrderDate || order.createdAt || '')
+        : null;
+      if (!date || Number.isNaN(date.getTime())) {
+        const match = (order.orderDate || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+        date = match ? new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1])) : null;
+      }
+      if (!date || Number.isNaN(date.getTime())) return false;
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      return monthKey === orderMonthFilter;
+    });
+  }, [roleFilteredOrders, orderMonthFilter]);
 
-  const filteredOrders = roleFilteredOrders.filter((order) => {
+  const serviceFilteredOrders = React.useMemo(() => {
+    if (!hasAodaiCapability || !hasPhotographyCapability || bookingTypeFilter === 'Tất cả') {
+      return monthFilteredOrders;
+    }
+    if (bookingTypeFilter === 'HAS_RENTAL') {
+      return monthFilteredOrders.filter(orderHasRentalItems);
+    }
+    return monthFilteredOrders.filter((order) => order.bookingType === bookingTypeFilter);
+  }, [monthFilteredOrders, bookingTypeFilter, hasAodaiCapability, hasPhotographyCapability]);
+
+  const tabs = React.useMemo(() => [
+    { label: 'Tất cả', count: serviceFilteredOrders.length },
+    { label: 'Chờ xử lý', count: serviceFilteredOrders.filter(o => getBookingStatusGroup(o.rawStatus || o.status) === 'PENDING').length },
+    { label: 'Đang thực hiện', count: serviceFilteredOrders.filter(o => getBookingStatusGroup(o.rawStatus || o.status) === 'ACTIVE').length },
+    { label: 'Hoàn tất', count: serviceFilteredOrders.filter(o => getBookingStatusGroup(o.rawStatus || o.status) === 'COMPLETED').length },
+    { label: 'Đã hủy', count: serviceFilteredOrders.filter(o => getBookingStatusGroup(o.rawStatus || o.status) === 'CANCELLED').length },
+  ], [serviceFilteredOrders]);
+
+  const attentionTabs = React.useMemo(() => [
+    { label: 'Tranh chấp / Hoàn tiền', count: serviceFilteredOrders.filter(o => getBookingStatusGroup(o.rawStatus || o.status) === 'DISPUTED').length },
+    { label: 'Yêu cầu đổi lịch', count: serviceFilteredOrders.filter(o => o.items?.some((item: any) => item?.rescheduleRequest?.status === 'PENDING')).length },
+  ], [serviceFilteredOrders]);
+
+  const filteredOrders = serviceFilteredOrders.filter((order) => {
     let matchesStatus = false;
     const group = getBookingStatusGroup(order.rawStatus || order.status);
-    if (orderTab === 'Tất cả') {
+    const rentalFilter = parseRentalOrderTab(orderTab);
+    if (rentalFilter) {
+      matchesStatus = orderMatchesRentalFilter(order, rentalFilter);
+    } else if (orderTab === 'Tất cả') {
       matchesStatus = true;
     } else if (orderTab === 'Yêu cầu đổi lịch') {
       matchesStatus = Boolean(order.items?.some((item: any) => item?.rescheduleRequest?.status === 'PENDING'));
@@ -814,15 +873,8 @@ export const ProviderDashboard: React.FC = () => {
     } else {
       matchesStatus = getOrderGroup(order.rawStatus || order.status) === orderTab;
     }
-    const matchesType = (!hasAodaiCapability || !hasPhotographyCapability) ? true : (bookingTypeFilter === 'Tất cả' || order.bookingType === bookingTypeFilter);
-    return matchesStatus && matchesType;
+    return matchesStatus;
   });
-
-  const rentalOperationItems = React.useMemo(() => orders.flatMap((order) =>
-    (order.items || [])
-      .filter((item: any) => item?.rentalFulfillment && item.rentalFulfillment.status !== 'CANCELLED')
-      .map((item: any) => ({ order, item })),
-  ), [orders]);
 
   const monthlyRevenue = React.useMemo(() => {
     const now = new Date();
@@ -855,7 +907,7 @@ export const ProviderDashboard: React.FC = () => {
       {/* MAIN CONTENT AREA */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100vh', overflowY: 'auto', backgroundColor: 'var(--color-light-bg)' }}>
         {/* TOP BAR */}
-        <ProviderHeader {...{ notiRef, setIsNotiOpen, isNotiOpen, fetchNotifications, providerUnreadCount, handleNotiMarkAllAsRead, loadingNoti, notifications, getNotiTypeStyle, handleNotiMarkAsRead, getNotiTimeAgo, setCurrentView, provider, isSidebarCollapsed, toggleSidebar }} />
+        <ProviderHeader {...{ notiRef, setIsNotiOpen, isNotiOpen, fetchNotifications, providerUnreadCount, handleNotiMarkAllAsRead, loadingNoti, notifications, getNotiTypeStyle, handleNotiMarkAsRead, handleNotificationClick: handleProviderNotificationClick, getNotiTimeAgo, setCurrentView, provider, isSidebarCollapsed, toggleSidebar }} />
 
         {/* CONTENT SWITCH PANEL */}
         <React.Suspense fallback={<DashboardTabLoader />}>
@@ -876,7 +928,11 @@ export const ProviderDashboard: React.FC = () => {
 
         {currentView === 'notifications' && (
           <main style={{ flex: 1, padding: '24px 32px' }}>
-            <NotificationsPage hideBreadcrumb variant="provider" />
+            <NotificationsPage
+              hideBreadcrumb
+              variant="provider"
+              onNotificationClick={handleProviderNotificationClick}
+            />
           </main>
         )}
 
@@ -892,11 +948,10 @@ export const ProviderDashboard: React.FC = () => {
         )}
 
         {currentView === 'orders' && (
-          <OrdersPanel {...{ toast, tabs, setOrderTab, orderTab, hasAodaiCapability, hasPhotographyCapability, orders, setBookingTypeFilter, bookingTypeFilter, monthlyRevenue, loadingOrders, filteredOrders, setSelectedBookingId, setIsDetailModalOpen, setActionMenuId, actionMenuId, resolveRescheduleRequest, changeOrderStatus, setReportingOrder, setSelectedItemId, setIncidentDesc, setIncidentPhotos, setIncidentAmount, setIncidentActionType, activePage, setActivePage, fetchOrders }} onOpenChat={() => setCurrentView('chat')} />
-        )}
-
-        {currentView === 'rental-operations' && (
-          <RentalOperationsPanel {...{ fetchOrders, loadingOrders, rentalOperationItems, setSelectedBookingId, setIsDetailModalOpen, orders, toast }} onOpenChat={() => setCurrentView('chat')} />
+          <OrdersPanel
+            {...{ toast, tabs, attentionTabs, setOrderTab, orderTab, hasAodaiCapability, hasPhotographyCapability, orders, filterBaseOrders: monthFilteredOrders, setBookingTypeFilter, bookingTypeFilter, orderMonthFilter, setOrderMonthFilter, monthlyRevenue, loadingOrders, filteredOrders, setSelectedBookingId, setIsDetailModalOpen, setActionMenuId, actionMenuId, resolveRescheduleRequest, changeOrderStatus, setReportingOrder, setSelectedItemId, setIncidentDesc, setIncidentPhotos, setIncidentAmount, setIncidentActionType, activePage, setActivePage, fetchOrders }}
+            onOpenChat={() => setCurrentView('chat')}
+          />
         )}
         {currentView === 'collections' && (
           <CollectionsPanel {...{ collectionTab, openAddModal, setCollectionTab, prodSearch, setProdSearch, setProdPage, prodSizeFilter, setProdSizeFilter, prodColorFilter, setProdColorFilter, prodSortBy, setProdSortBy, loadingProducts, products, openEditModal, handleDuplicateProduct, handleDeleteProduct, prodTotal, prodLimit, prodPage, renderInventoryView, categories, fetchProducts, inventorySummary, toast, provider }} />

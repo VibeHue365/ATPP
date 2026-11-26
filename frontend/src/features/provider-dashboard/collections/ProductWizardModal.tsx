@@ -634,9 +634,8 @@ export function ProductWizardModal({
                     <div className="pwm-input-unit-wrap">
                       <input
                         type="number"
-                        min={50000}
-                        max={10000000}
-                        step={1000}
+                        min={1}
+                        step={1}
                         value={prodBasePrice}
                         onChange={(e) => setProdBasePrice(e.target.value)}
                         placeholder="500000"
@@ -647,7 +646,7 @@ export function ProductWizardModal({
                       <span className="pwm-input-unit">VND</span>
                     </div>
                     <small style={{ color: '#64748B', fontSize: '11.5px', display: 'block', marginTop: '4px' }}>
-                      Từ 50.000đ – 10.000.000đ (bội số 1.000đ). Thuê theo giờ mặc định 20%/giờ, trần tối đa bằng giá ngày.
+                      Thuê theo giờ mặc định 20%/giờ, trần tối đa bằng giá ngày.
                     </small>
                   </div>
 
@@ -676,17 +675,34 @@ export function ProductWizardModal({
                   </div>
                 </div>
 
-                {editingProduct?.rentalPriceSuggestion?.eligible && editingProduct.rentalPriceSuggestion.suggestedPrice != null && (
-                  <div style={{ margin: '0 0 16px', padding: '12px 14px', borderRadius: 10, border: '1px solid #F59E0B', background: '#FFFBEB', color: '#78350F' }}>
-                    <strong>Nhắc giá lần {editingProduct.rentalPriceSuggestion.reminderNumber}/3 sau {editingProduct.rentalPriceSuggestion.rentalCount} lượt thuê</strong>
-                    <p style={{ margin: '5px 0 10px', fontSize: 12.5 }}>
-                      Tình trạng kho: {editingProduct.rentalPriceSuggestion.condition}. Hệ thống đề xuất giảm {editingProduct.rentalPriceSuggestion.discountPercent}% còn {editingProduct.rentalPriceSuggestion.suggestedPrice.toLocaleString('vi-VN')}đ/ngày. Đây chỉ là đề xuất, Shop có thể sửa lại giá trước khi lưu.
-                    </p>
-                    <button type="button" onClick={() => setProdBasePrice(String(editingProduct.rentalPriceSuggestion!.suggestedPrice))} style={{ border: 0, borderRadius: 7, padding: '7px 11px', background: '#92400E', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>
-                      Áp dụng giá đề xuất
-                    </button>
-                  </div>
-                )}
+                {editingProduct?.rentalPriceSuggestion?.eligible && editingProduct.rentalPriceSuggestion.suggestedPrice != null && (() => {
+                  const suggestion = editingProduct.rentalPriceSuggestion;
+                  const isSuggestedPriceApplied = Number(prodBasePrice) === suggestion.suggestedPrice;
+                  return (
+                    <div style={{ margin: '0 0 16px', padding: '12px 14px', borderRadius: 10, border: '1px solid #F59E0B', background: '#FFFBEB', color: '#78350F' }}>
+                      <strong>Nhắc giá lần {suggestion.reminderNumber}/3 (TB {suggestion.rentalCount} lượt thuê/áo)</strong>
+                      <p style={{ margin: '5px 0 10px', fontSize: 12.5 }}>
+                        Tình trạng kho: {suggestion.condition}. Hệ thống đề xuất giảm {suggestion.discountPercent}% còn {suggestion.suggestedPrice!.toLocaleString('vi-VN')}đ/ngày. Đây chỉ là đề xuất, Shop có thể sửa lại giá trước khi lưu.
+                      </p>
+                      <button
+                        type="button"
+                        disabled={isSuggestedPriceApplied}
+                        onClick={() => setProdBasePrice(String(suggestion.suggestedPrice))}
+                        style={{
+                          border: 0,
+                          borderRadius: 7,
+                          padding: '7px 11px',
+                          background: isSuggestedPriceApplied ? '#047857' : '#92400E',
+                          color: '#fff',
+                          fontWeight: 700,
+                          cursor: isSuggestedPriceApplied ? 'default' : 'pointer',
+                        }}
+                      >
+                        {isSuggestedPriceApplied ? 'Đã điền giá đề xuất — bấm Lưu để xác nhận' : 'Áp dụng giá đề xuất'}
+                      </button>
+                    </div>
+                  );
+                })()}
 
                 {/* Replacement Value Row */}
                 <div className="pwm-form-row">

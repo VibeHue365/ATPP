@@ -589,14 +589,14 @@ describe('Provider Ao Dai catalog use cases (DaiBLL)', () => {
       await expect(
         service.createProduct(
           userId,
-          createDto({ basePrice: 30000, depositAmount: 0 }),
+          createDto({ basePrice: 0, depositAmount: 0 }),
         ),
       ).rejects.toThrow(BadRequestException);
 
       await expect(
         service.createProduct(
           userId,
-          createDto({ basePrice: 500500, depositAmount: 100000 }),
+          createDto({ basePrice: 500500.5, depositAmount: 100000 }),
         ),
       ).rejects.toThrow(BadRequestException);
 

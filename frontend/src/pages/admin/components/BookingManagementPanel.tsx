@@ -614,6 +614,7 @@ export const BookingManagementPanel: React.FC = () => {
                 >
                   <option value="Tất cả">Tất cả</option>
                   <option value="Sắp diễn ra">Đang thực hiện / Sắp diễn ra</option>
+                  <option value="OVERDUE">Quá hạn</option>
                   <option value="Chờ xác nhận">Chờ thanh toán / Chờ duyệt</option>
                   <option value="Đã hoàn thành">Hoàn tất</option>
                   <option value="Đã hủy">Đã hủy / Hoàn tiền</option>

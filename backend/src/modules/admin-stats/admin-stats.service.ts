@@ -1878,6 +1878,19 @@ export class AdminStatsService {
       }
     }
 
+    if (cityFilter && cityFilter !== 'ALL' && cityFilter !== 'Tất cả') {
+      const normalizedCity = cityFilter
+        .trim()
+        .replace(/^(?:TP\.?|Thành phố)\s*/i, '');
+      const cityPattern = buildVietnameseRegexPattern(normalizedCity);
+      const providersInCity = await this.providerModel
+        .find({ 'address.city': new RegExp(cityPattern, 'i') }, '_id')
+        .lean();
+      filter.providerIds = {
+        $in: providersInCity.map((provider: any) => provider._id),
+      };
+    }
+
     if (startDate || endDate) {
       filter.createdAt = {};
       if (startDate) {
@@ -2027,7 +2040,7 @@ export class AdminStatsService {
       const overdueRentalItems = bItems.filter((item: any) => {
         const dueAt = item.rentalFulfillment?.returnDueAt || item.rentalTo;
         return dueAt && new Date(dueAt).getTime() < Date.now() &&
-          ['PICKED_UP', 'RETURN_PENDING'].includes(b.status);
+          ['PICKED_UP', 'RETURN_PENDING', 'OVERDUE'].includes(b.status);
       });
       const earliestOverdueAt = overdueRentalItems
         .map((item: any) => new Date(item.rentalFulfillment?.returnDueAt || item.rentalTo))

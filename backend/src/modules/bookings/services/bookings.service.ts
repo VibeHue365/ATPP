@@ -6572,6 +6572,55 @@ export class BookingsService implements OnApplicationBootstrap {
     });
   }
 
+  private async notifyRentalPriceMilestones(
+    items: Array<{ productId?: Types.ObjectId | { _id?: Types.ObjectId } | null }>,
+  ): Promise<void> {
+    try {
+      const productIds = items
+        .map((item) => (item.productId as any)?._id ?? item.productId)
+        .filter((id): id is Types.ObjectId => Boolean(id))
+        .map((id) => new Types.ObjectId(id));
+      const entries =
+        await this.productsService.getRentalPriceSuggestionEntries(productIds);
+
+      for (const entry of entries) {
+        const suggestion = entry.suggestion;
+        if (
+          !entry.providerId ||
+          !suggestion.eligible ||
+          suggestion.reminderNumber === null ||
+          suggestion.suggestedPrice === null
+        ) {
+          continue;
+        }
+        const provider = await this.providerModel
+          .findById(entry.providerId)
+          .select('userId')
+          .lean();
+        if (!provider?.userId) continue;
+
+        const dedupeKey = `rental-price-review:${entry.productId}:${suggestion.rentalCount}`;
+        await this.notificationsService.createNotificationOnce(
+          provider.userId.toString(),
+          dedupeKey,
+          'Đề xuất xem lại giá thuê áo dài',
+          `${entry.name} đã đạt trung bình ${suggestion.rentalCount} lượt thuê/áo. Theo tình trạng hiện tại, hệ thống đề xuất giảm ${suggestion.discountPercent}% còn ${suggestion.suggestedPrice.toLocaleString('vi-VN')}đ/ngày. Bạn có thể áp dụng hoặc tự điều chỉnh giá.`,
+          NotificationType.System,
+          {
+            action: 'REVIEW_RENTAL_PRICE',
+            targetView: 'collections',
+            targetTab: 'products',
+            productId: entry.productId,
+            rentalCount: suggestion.rentalCount,
+            reminderNumber: suggestion.reminderNumber,
+          },
+        );
+      }
+    } catch (error) {
+      console.warn('Failed to create rental price milestone notification:', error);
+    }
+  }
+
   async customerConfirmPickup(
     bookingId: string,
     customerId: string,
@@ -6724,6 +6773,8 @@ export class BookingsService implements OnApplicationBootstrap {
         await session.endSession();
       }
     }
+
+    await this.notifyRentalPriceMilestones(rentalItems);
 
     try {
       const recipientIds = await this.getBookingStakeholderUserIds(booking);
@@ -6901,6 +6952,10 @@ export class BookingsService implements OnApplicationBootstrap {
         await session.endSession();
       }
     }
+
+    await this.notifyRentalPriceMilestones(
+      items.filter((item) => item.itemType === BookingItemType.Product),
+    );
 
     // Notify provider of damage report
     try {

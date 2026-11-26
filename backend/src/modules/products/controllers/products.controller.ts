@@ -256,6 +256,15 @@ export class ProductsController {
     return this.productsService.createProduct(user.sub, dto);
   }
 
+  @Get('my-listings/:id')
+  @UseGuards(JwtAuthGuard)
+  async getMyProduct(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    return this.productsService.getMyProduct(user.sub, id);
+  }
+
   @Get('my-listings/:id/price-history')
   @UseGuards(JwtAuthGuard)
   async getMyProductPriceHistory(

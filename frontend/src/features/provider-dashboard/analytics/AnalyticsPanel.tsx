@@ -55,7 +55,7 @@ export function AnalyticsPanel({ analyticsData: data, chartTimeRange, handlePeri
   const value = (n?: number, suffix = '') => n == null ? '—' : `${n}${suffix}`;
   const tasks = [
     { icon: 'booking', title: `${pending} đơn đặt lịch chờ xử lý`, detail: 'Kiểm tra và phản hồi khách hàng', view: 'orders' as View },
-    ...(shop ? [{ icon: 'bag', title: `${rented} hiện vật đang được thuê`, detail: 'Theo dõi giao và nhận trang phục', view: 'rental-operations' as View }] : []),
+    ...(shop ? [{ icon: 'bag', title: `${rented} hiện vật đang được thuê`, detail: 'Theo dõi giao và nhận trang phục', view: 'orders' as View }] : []),
     ...(photo ? [{ icon: 'clock', title: `${schedules.length} lịch chụp sắp tới`, detail: 'Chuẩn bị cho buổi chụp tiếp theo', view: 'calendar' as View }] : []),
     { icon: 'tasks', title: `${unread} thông báo chưa đọc`, detail: 'Cập nhật hoạt động cửa hàng', view: 'notifications' as View },
   ];
@@ -63,7 +63,7 @@ export function AnalyticsPanel({ analyticsData: data, chartTimeRange, handlePeri
     { icon: 'revenue', label: 'Tổng doanh thu', value: money(data.totalRevenue), note: 'Doanh thu tích lũy', view: 'payouts' as View },
     { icon: 'booking', label: 'Booking chờ xử lý', value: loadingOrders ? '…' : String(pending), note: 'Đơn chờ xác nhận', view: 'orders' as View },
     { icon: 'clock', label: 'Lịch sắp tới', value: String(schedules.length), note: 'Lịch chụp được hiển thị', view: 'calendar' as View },
-    { icon: 'bag', label: shop ? 'Đang thuê áo dài' : 'Phí hoa hồng', value: shop ? String(rented) : money(data.commissionFee), note: shop ? 'Hiện vật đang cho thuê' : 'Phí hoa hồng hệ thống', view: shop ? 'rental-operations' as View : 'payouts' as View },
+    { icon: 'bag', label: shop ? 'Đang thuê áo dài' : 'Phí hoa hồng', value: shop ? String(rented) : money(data.commissionFee), note: shop ? 'Hiện vật đang cho thuê' : 'Phí hoa hồng hệ thống', view: shop ? 'orders' as View : 'payouts' as View },
     { icon: 'star', label: 'Tỷ lệ hoàn thành', value: value(data.successRate, '%'), note: 'Trên tổng số đơn hàng', view: 'orders' as View },
     { icon: 'tasks', label: 'Cần xử lý', value: loadingOrders ? '…' : String(pending), note: 'Ưu tiên', view: 'orders' as View },
   ];

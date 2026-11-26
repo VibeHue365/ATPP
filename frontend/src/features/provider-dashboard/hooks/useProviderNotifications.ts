@@ -1,9 +1,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSocket } from '../../../context/SocketContext';
 import { notificationsApi } from '../api/providerDashboardApi';
 
 /** Mounted at dashboard scope, preserving polling and dropdown lifetime across tabs. */
 export function useProviderNotifications() {
+  const { socket } = useSocket();
   const [isNotiOpen, setIsNotiOpen] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loadingNoti, setLoadingNoti] = useState(false);
@@ -37,6 +39,20 @@ export function useProviderNotifications() {
     const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
   }, [fetchNotifications]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const handleNewNotification = (notification: any) => {
+      setNotifications((previous) => [
+        notification,
+        ...previous.filter((item) => item._id !== notification?._id),
+      ]);
+    };
+    socket.on('new_notification', handleNewNotification);
+    return () => {
+      socket.off('new_notification', handleNewNotification);
+    };
+  }, [socket]);
 
   const providerUnreadCount = notifications.filter(n => !n.isRead).length;
 
