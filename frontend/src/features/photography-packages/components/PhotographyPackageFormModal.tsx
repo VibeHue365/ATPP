@@ -21,6 +21,7 @@ import type {
   PhotographyPackage,
   PhotographyPackagePayload,
   PhotographyPackageStatus,
+  PhotographyPricingUnit,
 } from '../types/photographyPackage.types';
 import { PhotographyPackageCard } from './PhotographyPackageCard';
 
@@ -71,6 +72,14 @@ export function PhotographyPackageFormModal({
   const [price, setPrice] = useState(() => (initialPackage ? String(initialPackage.price) : ''));
   const [durationHours, setDurationHours] = useState(() =>
     initialPackage ? String(initialPackage.durationHours) : '2'
+  );
+  const [pricingUnit, setPricingUnit] = useState<PhotographyPricingUnit>(
+    () => initialPackage?.pricingUnit || 'PER_SESSION'
+  );
+  const [maxOvertimeMinutes, setMaxOvertimeMinutes] = useState(() =>
+    initialPackage?.maxOvertimeMinutes !== undefined
+      ? String(initialPackage.maxOvertimeMinutes)
+      : '240'
   );
   const [editedPhotosCount, setEditedPhotosCount] = useState(() =>
     initialPackage ? String(initialPackage.editedPhotosCount) : '20'
@@ -207,11 +216,13 @@ export function PhotographyPackageFormModal({
       description: description.trim() || undefined,
       price: normalizedPrice,
       durationHours: normalizedDuration,
+      pricingUnit,
       maxPeople: normalizedMaxPeople,
       editedPhotosCount: normalizedEditedPhotos,
       rawPhotosCount: includesRawPhotos ? numberValue(rawPhotosCount) : 0,
       deliveryDays: normalizedDeliveryDays,
       overtimeFeePerHour: numberValue(overtimeFeePerHour),
+      maxOvertimeMinutes: numberValue(maxOvertimeMinutes, 240),
       travelFeeNotes: travelFeeNotes.trim() || undefined,
       images,
       status,
@@ -249,11 +260,13 @@ export function PhotographyPackageFormModal({
         'Gói chụp trọn gói tại Đại Nội & Cung An Định, bao gồm makeup nhẹ, hỗ trợ tạo dáng và trả toàn bộ file...',
       price: numberValue(price, 1500000),
       durationHours: numberValue(durationHours, 2),
+      pricingUnit,
       maxPeople: numberValue(maxPeople, 1),
       editedPhotosCount: numberValue(editedPhotosCount, 25),
       rawPhotosCount: includesRawPhotos ? numberValue(rawPhotosCount, 150) : 0,
       deliveryDays: numberValue(deliveryDays, 3),
       overtimeFeePerHour: numberValue(overtimeFeePerHour, 0),
+      maxOvertimeMinutes: numberValue(maxOvertimeMinutes, 240),
       travelFeeNotes: travelFeeNotes.trim() || undefined,
       images,
       status: 'ACTIVE',
@@ -268,12 +281,14 @@ export function PhotographyPackageFormModal({
     description,
     price,
     durationHours,
+    pricingUnit,
     maxPeople,
     editedPhotosCount,
     includesRawPhotos,
     rawPhotosCount,
     deliveryDays,
     overtimeFeePerHour,
+    maxOvertimeMinutes,
     travelFeeNotes,
     images,
   ]);
@@ -387,6 +402,45 @@ export function PhotographyPackageFormModal({
               <div className="photography-package-form__two-columns">
                 <label>
                   <span>
+                    Hình thức tính giá <b>*</b>
+                  </span>
+                  <select
+                    value={pricingUnit}
+                    onChange={(e) => setPricingUnit(e.target.value as PhotographyPricingUnit)}
+                  >
+                    <option value="PER_SESSION">Theo buổi (1h, 2h, 3h…)</option>
+                    <option value="PER_DAY">Theo ngày (Trọn ngày)</option>
+                    {initialPackage?.pricingUnit === 'PER_BOOKING' && (
+                      <option value="PER_BOOKING">Trọn gói nhiều ngày / sự kiện</option>
+                    )}
+                  </select>
+                  <small>
+                    {pricingUnit === 'PER_DAY'
+                      ? 'Khách đặt nhiều ca trong cùng 1 ngày vẫn tính 1 giá ngày.'
+                      : 'Khách có thể tăng thêm giờ hoặc đặt thêm buổi riêng.'}
+                  </small>
+                </label>
+
+                <label>
+                  <span>Cho phép đặt thêm giờ tối đa</span>
+                  <select
+                    value={maxOvertimeMinutes}
+                    onChange={(e) => setMaxOvertimeMinutes(e.target.value)}
+                  >
+                    <option value="0">Không cho tăng giờ (cố định)</option>
+                    <option value="60">Tối đa +1 giờ</option>
+                    <option value="120">Tối đa +2 giờ</option>
+                    <option value="180">Tối đa +3 giờ</option>
+                    <option value="240">Tối đa +4 giờ</option>
+                    <option value="360">Tối đa +6 giờ</option>
+                  </select>
+                  <small>Bước tăng mỗi lần 30 phút khi lịch sau còn trống.</small>
+                </label>
+              </div>
+
+              <div className="photography-package-form__two-columns">
+                <label>
+                  <span>
                     Giá trọn gói (đ) <b>*</b>
                   </span>
                   <input
@@ -397,12 +451,16 @@ export function PhotographyPackageFormModal({
                     onChange={(e) => setPrice(e.target.value)}
                     placeholder="1500000"
                   />
-                  <small>Chi phí tính theo 1 buổi chụp tiêu chuẩn.</small>
+                  <small>
+                    {pricingUnit === 'PER_DAY'
+                      ? 'Chi phí tính cho 1 ngày chụp tiêu chuẩn.'
+                      : 'Chi phí tính theo 1 buổi chụp tiêu chuẩn.'}
+                  </small>
                 </label>
 
                 <label>
                   <span>
-                    Thời lượng buổi chụp (giờ) <b>*</b>
+                    {pricingUnit === 'PER_DAY' ? 'Thời lượng mỗi ngày (giờ)' : 'Thời lượng buổi chụp (giờ)'} <b>*</b>
                   </span>
                   <input
                     type="number"
@@ -411,7 +469,11 @@ export function PhotographyPackageFormModal({
                     value={durationHours}
                     onChange={(e) => setDurationHours(e.target.value)}
                   />
-                  <small>Ví dụ: 1.5 giờ, 2 giờ, 3 giờ...</small>
+                  <small>
+                    {pricingUnit === 'PER_DAY'
+                      ? 'Ví dụ: 6 giờ, 8 giờ/ngày...'
+                      : 'Ví dụ: 1 giờ, 1.5 giờ, 2 giờ, 3 giờ...'}
+                  </small>
                 </label>
 
                 <label>
@@ -498,7 +560,7 @@ export function PhotographyPackageFormModal({
                     onChange={(e) => setOvertimeFeePerHour(e.target.value)}
                     placeholder="200000"
                   />
-                  <small>Để trống hoặc 0 nếu không tính phí thêm giờ.</small>
+                  <small>Để 0 nếu muốn hệ thống tự tính phí tăng giờ theo tỷ lệ giá gói.</small>
                 </label>
               </div>
 

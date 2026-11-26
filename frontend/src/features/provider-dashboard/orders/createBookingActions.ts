@@ -6,6 +6,22 @@ import { statusDisplayMap } from '../constants';
 import type { Order } from '../types';
 import type { useProviderOrderState } from './useProviderOrderState';
 import { httpClient } from '../../../services/httpClient';
+import { staffApi } from '../staff/staffApi';
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatDateKeyVn(dateKey?: string | null): string {
+  if (!dateKey) return '';
+  const parts = String(dateKey).slice(0, 10).split('-');
+  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : dateKey;
+}
 
 type Dependencies = Pick<ReturnType<typeof useProviderOrderState>,
   'orders' | 'setActionMenuId' | 'setOrders'
@@ -17,11 +33,174 @@ type Dependencies = Pick<ReturnType<typeof useProviderOrderState>,
 
 /** Recreated each render so handlers retain the dashboard's existing closure semantics. */
 export function createBookingActions({ orders, setActionMenuId, setOrders, toast, fetchOrders }: Dependencies) {
-  const changeOrderStatus = async (_id: string, apiStatus: string) => {
+  const changeOrderStatus = async (_id: string, apiStatus: string): Promise<boolean | void> => {
     const order = orders.find(o => o._id === _id || o.id === _id);
 
-    // ===== PHOTOGRAPHY / COMBO: Bàn giao sản phẩm buổi chụp → AWAITING_REVIEW =====
+    // ===== OPTION 1A: Chấp nhận lịch chụp → Bắt buộc chọn thợ chụp rảnh nếu chưa phân công =====
     const isPhotographyOrder = order?.bookingType === 'PHOTOGRAPHY' || order?.bookingType === 'COMBO' || order?.items?.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE');
+    if (apiStatus === 'CONFIRMED' && isPhotographyOrder) {
+      try {
+        const avail = await staffApi.getAvailableStaffForBooking(_id);
+        const staffList = Array.isArray(avail?.staff) ? avail.staff : [];
+        const hasTeam = (avail?.activeStaffCount ?? staffList.length) > 0;
+
+        if (avail?.scheduleId && hasTeam && !avail.currentAssignedStaffId) {
+          const freeStaff = staffList.filter((st) => st.available);
+          const firstFreeId = freeStaff[0]?.staffId ?? '';
+          const scheduleMeta = [
+            avail.dateKey ? `Ngày ${formatDateKeyVn(avail.dateKey)}` : '',
+            avail.timeSlot ? `Khung giờ ${avail.timeSlot}` : '',
+          ]
+            .filter(Boolean)
+            .join(' · ');
+
+          const staffCardsHtml = staffList
+            .map((st) => {
+              const isAvail = Boolean(st.available);
+              const isChecked = isAvail && st.staffId === firstFreeId;
+              const initial = escapeHtml((st.name || 'T').charAt(0).toUpperCase());
+              const safeName = escapeHtml(st.name);
+              const safeSpecialty = st.specialty ? ` · ${escapeHtml(st.specialty)}` : '';
+              const safePhone = escapeHtml(st.phone || '');
+              const badgeHtml = isAvail
+                ? `<span style="font-size:11px;font-weight:700;color:#047857;background:#ECFDF5;border:1px solid #A7F3D0;padding:3px 9px;border-radius:999px;white-space:nowrap;">Đang rảnh</span>`
+                : `<span style="font-size:11px;font-weight:700;color:#B91C1C;background:#FEF2F2;border:1px solid #FECACA;padding:3px 9px;border-radius:999px;white-space:nowrap;">${escapeHtml(st.conflictReason || 'Đang bận')}</span>`;
+
+              return `
+                <label
+                  class="tago-approve-staff-card"
+                  style="
+                    display:flex;align-items:center;justify-content:space-between;gap:10px;
+                    padding:11px 13px;border-radius:11px;
+                    border:1.5px solid ${isChecked ? '#8E1B2E' : '#E7DAC9'};
+                    background:${isAvail ? (isChecked ? '#FFF8F9' : '#FFFFFF') : '#F8FAFC'};
+                    opacity:${isAvail ? '1' : '0.62'};
+                    cursor:${isAvail ? 'pointer' : 'not-allowed'};
+                    transition:border-color 0.15s ease, background 0.15s ease;
+                  "
+                >
+                  <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+                    <input
+                      type="radio"
+                      name="approve-staff-pick"
+                      value="${escapeHtml(st.staffId)}"
+                      data-staff-name="${safeName}"
+                      ${isChecked ? 'checked' : ''}
+                      ${isAvail ? '' : 'disabled'}
+                      style="accent-color:#8E1B2E;width:16px;height:16px;flex-shrink:0;"
+                    />
+                    <div style="width:34px;height:34px;border-radius:999px;background:#F5E6E8;color:#8E1B2E;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0;">
+                      ${initial}
+                    </div>
+                    <div style="min-width:0;text-align:left;">
+                      <div style="font-size:13.5px;font-weight:750;color:#231F20;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        ${safeName}<span style="font-weight:500;color:#6B5E54;">${safeSpecialty}</span>
+                      </div>
+                      <div style="font-size:12px;color:#6B5E54;">SĐT: ${safePhone || 'Chưa cập nhật'}</div>
+                    </div>
+                  </div>
+                  ${badgeHtml}
+                </label>
+              `;
+            })
+            .join('');
+
+          const emptyAvailWarning =
+            freeStaff.length === 0
+              ? `<div style="background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;border-radius:10px;padding:10px 12px;font-size:12.5px;line-height:1.45;">
+                   Hiện không có thợ chụp nào rảnh trong khung giờ này. Vui lòng kiểm tra lịch nghỉ hoặc điều phối lại các đơn trùng giờ trước khi duyệt.
+                 </div>`
+              : '';
+
+          const pickResult = await Swal.fire({
+            title: 'Chấp nhận lịch & Phân công thợ chụp',
+            html: `
+              <div style="display:flex;flex-direction:column;gap:12px;text-align:left;padding:4px 0;">
+                ${
+                  scheduleMeta
+                    ? `<div style="display:inline-flex;align-items:center;gap:6px;background:#FCF9F2;border:1px solid #E7DAC9;color:#8E1B2E;padding:7px 11px;border-radius:9px;font-size:12.5px;font-weight:700;">
+                         📅 ${escapeHtml(scheduleMeta)}
+                       </div>`
+                    : ''
+                }
+                <p style="margin:0;font-size:12.5px;color:#57534E;line-height:1.5;">
+                  Chọn <strong>1 thợ chụp đang rảnh</strong> để phụ trách ca này. Sau khi xác nhận, khách hàng sẽ thấy thông tin liên hệ thợ và ca chụp sẽ hiển thị ngay trên Cổng Thợ chụp.
+                </p>
+                ${emptyAvailWarning}
+                <div id="tago-approve-staff-list" style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto;padding-right:2px;">
+                  ${staffCardsHtml}
+                </div>
+              </div>
+            `,
+            showCancelButton: true,
+            showConfirmButton: freeStaff.length > 0,
+            confirmButtonText: 'Xác nhận & Phân công thợ',
+            cancelButtonText: 'Hủy',
+            confirmButtonColor: '#8E1B2E',
+            cancelButtonColor: '#9CA3AF',
+            width: 520,
+            didOpen: () => {
+              const container = document.getElementById('tago-approve-staff-list');
+              if (!container) return;
+              container.addEventListener('change', () => {
+                const labels = container.querySelectorAll('.tago-approve-staff-card');
+                labels.forEach((lbl) => {
+                  const input = lbl.querySelector('input[type="radio"]') as HTMLInputElement | null;
+                  if (!input || input.disabled) return;
+                  (lbl as HTMLElement).style.borderColor = input.checked ? '#8E1B2E' : '#E7DAC9';
+                  (lbl as HTMLElement).style.background = input.checked ? '#FFF8F9' : '#FFFFFF';
+                });
+              });
+            },
+            preConfirm: () => {
+              const checked = document.querySelector(
+                'input[name="approve-staff-pick"]:checked',
+              ) as HTMLInputElement | null;
+              if (!checked?.value) {
+                Swal.showValidationMessage('Vui lòng chọn một thợ chụp đang rảnh.');
+                return false;
+              }
+              return {
+                staffId: checked.value,
+                staffName: checked.dataset.staffName || 'Thợ chụp đã chọn',
+              };
+            },
+          });
+
+          if (!pickResult.isConfirmed || !pickResult.value?.staffId) {
+            setActionMenuId(null);
+            return false;
+          }
+
+          await bookingsApi.updateStatus(_id, {
+            status: 'CONFIRMED',
+            assignedStaffId: pickResult.value.staffId,
+          });
+          const displayStatus = statusDisplayMap.CONFIRMED || 'CONFIRMED';
+          setOrders((prev) =>
+            prev.map((o) =>
+              o._id === _id || o.id === _id
+                ? { ...o, status: displayStatus, rawStatus: 'CONFIRMED' }
+                : o,
+            ),
+          );
+          if (fetchOrders) {
+            await fetchOrders(true, true);
+          }
+          toast.success(
+            `Đã chấp nhận lịch chụp và phân công thợ ${pickResult.value.staffName}!`,
+          );
+          setActionMenuId(null);
+          return true;
+        }
+      } catch (err: any) {
+        toast.error(err?.message || 'Không thể tải danh sách thợ chụp rảnh để duyệt đơn.');
+        setActionMenuId(null);
+        throw err;
+      }
+    }
+
+    // ===== PHOTOGRAPHY / COMBO: Bàn giao sản phẩm buổi chụp → AWAITING_REVIEW =====
     if (apiStatus === 'AWAITING_REVIEW' && isPhotographyOrder) {
       const result = await Swal.fire({
         title: 'Bàn giao sản phẩm buổi chụp',
@@ -501,7 +680,7 @@ export function createBookingActions({ orders, setActionMenuId, setOrders, toast
         toast.error(err.message || 'Cập nhật trạng thái thất bại');
       }
       setActionMenuId(null);
-      return;
+      return true;
     }
 
     if (apiStatus === 'SESSION_START' || apiStatus === 'SESSION_COMPLETE') {
@@ -517,7 +696,7 @@ export function createBookingActions({ orders, setActionMenuId, setOrders, toast
         toast.error(err.message || 'Cập nhật buổi chụp thất bại');
       }
       setActionMenuId(null);
-      return;
+      return true;
     }
     try {
       await bookingsApi.updateStatus(_id, { status: apiStatus });
@@ -532,6 +711,7 @@ export function createBookingActions({ orders, setActionMenuId, setOrders, toast
       throw err;
     }
     setActionMenuId(null);
+    return true;
   };
 
   const resolveRescheduleRequest = async (order: Order, item: any, approved: boolean) => {

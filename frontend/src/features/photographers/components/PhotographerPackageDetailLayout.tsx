@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import {
   ArrowRight,
-  Bookmark,
   Camera,
   Check,
   Clock3,
   Heart,
+  LayoutGrid,
   MapPin,
   Share2,
   Sparkles,
@@ -16,7 +16,6 @@ import type { PhotographerPackage } from '../types/photographer.types';
 import type { PhotographerPackageDetailLayoutProps } from '../types/photographer-package-detail.types';
 import { PhotographerPackageBookingCard } from './PhotographerPackageBookingCard';
 import { PhotographerPackageContent } from './PhotographerPackageContent';
-import { PhotographyDurationControl } from './PhotographyDurationControl';
 import { PhotographyMultiSessionDialog } from './PhotographyMultiSessionDialog';
 
 const formatPrice = (amount: number) => `${amount.toLocaleString('vi-VN')}đ`;
@@ -84,6 +83,7 @@ export const PhotographerPackageDetailLayout: React.FC<PhotographerPackageDetail
     onPreviousMonth,
     onNextMonth,
     onPreviewDate,
+    onPreviewDuration,
     onConfirmSchedule,
     onCancelSchedule,
     onDecreaseDuration,
@@ -111,8 +111,27 @@ export const PhotographerPackageDetailLayout: React.FC<PhotographerPackageDetail
   const [multiSessionDialogOrigin, setMultiSessionDialogOrigin] = useState<'single' | 'multi'>('single');
   const selectedImages = useMemo(() => {
     const packageImages = selectedPackage?.images?.filter(Boolean) || [];
-    return [...new Set([...packageImages, ...photographer.portfolio])];
-  }, [photographer.portfolio, selectedPackage]);
+    const portfolioItemImages = (photographer.portfolioItems ?? []).flatMap((item) =>
+      (item.images ?? []).filter(Boolean),
+    );
+    const otherPackageImages = packages
+      .filter((pkg) => pkg._id !== selectedPackage?._id)
+      .flatMap((pkg) => (pkg.images ?? []).filter(Boolean));
+    const studioMediaImages = [
+      ...(photographer.media?.images ?? []),
+      ...(photographer.coverImage ? [photographer.coverImage] : []),
+    ].filter(Boolean);
+
+    return [
+      ...new Set([
+        ...packageImages,
+        ...portfolioItemImages,
+        ...photographer.portfolio.filter(Boolean),
+        ...otherPackageImages,
+        ...studioMediaImages,
+      ]),
+    ];
+  }, [packages, photographer, selectedPackage]);
   const city = photographer.address.city || photographer.address.district || '';
   const category = selectedPackage?.name?.split(/[-–—]/)[0]?.trim() || 'GÓI CHỤP ẢNH';
   const tabs = [
@@ -166,8 +185,16 @@ export const PhotographerPackageDetailLayout: React.FC<PhotographerPackageDetail
     setIsMultiSessionDialogOpen(false);
   };
 
-  const completedMultiSessions = multiSessions.filter((session) => session.date && session.startTime).length;
-  const multiSessionErrors = quote?.valid === false ? quote.errors.filter((error) => multiSessions.some((session) => session.clientId === error.clientId)) : [];
+  const multiSessionErrors =
+    quote?.valid === false
+      ? quote.errors.filter(
+          (error) => !error.clientId || multiSessions.some((session) => session.clientId === error.clientId),
+        )
+      : [];
+  const localToday = (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  })();
 
   return (
     <div className="photography-package-detail-page">
@@ -186,11 +213,60 @@ export const PhotographerPackageDetailLayout: React.FC<PhotographerPackageDetail
           <div className="ppd-header-actions"><button type="button" onClick={handleShare}><Share2 size={16} /> {shareLabel}</button><button type="button" onClick={onToggleFavorite} className={props.isFavorite ? 'is-active' : ''}><Heart size={16} fill={props.isFavorite ? 'currentColor' : 'none'} /> {props.isFavorite ? 'Đã lưu' : 'Lưu'}</button></div>
         </header>
 
-        <section className="ppd-hero">
-          {selectedImages[0] ? <img src={selectedImages[0]} alt={selectedPackage?.name || photographer.businessName} /> : <div className="ppd-hero-empty"><Camera size={42} /><span>Photographer đang cập nhật hình ảnh cho gói này</span></div>}
-          <div className="ppd-hero-overlay" />
-          <div className="ppd-hero-content"><div className="ppd-hero-chips"><span>Nội dung từ package</span>{selectedPackage?.deliveryDays ? <span>Trả ảnh {selectedPackage.deliveryDays} ngày</span> : null}{city ? <span>{city}</span> : null}</div><h2>{selectedPackage?.description || 'Một buổi chụp nhẹ nhàng, tự nhiên và được chuẩn bị theo nhu cầu của bạn.'}</h2><p>{photographer.quote || 'Trao đổi trước để photographer hiểu rõ concept và mong muốn của bạn.'}</p>{selectedImages.length > 1 && <button type="button" onClick={() => onImageClick(selectedImages[0])}>Xem portfolio <ArrowRight size={16} /></button>}</div>
-        </section>
+        {(() => {
+          const mosaicImages = selectedImages.slice(0, 5);
+          const totalPhotos = selectedImages.length;
+          const variantByCount = {
+            1: 'single',
+            2: 'two',
+            3: 'three',
+            4: 'four',
+            5: 'five',
+          } as const;
+          const layoutVariant =
+            variantByCount[mosaicImages.length as keyof typeof variantByCount] ?? 'single';
+
+          return (
+            <section className="ppd-hero-gallery" aria-label="Bộ ảnh gói chụp">
+              {mosaicImages.length === 0 ? (
+                <div className="ppd-hero-empty">
+                  <Camera size={40} />
+                  <span>Studio đang cập nhật bộ ảnh cho gói này</span>
+                </div>
+              ) : (
+                <>
+                  <div className={`ppd-mosaic ppd-mosaic--${layoutVariant}`}>
+                    {mosaicImages.map((image, index) => (
+                      <button
+                        type="button"
+                        key={`${image}-${index}`}
+                        className="ppd-mosaic-tile"
+                        onClick={() => onImageClick(image)}
+                        aria-label={`Xem ảnh ${index + 1} trên ${totalPhotos}`}
+                      >
+                        <img
+                          src={image}
+                          alt={`${selectedPackage?.name || photographer.businessName} — ảnh ${index + 1}`}
+                          loading={index === 0 ? 'eager' : 'lazy'}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                  {totalPhotos > 1 && (
+                    <button
+                      type="button"
+                      className="ppd-mosaic-all-btn"
+                      onClick={() => onImageClick(selectedImages[0])}
+                    >
+                      <LayoutGrid size={15} />
+                      <span>Xem tất cả {totalPhotos} ảnh</span>
+                    </button>
+                  )}
+                </>
+              )}
+            </section>
+          );
+        })()}
 
         {selectedPackage && <PackageHighlights selectedPackage={selectedPackage} photographerCity={city} />}
 
@@ -207,6 +283,15 @@ export const PhotographerPackageDetailLayout: React.FC<PhotographerPackageDetail
                 startTime={startTime}
                 endTime={endTime}
                 selectedTimeSlot={selectedTimeSlot}
+                durationMinutes={durationMinutes}
+                includedDurationMinutes={includedDurationMinutes}
+                overtimeIncrementMinutes={overtimeIncrementMinutes}
+                maxOvertimeMinutes={maxOvertimeMinutes}
+                canIncreaseDuration={canIncreaseDuration}
+                isNextDurationQuoteLoading={isNextDurationQuoteLoading}
+                increaseUnavailableReason={increaseUnavailableReason}
+                bookingMode={bookingMode}
+                multiSessions={multiSessions}
                 quote={quote}
                 quoteError={quoteError}
                 isQuoteLoading={isQuoteLoading}
@@ -219,14 +304,21 @@ export const PhotographerPackageDetailLayout: React.FC<PhotographerPackageDetail
                 calendarDate={calendarDate}
                 calendarDays={calendarDays}
                 isCalendarLoading={isCalendarLoading}
+                isSlotsLoading={props.isSlotsLoading}
                 slots={slots}
                 isSlotBusy={isSlotBusy}
+                getSlotCapacityInfo={props.getSlotCapacityInfo}
                 onSelectPackage={handlePackageSelection}
                 onPreviousMonth={onPreviousMonth}
                 onNextMonth={onNextMonth}
                 onPreviewDate={onPreviewDate}
+                onPreviewDuration={onPreviewDuration}
                 onConfirmSchedule={onConfirmSchedule}
                 onCancelSchedule={onCancelSchedule}
+                onDecreaseDuration={onDecreaseDuration}
+                onIncreaseDuration={onIncreaseDuration}
+                onOpenMultiSession={openMultiSessionDialog}
+                onBackToSingle={onBackToSingle}
                 onLocationChange={onLocationChange}
                 onAgreeTermsChange={onAgreeTermsChange}
                 onBookNow={onBookNow}
@@ -237,14 +329,33 @@ export const PhotographerPackageDetailLayout: React.FC<PhotographerPackageDetail
                 onRemoveVoucher={props.onRemoveVoucher}
                 studioStaff={props.studioStaff}
                 effectiveCapacity={props.effectiveCapacity}
-                preferredStaffId={props.preferredStaffId}
-                onSelectPreferredStaff={props.onSelectPreferredStaff}
+                previewDayQuota={props.previewDayQuota}
+                selectedSlotCapacity={props.selectedSlotCapacity}
+                onRefreshAvailability={props.onRefreshAvailability}
               />
-               {bookingMode === 'SINGLE' && <div className="ppd-duration-panel"><div><span>Thêm thời lượng</span><small>Chỉ áp dụng khi ca sau còn trống liên tục.</small></div><PhotographyDurationControl includedDurationMinutes={includedDurationMinutes} durationMinutes={durationMinutes} overtimeIncrementMinutes={overtimeIncrementMinutes} maxOvertimeMinutes={maxOvertimeMinutes} endTime={endTime} canIncrease={canIncreaseDuration} isCheckingIncrease={isNextDurationQuoteLoading} unavailableReason={increaseUnavailableReason} onDecrease={onDecreaseDuration} onIncrease={onIncreaseDuration} /></div>}
-
-               {bookingMode === 'MULTI' && <div className="ppd-multi-session-summary"><div><span className="ppd-multi-session-summary__icon"><Bookmark size={15} /></span><div><strong>Lịch nhiều buổi</strong><small>{completedMultiSessions}/{multiSessions.length} buổi đã đủ ngày và giờ</small></div></div><div className="ppd-multi-session-summary__actions"><button type="button" onClick={openMultiSessionDialog}>Chỉnh sửa</button><button type="button" onClick={onBackToSingle}>Về một buổi</button></div></div>}
-               {bookingMode === 'SINGLE' && <button type="button" className="ppd-multi-session-toggle" onClick={openMultiSessionDialog} disabled={!selectedDate || !startTime}><span><Bookmark size={16} /> Đặt nhiều buổi</span><ArrowRight size={15} /></button>}
-               <PhotographyMultiSessionDialog open={isMultiSessionDialogOpen} sessions={multiSessions} minDate={new Date().toISOString().slice(0, 10)} includedDurationMinutes={includedDurationMinutes} overtimeIncrementMinutes={overtimeIncrementMinutes} maxOvertimeMinutes={maxOvertimeMinutes} errors={multiSessionErrors} onAdd={onAddSession} onGenerateRange={onGenerateRange} onUpdate={onUpdateSession} onRemove={onRemoveSession} onCancel={cancelMultiSessionDialog} onConfirm={confirmMultiSessionDialog} />
+               <PhotographyMultiSessionDialog
+                 open={isMultiSessionDialogOpen}
+                 sessions={multiSessions}
+                 minDate={localToday}
+                 includedDurationMinutes={includedDurationMinutes}
+                 minimumSessionMinutes={
+                   selectedPackage?.pricingUnit && selectedPackage.pricingUnit !== 'PER_SESSION'
+                     ? 30
+                     : includedDurationMinutes
+                 }
+                 overtimeIncrementMinutes={overtimeIncrementMinutes}
+                 maxOvertimeMinutes={maxOvertimeMinutes}
+                 pricingUnit={selectedPackage?.pricingUnit}
+                 includedDayCount={selectedPackage?.includedDayCount}
+                 includedSessionCount={selectedPackage?.includedSessionCount}
+                 errors={multiSessionErrors}
+                 onAdd={onAddSession}
+                 onGenerateRange={onGenerateRange}
+                 onUpdate={onUpdateSession}
+                 onRemove={onRemoveSession}
+                 onCancel={cancelMultiSessionDialog}
+                 onConfirm={confirmMultiSessionDialog}
+               />
             </div>
           </div>
           <RelatedPackages packages={packages} selectedPackageId={selectedPackage._id} onSelectPackage={handlePackageSelection} />

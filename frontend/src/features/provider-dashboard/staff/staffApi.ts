@@ -92,9 +92,11 @@ export interface ScheduleAvailableStaffItem {
 }
 
 export interface ScheduleAvailableStaffResponse {
-  scheduleId: string;
+  scheduleId: string | null;
   dateKey?: string | null;
+  timeSlot?: string | null;
   currentAssignedStaffId?: string | null;
+  activeStaffCount?: number;
   staff: ScheduleAvailableStaffItem[];
 }
 
@@ -238,6 +240,11 @@ export const staffApi = {
     }>(
       `/api/providers/me/staff/${encodeURIComponent(staffId)}/account/lock`,
       dto,
+    );
+  },
+  getAvailableStaffForBooking(bookingId: string) {
+    return httpClient.get<ScheduleAvailableStaffResponse>(
+      `/api/bookings/${encodeURIComponent(bookingId)}/available-staff`,
     );
   },
   getAvailableStaffForSchedule(bookingId: string, scheduleId: string) {

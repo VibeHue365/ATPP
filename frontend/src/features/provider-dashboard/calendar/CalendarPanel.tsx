@@ -33,7 +33,7 @@ import { toLocalDateKey } from '../shared/dateHelpers';
 import type { useProviderCalendarState } from './useProviderCalendarState';
 import './calendarFigma.css';
 import { providerApi } from '../api/providerDashboardApi';
-import { staffApi, type ProviderStaffItem } from '../staff/staffApi';
+import { staffApi, type ProviderStaffItem, type ProviderStaffSummary } from '../staff/staffApi';
 import { getBookingStatusLabel, normalizeBookingStatusCode } from '../../../utils/bookingStatus';
 
 type PhotographerCalendarEvent = {
@@ -145,6 +145,7 @@ export function CalendarPanel({
 
   const [detailFilter, setDetailFilter] = useState<'ALL' | 'PHOTO' | 'AODAI'>('ALL');
   const [staffList, setStaffList] = useState<ProviderStaffItem[]>([]);
+  const [staffSummary, setStaffSummary] = useState<ProviderStaffSummary | null>(null);
   const [selectedStaffId, setSelectedStaffId] = useState<string>('');
 
   // Month navigation helpers
@@ -155,6 +156,7 @@ export function CalendarPanel({
   useEffect(() => {
     if (!hasPhotographyCapability) {
       setStaffList([]);
+      setStaffSummary(null);
       return;
     }
     let active = true;
@@ -163,6 +165,7 @@ export function CalendarPanel({
       .then((res) => {
         if (active && Array.isArray(res?.items)) {
           setStaffList(res.items);
+          setStaffSummary(res.summary ?? null);
         }
       })
       .catch(() => {
@@ -813,6 +816,276 @@ export function CalendarPanel({
                     })
                   )}
                 </div>
+
+                {/* Per-Slot Capacity Load Summary for Studio Owner */}
+                {hasPhotographyCapability && (() => {
+                  const activeStaffPool = staffList.filter((st) => st.status === 'ACTIVE');
+                  const baseCap = Math.max(
+                    1,
+                    staffSummary?.effectiveCapacity ?? (activeStaffPool.length || 1),
+                  );
+                  const maxDaily = staffSummary?.maxDailySessions ?? null;
+
+                  const parseHHmm = (v?: string | null) => {
+                    if (!v) return null;
+                    const m = /^(\d{1,2}):(\d{2})$/.exec(v.trim());
+                    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+                  };
+                  const parseSlotRange = (slot?: string | null) => {
+                    if (!slot || !slot.includes('-')) return null;
+                    const [s, e] = slot.split('-').map((p) => parseHHmm(p));
+                    if (s === null || e === null || s >= e) return null;
+                    return { startMin: s, endMin: e };
+                  };
+                  const formatHHmm = (mins: number) =>
+                    `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+
+                  const activePhotoOrders = selectedDateOrders.filter((ord: any) => {
+                    const code = normalizeBookingStatusCode(ord.rawStatus || ord.status);
+                    if (code === 'CANCELLED' || code === 'REFUNDED') return false;
+                    return (
+                      ord.bookingType === 'PHOTOGRAPHY' ||
+                      ord.bookingType === 'COMBO' ||
+                      ord.items?.some(
+                        (i: any) =>
+                          i.itemType === 'PHOTOGRAPHY' ||
+                          i.itemType === 'PHOTOGRAPHY_PACKAGE' ||
+                          Boolean(i.photographyPackageId),
+                      ) ||
+                      ord.schedules?.some((s: any) => s.scheduleType === 'PHOTOSHOOT')
+                    );
+                  });
+
+                  const groupedWindows = new Map<
+                    string,
+                    { label: string; startMin: number; endMin: number; count: number; unassigned: number }
+                  >();
+                  for (const ord of activePhotoOrders) {
+                    const sch = ord.schedules?.[0];
+                    let rawSlot: string | null = sch?.timeSlot || null;
+                    if (!rawSlot && sch?.startsAt && sch?.endsAt) {
+                      const sD = new Date(sch.startsAt);
+                      const eD = new Date(sch.endsAt);
+                      if (!Number.isNaN(sD.getTime()) && !Number.isNaN(eD.getTime())) {
+                        const fmt = (d: Date) =>
+                          d.toLocaleTimeString('en-GB', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false,
+                            timeZone: 'Asia/Ho_Chi_Minh',
+                          });
+                        rawSlot = `${fmt(sD)}-${fmt(eD)}`;
+                      }
+                    }
+                    const parsed = parseSlotRange(rawSlot);
+                    const startMin = parsed?.startMin ?? 480;
+                    const endMin = parsed?.endMin ?? 540;
+                    const key = `${startMin}-${endMin}`;
+                    const hasAssigned = Boolean(
+                      ord.assignedStaffId ||
+                        ord.assignedStaffSnapshot?.name ||
+                        sch?.assignedStaffId ||
+                        sch?.assignedStaffSnapshot?.name,
+                    );
+                    const prev = groupedWindows.get(key) || {
+                      label: `${formatHHmm(startMin)} – ${formatHHmm(endMin)}`,
+                      startMin,
+                      endMin,
+                      count: 0,
+                      unassigned: 0,
+                    };
+                    prev.count += 1;
+                    if (!hasAssigned) prev.unassigned += 1;
+                    groupedWindows.set(key, prev);
+                  }
+
+                  const slotRows = Array.from(groupedWindows.values())
+                    .sort((a, b) => a.startMin - b.startMin)
+                    .map((w) => {
+                      const workingStaffCount =
+                        activeStaffPool.length > 0
+                          ? activeStaffPool.filter((st) => {
+                              const blks = (st.blockedSlots ?? []).filter(
+                                (b) => b.date === selectedDate,
+                              );
+                              return !blks.some((b) => {
+                                const bs = b.startTime ? (parseHHmm(b.startTime) ?? 0) : 0;
+                                const be = b.endTime ? (parseHHmm(b.endTime) ?? 24 * 60) : 24 * 60;
+                                return bs < w.endMin && w.startMin < be;
+                              });
+                            }).length
+                          : 1;
+                      const windowCap = Math.min(baseCap, Math.max(0, workingStaffCount));
+                      const dailyRem =
+                        maxDaily && maxDaily > 0
+                          ? Math.max(0, maxDaily - activePhotoOrders.length)
+                          : null;
+                      const rawRemaining = Math.max(0, windowCap - w.count);
+                      const remaining =
+                        dailyRem !== null ? Math.min(rawRemaining, dailyRem) : rawRemaining;
+                      return { ...w, capacity: Math.max(1, windowCap), remaining };
+                    });
+
+                  const dailyUsed = activePhotoOrders.length;
+                  const dailyExhausted = Boolean(maxDaily && maxDaily > 0 && dailyUsed >= maxDaily);
+
+                  return (
+                    <div
+                      style={{
+                        marginTop: '14px',
+                        padding: '12px 14px',
+                        borderRadius: '12px',
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid #E7DAC9',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: '6px',
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: '12px',
+                            fontWeight: 750,
+                            color: '#8E1B2E',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                          }}
+                        >
+                          <Layers size={14} />
+                          <span>Tải suất khung giờ ngày {selectedDateFormatted}</span>
+                        </span>
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: '999px',
+                            backgroundColor: dailyExhausted ? '#FEF2F2' : '#FCF9F2',
+                            color: dailyExhausted ? '#B91C1C' : '#6B5E54',
+                            border: `1px solid ${dailyExhausted ? '#FECACA' : '#E7DAC9'}`,
+                          }}
+                        >
+                          {maxDaily
+                            ? `Tổng ngày: ${dailyUsed}/${maxDaily} ca`
+                            : `Tổng ngày: ${dailyUsed} ca · Tối đa ${baseCap} suất/giờ`}
+                        </span>
+                      </div>
+
+                      {slotRows.length === 0 ? (
+                        <div style={{ fontSize: '12px', color: '#6B5E54' }}>
+                          Chưa có ca chụp nào — toàn bộ khung giờ mở tối đa{' '}
+                          <strong style={{ color: '#047857' }}>{baseCap} suất/giờ</strong>.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {slotRows.map((row) => {
+                            const fillPct = Math.min(
+                              100,
+                              Math.round((row.count / Math.max(1, row.capacity)) * 100),
+                            );
+                            const isFull = row.remaining <= 0;
+                            const isLast = !isFull && row.remaining === 1 && row.capacity > 1;
+                            const barColor = isFull
+                              ? '#DC2626'
+                              : isLast
+                                ? '#EA580C'
+                                : '#10B981';
+
+                            return (
+                              <div
+                                key={row.label}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  gap: '10px',
+                                  padding: '8px 10px',
+                                  borderRadius: '9px',
+                                  backgroundColor: isFull ? '#FEF2F2' : '#FAF7F2',
+                                  border: `1px solid ${isFull ? '#FECACA' : '#ECE5DB'}`,
+                                }}
+                              >
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '115px' }}>
+                                  <strong style={{ fontSize: '12px', color: '#231F20' }}>
+                                    {row.label}
+                                  </strong>
+                                  <div
+                                    style={{
+                                      width: '100px',
+                                      height: '5px',
+                                      borderRadius: '999px',
+                                      backgroundColor: '#E5E7EB',
+                                      overflow: 'hidden',
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        width: `${fillPct}%`,
+                                        height: '100%',
+                                        backgroundColor: barColor,
+                                        borderRadius: '999px',
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                  {row.unassigned > 0 && (
+                                    <span
+                                      style={{
+                                        fontSize: '10.5px',
+                                        fontWeight: 700,
+                                        padding: '2px 7px',
+                                        borderRadius: '999px',
+                                        backgroundColor: '#FFFBEB',
+                                        color: '#B45309',
+                                        border: '1px solid #FDE68A',
+                                      }}
+                                    >
+                                      {row.unassigned} chờ phân thợ
+                                    </span>
+                                  )}
+                                  <span
+                                    style={{
+                                      fontSize: '11px',
+                                      fontWeight: 700,
+                                      padding: '2px 8px',
+                                      borderRadius: '999px',
+                                      backgroundColor: isFull
+                                        ? '#FEE2E2'
+                                        : isLast
+                                          ? '#FFEDD5'
+                                          : '#ECFDF5',
+                                      color: isFull
+                                        ? '#B91C1C'
+                                        : isLast
+                                          ? '#C2410C'
+                                          : '#047857',
+                                    }}
+                                  >
+                                    {isFull
+                                      ? `Đã kín (${row.count}/${row.capacity} suất)`
+                                      : `Đã nhận ${row.count}/${row.capacity} · Còn ${row.remaining} suất`}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Staff Team Daily Availability Summary */}
                 {hasPhotographyCapability && visibleStaffPool.length > 0 && (

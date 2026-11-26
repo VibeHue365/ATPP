@@ -107,13 +107,114 @@
 }
 
 .pstaff-capacity-card {
-  background: #fcf9f2;
+  background: linear-gradient(180deg, #fcf9f2 0%, #fffdf9 100%);
   border: 1px solid #e7dac9;
-  border-radius: 14px;
-  padding: 18px 20px;
+  border-radius: 16px;
+  padding: 20px 22px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
+}
+
+.pstaff-capacity-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pstaff-capacity-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pstaff-capacity-pill.is-auto {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.pstaff-capacity-pill.is-manual {
+  background: #fdf2f4;
+  color: #8e1b2e;
+  border: 1px solid #f2cfd6;
+}
+
+.pstaff-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.pstaff-mode-option {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  padding: 13px 15px;
+  border-radius: 12px;
+  border: 1.5px solid #e4d8ca;
+  background: #ffffff;
+  cursor: pointer;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.pstaff-mode-option:hover {
+  border-color: #c9a7ae;
+  background: #fffdfb;
+}
+
+.pstaff-mode-option.is-active {
+  border-color: #8e1b2e;
+  background: #fff9fa;
+  box-shadow: 0 4px 14px rgba(142, 27, 46, 0.08);
+}
+
+.pstaff-mode-option__top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13.5px;
+  color: #231f20;
+}
+
+.pstaff-mode-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid #c7b8a8;
+  display: inline-block;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.pstaff-mode-option.is-active .pstaff-mode-dot {
+  border-color: #8e1b2e;
+  background: radial-gradient(circle, #8e1b2e 45%, #ffffff 48%);
+}
+
+.pstaff-mode-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.pstaff-mode-option__desc {
+  margin: 0;
+  padding-left: 24px;
+  font-size: 12px;
+  line-height: 1.48;
+  color: #6b5e54;
 }
 
 .pstaff-capacity-form {
@@ -146,6 +247,52 @@
   color: #231f20;
   width: 100%;
   box-sizing: border-box;
+}
+
+.pstaff-daily-box {
+  flex: 1 1 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #e7dac9;
+  background: #fcfaf6;
+}
+
+.pstaff-daily-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #3f362f;
+  cursor: pointer;
+}
+
+.pstaff-daily-toggle input {
+  width: 15px;
+  height: 15px;
+  accent-color: #8e1b2e;
+  cursor: pointer;
+}
+
+.pstaff-daily-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #6b5e54;
+}
+
+.pstaff-daily-warn {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .pstaff-roster-grid {

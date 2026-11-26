@@ -1,4 +1,5 @@
 export type PhotographyPackageStatus = 'DRAFT' | 'ACTIVE' | 'INACTIVE';
+export type PhotographyPricingUnit = 'PER_SESSION' | 'PER_DAY' | 'PER_BOOKING';
 
 export interface PhotographyPackage {
   _id: string;
@@ -10,12 +11,16 @@ export interface PhotographyPackage {
   description?: string | null;
   price: number;
   durationHours: number;
+  pricingUnit?: PhotographyPricingUnit;
+  includedDurationMinutes?: number | null;
   maxPeople?: number;
   editedPhotosCount: number;
   rawPhotosCount?: number;
   deliveryDays: number;
   travelFeeNotes?: string | null;
   overtimeFeePerHour?: number;
+  overtimeIncrementMinutes?: number;
+  maxOvertimeMinutes?: number;
   images: string[];
   status: PhotographyPackageStatus;
   createdAt?: string;
@@ -31,12 +36,14 @@ export interface PhotographyPackagePayload {
   description?: string;
   price: number;
   durationHours: number;
+  pricingUnit?: PhotographyPricingUnit;
   maxPeople?: number;
   editedPhotosCount: number;
   rawPhotosCount?: number;
   deliveryDays: number;
   travelFeeNotes?: string;
   overtimeFeePerHour?: number;
+  maxOvertimeMinutes?: number;
   images: string[];
   status?: PhotographyPackageStatus;
 }

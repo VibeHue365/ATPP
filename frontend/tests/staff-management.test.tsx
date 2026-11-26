@@ -169,6 +169,46 @@ describe('StaffManagementPanel (Phase 3 Studio Owner UI)', () => {
       maxDailySessions: 4,
     });
     expect(mocks.toast.success).toHaveBeenCalled();
+
+    // Switch to Auto mode (2A) and verify maxConcurrentSessions: null is submitted
+    fireEvent.click(screen.getByRole('radio', { name: /Tự động theo số thợ rảnh/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Lưu sức chứa/i }));
+    });
+    const autoPatchCall = [...mocks.requests]
+      .reverse()
+      .find(
+        (r) => r.method === 'PATCH' && r.path === '/api/providers/me/staff/capacity',
+      );
+    expect(autoPatchCall?.body).toEqual({
+      maxConcurrentSessions: null,
+      maxDailySessions: 6,
+    });
+
+    // Verify amber misconfiguration warning appears when activeStaff >= 2 and daily limit <= activeStaff
+    const dailyInputAgain = screen.getByLabelText(/Giới hạn tối đa ca/i) as HTMLInputElement;
+    fireEvent.change(dailyInputAgain, { target: { value: '2' } });
+    expect(screen.getByRole('status').textContent).toMatch(/TỔNG số ca của cả ngày/i);
+
+    // Toggle daily limit OFF -> hides input and submits maxDailySessions: null
+    fireEvent.click(
+      screen.getByLabelText(/Bật giới hạn tổng số ca chụp trong 1 ngày/i),
+    );
+    expect(screen.queryByLabelText(/Giới hạn tối đa ca/i)).toBeNull();
+    expect(screen.getByText(/Không giới hạn tổng ca\/ngày/i)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Lưu sức chứa/i }));
+    });
+    const unlimitedPatchCall = [...mocks.requests]
+      .reverse()
+      .find(
+        (r) => r.method === 'PATCH' && r.path === '/api/providers/me/staff/capacity',
+      );
+    expect(unlimitedPatchCall?.body).toEqual({
+      maxConcurrentSessions: 2,
+      maxDailySessions: null,
+    });
   });
 
   it('creates a new staff member with STAFF account and displays the one-time temporary password modal', async () => {

@@ -140,6 +140,25 @@ export const AssignedStaffContactCard: React.FC<AssignedStaffContactCardProps> =
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          {!assignedStaffSnap?.name && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '11.5px',
+                fontWeight: 700,
+                padding: '3px 10px',
+                borderRadius: '999px',
+                backgroundColor: '#FFFBEB',
+                color: '#B45309',
+                border: '1px solid #FDE68A',
+              }}
+            >
+              <Clock size={12} />
+              Đang chờ Studio điều phối
+            </span>
+          )}
           {photoshootSchedule?.checkedInAt && (
             <span
               style={{
@@ -341,14 +360,40 @@ export const AssignedStaffContactCard: React.FC<AssignedStaffContactCardProps> =
             alignItems: 'center',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
-            gap: '10px',
-            fontSize: '13px',
-            color: '#6B5E54',
+            gap: '14px',
+            backgroundColor: '#FFFFFF',
+            border: '1px dashed #E4D4C3',
+            borderRadius: '12px',
+            padding: '12px 14px',
           }}
         >
-          <span>
-            Studio đang điều phối thợ chụp phụ trách cho lịch hẹn này và sẽ cập nhật tên thợ trước giờ chụp.
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '220px' }}>
+            <div
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '999px',
+                backgroundColor: '#FFFBEB',
+                color: '#B45309',
+                border: '1px solid #FDE68A',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <Clock size={18} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <div style={{ fontSize: '13.5px', fontWeight: 750, color: '#231F20' }}>
+                Studio đang điều phối thợ chụp phụ trách
+              </div>
+              <div style={{ fontSize: '12.5px', color: '#6B5E54', lineHeight: 1.45 }}>
+                Tên thợ chụp, số điện thoại và nút nhắn tin trực tiếp sẽ hiển thị ngay sau khi{' '}
+                <strong style={{ color: '#231F20' }}>{studioName || 'Studio'}</strong> xác nhận lịch hẹn của bạn.
+              </div>
+            </div>
+          </div>
           {photoProviderId && (
             <button
               type="button"
@@ -358,18 +403,19 @@ export const AssignedStaffContactCard: React.FC<AssignedStaffContactCardProps> =
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
-                backgroundColor: '#FFFFFF',
-                color: '#3F362F',
-                border: '1px solid #D8CAB9',
+                backgroundColor: '#8E1B2E',
+                color: '#FFFFFF',
+                border: 'none',
                 borderRadius: '9px',
-                padding: '8px 13px',
+                padding: '9px 14px',
                 fontSize: '12.5px',
                 fontWeight: 700,
                 cursor: openingChatKey === 'studio' ? 'wait' : 'pointer',
+                boxShadow: '0 2px 8px rgba(142, 27, 46, 0.18)',
               }}
             >
               <MessageSquare size={14} />
-              <span>Chat với Studio</span>
+              <span>{openingChatKey === 'studio' ? 'Đang mở...' : 'Chat với Studio'}</span>
             </button>
           )}
         </div>
