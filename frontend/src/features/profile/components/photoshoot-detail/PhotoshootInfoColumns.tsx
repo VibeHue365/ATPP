@@ -11,14 +11,27 @@ import {
   ShieldCheck
 } from 'lucide-react';
 
+export interface PhotoshootSessionSummary {
+  label: string;
+  dateText: string;
+  timeSlot: string;
+  durationText?: string;
+  overtimeMinutes?: number;
+}
+
 interface PhotoshootInfoColumnsProps {
   shootDate?: string;
   shootTimeSlot?: string;
+  durationText?: string;
+  sessions?: PhotoshootSessionSummary[];
   locationName?: string;
   locationAddress?: string;
   photographerName?: string;
   photographerPhone?: string;
   packagePrice?: number;
+  overtimeFee?: number;
+  overtimeMinutes?: number;
+  voucherDiscount?: number;
   serviceFee?: number;
   depositFee?: number;
   totalPrice?: number;
@@ -33,11 +46,16 @@ interface PhotoshootInfoColumnsProps {
 export const PhotoshootInfoColumns: React.FC<PhotoshootInfoColumnsProps> = ({
   shootDate = 'Chưa xác định',
   shootTimeSlot = '09:00 - 11:00',
+  durationText,
+  sessions = [],
   locationName = 'Địa điểm chụp',
   locationAddress = 'Thành phố Huế',
   photographerName = 'Nhiếp ảnh gia đối tác',
   photographerPhone = '1900 9999',
   packagePrice = 0,
+  overtimeFee = 0,
+  overtimeMinutes = 0,
+  voucherDiscount = 0,
   serviceFee = 0,
   depositFee = 0,
   totalPrice = 0,
@@ -48,6 +66,13 @@ export const PhotoshootInfoColumns: React.FC<PhotoshootInfoColumnsProps> = ({
   onViewInvoice,
   onViewRules
 }) => {
+  const formatOvertimeLabel = (mins: number) => {
+    if (!mins || mins <= 0) return '';
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (!h) return ` (+${m} phút)`;
+    return m ? ` (+${h} giờ ${m} phút)` : ` (+${h} giờ)`;
+  };
   return (
     <div
       style={{
@@ -94,9 +119,28 @@ export const PhotoshootInfoColumns: React.FC<PhotoshootInfoColumnsProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '12.5px' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
               <Clock size={15} color="#8C827A" style={{ marginTop: '2px', flexShrink: 0 }} />
-              <div>
-                <strong style={{ color: '#231F20' }}>{shootDate}</strong>
-                <div style={{ color: '#7D736B' }}>Khung giờ: {shootTimeSlot}</div>
+              <div style={{ flex: 1 }}>
+                {sessions.length > 1 ? (
+                  <>
+                    <strong style={{ color: '#231F20' }}>Lịch {sessions.length} buổi chụp</strong>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                      {sessions.map((s, idx) => (
+                        <div key={idx} style={{ color: '#574D4F', fontSize: '12px' }}>
+                          <strong>{s.label}:</strong> {s.dateText} · {s.timeSlot}
+                          {s.durationText ? ` (${s.durationText})` : ''}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <strong style={{ color: '#231F20' }}>{shootDate}</strong>
+                    <div style={{ color: '#7D736B' }}>
+                      Khung giờ: {shootTimeSlot}
+                      {durationText ? ` · ${durationText}` : ''}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -206,9 +250,16 @@ export const PhotoshootInfoColumns: React.FC<PhotoshootInfoColumnsProps> = ({
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12.5px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#574D4F' }}>
-              <span>Giá gói chụp:</span>
+              <span>{overtimeFee > 0 ? 'Giá gói cơ bản:' : 'Giá gói chụp:'}</span>
               <strong style={{ color: '#231F20' }}>{packagePrice.toLocaleString('vi-VN')}đ</strong>
             </div>
+
+            {overtimeFee > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8E1B2E', fontWeight: 600 }}>
+                <span>Phí tăng giờ{formatOvertimeLabel(overtimeMinutes)}:</span>
+                <span>+{overtimeFee.toLocaleString('vi-VN')}đ</span>
+              </div>
+            )}
 
             {serviceFee > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#574D4F' }}>
@@ -217,7 +268,14 @@ export const PhotoshootInfoColumns: React.FC<PhotoshootInfoColumnsProps> = ({
               </div>
             )}
 
-            {depositFee > 0 && (
+            {voucherDiscount > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#047857', fontWeight: 600 }}>
+                <span>Ưu đãi voucher:</span>
+                <span>-{voucherDiscount.toLocaleString('vi-VN')}đ</span>
+              </div>
+            )}
+
+            {depositFee > 0 && depositFee !== totalPrice && (
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#574D4F' }}>
                 <span>Tiền cọc giữ lịch:</span>
                 <span>{depositFee.toLocaleString('vi-VN')}đ</span>

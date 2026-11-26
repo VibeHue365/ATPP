@@ -16,6 +16,7 @@ export interface BookingStatusExtraPayload {
   handoverPhotos?: string[];
   deliveredPhotos?: string[];
   deliveryDriveUrl?: string;
+  assignedStaffId?: string;
 }
 
 export interface IncidentReportPayload {

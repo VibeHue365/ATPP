@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
 import { useToast } from '../../components/feedback/Toast';
@@ -49,6 +49,22 @@ const distanceKm = (aLat: number, aLon: number, bLat: number, bLon: number): num
 
 const toTime = (minutes: number): string =>
   `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+
+const isTimeSlotOverlap = (slot1: string, slot2: string): boolean => {
+  if (!slot1 || !slot2) return false;
+  const parseTime = (t: string) => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  };
+  const [start1Str, end1Str] = slot1.split('-').map((s) => s.trim());
+  const [start2Str, end2Str] = slot2.split('-').map((s) => s.trim());
+  if (!start1Str || !end1Str || !start2Str || !end2Str) return false;
+  const s1 = parseTime(start1Str);
+  const e1 = parseTime(end1Str);
+  const s2 = parseTime(start2Str);
+  const e2 = parseTime(end2Str);
+  return s1 < e2 && s2 < e1;
+};
 
 
 export const PhotographerDetailPage: React.FC = () => {
@@ -145,29 +161,56 @@ export const PhotographerDetailPage: React.FC = () => {
         imageCount: images.length,
       }));
     });
-    const packageImages = photographer.packages.flatMap((pkg) => (pkg.images || []).filter(Boolean)).map((src, index, images) => ({
+    const packageImages = photographer.packages
+      .flatMap((pkg) => (pkg.images || []).filter(Boolean))
+      .map((src, index, images) => ({
+        src,
+        title:
+          photographer.packages.find((pkg) => pkg.images?.includes(src))?.name ||
+          `Ảnh gói chụp #${index + 1}`,
+        imageNumber: index + 1,
+        imageCount: images.length,
+      }));
+    const legacyImages =
+      photographer.portfolio.length && !portfolioImages.length
+        ? photographer.portfolio.filter(Boolean).map((src, index, images) => ({
+            src,
+            title: `Tác phẩm #${index + 1}`,
+            imageNumber: index + 1,
+            imageCount: images.length,
+          }))
+        : [];
+    const studioMediaRaw = [
+      ...(photographer.media?.images ?? []),
+      ...(photographer.coverImage ? [photographer.coverImage] : []),
+    ].filter(Boolean);
+    const studioMediaImages = studioMediaRaw.map((src, index, images) => ({
       src,
-      title: photographer.packages.find((pkg) => pkg.images?.includes(src))?.name || `Ảnh package #${index + 1}`,
+      title: photographer.businessName,
       imageNumber: index + 1,
       imageCount: images.length,
     }));
-    const legacyImages = photographer.portfolio.length && !portfolioImages.length
-      ? photographer.portfolio.filter(Boolean).map((src, index, images) => ({
-        src,
-        title: `Tác phẩm #${index + 1}`,
-        imageNumber: index + 1,
-        imageCount: images.length,
-      }))
-      : [];
-    return [...portfolioImages, ...legacyImages, ...packageImages.filter((image) => !portfolioImages.some((item) => item.src === image.src) && !legacyImages.some((item) => item.src === image.src))];
+
+    const deduped: PhotographerPortfolioImage[] = [];
+    const seen = new Set<string>();
+    for (const img of [
+      ...packageImages,
+      ...portfolioImages,
+      ...legacyImages,
+      ...studioMediaImages,
+    ]) {
+      if (!img.src || seen.has(img.src)) continue;
+      seen.add(img.src);
+      deduped.push(img);
+    }
+    return deduped;
   }, [photographer]);
 
   const handleImageClick = (imageSrc: string) => {
+    if (!allPortfolioImages.length) return;
     const index = allPortfolioImages.findIndex((image) => image.src === imageSrc);
-    if (index >= 0) {
-      setLightboxIndex(index);
-      setLightboxOpen(true);
-    }
+    setLightboxIndex(index >= 0 ? index : 0);
+    setLightboxOpen(true);
   };
 
   const handlePreviousImage = () => {
@@ -186,6 +229,7 @@ export const PhotographerDetailPage: React.FC = () => {
   const [selectedPkg, setSelectedPkg] = useState<Package | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>(''); // YYYY-MM-DD
   const [schedulePreviewDate, setSchedulePreviewDate] = useState<string | null>(null);
+  const [schedulePreviewDuration, setSchedulePreviewDuration] = useState<number | null>(null);
   const [startTime, setStartTime] = useState<string>('');
   const [durationMinutes, setDurationMinutes] = useState<number>(0);
   const includedDurationMinutes = Math.max(selectedPkg?.includedDurationMinutes ?? Math.round((selectedPkg?.durationHours ?? 2) * 60), 30);
@@ -296,13 +340,30 @@ export const PhotographerDetailPage: React.FC = () => {
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
   const [isBookingNow, setIsBookingNow] = useState<boolean>(false);
   const [busyDates, setBusyDates] = useState<string[]>([]);
-  const [busySlots, setBusySlots] = useState<{ date: string, timeSlot: string }[]>([]);
+  const [busySlots, setBusySlots] = useState<{ date: string; timeSlot: string }[]>([]);
+  const [slotAvailability, setSlotAvailability] = useState<
+    Array<{
+      date: string;
+      timeSlot: string;
+      occupiedCount: number;
+      capacity: number;
+      remainingSlots: number;
+    }>
+  >([]);
+  const [dailyAvailability, setDailyAvailability] = useState<
+    Array<{
+      date: string;
+      used: number;
+      limit: number;
+      remaining: number;
+    }>
+  >([]);
   const [availableTimeRanges, setAvailableTimeRanges] = useState<Array<{ start: string; end: string }>>([]);
+  const [isSlotsLoading, setIsSlotsLoading] = useState(false);
   const [monthlyAvailability, setMonthlyAvailability] = useState<Record<string, PhotographerAvailabilityStatus>>({});
   const [isMonthlyAvailabilityLoading, setIsMonthlyAvailabilityLoading] = useState(false);
   const [studioStaff, setStudioStaff] = useState<PublicProviderStaffMember[]>([]);
   const [effectiveCapacity, setEffectiveCapacity] = useState<number>(1);
-  const [preferredStaffId, setPreferredStaffId] = useState<string>('');
 
   // Check if cart has an Ao Dai to auto-fill details
   const aoDaiInCart = cart.find((item) => item.itemType === 'PRODUCT');
@@ -344,26 +405,47 @@ export const PhotographerDetailPage: React.FC = () => {
     };
   }, [id, photographer?.providerId]);
 
-  useEffect(() => {
-    const fetchBookingAvailability = async () => {
-      const targetId = photographer?.providerId || id;
-      if (!targetId) return;
-      try {
-        const staffQuery = preferredStaffId
-          ? `?staffId=${encodeURIComponent(preferredStaffId)}`
-          : '';
-        const busyData = await httpClient.get<{ bookedDates: string[]; bookedSlots: { date: string; timeSlot: string }[] }>(`/api/bookings/busy-dates/provider/${targetId}${staffQuery}`);
-        setBusyDates(busyData.bookedDates || []);
-        setBusySlots(busyData.bookedSlots || []);
-      } catch (bookingError) {
-        console.error('Không thể tải lịch bận của nhiếp ảnh gia:', bookingError);
-        setBusyDates([]);
-        setBusySlots([]);
+  const fetchBookingAvailability = useCallback(async () => {
+    const targetId = photographer?.providerId || id;
+    if (!targetId) return;
+    try {
+      const busyData = await httpClient.get<{
+        bookedDates: string[];
+        bookedSlots: { date: string; timeSlot: string }[];
+        effectiveCapacity?: number;
+        slotAvailability?: Array<{
+          date: string;
+          timeSlot: string;
+          occupiedCount: number;
+          capacity: number;
+          remainingSlots: number;
+        }>;
+        dailyAvailability?: Array<{
+          date: string;
+          used: number;
+          limit: number;
+          remaining: number;
+        }>;
+      }>(`/api/bookings/busy-dates/provider/${targetId}`);
+      setBusyDates(busyData.bookedDates || []);
+      setBusySlots(busyData.bookedSlots || []);
+      setSlotAvailability(Array.isArray(busyData.slotAvailability) ? busyData.slotAvailability : []);
+      setDailyAvailability(Array.isArray(busyData.dailyAvailability) ? busyData.dailyAvailability : []);
+      if (typeof busyData.effectiveCapacity === 'number' && busyData.effectiveCapacity > 0) {
+        setEffectiveCapacity(busyData.effectiveCapacity);
       }
-    };
+    } catch (bookingError) {
+      console.error('Không thể tải lịch bận của nhiếp ảnh gia:', bookingError);
+      setBusyDates([]);
+      setBusySlots([]);
+      setSlotAvailability([]);
+      setDailyAvailability([]);
+    }
+  }, [id, photographer?.providerId]);
 
+  useEffect(() => {
     void fetchBookingAvailability();
-  }, [id, photographer?.providerId, preferredStaffId]);
+  }, [fetchBookingAvailability]);
 
   useEffect(() => {
     if (!photographer?.packages.length) {
@@ -385,26 +467,11 @@ export const PhotographerDetailPage: React.FC = () => {
     }
     const packageDuration = Math.max(selectedPkg.includedDurationMinutes ?? Math.round(selectedPkg.durationHours * 60), 30);
     setDurationMinutes(packageDuration);
+    setSchedulePreviewDate(null);
+    setSchedulePreviewDuration(null);
     setBookingMode('SINGLE');
     setMultiSessions([]);
   }, [selectedPkg?._id]);
-  // Load Photographer reviews
-  useEffect(() => {
-    const fetchReviews = async () => {
-      try {
-        setReviewsLoading(true);
-        const data = await httpClient.get<PhotographerReview[]>(`/reviews/provider/${id}`);
-        setReviews(data || []);
-      } catch (err) {
-        console.error('Failed to fetch reviews for photographer', err);
-      } finally {
-        setReviewsLoading(false);
-      }
-    };
-    if (id) {
-      fetchReviews();
-    }
-  }, [id]);
 
   // Handle Cart Autofill logic
   useEffect(() => {
@@ -433,20 +500,53 @@ export const PhotographerDetailPage: React.FC = () => {
     if (!targetDate) return [];
     return busySlots.filter(s => s.date === targetDate).map(s => s.timeSlot);
   }, [schedulePreviewDate, selectedDate, busySlots]);
-  const isTimeSlotOverlap = (slot1: string, slot2: string) => {
-    const parseTime = (t: string) => {
-      const [h, m] = t.split(':').map(Number);
-      return h * 60 + m;
+
+  const slotAvailabilityOnPreviewDate = useMemo(() => {
+    const targetDate = schedulePreviewDate || selectedDate;
+    if (!targetDate) return [];
+    return slotAvailability.filter(s => s.date === targetDate);
+  }, [schedulePreviewDate, selectedDate, slotAvailability]);
+
+  const previewDayQuota = useMemo(() => {
+    const targetDate = schedulePreviewDate || selectedDate;
+    if (!targetDate) return null;
+    return dailyAvailability.find((d) => d.date === targetDate) || null;
+  }, [schedulePreviewDate, selectedDate, dailyAvailability]);
+
+  const selectedSlotCapacity = useMemo(() => {
+    if (!selectedDate || !startTime || !endTime) return null;
+    const range = `${startTime}-${endTime}`;
+    const baseCap = Math.max(1, effectiveCapacity);
+    const dayBusy = busySlots.filter((s) => s.date === selectedDate).map((s) => s.timeSlot);
+    const dayWindows = slotAvailability.filter((w) => w.date === selectedDate);
+    const overlappingWindows = dayWindows.filter((w) => isTimeSlotOverlap(range, w.timeSlot));
+    const minWindowCap = overlappingWindows.length > 0
+      ? Math.min(...overlappingWindows.map((w) => Math.max(1, w.capacity)))
+      : baseCap;
+    const busy = dayBusy.some((b) => isTimeSlotOverlap(range, b));
+    if (busy) {
+      return { busy: true, remaining: 0, capacity: minWindowCap, occupied: minWindowCap };
+    }
+    if (overlappingWindows.length > 0) {
+      const remaining = Math.max(0, Math.min(...overlappingWindows.map((w) => w.remainingSlots)));
+      return {
+        busy: remaining <= 0,
+        remaining,
+        capacity: minWindowCap,
+        occupied: Math.max(0, minWindowCap - remaining),
+      };
+    }
+    const dayQuota = dailyAvailability.find((d) => d.date === selectedDate);
+    if (dayQuota && dayQuota.remaining <= 0) {
+      return { busy: true, remaining: 0, capacity: baseCap, occupied: baseCap };
+    }
+    return {
+      busy: false,
+      remaining: baseCap,
+      capacity: baseCap,
+      occupied: 0,
     };
-    const [start1Str, end1Str] = slot1.split('-').map(s => s.trim());
-    const [start2Str, end2Str] = slot2.split('-').map(s => s.trim());
-    if (!start1Str || !end1Str || !start2Str || !end2Str) return false;
-    const s1 = parseTime(start1Str);
-    const e1 = parseTime(end1Str);
-    const s2 = parseTime(start2Str);
-    const e2 = parseTime(end2Str);
-    return s1 < e2 && s2 < e1;
-  };
+  }, [selectedDate, startTime, endTime, effectiveCapacity, busySlots, slotAvailability, dailyAvailability]);
 
 
   // Calendar availability is supplied by the backend from provider working hours,
@@ -486,13 +586,10 @@ export const PhotographerDetailPage: React.FC = () => {
 
     let cancelled = false;
     const month = `${calendarDate.getFullYear()}-${String(calendarDate.getMonth() + 1).padStart(2, '0')}`;
-    const staffQuery = preferredStaffId
-      ? `&staffId=${encodeURIComponent(preferredStaffId)}`
-      : '';
     setIsMonthlyAvailabilityLoading(true);
     httpClient
       .get<MonthlyAvailabilityResponse>(
-        `/api/photographers/${id}/availability/month?month=${month}&packageId=${selectedPkg._id}${staffQuery}`,
+        `/api/photographers/${id}/availability/month?month=${month}&packageId=${selectedPkg._id}`,
       )
       .then((availability) => {
         if (cancelled) return;
@@ -507,7 +604,7 @@ export const PhotographerDetailPage: React.FC = () => {
       });
 
     return () => { cancelled = true; };
-  }, [calendarDate, id, selectedPkg, preferredStaffId]);
+  }, [calendarDate, id, selectedPkg]);
 
   useEffect(() => {
     if (!selectedDate) return;
@@ -523,22 +620,40 @@ export const PhotographerDetailPage: React.FC = () => {
   useEffect(() => {
     if (!id || !availabilityDate) {
       setAvailableTimeRanges([]);
+      setIsSlotsLoading(false);
       return;
     }
 
+    let cancelled = false;
+    setIsSlotsLoading(true);
     httpClient
       .get<{ timeRanges: Array<{ start: string; end: string }> }>(
         `/api/photographers/${id}/availability?date=${availabilityDate}`,
       )
-      .then((availability) => setAvailableTimeRanges(availability.timeRanges || []))
+      .then((availability) => {
+        if (cancelled) return;
+        setAvailableTimeRanges(availability.timeRanges || []);
+      })
       .catch((availabilityError) => {
         console.error("Unable to load photographer availability:", availabilityError);
-        setAvailableTimeRanges([]);
+        if (!cancelled) setAvailableTimeRanges([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsSlotsLoading(false);
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [id, availabilityDate]);
 
+  const slotDurationMinutes = Math.max(schedulePreviewDuration ?? effectiveDurationMinutes, includedDurationMinutes);
+
   const photographerSlots = useMemo(() => {
-    const stepMinutes = effectiveDurationMinutes >= 180 ? 60 : 30;
+    const stepMinutes =
+      slotDurationMinutes >= 180
+        ? Math.max(60, overtimeIncrementMinutes)
+        : Math.max(30, overtimeIncrementMinutes);
     return availableTimeRanges.flatMap((range) => {
       const start = toMinutes(range.start);
       const end = toMinutes(range.end);
@@ -546,20 +661,25 @@ export const PhotographerDetailPage: React.FC = () => {
       const lunchStart = toMinutes('12:00');
       const lunchEnd = toMinutes('13:00');
 
-      for (let current = start; current + effectiveDurationMinutes <= end; current += stepMinutes) {
-        const slotEnd = current + effectiveDurationMinutes;
+      for (let current = start; current + slotDurationMinutes <= end; current += stepMinutes) {
+        const slotEnd = current + slotDurationMinutes;
         // For 3h+ packages, avoid slots starting between 09:30 and 12:30 that cut straight through 12:00-13:00 lunch hour
-        if (effectiveDurationMinutes >= 180 && current > toMinutes('09:30') && current < lunchEnd && slotEnd > lunchStart) {
+        if (slotDurationMinutes >= 180 && current > toMinutes('09:30') && current < lunchEnd && slotEnd > lunchStart) {
           continue;
         }
         slots.push({ start: toTime(current), end: toTime(slotEnd), label: `${toTime(current)} - ${toTime(slotEnd)}` });
       }
       return slots;
     });
-  }, [availableTimeRanges, effectiveDurationMinutes]);
+  }, [availableTimeRanges, slotDurationMinutes, overtimeIncrementMinutes]);
 
   useEffect(() => {
-    if (schedulePreviewDate && schedulePreviewDate !== selectedDate) return;
+    if (
+      (schedulePreviewDate && schedulePreviewDate !== selectedDate) ||
+      (schedulePreviewDuration !== null && schedulePreviewDuration !== effectiveDurationMinutes)
+    ) {
+      return;
+    }
     const currentSlot = photographerSlots.find((slot) => slot.start === startTime);
     const currentSlotIsAvailable = currentSlot && !bookedSlotsOnSelectedDate.some((bookedSlot) =>
       isTimeSlotOverlap(`${currentSlot.start}-${currentSlot.end}`, bookedSlot),
@@ -570,21 +690,35 @@ export const PhotographerDetailPage: React.FC = () => {
       isTimeSlotOverlap(`${slot.start}-${slot.end}`, bookedSlot),
     ));
     setStartTime(firstAvailableSlot?.start || '');
-  }, [photographerSlots, bookedSlotsOnSelectedDate, schedulePreviewDate, selectedDate, startTime]);
+  }, [photographerSlots, bookedSlotsOnSelectedDate, schedulePreviewDate, schedulePreviewDuration, effectiveDurationMinutes, selectedDate, startTime]);
 
   const handlePreviewDate = (date: string) => {
+    if (date === availabilityDate) {
+      setSchedulePreviewDate(date);
+      return;
+    }
     setAvailableTimeRanges([]);
+    setIsSlotsLoading(true);
     setSchedulePreviewDate(date);
   };
 
-  const handleConfirmSchedule = (date: string, slot: { start: string; end: string }) => {
+  const handleConfirmSchedule = (
+    date: string,
+    slot: { start: string; end: string },
+    confirmedDurationMinutes?: number,
+  ) => {
     setSchedulePreviewDate(null);
+    setSchedulePreviewDuration(null);
     setSelectedDate(date);
     setStartTime(slot.start);
+    if (typeof confirmedDurationMinutes === 'number' && confirmedDurationMinutes >= includedDurationMinutes) {
+      setDurationMinutes(confirmedDurationMinutes);
+    }
   };
 
   const handleCancelSchedule = () => {
     setSchedulePreviewDate(null);
+    setSchedulePreviewDuration(null);
   };
   const isCurrentTimeSlotBusy = useMemo(() => {
     return bookedSlotsOnSelectedDate.some(bookedSlot => {
@@ -613,7 +747,7 @@ export const PhotographerDetailPage: React.FC = () => {
     setSelectedLocation(nextLocation);
   };
 
-  const isQuoteable = Boolean(selectedLocation) && !locationError && quoteSessions.length > 0 && quoteSessions.every((session) => Boolean(session.date && session.startTime));
+  const isQuoteable = !locationError && quoteSessions.length > 0 && quoteSessions.every((session) => Boolean(session.date && session.startTime));
   const nextDurationMinutes = effectiveDurationMinutes + overtimeIncrementMinutes;
   const canRequestNextDurationQuote = Boolean(
     bookingMode === 'SINGLE' && id && selectedPkg && selectedDate && startTime && nextDurationMinutes <= includedDurationMinutes + maxOvertimeMinutes,
@@ -632,7 +766,6 @@ export const PhotographerDetailPage: React.FC = () => {
     let cancelled = false;
     const createPayload = (sessions: PhotographySessionDraft[]) => ({
       packageId: selectedPkg._id,
-      ...(preferredStaffId ? { preferredStaffId } : {}),
       sessions: sessions.map((session) => ({
         clientId: session.clientId,
         startsAt: `${session.date}T${session.startTime}:00+07:00`,
@@ -681,18 +814,16 @@ export const PhotographerDetailPage: React.FC = () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [id, selectedPkg, selectedLocation, quoteSessions, isQuoteable, selectedDate, startTime, effectiveDurationMinutes, nextDurationMinutes, canRequestNextDurationQuote, preferredStaffId]);
+  }, [id, selectedPkg, selectedLocation, quoteSessions, isQuoteable, selectedDate, startTime, effectiveDurationMinutes, nextDurationMinutes, canRequestNextDurationQuote]);
 
   const canIncreaseDuration = bookingMode === 'SINGLE' && Boolean(nextDurationQuote?.valid) && !isNextDurationQuoteLoading;
   const increaseUnavailableReason = !selectedDate || !startTime
     ? 'Hãy chọn ngày và giờ bắt đầu trước.'
-    : !selectedLocation
-      ? 'Hãy chọn địa điểm chụp để kiểm tra lịch và chi phí tăng giờ.'
     : nextDurationMinutes > includedDurationMinutes + maxOvertimeMinutes
       ? 'Đã đạt thời lượng tăng giờ tối đa của gói.'
       : isNextDurationQuoteLoading
         ? 'Đang kiểm tra lịch còn trống…'
-        : nextDurationQuote?.errors[0]?.message || 'Khoảng thời gian tăng thêm không còn trống.';
+        : nextDurationQuote?.errors?.[0]?.message || 'Khoảng thời gian tăng thêm không còn trống trong ca làm việc này.';
   if (loading) {
     return (
       <div style={{ backgroundColor: '#FCF9F2', minHeight: '80vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '16px' }}>
@@ -765,12 +896,10 @@ export const PhotographerDetailPage: React.FC = () => {
   };
 
   const startMultiSessionBooking = () => {
-    if (!selectedDate || !startTime) {
-      toast.error('Hãy hoàn tất ngày và giờ của buổi đầu tiên trước khi thêm buổi.');
-      return;
-    }
-    const firstSession = createSessionDraft(selectedDate, effectiveDurationMinutes, startTime);
-    const nextSession = createSessionDraft(selectedDate, minimumMultiSessionMinutes, '');
+    const baseDate = selectedDate || rentalFrom || localToday();
+    const baseStart = startTime || '09:00';
+    const firstSession = createSessionDraft(baseDate, effectiveDurationMinutes, baseStart);
+    const nextSession = createSessionDraft(baseDate, minimumMultiSessionMinutes, '');
     setMultiSessions([firstSession, nextSession]);
     setBookingMode('MULTI');
   };
@@ -925,7 +1054,6 @@ export const PhotographerDetailPage: React.FC = () => {
         '/api/bookings/photography/hold',
         {
           packageId: selectedPkg._id,
-          ...(preferredStaffId ? { preferredStaffId } : {}),
           sessions: quoteSessions.map((session) => ({
             clientId: session.clientId,
             startsAt: `${session.date}T${session.startTime}:00+07:00`,
@@ -964,6 +1092,7 @@ export const PhotographerDetailPage: React.FC = () => {
     } catch (err: any) {
       console.error('Lỗi đặt lịch:', err);
       toast.error(err.message || 'Không thể tạo lịch đặt. Vui lòng thử lại.');
+      void fetchBookingAvailability();
     } finally {
       setIsBookingNow(false);
     }
@@ -1023,8 +1152,44 @@ export const PhotographerDetailPage: React.FC = () => {
       calendarDate={calendarDate}
       calendarDays={calendarDays}
       isCalendarLoading={isMonthlyAvailabilityLoading}
+      isSlotsLoading={isSlotsLoading}
       slots={photographerSlots}
-      isSlotBusy={(slot) => bookedSlotsOnPreviewDate.some((bookedSlot) => isTimeSlotOverlap(`${slot.start}-${slot.end}`, bookedSlot))}
+      isSlotBusy={(slot) =>
+        (previewDayQuota !== null && previewDayQuota.remaining <= 0) ||
+        bookedSlotsOnPreviewDate.some((bookedSlot) => isTimeSlotOverlap(`${slot.start}-${slot.end}`, bookedSlot))
+      }
+      getSlotCapacityInfo={(slot) => {
+        const range = `${slot.start}-${slot.end}`;
+        const baseCap = Math.max(1, effectiveCapacity);
+        if (previewDayQuota && previewDayQuota.remaining <= 0) {
+          return { busy: true, remaining: 0, capacity: baseCap, occupied: baseCap };
+        }
+        const overlappingWindows = slotAvailabilityOnPreviewDate.filter((w) =>
+          isTimeSlotOverlap(range, w.timeSlot),
+        );
+        const minWindowCap = overlappingWindows.length > 0
+          ? Math.min(...overlappingWindows.map((w) => Math.max(1, w.capacity)))
+          : baseCap;
+        const busy = bookedSlotsOnPreviewDate.some((bookedSlot) =>
+          isTimeSlotOverlap(range, bookedSlot),
+        );
+        if (busy) {
+          return { busy: true, remaining: 0, capacity: minWindowCap, occupied: minWindowCap };
+        }
+        if (overlappingWindows.length > 0) {
+          const remaining = Math.max(
+            0,
+            Math.min(...overlappingWindows.map((w) => w.remainingSlots)),
+          );
+          return {
+            busy: remaining <= 0,
+            remaining,
+            capacity: minWindowCap,
+            occupied: Math.max(0, minWindowCap - remaining),
+          };
+        }
+        return { busy: false, remaining: baseCap, capacity: baseCap, occupied: 0 };
+      }}
       includedDurationMinutes={includedDurationMinutes}
       overtimeIncrementMinutes={overtimeIncrementMinutes}
       maxOvertimeMinutes={maxOvertimeMinutes}
@@ -1036,6 +1201,7 @@ export const PhotographerDetailPage: React.FC = () => {
       onPreviousMonth={() => { const nextDate = new Date(calendarDate); nextDate.setMonth(nextDate.getMonth() - 1); setCalendarDate(nextDate); }}
       onNextMonth={() => { const nextDate = new Date(calendarDate); nextDate.setMonth(nextDate.getMonth() + 1); setCalendarDate(nextDate); }}
       onPreviewDate={handlePreviewDate}
+      onPreviewDuration={setSchedulePreviewDuration}
       onConfirmSchedule={handleConfirmSchedule} onCancelSchedule={handleCancelSchedule}
       onDecreaseDuration={() => setDurationMinutes((current) => Math.max(includedDurationMinutes, current - overtimeIncrementMinutes))}
       onIncreaseDuration={() => { if (canIncreaseDuration) setDurationMinutes(nextDurationMinutes); }}
@@ -1075,8 +1241,9 @@ export const PhotographerDetailPage: React.FC = () => {
       onRemoveVoucher={() => setSelectedVoucher(null)}
       studioStaff={studioStaff}
       effectiveCapacity={effectiveCapacity}
-      preferredStaffId={preferredStaffId}
-      onSelectPreferredStaff={setPreferredStaffId}
+      previewDayQuota={previewDayQuota}
+      selectedSlotCapacity={selectedSlotCapacity}
+      onRefreshAvailability={() => { void fetchBookingAvailability(); }}
     />
     <VoucherPickerModal
       isOpen={isVoucherModalOpen}

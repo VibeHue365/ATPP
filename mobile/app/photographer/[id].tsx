@@ -201,7 +201,24 @@ export default function PhotographerDetailScreen() {
     activeStaffCount: number;
     effectiveCapacity: number;
   }>({ activeStaffCount: 1, effectiveCapacity: 1 });
-  const [preferredStaffId, setPreferredStaffId] = useState<string | null>(null);
+  const [bookedSlots, setBookedSlots] = useState<Array<{ date: string; timeSlot: string }>>([]);
+  const [slotAvailability, setSlotAvailability] = useState<
+    Array<{
+      date: string;
+      timeSlot: string;
+      occupiedCount: number;
+      capacity: number;
+      remainingSlots: number;
+    }>
+  >([]);
+  const [dailyAvailability, setDailyAvailability] = useState<
+    Array<{
+      date: string;
+      used: number;
+      limit: number;
+      remaining: number;
+    }>
+  >([]);
   const [monthStatuses, setMonthStatuses] = useState<Record<string, string>>({});
   const [monthDayMeta, setMonthDayMeta] = useState<
     Record<string, { status: string; remainingCapacity?: number; totalCapacity?: number }>
@@ -226,7 +243,18 @@ export default function PhotographerDetailScreen() {
   );
   const includedDuration = durationOf(selectedPackage);
   const overtimeStep = Math.max(selectedPackage?.overtimeIncrementMinutes ?? 30, 30);
-  const maxDuration = includedDuration + Math.max(selectedPackage?.maxOvertimeMinutes ?? 0, 0);
+  const maxOvertime = Math.max(selectedPackage?.maxOvertimeMinutes ?? 240, 0);
+  const maxDuration = includedDuration + maxOvertime;
+  const overtimeHourlyRate = useMemo(() => {
+    const configured = Number(selectedPackage?.overtimeFeePerHour ?? 0);
+    if (configured > 0) return Math.round(configured);
+    const includedHours = includedDuration / 60;
+    return includedHours > 0 ? Math.round((selectedPackage?.price ?? 0) / includedHours) : 0;
+  }, [selectedPackage?.overtimeFeePerHour, selectedPackage?.price, includedDuration]);
+  const estimatedOvertimeFee =
+    durationMinutes > includedDuration
+      ? Math.round(((durationMinutes - includedDuration) * overtimeHourlyRate) / 60)
+      : 0;
   const endTime = startTime ? toTime(toMinutes(startTime) + durationMinutes) : '';
   const liked = photographer ? isFavorite('PROVIDER', photographer._id) : false;
 
@@ -312,22 +340,40 @@ export default function PhotographerDetailScreen() {
   useEffect(() => {
     if (!photographer?._id) return;
     let active = true;
-    setPreferredStaffId(null);
-    staffApi
-      .listPublic(photographer._id)
-      .then((res) => {
-        if (!active) return;
-        setPublicStaff(Array.isArray(res?.staff) ? res.staff : []);
-        setTeamCapacity({
-          activeStaffCount: Number(res?.activeStaffCount ?? 1),
-          effectiveCapacity: Number(res?.effectiveCapacity ?? 1),
-        });
-      })
-      .catch(() => {
-        if (!active) return;
+    Promise.all([
+      staffApi.listPublic(photographer._id).catch(() => null),
+      photographerApi.busySchedule(photographer._id).catch(() => null),
+    ]).then(([staffRes, busyRes]) => {
+      if (!active) return;
+      if (staffRes) {
+        setPublicStaff(Array.isArray(staffRes.staff) ? staffRes.staff : []);
+      } else {
         setPublicStaff([]);
-        setTeamCapacity({ activeStaffCount: 1, effectiveCapacity: 1 });
+      }
+      if (busyRes) {
+        setBookedSlots(Array.isArray(busyRes.bookedSlots) ? busyRes.bookedSlots : []);
+        setSlotAvailability(
+          Array.isArray(busyRes.slotAvailability) ? busyRes.slotAvailability : [],
+        );
+        setDailyAvailability(
+          Array.isArray(busyRes.dailyAvailability) ? busyRes.dailyAvailability : [],
+        );
+      } else {
+        setBookedSlots([]);
+        setSlotAvailability([]);
+        setDailyAvailability([]);
+      }
+      const nextActiveStaff = Number(
+        busyRes?.totalActiveStaff ?? staffRes?.activeStaffCount ?? 1,
+      );
+      const nextEffective = Number(
+        busyRes?.effectiveCapacity ?? staffRes?.effectiveCapacity ?? 1,
+      );
+      setTeamCapacity({
+        activeStaffCount: nextActiveStaff,
+        effectiveCapacity: Math.max(1, nextEffective),
       });
+    });
     return () => {
       active = false;
     };
@@ -344,7 +390,6 @@ export default function PhotographerDetailScreen() {
             photographer._id,
             month,
             selectedPackage._id,
-            preferredStaffId || undefined,
           )
           .catch(() => null)
       )
@@ -371,7 +416,7 @@ export default function PhotographerDetailScreen() {
     return () => {
       active = false;
     };
-  }, [photographer?._id, selectedPackage?._id, preferredStaffId]);
+  }, [photographer?._id, selectedPackage?._id]);
 
   useEffect(() => {
     if (!photographer || !selectedDate) {
@@ -383,13 +428,28 @@ export default function PhotographerDetailScreen() {
     setScheduleLoading(true);
     setStartTime('');
     setQuote(null);
-    photographerApi
-      .timeRanges(photographer._id, selectedDate)
-      .then((response) => {
-        if (active) setTimeRanges(response.timeRanges ?? []);
-      })
-      .catch(() => {
-        if (active) setTimeRanges([]);
+    Promise.all([
+      photographerApi.timeRanges(photographer._id, selectedDate).catch(() => null),
+      photographerApi.busySchedule(photographer._id).catch(() => null),
+    ])
+      .then(([timeRes, busyRes]) => {
+        if (!active) return;
+        setTimeRanges(timeRes?.timeRanges ?? []);
+        if (busyRes) {
+          setBookedSlots(Array.isArray(busyRes.bookedSlots) ? busyRes.bookedSlots : []);
+          setSlotAvailability(
+            Array.isArray(busyRes.slotAvailability) ? busyRes.slotAvailability : [],
+          );
+          setDailyAvailability(
+            Array.isArray(busyRes.dailyAvailability) ? busyRes.dailyAvailability : [],
+          );
+          if (typeof busyRes.effectiveCapacity === 'number' && busyRes.effectiveCapacity > 0) {
+            setTeamCapacity((prev) => ({
+              activeStaffCount: Number(busyRes.totalActiveStaff ?? prev.activeStaffCount),
+              effectiveCapacity: Math.max(1, busyRes.effectiveCapacity!),
+            }));
+          }
+        }
       })
       .finally(() => {
         if (active) setScheduleLoading(false);
@@ -450,7 +510,6 @@ export default function PhotographerDetailScreen() {
               locationLongitude: coords.lng,
             },
           ],
-          preferredStaffId || undefined,
         )
         .then((result) => {
           if (active) {
@@ -463,10 +522,7 @@ export default function PhotographerDetailScreen() {
         .catch((cause) => {
           if (active) {
             // Friendly fallback calculation if backend quote server has mock delay
-            const overtimeFee =
-              durationMinutes > includedDuration
-                ? Math.round(((durationMinutes - includedDuration) / 30) * 50000)
-                : 0;
+            const overtimeFee = estimatedOvertimeFee;
             const fallbackTotal = (selectedPackage.price ?? 0) + overtimeFee;
             setQuote({
               valid: true,
@@ -509,7 +565,7 @@ export default function PhotographerDetailScreen() {
       active = false;
       clearTimeout(timer);
     };
-  }, [photographer?._id, selectedPackage?._id, selectedDate, startTime, endTime, location, coords, durationMinutes, preferredStaffId]);
+  }, [photographer?._id, selectedPackage?._id, selectedDate, startTime, endTime, location, coords, durationMinutes]);
 
   if (loading) return <LoadingState label="Đang tải thông tin gói chụp..." />;
   if (error || !photographer)
@@ -574,9 +630,6 @@ export default function PhotographerDetailScreen() {
     }
 
     const priceToCharge = quote?.totals?.totalAmount ?? selectedPackage.price ?? 0;
-    const selectedStaffObj = preferredStaffId
-      ? publicStaff.find((s) => s._id === preferredStaffId)
-      : null;
 
     addItem({
       itemType: 'PHOTOGRAPHY_PACKAGE',
@@ -592,14 +645,10 @@ export default function PhotographerDetailScreen() {
       shootLocationLongitude: coords.lng,
       shootConcept: concept.trim() || 'Cổ phục truyền thống',
       providerAddress: fullAddress(photographer),
-      preferredStaffId: preferredStaffId || undefined,
-      preferredStaffName: selectedStaffObj?.name || undefined,
       metadata: {
         providerId: photographer._id,
         packageName: selectedPackage.name,
         durationMinutes,
-        preferredStaffId: preferredStaffId || undefined,
-        preferredStaffName: selectedStaffObj?.name || undefined,
         quoteBreakdown: quote?.breakdown,
       },
     });
@@ -790,79 +839,39 @@ export default function PhotographerDetailScreen() {
           </Pressable>
         </View>
 
-        {/* Optional Staff Picker & Team Capacity Banner */}
+        {/* Studio Team Capacity & Dispatch Banner (Option 1A: Shop assigns photographer) */}
         {publicStaff.length > 0 && (
-          <Section title="Đội ngũ & Chọn thợ chụp (Tùy chọn)" icon="people-outline">
-            {teamCapacity.effectiveCapacity > 1 && (
-              <View style={styles.teamBanner}>
-                <Ionicons name="sparkles" size={14} color="#BA0049" />
-                <Text style={styles.teamBannerText}>
-                  Studio có {teamCapacity.activeStaffCount} thợ chụp · nhận tối đa{' '}
-                  {teamCapacity.effectiveCapacity} ca chụp song song cùng khung giờ.
+          <View style={styles.teamDispatchCard}>
+            <View style={styles.teamDispatchTop}>
+              <View style={styles.teamDispatchBadgeRow}>
+                <Ionicons name="people" size={14} color={Colors.primary} />
+                <Text style={styles.teamDispatchTitle}>
+                  Đội ngũ {Math.max(publicStaff.length, teamCapacity.activeStaffCount)} thợ chụp · Tối đa{' '}
+                  {Math.max(1, teamCapacity.effectiveCapacity)} ca/giờ
                 </Text>
               </View>
-            )}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.staffRow}
-            >
-              <Pressable
-                onPress={() => {
-                  setPreferredStaffId(null);
-                  setStartTime('');
-                  setQuote(null);
-                }}
-                style={[
-                  styles.staffChipCard,
-                  preferredStaffId === null && styles.staffChipCardActive,
-                ]}
-              >
-                <View style={styles.staffChipAvatar}>
-                  <Ionicons name="shuffle" size={16} color="#BA0049" />
-                </View>
-                <Text style={styles.staffChipName} numberOfLines={1}>
-                  Studio tự điều phối
-                </Text>
-                <Text style={styles.staffChipSub} numberOfLines={1}>
-                  Tối ưu giờ trống
-                </Text>
-              </Pressable>
-
-              {publicStaff.map((member) => {
-                const selected = preferredStaffId === member._id;
-                return (
-                  <Pressable
+              <View style={styles.teamAvatarStack}>
+                {publicStaff.slice(0, 4).map((member, idx) => (
+                  <View
                     key={member._id}
-                    onPress={() => {
-                      setPreferredStaffId(member._id);
-                      setStartTime('');
-                      setQuote(null);
-                    }}
-                    style={[
-                      styles.staffChipCard,
-                      selected && styles.staffChipCardActive,
-                    ]}
+                    style={[styles.teamAvatarMini, idx > 0 && { marginLeft: -7 }]}
                   >
-                    <View style={styles.staffChipAvatar}>
-                      <Text style={styles.staffChipInitial}>
-                        {(member.name || 'T').charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
-                    <Text style={styles.staffChipName} numberOfLines={1}>
-                      {member.name}
+                    <Text style={styles.teamAvatarMiniText}>
+                      {(member.name || 'T').charAt(0).toUpperCase()}
                     </Text>
-                    <Text style={styles.staffChipSub} numberOfLines={1}>
-                      {member.specialty ||
-                        (member.experienceYears
-                          ? `${member.experienceYears} năm KN`
-                          : 'Nhiếp ảnh gia')}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </Section>
+                  </View>
+                ))}
+                {publicStaff.length > 4 && (
+                  <View style={[styles.teamAvatarMini, styles.teamAvatarMiniMore, { marginLeft: -7 }]}>
+                    <Text style={styles.teamAvatarMiniMoreText}>+{publicStaff.length - 4}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+            <Text style={styles.teamDispatchNote}>
+              Studio sẽ chủ động phân công thợ chụp phù hợp nhất khi xác nhận lịch hẹn của bạn.
+            </Text>
+          </View>
         )}
 
         {/* Step 1: Date & Time */}
@@ -907,31 +916,177 @@ export default function PhotographerDetailScreen() {
               <View style={styles.slotsSection}>
                 <View style={styles.slotTitleRow}>
                   <Text style={styles.slotSectionTitle}>CHỌN CA CHỤP PHÙ HỢP:</Text>
-                  {monthDayMeta[selectedDate]?.remainingCapacity !== undefined &&
-                    (monthDayMeta[selectedDate]?.totalCapacity ?? teamCapacity.effectiveCapacity) > 1 && (
-                      <View style={styles.capacityAvailPill}>
-                        <Text style={styles.capacityAvailText}>
-                          Còn {monthDayMeta[selectedDate].remainingCapacity}/
-                          {monthDayMeta[selectedDate].totalCapacity ?? teamCapacity.effectiveCapacity} suất
+                  {teamCapacity.effectiveCapacity > 1 && (
+                    <View style={styles.capacityAvailPill}>
+                      <Text style={styles.capacityAvailText}>
+                        Tối đa {teamCapacity.effectiveCapacity} suất/giờ
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {teamCapacity.effectiveCapacity > 1 && (
+                  <View style={styles.stockLegendRow}>
+                    <View style={styles.stockLegendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
+                      <Text style={styles.stockLegendText}>Còn nhiều</Text>
+                    </View>
+                    <View style={styles.stockLegendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
+                      <Text style={styles.stockLegendText}>Sắp kín</Text>
+                    </View>
+                    <View style={styles.stockLegendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: '#EA580C' }]} />
+                      <Text style={styles.stockLegendText}>Suất cuối</Text>
+                    </View>
+                    <View style={styles.stockLegendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: '#CBD5E1' }]} />
+                      <Text style={styles.stockLegendText}>Hết suất</Text>
+                    </View>
+                  </View>
+                )}
+
+                {(() => {
+                  const dayQuota = dailyAvailability.find((d) => d.date === selectedDate);
+                  if (!dayQuota) return null;
+                  if (dayQuota.remaining === 0) {
+                    return (
+                      <View style={[styles.dailyQuotaBox, styles.dailyQuotaBoxFull]}>
+                        <Ionicons name="alert-circle-outline" size={14} color="#B91C1C" />
+                        <Text style={[styles.dailyQuotaText, { color: '#991B1B' }]}>
+                          Ngày này đã nhận đủ giới hạn {dayQuota.limit}/{dayQuota.limit} ca chụp. Vui lòng chọn ngày khác.
                         </Text>
                       </View>
-                    )}
-                </View>
+                    );
+                  }
+                  if (dayQuota.remaining === 1) {
+                    return (
+                      <View style={styles.dailyQuotaBox}>
+                        <Ionicons name="flame-outline" size={14} color="#C2410C" />
+                        <Text style={styles.dailyQuotaText}>
+                          Lưu ý: Studio đặt giới hạn {dayQuota.limit} ca/ngày — ngày này chỉ còn nhận 1 ca cuối.
+                        </Text>
+                      </View>
+                    );
+                  }
+                  return null;
+                })()}
+
                 <View style={styles.slotGrid}>
                   {slots.map((slot) => {
-                    const active = startTime === slot.start;
+                    const slotStartMin = toMinutes(slot.start);
+                    const slotEndMin = toMinutes(slot.end);
+                    const overlaps = (rangeStr: string) => {
+                      const [sStr, eStr] = String(rangeStr || '').split('-').map((p) => p.trim());
+                      if (!sStr || !eStr) return false;
+                      return slotStartMin < toMinutes(eStr) && toMinutes(sStr) < slotEndMin;
+                    };
+                    const dayBooked = bookedSlots.filter((b) => b.date === selectedDate);
+                    const dayAvail = slotAvailability.filter((a) => a.date === selectedDate);
+                    const dayQuota = dailyAvailability.find((d) => d.date === selectedDate);
+                    const matchingWindows = dayAvail.filter((w) => overlaps(w.timeSlot));
+                    const baseCap = Math.max(1, teamCapacity.effectiveCapacity);
+                    const slotCap = matchingWindows.length > 0
+                      ? Math.min(...matchingWindows.map((w) => Math.max(1, w.capacity)))
+                      : baseCap;
+                    const isSaturated = dayBooked.some((b) => overlaps(b.timeSlot));
+                    const isDayExhausted = Boolean(dayQuota && dayQuota.remaining <= 0);
+                    const remaining = isSaturated || isDayExhausted
+                      ? 0
+                      : matchingWindows.length > 0
+                        ? Math.max(0, Math.min(...matchingWindows.map((w) => w.remainingSlots)))
+                        : baseCap;
+                    const isFull = isSaturated || isDayExhausted || remaining <= 0;
+                    const active = !isFull && startTime === slot.start;
+                    const showCap = slotCap > 1 || baseCap > 1;
+                    const isLastSlot = !isFull && remaining === 1 && showCap;
+                    const isPartial = !isFull && !isLastSlot && showCap && remaining < slotCap;
+
+                    const capLabel = isFull
+                      ? showCap
+                        ? `Hết suất (0/${slotCap})`
+                        : 'Đã kín lịch'
+                      : active
+                        ? isLastSlot
+                          ? 'Đã chọn · Suất cuối'
+                          : showCap
+                            ? `Đã chọn · Còn ${remaining}/${slotCap} suất`
+                            : 'Đã chọn'
+                        : isLastSlot
+                          ? 'Chỉ còn 1 suất cuối'
+                          : showCap
+                            ? `Còn ${remaining}/${slotCap} suất`
+                            : 'Còn trống';
+
+                    const dotCap = Math.min(slotCap, 5);
+                    const dotRemaining =
+                      slotCap <= 5
+                        ? Math.min(remaining, dotCap)
+                        : Math.round((remaining / Math.max(1, slotCap)) * dotCap);
+
                     return (
                       <Pressable
                         key={slot.start}
+                        disabled={isFull}
                         onPress={() => setStartTime(slot.start)}
-                        style={[styles.slot, active && styles.slotActive]}>
-                        <Ionicons
-                          name="time-outline"
-                          size={12}
-                          color={active ? '#FFFFFF' : Colors.primary}
-                        />
-                        <Text style={[styles.slotText, active && styles.lightText]}>
-                          {slot.start} – {slot.end}
+                        style={[
+                          styles.slot,
+                          isLastSlot && !active && styles.slotLast,
+                          isPartial && !active && styles.slotPartial,
+                          active && styles.slotActive,
+                          isFull && styles.slotBusy,
+                        ]}>
+                        <View style={styles.slotHeaderRow}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Ionicons
+                              name="time-outline"
+                              size={12}
+                              color={isFull ? '#94A3B8' : active ? '#FFFFFF' : Colors.primary}
+                            />
+                            <Text
+                              style={[
+                                styles.slotText,
+                                active && styles.lightText,
+                                isFull && styles.slotTextBusy,
+                              ]}>
+                              {slot.start} – {slot.end}
+                            </Text>
+                          </View>
+                          {showCap && (
+                            <View style={styles.stockDotsRow}>
+                              {Array.from({ length: dotCap }).map((_, idx) => {
+                                const filled = idx < dotRemaining;
+                                const dotBg = !filled
+                                  ? active
+                                    ? 'rgba(255,255,255,0.3)'
+                                    : '#E2DDD8'
+                                  : active
+                                    ? '#FFFFFF'
+                                    : isLastSlot
+                                      ? '#EA580C'
+                                      : isPartial
+                                        ? '#F59E0B'
+                                        : '#10B981';
+                                return (
+                                  <View
+                                    key={idx}
+                                    style={[styles.stockDot, { backgroundColor: dotBg }]}
+                                  />
+                                );
+                              })}
+                            </View>
+                          )}
+                        </View>
+                        <Text
+                          style={[
+                            styles.slotSubText,
+                            !isFull && showCap && !isPartial && !isLastSlot && !active && styles.slotSubOpen,
+                            isPartial && !active && styles.slotSubPartial,
+                            isLastSlot && !active && styles.slotSubLast,
+                            active && styles.slotSubActive,
+                            isFull && styles.slotSubBusy,
+                          ]}>
+                          {capLabel}
                         </Text>
                       </Pressable>
                     );
@@ -959,14 +1114,17 @@ export default function PhotographerDetailScreen() {
         {/* Step 2: Duration */}
         <Section title="2. Thời lượng chụp & thêm giờ" stepNumber="2">
           <Text style={styles.helper}>
-            Gói tiêu chuẩn gồm {includedDuration} phút. Bạn có thể cộng thêm thời lượng nếu muốn chụp nhiều bối cảnh hơn.
+            Gói tiêu chuẩn gồm {includedDuration} phút.{' '}
+            {maxOvertime > 0
+              ? `Bạn có thể tăng thêm tối đa +${maxOvertime} phút (${money(overtimeHourlyRate)}/giờ) — khung giờ ở Bước 1 sẽ tự động cập nhật theo thời lượng mới.`
+              : 'Gói này áp dụng thời lượng cố định.'}
           </Text>
           <View style={styles.durationCard}>
             <View style={styles.durationLeft}>
               <Text style={styles.durationTitle}>Thời lượng buổi chụp</Text>
               <Text style={styles.durationOvertime}>
                 {durationMinutes > includedDuration
-                  ? `Đã cộng thêm +${durationMinutes - includedDuration} phút (+${money(Math.round(((durationMinutes - includedDuration) / 30) * 50000))})`
+                  ? `Đã cộng thêm +${durationMinutes - includedDuration} phút (+${money(quote?.totals?.overtimeAmount ?? estimatedOvertimeFee)})`
                   : 'Thời lượng chuẩn theo gói'}
               </Text>
             </View>
@@ -1795,24 +1953,188 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   slot: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 3,
+    minWidth: '47%',
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 10,
     borderWidth: 1,
     borderColor: '#EFECEB',
-    borderRadius: 10,
+    borderRadius: 11,
     backgroundColor: '#FAF8F8',
+  },
+  slotPartial: {
+    backgroundColor: '#FFFBF2',
+    borderColor: '#F3D29B',
+  },
+  slotLast: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FDBA74',
   },
   slotActive: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },
+  slotBusy: {
+    backgroundColor: '#F4F4F5',
+    borderColor: '#E5E7EB',
+    opacity: 0.72,
+  },
+  slotHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    gap: 5,
+  },
+  stockLegendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 8,
+  },
+  stockLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  legendDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  stockLegendText: {
+    fontFamily: FontFamily.body,
+    fontSize: 10.5,
+    color: '#6B5E54',
+  },
+  dailyQuotaBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+    borderRadius: 9,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginBottom: 8,
+  },
+  dailyQuotaBoxFull: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  dailyQuotaText: {
+    flex: 1,
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: 11,
+    lineHeight: 15.5,
+    color: '#9A3412',
+  },
+  stockDotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  stockDot: {
+    width: 5.5,
+    height: 5.5,
+    borderRadius: 3,
+  },
+  slotSubLast: {
+    color: '#C2410C',
+    fontFamily: FontFamily.bodyBold,
+  },
   slotText: {
     fontFamily: FontFamily.bodySemiBold,
-    fontSize: 11.5,
+    fontSize: 12,
     color: '#1B1C1C',
+  },
+  slotTextBusy: {
+    color: '#94A3B8',
+  },
+  slotSubText: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: 10.5,
+    color: '#6B5E54',
+  },
+  slotSubOpen: {
+    color: '#047857',
+    fontFamily: FontFamily.bodySemiBold,
+  },
+  slotSubPartial: {
+    color: '#B45309',
+    fontFamily: FontFamily.bodySemiBold,
+  },
+  slotSubActive: {
+    color: 'rgba(255,255,255,0.9)',
+    fontFamily: FontFamily.bodySemiBold,
+  },
+  slotSubBusy: {
+    color: '#94A3B8',
+  },
+  teamDispatchCard: {
+    marginHorizontal: 16,
+    marginBottom: 14,
+    padding: 13,
+    borderRadius: 14,
+    backgroundColor: '#FCF9F2',
+    borderWidth: 1,
+    borderColor: '#E8D9CA',
+    gap: 7,
+  },
+  teamDispatchTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  teamDispatchBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  teamDispatchTitle: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 12.5,
+    color: '#8E1B2E',
+    flexShrink: 1,
+  },
+  teamAvatarStack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  teamAvatarMini: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#F5E2E6',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  teamAvatarMiniText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 10,
+    color: '#8E1B2E',
+  },
+  teamAvatarMiniMore: {
+    backgroundColor: '#8E1B2E',
+  },
+  teamAvatarMiniMoreText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 9,
+    color: '#FFFFFF',
+  },
+  teamDispatchNote: {
+    fontFamily: FontFamily.body,
+    fontSize: 11.5,
+    lineHeight: 16.5,
+    color: '#6B5E54',
   },
   warning: {
     flexDirection: 'row',

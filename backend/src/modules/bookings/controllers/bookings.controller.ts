@@ -243,6 +243,21 @@ export class BookingsController {
     );
   }
 
+  /** GET /bookings/:id/available-staff */
+  @Get(':id/available-staff')
+  @UseGuards(RolesGuard)
+  @Roles('PROVIDER', 'ADMIN')
+  async getAvailableStaffForBooking(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    return this.bookingsService.getAvailableStaffForBooking(
+      id,
+      user.sub,
+      user.roles,
+    );
+  }
+
   /** GET /bookings/:id/schedules/:scheduleId/available-staff */
   @Get(':id/schedules/:scheduleId/available-staff')
   @UseGuards(RolesGuard)

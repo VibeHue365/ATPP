@@ -80,6 +80,13 @@ export interface SlotAvailabilityWindow {
   remainingSlots: number;
 }
 
+export interface DailyAvailabilitySummary {
+  date: string;
+  used: number;
+  limit: number;
+  remaining: number;
+}
+
 export function toIctDateKey(date: Date): string {
   return date.toLocaleDateString('en-CA', { timeZone: BUSINESS_TIME_ZONE });
 }
@@ -421,6 +428,8 @@ export class StaffAvailabilityService {
     options?: {
       preferredStaffId?: string | null;
       preferStaffIdForReschedule?: string | null;
+      deferStaffAssignment?: boolean;
+      isExistingBookingReassignment?: boolean;
       session?: ClientSession;
       excludeScheduleId?: Types.ObjectId;
       excludeBookingItemId?: Types.ObjectId;
@@ -490,20 +499,35 @@ export class StaffAvailabilityService {
       }
     }
 
-    // Track per-day booking count (unique existing bookings + current booking) for maxDailySessions
-    if (maxDailySessions && maxDailySessions > 0) {
+    // Reassigning/assigning a free active photographer onto an ALREADY-EXISTING booking schedule
+    // must never be blocked by studio-level ceilings (those ceilings only gate NEW booking/reschedule demand).
+    const bypassStudioCapForExisting = Boolean(
+      options?.isExistingBookingReassignment && preferredStaffDoc,
+    );
+
+    // Track per-day photoshoot session count (existing occupancies + newly requested sessions) for maxDailySessions
+    if (maxDailySessions && maxDailySessions > 0 && !bypassStudioCapForExisting) {
       for (const dateKey of dateKeys) {
-        const distinctBookingsOnDay = new Set(
-          occupancies
-            .filter((o) => o.dateKey === dateKey)
-            .map((o) => o.bookingId || o.bookingItemId),
-        );
-        if (distinctBookingsOnDay.size >= maxDailySessions) {
+        const existingSessionsOnDay = occupancies.filter(
+          (o) => o.dateKey === dateKey,
+        ).length;
+        const requestedSessionsOnDay = sessions.filter(
+          (x) => x.dateKey === dateKey,
+        ).length;
+        if (existingSessionsOnDay + requestedSessionsOnDay > maxDailySessions) {
+          const remainingDaily = Math.max(
+            0,
+            maxDailySessions - existingSessionsOnDay,
+          );
+          const message =
+            remainingDaily === 0
+              ? `Studio đã nhận đủ giới hạn ${maxDailySessions} ca chụp trong ngày ${dateKey}.`
+              : `Ngày ${dateKey} chỉ còn nhận được thêm tối đa ${remainingDaily} ca chụp (giới hạn ${maxDailySessions} ca/ngày), không đủ cho ${requestedSessionsOnDay} ca bạn chọn.`;
           for (const s of sessions.filter((x) => x.dateKey === dateKey)) {
             errors.push({
               clientId: s.clientId,
               code: 'SLOT_UNAVAILABLE',
-              message: `Studio đã nhận đủ giới hạn ${maxDailySessions} ca chụp trong ngày ${dateKey}.`,
+              message,
             });
           }
         }
@@ -638,12 +662,32 @@ export class StaffAvailabilityService {
       );
       remainingByClientId.set(req.clientId, remainingSlots);
 
-      if (remainingSlots <= 0) {
+      if (!bypassStudioCapForExisting && remainingSlots <= 0) {
         errors.push({
           clientId: req.clientId,
           code: 'SLOT_UNAVAILABLE',
           message:
             'Khung giờ này hiện đã hết suất thợ chụp trống. Vui lòng chọn giờ khác.',
+        });
+        continue;
+      }
+
+      // Option 1A: Shop-controlled assignment — reserve studio slot capacity
+      // without locking a specific staff member until Studio Owner approves.
+      if (options?.deferStaffAssignment && !preferredStaffDoc) {
+        assignmentsByClientId.set(req.clientId, {
+          assignedStaffId: null,
+          assignedStaffSnapshot: null,
+          remainingSlotsAfterAssign: Math.max(0, remainingSlots - 1),
+        });
+        workingOccupancies.push({
+          bookingId: 'PENDING_NEW',
+          bookingItemId: req.clientId,
+          scheduleId: null,
+          dateKey: req.dateKey,
+          startMin: req.startMin,
+          endMin: req.endMin,
+          assignedStaffId: null,
         });
         continue;
       }
@@ -753,16 +797,23 @@ export class StaffAvailabilityService {
     bookedSlots: { date: string; timeSlot: string; bookingItemId: string }[];
     totalActiveStaff: number;
     maxConcurrentSessions: number | null;
+    maxDailySessions: number | null;
     effectiveCapacity: number;
     slotAvailability: SlotAvailabilityWindow[];
+    dailyAvailability: DailyAvailabilitySummary[];
   }> {
     const [ctx, occupancies] = await Promise.all([
       this.loadProviderCapacityContext(providerId),
       this.loadActiveOccupancies(providerId),
     ]);
 
-    const { activeStaff, activeStaffCount, configuredCapacity, maxConcurrentSessions } =
-      ctx;
+    const {
+      activeStaff,
+      activeStaffCount,
+      configuredCapacity,
+      maxConcurrentSessions,
+      maxDailySessions,
+    } = ctx;
 
     const targetStaffDoc =
       staffId && Types.ObjectId.isValid(staffId)
@@ -791,9 +842,37 @@ export class StaffAvailabilityService {
       bookingItemId: string;
     }[] = [];
     const slotAvailability: SlotAvailabilityWindow[] = [];
+    const dailyAvailability: DailyAvailabilitySummary[] = [];
 
     for (const dateKey of Array.from(allDates).sort()) {
       const dayOccupancies = occupancies.filter((o) => o.dateKey === dateKey);
+
+      let dailyRemaining: number | null = null;
+      if (maxDailySessions && maxDailySessions > 0) {
+        const usedSessionsOnDay = dayOccupancies.length;
+        dailyRemaining = Math.max(0, maxDailySessions - usedSessionsOnDay);
+        if (usedSessionsOnDay > 0) {
+          dailyAvailability.push({
+            date: dateKey,
+            used: usedSessionsOnDay,
+            limit: maxDailySessions,
+            remaining: dailyRemaining,
+          });
+        }
+        if (dailyRemaining <= 0) {
+          bookedSlots.push({
+            date: dateKey,
+            timeSlot: '00:00-24:00',
+            bookingItemId:
+              dayOccupancies[0]?.bookingItemId ||
+              dayOccupancies[0]?.scheduleId ||
+              `daily_limit_${dateKey}`,
+          });
+          bookedDates.add(dateKey);
+          continue;
+        }
+      }
+
       const boundaries = new Set<number>();
 
       for (const occ of dayOccupancies) {
@@ -942,8 +1021,10 @@ export class StaffAvailabilityService {
       bookedSlots,
       totalActiveStaff: activeStaffCount,
       maxConcurrentSessions,
+      maxDailySessions,
       effectiveCapacity: configuredCapacity,
       slotAvailability,
+      dailyAvailability,
     };
   }
 
@@ -1020,8 +1101,13 @@ export class StaffAvailabilityService {
     );
 
     const currentStaffIdStr = schedule.assignedStaffId?.toString() ?? null;
+    const resolvedTimeSlot =
+      schedule.timeSlot ||
+      (schedule.startsAt && schedule.endsAt
+        ? `${formatMinutesToHHmm(startMin)} - ${formatMinutesToHHmm(endMin)}`
+        : null);
 
-    return ctx.activeStaff.map((st: any) => {
+    const staff = ctx.activeStaff.map((st: any) => {
       const id = st._id.toString();
       const block = dateKey
         ? getStaffBlockReason(st, dateKey, startMin, endMin)
@@ -1036,15 +1122,71 @@ export class StaffAvailabilityService {
 
       return {
         _id: id,
+        staffId: id,
         name: st.name,
         phone: st.phone,
         avatarUrl: st.avatarUrl ?? null,
         specialty: st.specialty ?? null,
         isCurrentlyAssigned: currentStaffIdStr === id,
+        isCurrentAssigned: currentStaffIdStr === id,
         available,
+        conflictReason: unavailableReason,
         unavailableReason,
       };
     });
+
+    return {
+      scheduleId: schedule._id.toString(),
+      dateKey,
+      timeSlot: resolvedTimeSlot,
+      currentAssignedStaffId: currentStaffIdStr,
+      activeStaffCount: ctx.activeStaffCount,
+      staff,
+    };
+  }
+
+  async getAvailableStaffForBooking(
+    bookingIdStr: string,
+    actorUserId: string,
+    actorRoles?: string[],
+  ) {
+    if (!Types.ObjectId.isValid(bookingIdStr)) {
+      throw new BadRequestException('Mã đơn hàng không hợp lệ.');
+    }
+    const schedule = await this.bookingScheduleModel
+      .findOne({
+        bookingId: new Types.ObjectId(bookingIdStr),
+        scheduleType: BookingScheduleType.Photoshoot,
+        status: {
+          $in: [
+            BookingScheduleStatus.Confirmed,
+            BookingScheduleStatus.Held,
+            BookingScheduleStatus.Scheduled,
+          ],
+        },
+      })
+      .sort({ startsAt: 1, scheduledDate: 1 })
+      .select('_id')
+      .lean()
+      .exec();
+
+    if (!schedule?._id) {
+      return {
+        scheduleId: null,
+        dateKey: null,
+        timeSlot: null,
+        currentAssignedStaffId: null,
+        activeStaffCount: 0,
+        staff: [],
+      };
+    }
+
+    return this.getAvailableStaffForSchedule(
+      bookingIdStr,
+      schedule._id.toString(),
+      actorUserId,
+      actorRoles,
+    );
   }
 
   async assignStaffToBooking(
@@ -1199,6 +1341,7 @@ export class StaffAvailabilityService {
         {
           preferredStaffId: newStaffIdStr,
           excludeScheduleId: schedule._id,
+          isExistingBookingReassignment: true,
           session,
         },
       );

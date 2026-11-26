@@ -29,7 +29,7 @@ type OrdersPanelProps = Pick<ReturnType<typeof useProviderOrderState>,
   monthlyRevenue: number;
   filteredOrders: Order[];
   resolveRescheduleRequest: (order: Order, item: any, approved: boolean) => Promise<void>;
-  changeOrderStatus: (_id: string, apiStatus: string) => Promise<void>;
+  changeOrderStatus: (_id: string, apiStatus: string) => Promise<boolean | void>;
   onOpenChat: () => void;
   fetchOrders?: (silent?: boolean, force?: boolean) => Promise<void>;
 };

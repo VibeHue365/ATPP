@@ -130,7 +130,13 @@ export function PhotographyPackageCard({
           <span className="photography-package-card__price">
             {Number(photographyPackage.price || 0).toLocaleString('vi-VN')}đ
           </span>
-          <span className="photography-package-card__price-unit">/ buổi</span>
+          <span className="photography-package-card__price-unit">
+            {photographyPackage.pricingUnit === 'PER_DAY'
+              ? '/ ngày'
+              : photographyPackage.pricingUnit === 'PER_BOOKING'
+                ? '/ trọn gói'
+                : '/ buổi'}
+          </span>
         </div>
 
         {/* Structured Facts Grid */}

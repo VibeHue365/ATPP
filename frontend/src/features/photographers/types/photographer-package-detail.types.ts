@@ -16,6 +16,20 @@ import type {
   IneligibleVoucherItem,
 } from '../../../pages/cart/components/VoucherPickerModal';
 
+export interface SlotCapacityInfo {
+  busy: boolean;
+  remaining: number;
+  capacity: number;
+  occupied: number;
+}
+
+export interface DailyQuotaInfo {
+  date: string;
+  used: number;
+  limit: number;
+  remaining: number;
+}
+
 export interface PhotographerPackageDetailLayoutProps {
   photographer: PhotographerDetails;
   packages: PhotographerPackage[];
@@ -45,8 +59,10 @@ export interface PhotographerPackageDetailLayoutProps {
   calendarDate: Date;
   calendarDays: PhotographyCalendarDay[];
   isCalendarLoading: boolean;
+  isSlotsLoading?: boolean;
   slots: PhotographyTimeSlot[];
   isSlotBusy: (slot: PhotographyTimeSlot) => boolean;
+  getSlotCapacityInfo?: (slot: PhotographyTimeSlot) => SlotCapacityInfo;
   includedDurationMinutes: number;
   overtimeIncrementMinutes: number;
   maxOvertimeMinutes: number;
@@ -58,10 +74,12 @@ export interface PhotographerPackageDetailLayoutProps {
   onPreviousMonth: () => void;
   onNextMonth: () => void;
   onPreviewDate: (date: string) => void;
-  onConfirmSchedule: (date: string, slot: PhotographyTimeSlot) => void;
+  onPreviewDuration?: (durationMinutes: number | null) => void;
+  onConfirmSchedule: (date: string, slot: PhotographyTimeSlot, durationMinutes?: number) => void;
   onCancelSchedule: () => void;
   onDecreaseDuration: () => void;
   onIncreaseDuration: () => void;
+  onSetDuration?: (durationMinutes: number) => void;
   onLocationChange: (location: LocationSelection) => void;
   onConceptChange: (value: string) => void;
   onRequestChange: (value: string) => void;
@@ -84,7 +102,8 @@ export interface PhotographerPackageDetailLayoutProps {
   onRemoveVoucher?: () => void;
   studioStaff?: PublicProviderStaffMember[];
   effectiveCapacity?: number;
-  preferredStaffId?: string;
-  onSelectPreferredStaff?: (staffId: string) => void;
+  previewDayQuota?: DailyQuotaInfo | null;
+  selectedSlotCapacity?: SlotCapacityInfo | null;
+  onRefreshAvailability?: () => void;
 }
 

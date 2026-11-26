@@ -13,6 +13,7 @@ interface PhotographyMultiSessionEditorProps {
   sessions: PhotographySessionDraft[];
   minDate: string;
   includedDurationMinutes: number;
+  minimumSessionMinutes?: number;
   overtimeIncrementMinutes: number;
   maxOvertimeMinutes: number;
   errors: PhotographyQuoteError[];
@@ -28,12 +29,18 @@ const toMinutes = (time: string) => {
 };
 
 const toTime = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
-const formatDuration = (minutes: number) => `${Math.floor(minutes / 60)} giờ${minutes % 60 ? ` ${minutes % 60} phút` : ''}`;
+const formatDuration = (minutes: number) => {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (!hours) return `${rest} phút`;
+  return `${hours} giờ${rest ? ` ${rest} phút` : ''}`;
+};
 
 export const PhotographyMultiSessionEditor: React.FC<PhotographyMultiSessionEditorProps> = ({
   sessions,
   minDate,
   includedDurationMinutes,
+  minimumSessionMinutes,
   overtimeIncrementMinutes,
   maxOvertimeMinutes,
   errors,
@@ -44,6 +51,7 @@ export const PhotographyMultiSessionEditor: React.FC<PhotographyMultiSessionEdit
 }) => {
   const [rangeFrom, setRangeFrom] = useState(minDate);
   const [rangeTo, setRangeTo] = useState(minDate);
+  const minSessionDuration = Math.max(minimumSessionMinutes ?? includedDurationMinutes, 30);
   const maxDuration = includedDurationMinutes + maxOvertimeMinutes;
   const errorsBySession = new Map(errors.map((error) => [error.clientId, error.message]));
 
@@ -70,7 +78,7 @@ export const PhotographyMultiSessionEditor: React.FC<PhotographyMultiSessionEdit
               <div className="pd-multi-session-row__duration">
                 <span>Thời lượng</span>
                 <div>
-                  <button type="button" onClick={() => onUpdate(session.clientId, { durationMinutes: Math.max(includedDurationMinutes, session.durationMinutes - overtimeIncrementMinutes) })} disabled={session.durationMinutes <= includedDurationMinutes}>−</button>
+                  <button type="button" onClick={() => onUpdate(session.clientId, { durationMinutes: Math.max(minSessionDuration, session.durationMinutes - overtimeIncrementMinutes) })} disabled={session.durationMinutes <= minSessionDuration}>−</button>
                   <strong>{formatDuration(session.durationMinutes)}</strong>
                   <button type="button" onClick={() => onUpdate(session.clientId, { durationMinutes: Math.min(maxDuration, session.durationMinutes + overtimeIncrementMinutes) })} disabled={session.durationMinutes >= maxDuration}>+</button>
                 </div>

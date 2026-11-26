@@ -34,6 +34,31 @@ export const photographerApi = {
     ),
   timeRanges: (id: string, date: string) =>
     httpClient.get<never, PhotographyTimeRanges>(`/api/photographers/${id}/availability${query({ date })}`),
+  busySchedule: (providerId: string) =>
+    httpClient.get<
+      never,
+      {
+        bookedDates: string[];
+        bookedSlots: Array<{ date: string; timeSlot: string }>;
+        totalActiveStaff?: number;
+        maxConcurrentSessions?: number | null;
+        maxDailySessions?: number | null;
+        effectiveCapacity?: number;
+        slotAvailability?: Array<{
+          date: string;
+          timeSlot: string;
+          occupiedCount: number;
+          capacity: number;
+          remainingSlots: number;
+        }>;
+        dailyAvailability?: Array<{
+          date: string;
+          used: number;
+          limit: number;
+          remaining: number;
+        }>;
+      }
+    >(`/api/bookings/busy-dates/provider/${encodeURIComponent(providerId)}`),
   quote: (
     id: string,
     packageId: string,

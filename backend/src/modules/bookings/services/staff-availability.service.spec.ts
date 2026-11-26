@@ -544,4 +544,429 @@ describe('StaffAvailabilityService (Phase 1 Core)', () => {
       ]),
     );
   });
+
+  it('defers staff assignment (Option 1A) while accurately enforcing concurrent slot capacity across 3 staff', async () => {
+    const s1 = { _id: new Types.ObjectId(), name: 'Tuấn', phone: '0901', status: ProviderStaffStatus.Active, sortOrder: 0, blockedSlots: [] };
+    const s2 = { _id: new Types.ObjectId(), name: 'Nam', phone: '0902', status: ProviderStaffStatus.Active, sortOrder: 1, blockedSlots: [] };
+    const s3 = { _id: new Types.ObjectId(), name: 'Lan', phone: '0903', status: ProviderStaffStatus.Active, sortOrder: 2, blockedSlots: [] };
+
+    // Already 1 unassigned booking at 11:00-12:00 -> 2 slots left out of 3
+    const { service } = buildFixture({
+      activeStaff: [s1, s2, s3],
+      providerSettings: { maxConcurrentSessions: null },
+      v2Schedules: [
+        {
+          _id: new Types.ObjectId(),
+          bookingId: new Types.ObjectId(),
+          bookingItemId: new Types.ObjectId(),
+          providerLocalDate: '2026-11-27',
+          startsAt: new Date('2026-11-27T11:00:00+07:00'),
+          endsAt: new Date('2026-11-27T12:00:00+07:00'),
+          assignedStaffId: null,
+        },
+      ],
+    });
+
+    const second = await service.evaluateSessions(
+      providerId,
+      [{ clientId: 'b2', dateKey: '2026-11-27', startMin: 660, endMin: 720 }],
+      { deferStaffAssignment: true },
+    );
+    expect(second.valid).toBe(true);
+    expect(second.configuredCapacity).toBe(3);
+    expect(second.remainingByClientId.get('b2')).toBe(2);
+    expect(second.assignmentsByClientId.get('b2')?.assignedStaffId).toBeNull();
+    expect(second.assignmentsByClientId.get('b2')?.assignedStaffSnapshot).toBeNull();
+    expect(second.assignmentsByClientId.get('b2')?.remainingSlotsAfterAssign).toBe(1);
+
+    const summary = await service.computeBusyScheduleSummary(providerId);
+    expect(summary.effectiveCapacity).toBe(3);
+    expect(summary.bookedSlots).toHaveLength(0);
+    expect(summary.slotAvailability).toEqual([
+      {
+        date: '2026-11-27',
+        timeSlot: '11:00-12:00',
+        occupiedCount: 1,
+        capacity: 3,
+        remainingSlots: 2,
+      },
+    ]);
+  });
+
+  it('returns structured ScheduleAvailableStaffResponse with staffId and conflictReason from getAvailableStaffForSchedule', async () => {
+    const bookingId = new Types.ObjectId();
+    const schId = new Types.ObjectId();
+    const s1 = { _id: new Types.ObjectId(), name: 'Tuấn', phone: '0901', status: ProviderStaffStatus.Active, sortOrder: 0, blockedSlots: [] };
+    const s2 = { _id: new Types.ObjectId(), name: 'Nam', phone: '0902', status: ProviderStaffStatus.Active, sortOrder: 1, blockedSlots: [] };
+
+    const { service } = buildFixture({
+      activeStaff: [s1, s2],
+      singleSchedule: {
+        _id: schId,
+        bookingId,
+        providerId,
+        scheduleType: BookingScheduleType.Photoshoot,
+        providerLocalDate: '2026-11-27',
+        startsAt: new Date('2026-11-27T11:00:00+07:00'),
+        endsAt: new Date('2026-11-27T12:00:00+07:00'),
+        assignedStaffId: null,
+        status: BookingScheduleStatus.Confirmed,
+      },
+      v2Schedules: [
+        {
+          _id: new Types.ObjectId(),
+          bookingId: new Types.ObjectId(),
+          bookingItemId: new Types.ObjectId(),
+          providerLocalDate: '2026-11-27',
+          startsAt: new Date('2026-11-27T11:00:00+07:00'),
+          endsAt: new Date('2026-11-27T12:00:00+07:00'),
+          assignedStaffId: s1._id,
+        },
+      ],
+    });
+
+    const res = await service.getAvailableStaffForSchedule(
+      bookingId.toString(),
+      schId.toString(),
+      ownerUserId.toString(),
+      ['PROVIDER'],
+    );
+    expect(res.scheduleId).toBe(schId.toString());
+    expect(res.dateKey).toBe('2026-11-27');
+    expect(res.timeSlot).toBe('11:00 - 12:00');
+    expect(res.activeStaffCount).toBe(2);
+    expect(res.currentAssignedStaffId).toBeNull();
+    expect(res.staff).toHaveLength(2);
+    expect(res.staff[0]).toMatchObject({
+      staffId: s1._id.toString(),
+      available: false,
+      conflictReason: 'Đang bận đơn chụp khác cùng giờ',
+      isCurrentAssigned: false,
+    });
+    expect(res.staff[1]).toMatchObject({
+      staffId: s2._id.toString(),
+      available: true,
+      conflictReason: null,
+      isCurrentAssigned: false,
+    });
+  });
+
+  it('keeps per-slot stock accurate while reporting dailyAvailability and locks full day once maxDailySessions is reached', async () => {
+    const s1 = { _id: new Types.ObjectId(), name: 'Tuấn', phone: '0901', status: ProviderStaffStatus.Active, sortOrder: 0, blockedSlots: [] };
+    const s2 = { _id: new Types.ObjectId(), name: 'Nam', phone: '0902', status: ProviderStaffStatus.Active, sortOrder: 1, blockedSlots: [] };
+    const s3 = { _id: new Types.ObjectId(), name: 'Lan', phone: '0903', status: ProviderStaffStatus.Active, sortOrder: 2, blockedSlots: [] };
+
+    // 3 staff (3 concurrent), maxDailySessions = 3, already 2 bookings on 2026-11-27 -> dailyRemaining = 1
+    const { service: almostFull } = buildFixture({
+      activeStaff: [s1, s2, s3],
+      providerSettings: { maxConcurrentSessions: null, maxDailySessions: 3 },
+      v2Schedules: [
+        {
+          _id: new Types.ObjectId(),
+          bookingId: new Types.ObjectId(),
+          bookingItemId: new Types.ObjectId(),
+          providerLocalDate: '2026-11-27',
+          startsAt: new Date('2026-11-27T08:00:00+07:00'),
+          endsAt: new Date('2026-11-27T09:00:00+07:00'),
+          assignedStaffId: s1._id,
+        },
+        {
+          _id: new Types.ObjectId(),
+          bookingId: new Types.ObjectId(),
+          bookingItemId: new Types.ObjectId(),
+          providerLocalDate: '2026-11-27',
+          startsAt: new Date('2026-11-27T11:00:00+07:00'),
+          endsAt: new Date('2026-11-27T12:00:00+07:00'),
+          assignedStaffId: s2._id,
+        },
+      ],
+    });
+
+    const partialSummary = await almostFull.computeBusyScheduleSummary(providerId);
+    expect(partialSummary.bookedSlots).toHaveLength(0);
+    expect(partialSummary.dailyAvailability).toEqual([
+      { date: '2026-11-27', used: 2, limit: 3, remaining: 1 },
+    ]);
+    // Per-slot stock only drops on the actual booked windows (08:00-09:00 and 11:00-12:00)
+    expect(partialSummary.slotAvailability).toEqual([
+      { date: '2026-11-27', timeSlot: '08:00-09:00', occupiedCount: 1, capacity: 3, remainingSlots: 2 },
+      { date: '2026-11-27', timeSlot: '11:00-12:00', occupiedCount: 1, capacity: 3, remainingSlots: 2 },
+    ]);
+
+    // Now 3 distinct bookings on 2026-11-27 -> dailyRemaining = 0 -> full day locked!
+    const { service: dailyFull } = buildFixture({
+      activeStaff: [s1, s2, s3],
+      providerSettings: { maxConcurrentSessions: null, maxDailySessions: 3 },
+      v2Schedules: [
+        {
+          _id: new Types.ObjectId(),
+          bookingId: new Types.ObjectId(),
+          bookingItemId: new Types.ObjectId(),
+          providerLocalDate: '2026-11-27',
+          startsAt: new Date('2026-11-27T08:00:00+07:00'),
+          endsAt: new Date('2026-11-27T09:00:00+07:00'),
+          assignedStaffId: s1._id,
+        },
+        {
+          _id: new Types.ObjectId(),
+          bookingId: new Types.ObjectId(),
+          bookingItemId: new Types.ObjectId(),
+          providerLocalDate: '2026-11-27',
+          startsAt: new Date('2026-11-27T11:00:00+07:00'),
+          endsAt: new Date('2026-11-27T12:00:00+07:00'),
+          assignedStaffId: s2._id,
+        },
+        {
+          _id: new Types.ObjectId(),
+          bookingId: new Types.ObjectId(),
+          bookingItemId: new Types.ObjectId(),
+          providerLocalDate: '2026-11-27',
+          startsAt: new Date('2026-11-27T14:00:00+07:00'),
+          endsAt: new Date('2026-11-27T15:00:00+07:00'),
+          assignedStaffId: s3._id,
+        },
+      ],
+    });
+
+    const fullSummary = await dailyFull.computeBusyScheduleSummary(providerId);
+    expect(fullSummary.bookedDates).toContain('2026-11-27');
+    expect(fullSummary.bookedSlots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ date: '2026-11-27', timeSlot: '00:00-24:00' }),
+      ]),
+    );
+    expect(fullSummary.dailyAvailability).toEqual([
+      { date: '2026-11-27', used: 3, limit: 3, remaining: 0 },
+    ]);
+  });
+
+  it('allows assigning free active staff to already-existing bookings even when maxConcurrentSessions is lowered, while still blocking overlapping staff and new bookings', async () => {
+    const booking1Id = new Types.ObjectId();
+    const booking2Id = new Types.ObjectId();
+    const sch1Id = new Types.ObjectId();
+    const sch2Id = new Types.ObjectId();
+    const s1 = { _id: new Types.ObjectId(), name: 'Tuấn', phone: '0901', status: ProviderStaffStatus.Active, sortOrder: 0, blockedSlots: [] };
+    const s2 = { _id: new Types.ObjectId(), name: 'Nam', phone: '0902', status: ProviderStaffStatus.Active, sortOrder: 1, blockedSlots: [] };
+
+    const sch1Base = {
+      _id: sch1Id,
+      bookingId: booking1Id,
+      bookingItemId: new Types.ObjectId(),
+      providerId,
+      scheduleType: BookingScheduleType.Photoshoot,
+      providerLocalDate: '2026-11-27',
+      startsAt: new Date('2026-11-27T11:00:00+07:00'),
+      endsAt: new Date('2026-11-27T12:00:00+07:00'),
+      assignedStaffId: null,
+      status: BookingScheduleStatus.Confirmed,
+    };
+    const sch2Base = {
+      _id: sch2Id,
+      bookingId: booking2Id,
+      bookingItemId: new Types.ObjectId(),
+      providerId,
+      scheduleType: BookingScheduleType.Photoshoot,
+      providerLocalDate: '2026-11-27',
+      startsAt: new Date('2026-11-27T11:00:00+07:00'),
+      endsAt: new Date('2026-11-27T12:00:00+07:00'),
+      assignedStaffId: null,
+      status: BookingScheduleStatus.Confirmed,
+    };
+
+    // Studio owner lowered maxConcurrentSessions = 1 while 2 existing bookings overlap at 11:00-12:00.
+    // Assigning s1 (free) to sch1 must succeed despite remainingSlots = 0 for studio cap.
+    const { service: assignFirst } = buildFixture({
+      activeStaff: [s1, s2],
+      providerSettings: { maxConcurrentSessions: 1 },
+      singleBooking: {
+        _id: booking1Id,
+        bookingCode: 'BK801',
+        customerId: new Types.ObjectId(),
+        status: BookingStatus.Confirmed,
+      },
+      singleSchedule: sch1Base,
+      v2Schedules: [sch1Base, sch2Base],
+    });
+    const firstAssigned = await assignFirst.assignStaffToSchedule(
+      booking1Id.toString(),
+      sch1Id.toString(),
+      s1._id.toString(),
+      ownerUserId.toString(),
+      ['PROVIDER'],
+    );
+    expect(firstAssigned.assignedStaffId?.toString()).toBe(s1._id.toString());
+
+    // Now sch1 has s1; assigning free s2 to existing sch2 must also succeed under maxConcurrentSessions = 1.
+    const sch1WithS1 = { ...sch1Base, assignedStaffId: s1._id };
+    const { service: assignSecond } = buildFixture({
+      activeStaff: [s1, s2],
+      providerSettings: { maxConcurrentSessions: 1 },
+      singleBooking: {
+        _id: booking2Id,
+        bookingCode: 'BK802',
+        customerId: new Types.ObjectId(),
+        status: BookingStatus.Confirmed,
+      },
+      singleSchedule: sch2Base,
+      v2Schedules: [sch1WithS1, sch2Base],
+    });
+    const secondAssigned = await assignSecond.assignStaffToSchedule(
+      booking2Id.toString(),
+      sch2Id.toString(),
+      s2._id.toString(),
+      ownerUserId.toString(),
+      ['PROVIDER'],
+    );
+    expect(secondAssigned.assignedStaffId?.toString()).toBe(s2._id.toString());
+
+    // Assigning busy s1 to sch2 must STILL be rejected with ConflictException.
+    await expect(
+      assignSecond.assignStaffToSchedule(
+        booking2Id.toString(),
+        sch2Id.toString(),
+        s1._id.toString(),
+        ownerUserId.toString(),
+        ['PROVIDER'],
+      ),
+    ).rejects.toThrow(ConflictException);
+
+    // A NEW 3rd booking at 11:00-12:00 must STILL be blocked by maxConcurrentSessions = 1.
+    const newBookingEval = await assignSecond.evaluateSessions(
+      providerId,
+      [{ clientId: 'new3', dateKey: '2026-11-27', startMin: 660, endMin: 720 }],
+      { deferStaffAssignment: true },
+    );
+    expect(newBookingEval.valid).toBe(false);
+    expect(newBookingEval.errors[0]?.code).toBe('SLOT_UNAVAILABLE');
+  });
+
+  it('allows reassigning free active staff on an existing booking even when maxDailySessions is lower than current bookings', async () => {
+    const booking1Id = new Types.ObjectId();
+    const sch1Id = new Types.ObjectId();
+    const s1 = { _id: new Types.ObjectId(), name: 'Tuấn', phone: '0901', status: ProviderStaffStatus.Active, sortOrder: 0, blockedSlots: [] };
+    const s2 = { _id: new Types.ObjectId(), name: 'Nam', phone: '0902', status: ProviderStaffStatus.Active, sortOrder: 1, blockedSlots: [] };
+    const s3 = { _id: new Types.ObjectId(), name: 'Lan', phone: '0903', status: ProviderStaffStatus.Active, sortOrder: 2, blockedSlots: [] };
+
+    const sch1 = {
+      _id: sch1Id,
+      bookingId: booking1Id,
+      bookingItemId: new Types.ObjectId(),
+      providerId,
+      scheduleType: BookingScheduleType.Photoshoot,
+      providerLocalDate: '2026-11-27',
+      startsAt: new Date('2026-11-27T08:00:00+07:00'),
+      endsAt: new Date('2026-11-27T09:00:00+07:00'),
+      assignedStaffId: s1._id,
+      status: BookingScheduleStatus.Confirmed,
+    };
+
+    const { service } = buildFixture({
+      activeStaff: [s1, s2, s3],
+      providerSettings: { maxConcurrentSessions: null, maxDailySessions: 2 },
+      singleBooking: {
+        _id: booking1Id,
+        bookingCode: 'BK901',
+        customerId: new Types.ObjectId(),
+        status: BookingStatus.Confirmed,
+      },
+      singleSchedule: sch1,
+      v2Schedules: [
+        sch1,
+        {
+          _id: new Types.ObjectId(),
+          bookingId: new Types.ObjectId(),
+          bookingItemId: new Types.ObjectId(),
+          providerLocalDate: '2026-11-27',
+          startsAt: new Date('2026-11-27T11:00:00+07:00'),
+          endsAt: new Date('2026-11-27T12:00:00+07:00'),
+          assignedStaffId: s2._id,
+        },
+        {
+          _id: new Types.ObjectId(),
+          bookingId: new Types.ObjectId(),
+          bookingItemId: new Types.ObjectId(),
+          providerLocalDate: '2026-11-27',
+          startsAt: new Date('2026-11-27T14:00:00+07:00'),
+          endsAt: new Date('2026-11-27T15:00:00+07:00'),
+          assignedStaffId: s1._id,
+        },
+      ],
+    });
+
+    const reassigned = await service.assignStaffToSchedule(
+      booking1Id.toString(),
+      sch1Id.toString(),
+      s3._id.toString(),
+      ownerUserId.toString(),
+      ['PROVIDER'],
+    );
+    expect(reassigned.assignedStaffId?.toString()).toBe(s3._id.toString());
+
+    const newEval = await service.evaluateSessions(
+      providerId,
+      [{ clientId: 'new4', dateKey: '2026-11-27', startMin: 960, endMin: 1020 }],
+      { deferStaffAssignment: true },
+    );
+    expect(newEval.valid).toBe(false);
+    expect(newEval.errors[0]?.message).toMatch(/đã nhận đủ giới hạn 2 ca chụp/i);
+  });
+
+  it('counts multi-session bookings accurately by total sessions on day against maxDailySessions', async () => {
+    const multiBookingId = new Types.ObjectId();
+    const s1 = { _id: new Types.ObjectId(), name: 'Tuấn', phone: '0901', status: ProviderStaffStatus.Active, sortOrder: 0, blockedSlots: [] };
+    const s2 = { _id: new Types.ObjectId(), name: 'Nam', phone: '0902', status: ProviderStaffStatus.Active, sortOrder: 1, blockedSlots: [] };
+
+    // 1 MULTI booking already occupies 2 distinct sessions on 2026-11-27 (08:00-09:00 and 15:00-16:00).
+    // With maxDailySessions = 3, remaining quota is strictly 1 session (not 2).
+    const { service } = buildFixture({
+      activeStaff: [s1, s2],
+      providerSettings: { maxConcurrentSessions: null, maxDailySessions: 3 },
+      v2Schedules: [
+        {
+          _id: new Types.ObjectId(),
+          bookingId: multiBookingId,
+          bookingItemId: new Types.ObjectId(),
+          providerLocalDate: '2026-11-27',
+          startsAt: new Date('2026-11-27T08:00:00+07:00'),
+          endsAt: new Date('2026-11-27T09:00:00+07:00'),
+          assignedStaffId: s1._id,
+        },
+        {
+          _id: new Types.ObjectId(),
+          bookingId: multiBookingId,
+          bookingItemId: new Types.ObjectId(),
+          providerLocalDate: '2026-11-27',
+          startsAt: new Date('2026-11-27T15:00:00+07:00'),
+          endsAt: new Date('2026-11-27T16:00:00+07:00'),
+          assignedStaffId: s1._id,
+        },
+      ],
+    });
+
+    const summary = await service.computeBusyScheduleSummary(providerId);
+    expect(summary.dailyAvailability).toEqual([
+      { date: '2026-11-27', used: 2, limit: 3, remaining: 1 },
+    ]);
+    expect(summary.bookedSlots).toHaveLength(0);
+
+    // Requesting 2 new sessions on the same day (2 + 2 = 4 > 3) must fail cleanly.
+    const twoMore = await service.evaluateSessions(
+      providerId,
+      [
+        { clientId: 'm1', dateKey: '2026-11-27', startMin: 600, endMin: 660 },
+        { clientId: 'm2', dateKey: '2026-11-27', startMin: 780, endMin: 840 },
+      ],
+      { deferStaffAssignment: true },
+    );
+    expect(twoMore.valid).toBe(false);
+    expect(twoMore.errors[0]?.message).toMatch(/chỉ còn nhận được thêm tối đa 1 ca chụp/i);
+
+    // Requesting 1 new session on the same day (2 + 1 = 3 <= 3) must succeed.
+    const oneMore = await service.evaluateSessions(
+      providerId,
+      [{ clientId: 's1', dateKey: '2026-11-27', startMin: 600, endMin: 660 }],
+      { deferStaffAssignment: true },
+    );
+    expect(oneMore.valid).toBe(true);
+  });
 });

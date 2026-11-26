@@ -48,7 +48,7 @@ interface OrderDetailDrawerProps {
   onClose: () => void;
   onSelectOrder: (order: Order) => void;
   resolveRescheduleRequest: (order: Order, item: any, approved: boolean) => Promise<void>;
-  changeOrderStatus: (_id: string, apiStatus: string) => Promise<void>;
+  changeOrderStatus: (_id: string, apiStatus: string) => Promise<boolean | void>;
   onOpenIncidentReport: (order: Order) => void;
   onOpenChat: () => void;
   onOpenFulfillmentModal?: (bookingId: string) => void;
@@ -554,8 +554,18 @@ export function OrderDetailDrawer({
     if (isConfirming) return;
     try {
       setIsConfirming(true);
-      await changeOrderStatus(order._id, 'CONFIRMED');
+      const result = await changeOrderStatus(order._id, 'CONFIRMED');
+      if (result === false) return;
       if (onSelectOrder) {
+        try {
+          const fresh = await httpClient.get<any>(`/api/bookings/${order._id}`);
+          if (fresh) {
+            onSelectOrder(fresh);
+            return;
+          }
+        } catch {
+          // fallback optimistic patch if refetch fails
+        }
         onSelectOrder({
           ...order,
           rawStatus: 'CONFIRMED',
@@ -3196,106 +3206,362 @@ export function OrderDetailDrawer({
           {/* ============================================================
               TAB 2: THÔNG TIN CHI TIẾT (DETAILS)
               ============================================================ */}
-          {activeTab === 'details' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div className="p-card-box">
-                <div className="p-card-header">
-                  <h3 className="p-card-title">
-                    <Shirt size={16} color="#881337" />
-                    <span>Quy cách &amp; Thông số trang phục Áo dài</span>
-                  </h3>
-                </div>
-                <div className="p-info-grid-2">
-                  <div className="p-info-item">
-                    <span className="info-label">Mẫu trang phục</span>
-                    <span className="info-val">Áo dài Nhật Bình thêu tay cao cấp</span>
-                  </div>
-                  <div className="p-info-item">
-                    <span className="info-label">Kích cỡ &amp; Thông số</span>
-                    <span className="info-val">Size M (Ngực 86cm - Eo 68cm - Dài áo 135cm)</span>
-                  </div>
-                  <div className="p-info-item">
-                    <span className="info-label">Chất liệu vải</span>
-                    <span className="info-val">Gấm hoàng cung dệt chỉ vàng, lụa tơ tằm mềm mại</span>
-                  </div>
-                  <div className="p-info-item">
-                    <span className="info-label">Phụ kiện đi kèm</span>
-                    <span className="info-val">Mấn thêu đính ngọc, Quạt gấm Huế, Hài thêu truyền thống</span>
-                  </div>
-                  <div className="p-info-item">
-                    <span className="info-label">Quy chuẩn vệ sinh</span>
-                    <span className="info-val">Hấp sấy tiệt trùng công nghệ ozone trước khi giao</span>
-                  </div>
-                  <div className="p-info-item">
-                    <span className="info-label">Tình trạng trang phục</span>
-                    <span className="info-val" style={{ color: '#15803D', fontWeight: 700 }}>
-                      ✓ Mới 98%, không sờn rách
-                    </span>
-                  </div>
-                </div>
-              </div>
+          {activeTab === 'details' && (() => {
+            const hasRentalSection = !isPhoto && (isAoDai || isCombo || rentalItems.length > 0);
+            const hasPhotoSection = isPhoto || isCombo || Boolean(photoItem || photoSchedule);
+            const assignedSnap = photoSchedule?.assignedStaffSnapshot || null;
+            const pkgObj =
+              photoItem?.photographyPackageId && typeof photoItem.photographyPackageId === 'object'
+                ? photoItem.photographyPackageId
+                : null;
+            const pkgSnap = photoItem?.packageSnapshot || null;
+            const activePhotoSchedules = (order.schedules || [])
+              .filter(
+                (s: any) =>
+                  s.scheduleType === 'PHOTOSHOOT' &&
+                  s.status !== 'CANCELLED' &&
+                  s.status !== 'EXPIRED',
+              )
+              .sort(
+                (a: any, b: any) =>
+                  new Date(a?.startsAt || a?.scheduledDate || 0).getTime() -
+                  new Date(b?.startsAt || b?.scheduledDate || 0).getTime(),
+              );
+            const fmtDurationMins = (mins: number) =>
+              mins >= 60
+                ? `${Math.floor(mins / 60)} giờ${mins % 60 ? ` ${mins % 60} phút` : ''}`
+                : `${mins} phút`;
+            const baseDurationMins =
+              photoSchedule?.includedDurationMinutes ??
+              pkgSnap?.includedDurationMinutes ??
+              (pkgObj?.includedDurationMinutes ?? (pkgObj?.durationHours ? Math.round(pkgObj.durationHours * 60) : null));
+            const actualScheduleMins =
+              photoSchedule?.startsAt && photoSchedule?.endsAt
+                ? Math.max(
+                    0,
+                    Math.round(
+                      (new Date(photoSchedule.endsAt).getTime() - new Date(photoSchedule.startsAt).getTime()) / 60000,
+                    ),
+                  )
+                : 0;
+            const totalOvertimeMins = activePhotoSchedules.reduce((sum: number, sch: any) => {
+              const explicit = Number(sch?.overtimeMinutes ?? 0);
+              if (explicit > 0) return sum + explicit;
+              if (sch?.startsAt && sch?.endsAt && baseDurationMins) {
+                const diff = Math.round(
+                  (new Date(sch.endsAt).getTime() - new Date(sch.startsAt).getTime()) / 60000,
+                );
+                return sum + Math.max(0, diff - baseDurationMins);
+              }
+              return sum;
+            }, 0);
+            const totalDurationMins =
+              activePhotoSchedules.length > 1
+                ? activePhotoSchedules.reduce((sum: number, sch: any) => {
+                    if (sch?.startsAt && sch?.endsAt) {
+                      return (
+                        sum +
+                        Math.max(
+                          0,
+                          Math.round(
+                            (new Date(sch.endsAt).getTime() - new Date(sch.startsAt).getTime()) / 60000,
+                          ),
+                        )
+                      );
+                    }
+                    return sum + Number(baseDurationMins || 0);
+                  }, 0)
+                : Math.max(actualScheduleMins, (baseDurationMins ?? 0) + totalOvertimeMins);
+            const durationText = totalDurationMins
+              ? totalOvertimeMins > 0 && baseDurationMins && activePhotoSchedules.length <= 1
+                ? `${fmtDurationMins(totalDurationMins)} (Gói ${fmtDurationMins(baseDurationMins)} + ${fmtDurationMins(totalOvertimeMins)} tăng giờ)`
+                : activePhotoSchedules.length > 1
+                  ? `${activePhotoSchedules.length} buổi · Tổng ${fmtDurationMins(totalDurationMins)}${totalOvertimeMins > 0 ? ` (+${fmtDurationMins(totalOvertimeMins)} tăng giờ)` : ''}`
+                  : fmtDurationMins(totalDurationMins)
+              : 'Theo gói đã đặt';
+            const editedPhotosCount = pkgObj?.editedPhotosCount;
+            const deliveryDays = pkgObj?.deliveryDays;
+            const formatScheduleSlot = () => {
+              if (photoSchedule?.timeSlot) return photoSchedule.timeSlot;
+              if (photoItem?.shootTimeSlot) return photoItem.shootTimeSlot;
+              if (photoSchedule?.startsAt && photoSchedule?.endsAt) {
+                const s = new Date(photoSchedule.startsAt);
+                const e = new Date(photoSchedule.endsAt);
+                if (!Number.isNaN(s.getTime()) && !Number.isNaN(e.getTime())) {
+                  const fmt = (d: Date) =>
+                    d.toLocaleTimeString('vi-VN', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: false,
+                      timeZone: 'Asia/Ho_Chi_Minh',
+                    });
+                  return `${fmt(s)} – ${fmt(e)}`;
+                }
+              }
+              return 'Theo lịch hẹn';
+            };
+            const formattedShootDate = shootDate
+              ? new Date(shootDate).toLocaleDateString('vi-VN', {
+                  weekday: 'short',
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                  timeZone: 'Asia/Ho_Chi_Minh',
+                })
+              : 'Chưa cập nhật';
+            const shootLocationText =
+              photoSchedule?.locationAddress ||
+              photoSchedule?.locationSnapshot?.address ||
+              (typeof photoItem?.shootLocation === 'string'
+                ? photoItem.shootLocation
+                : photoItem?.shootLocation?.address || photoItem?.shootLocation?.name) ||
+              photoItem?.shootLocationSnapshot?.address ||
+              order.pickupLocation ||
+              'Theo thỏa thuận';
+            const conceptText =
+              photoItem?.shootConcept ||
+              pkgObj?.concept ||
+              pkgSnap?.name ||
+              pkgObj?.name ||
+              order.serviceName ||
+              order.productName ||
+              'Theo yêu cầu buổi chụp';
+            const pricing = (order as any).pricingSummary || {};
+            const grandTotalVal = Number(pricing.grandTotal ?? (order as any).totalAmount ?? 0);
+            const depositVal = Number(pricing.depositTotal ?? (order as any).depositAmount ?? 0);
+            const totalPaidVal = Number((order as any).paymentSummary?.totalPaid ?? 0);
+            const fmtMoney = (n: number) => `${Math.max(0, Math.round(n)).toLocaleString('vi-VN')}đ`;
 
-              <div className="p-card-box">
-                <div className="p-card-header">
-                  <h3 className="p-card-title">
-                    <Camera size={16} color="#881337" />
-                    <span>Thông số kỹ thuật buổi chụp ảnh</span>
-                  </h3>
-                </div>
-                <div className="p-info-grid-2">
-                  <div className="p-info-item">
-                    <span className="info-label">Concept nghệ thuật</span>
-                    <span className="info-val">Nét Đẹp Cố Đô Huế Xưa - Phong cách hoàng cung trang nhã</span>
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {hasRentalSection && (
+                  <div className="p-card-box">
+                    <div className="p-card-header">
+                      <h3 className="p-card-title">
+                        <Shirt size={16} color="#881337" />
+                        <span>Thông tin trang phục Áo dài thuê ({rentalItems.length || 1} mục)</span>
+                      </h3>
+                    </div>
+                    {rentalItems.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {rentalItems.map((it: any, idx: number) => {
+                          const prod = it.productId && typeof it.productId === 'object' ? it.productId : null;
+                          const prodName = it.productName || prod?.name || it.name || `Trang phục #${idx + 1}`;
+                          const sizeLabel = it.size || it.selectedSize || 'Theo đơn đặt';
+                          const colorLabel = it.color || it.selectedColor || 'Theo mẫu';
+                          const qty = Number(it.quantity ?? 1);
+                          const itemDeposit = Number(it.depositAmount ?? 0);
+                          const itemFrom = getRentalFrom(it);
+                          const itemTo = getRentalTo(it);
+                          const rangeStr =
+                            itemFrom && itemTo
+                              ? `${new Date(itemFrom).toLocaleDateString('vi-VN')} – ${new Date(itemTo).toLocaleDateString('vi-VN')}`
+                              : itemFrom
+                                ? new Date(itemFrom).toLocaleDateString('vi-VN')
+                                : 'Theo lịch đơn';
+                          return (
+                            <div
+                              key={it._id || idx}
+                              style={{
+                                border: rentalItems.length > 1 ? '1px solid #F1E8DF' : 'none',
+                                borderRadius: rentalItems.length > 1 ? '10px' : '0',
+                                padding: rentalItems.length > 1 ? '12px' : '0',
+                                background: rentalItems.length > 1 ? '#FFFDFB' : 'transparent',
+                              }}
+                            >
+                              <div className="p-info-grid-2">
+                                <div className="p-info-item">
+                                  <span className="info-label">Mẫu trang phục</span>
+                                  <span className="info-val">{prodName}</span>
+                                </div>
+                                <div className="p-info-item">
+                                  <span className="info-label">Kích cỡ &amp; Màu sắc</span>
+                                  <span className="info-val">
+                                    Size {sizeLabel} · Màu {colorLabel} · SL: {qty}
+                                  </span>
+                                </div>
+                                <div className="p-info-item">
+                                  <span className="info-label">Thời gian thuê</span>
+                                  <span className="info-val">{rangeStr}</span>
+                                </div>
+                                <div className="p-info-item">
+                                  <span className="info-label">Tiền cọc trang phục</span>
+                                  <span className="info-val" style={{ color: '#881337', fontWeight: 700 }}>
+                                    {itemDeposit > 0 ? fmtMoney(itemDeposit * qty) : 'Không yêu cầu cọc riêng'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-info-grid-2">
+                        <div className="p-info-item">
+                          <span className="info-label">Dịch vụ thuê</span>
+                          <span className="info-val">{order.serviceName || order.productName}</span>
+                        </div>
+                        <div className="p-info-item">
+                          <span className="info-label">Thời gian thuê</span>
+                          <span className="info-val">
+                            {rentalFrom ? new Date(rentalFrom).toLocaleDateString('vi-VN') : 'Theo đơn hàng'}
+                            {rentalTo ? ` – ${new Date(rentalTo).toLocaleDateString('vi-VN')}` : ''}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="p-info-item">
-                    <span className="info-label">Nhiếp ảnh gia chính</span>
-                    <span className="info-val">Trần Quang Huy (5 năm kinh nghiệm chụp văn hóa Huế)</span>
-                  </div>
-                  <div className="p-info-item">
-                    <span className="info-label">Thiết bị tác nghiệp</span>
-                    <span className="info-val">Sony Alpha A7IV, Lens Sony GM 85mm f/1.4, Đèn hắt sáng chuyên dụng</span>
-                  </div>
-                  <div className="p-info-item">
-                    <span className="info-label">Định dạng bàn giao</span>
-                    <span className="info-val">File JPG gốc chuẩn màu 300 DPI + 20 file chỉnh sửa theo tone màu hoàng gia</span>
-                  </div>
-                  <div className="p-info-item">
-                    <span className="info-label">Kênh bàn giao</span>
-                    <span className="info-val">Google Drive riêng tư được lưu trữ bảo đảm 30 ngày</span>
-                  </div>
-                  <div className="p-info-item">
-                    <span className="info-label">Hỗ trợ tạo dáng</span>
-                    <span className="info-val">Nhiếp ảnh gia hướng dẫn tạo dáng chuẩn phong thái quý tộc cung đình</span>
-                  </div>
-                </div>
-              </div>
+                )}
 
-              <div className="p-card-box">
-                <div className="p-card-header">
-                  <h3 className="p-card-title">
-                    <ShieldCheck size={16} color="#881337" />
-                    <span>Chính sách bảo chứng TàGo Escrow</span>
-                  </h3>
-                </div>
-                <div style={{ fontSize: '12.5px', color: '#475569', lineHeight: 1.6 }}>
-                  • <strong>Bảo vệ tiền cọc:</strong> Khoản tiền cọc dịch vụ 1.400.000đ và cọc trang phục 1.000.000đ được khóa an toàn trên hợp đồng thông minh ký quỹ TàGo Escrow.<br />
-                  • <strong>Giải ngân doanh thu:</strong> Doanh thu được tự động chuyển về ví đối tác của bạn ngay sau khi khách hàng xác nhận nhận đủ ảnh và hoàn trả áo dài nguyên vẹn.<br />
-                  • <strong>Bảo hiểm sự cố:</strong> Trường hợp phát sinh hư hỏng, hệ thống trọng tài TàGo sẽ thụ lý bằng chứng hình ảnh trong vòng 24 giờ.
-                </div>
-              </div>
+                {hasPhotoSection && (
+                  <div className="p-card-box">
+                    <div className="p-card-header">
+                      <h3 className="p-card-title">
+                        <Camera size={16} color="#881337" />
+                        <span>Thông tin chi tiết buổi chụp ảnh</span>
+                      </h3>
+                    </div>
+                    <div className="p-info-grid-2">
+                      <div className="p-info-item">
+                        <span className="info-label">Gói chụp / Concept</span>
+                        <span className="info-val">{conceptText}</span>
+                      </div>
+                      <div className="p-info-item">
+                        <span className="info-label">Thợ chụp phụ trách</span>
+                        {assignedSnap?.name ? (
+                          <span className="info-val" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <strong style={{ color: '#047857' }}>
+                              ✓ {assignedSnap.name}
+                              {assignedSnap.specialty ? ` · ${assignedSnap.specialty}` : ''}
+                            </strong>
+                            {assignedSnap.phone && (
+                              <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>
+                                SĐT: {assignedSnap.phone}
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span
+                            className="info-val"
+                            style={{
+                              color: '#B45309',
+                              fontWeight: 700,
+                              background: '#FFFBEB',
+                              border: '1px solid #FDE68A',
+                              padding: '4px 10px',
+                              borderRadius: '8px',
+                              display: 'inline-block',
+                              width: 'fit-content',
+                            }}
+                          >
+                            Chưa phân công thợ (chọn khi duyệt lịch)
+                          </span>
+                        )}
+                      </div>
+                      <div className="p-info-item">
+                        <span className="info-label">
+                          {activePhotoSchedules.length > 1
+                            ? `Lịch chụp (${activePhotoSchedules.length} buổi)`
+                            : 'Ngày & Khung giờ chụp'}
+                        </span>
+                        {activePhotoSchedules.length > 1 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            {activePhotoSchedules.map((sch: any, sIdx: number) => {
+                              const sDate = sch?.startsAt || sch?.scheduledDate || sch?.providerLocalDate;
+                              const dateLabel = sDate
+                                ? new Date(sDate).toLocaleDateString('vi-VN', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric',
+                                    timeZone: 'Asia/Ho_Chi_Minh',
+                                  })
+                                : 'Theo lịch';
+                              let rangeLabel = sch?.timeSlot || '';
+                              if (!rangeLabel && sch?.startsAt && sch?.endsAt) {
+                                const fmtT = (d: Date) =>
+                                  d.toLocaleTimeString('vi-VN', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    hour12: false,
+                                    timeZone: 'Asia/Ho_Chi_Minh',
+                                  });
+                                rangeLabel = `${fmtT(new Date(sch.startsAt))} – ${fmtT(new Date(sch.endsAt))}`;
+                              }
+                              return (
+                                <span key={sch._id || sIdx} className="info-val" style={{ fontSize: '12.5px' }}>
+                                  Buổi {sIdx + 1}: {dateLabel} · {rangeLabel || 'Theo lịch hẹn'}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <span className="info-val">
+                            {formattedShootDate} · {formatScheduleSlot()}
+                          </span>
+                        )}
+                      </div>
+                      <div className="p-info-item">
+                        <span className="info-label">Địa điểm chụp</span>
+                        <span className="info-val">{shootLocationText}</span>
+                      </div>
+                      <div className="p-info-item">
+                        <span className="info-label">Thời lượng &amp; Quy cách gói</span>
+                        <span className="info-val">
+                          {durationText}
+                          {editedPhotosCount ? ` · ${editedPhotosCount} ảnh chỉnh sửa` : ''}
+                          {deliveryDays ? ` · Trả ảnh trong ${deliveryDays} ngày` : ''}
+                        </span>
+                      </div>
+                      <div className="p-info-item">
+                        <span className="info-label">Yêu cầu riêng của khách</span>
+                        <span className="info-val">
+                          {photoItem?.customRequests?.trim() || 'Không có yêu cầu bổ sung'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
-              {/* Hợp đồng điện tử (Phạm vi đối tác) */}
-              <div style={{ marginTop: '16px' }}>
-                <BookingContractsSection
-                  bookingId={order._id}
-                  bookingStatus={order.rawStatus || order.status}
-                  viewerRole="provider"
-                  title="Hợp đồng điện tử (Phạm vi đối tác)"
-                  hideWhenEmpty={true}
-                />
+                <div className="p-card-box">
+                  <div className="p-card-header">
+                    <h3 className="p-card-title">
+                      <ShieldCheck size={16} color="#881337" />
+                      <span>Chính sách bảo chứng TàGo Escrow</span>
+                    </h3>
+                  </div>
+                  <div style={{ fontSize: '12.5px', color: '#475569', lineHeight: 1.65 }}>
+                    • <strong>Khoản ký quỹ đơn hàng:</strong>{' '}
+                    {totalPaidVal > 0
+                      ? `Khách hàng đã thanh toán ${fmtMoney(totalPaidVal)}`
+                      : grandTotalVal > 0
+                        ? `Tổng giá trị đơn hàng ${fmtMoney(grandTotalVal)}`
+                        : 'Khoản thanh toán đơn hàng'}{' '}
+                    {depositVal > 0 && hasRentalSection
+                      ? `(bao gồm ${fmtMoney(depositVal)} tiền cọc bảo đảm)`
+                      : ''} được khóa an toàn trên hệ thống ký quỹ TàGo Escrow.<br />
+                    • <strong>Giải ngân doanh thu:</strong>{' '}
+                    {isPhoto
+                      ? 'Doanh thu được tự động chuyển về ví Studio ngay sau khi khách hàng xác nhận hài lòng với bộ ảnh bàn giao (hoặc tự động nghiệm thu sau 48 giờ).'
+                      : isCombo
+                        ? 'Doanh thu được giải ngân về ví đối tác sau khi hoàn tất cả bàn giao ảnh chụp và nghiệm thu hoàn trả trang phục Áo dài.'
+                        : 'Doanh thu và quyết toán tiền cọc được tự động xử lý sau khi xác nhận hoàn trả trang phục nguyên vẹn.'}<br />
+                    • <strong>Bảo hiểm sự cố:</strong> Trường hợp phát sinh khiếu nại hoặc hư hỏng, hệ thống TàGo sẽ đóng băng quyết toán và hỗ trợ xử lý dựa trên bằng chứng hình ảnh.
+                  </div>
+                </div>
+
+                {/* Hợp đồng điện tử (Phạm vi đối tác) */}
+                <div style={{ marginTop: '16px' }}>
+                  <BookingContractsSection
+                    bookingId={order._id}
+                    bookingStatus={order.rawStatus || order.status}
+                    viewerRole="provider"
+                    title="Hợp đồng điện tử (Phạm vi đối tác)"
+                    hideWhenEmpty={true}
+                  />
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ============================================================
               TAB 3: LỊCH TRÌNH & CHECK-IN (SCHEDULE)
@@ -3438,6 +3704,33 @@ export function OrderDetailDrawer({
                         order.items.map((item: any, idx: number) => {
                           const itemName = item.name || item.productId?.name || item.photographyPackageId?.name || (item.itemType === 'PRODUCT' ? 'Áo dài' : 'Gói chụp ảnh');
                           const linePrice = Number(item.subtotal || (item.unitPrice || item.price || 0) * (item.quantity || 1));
+                          const breakdown: Array<{ type?: string; label?: string; amount?: number }> =
+                            item.itemType === 'PHOTOGRAPHY_PACKAGE' && Array.isArray(item.priceBreakdown)
+                              ? item.priceBreakdown.filter((b: any) => Number(b?.amount || 0) > 0)
+                              : [];
+                          const hasMultiLineBreakdown =
+                            breakdown.length > 1 ||
+                            breakdown.some((b) => b.type === 'OVERTIME' || b.type === 'SURCHARGE');
+
+                          if (hasMultiLineBreakdown) {
+                            return (
+                              <div key={item._id || idx} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                {breakdown.map((b, bIdx) => (
+                                  <div
+                                    key={bIdx}
+                                    className="p-payment-row"
+                                    style={b.type === 'OVERTIME' ? { color: '#881337' } : undefined}
+                                  >
+                                    <span>{b.label || itemName}</span>
+                                    <strong>
+                                      {b.type === 'OVERTIME' ? '+' : ''}
+                                      {Number(b.amount || 0).toLocaleString('vi-VN')}đ
+                                    </strong>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          }
                           return (
                             <div key={item._id || idx} className="p-payment-row">
                               <span>{itemName} (x{item.quantity || 1})</span>

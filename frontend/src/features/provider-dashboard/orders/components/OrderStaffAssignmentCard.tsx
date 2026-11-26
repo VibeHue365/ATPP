@@ -64,9 +64,16 @@ export const OrderStaffAssignmentCard: React.FC<
 
   if (!schedule?._id) return null;
 
-  const isTerminal = ['CANCELLED', 'COMPLETED', 'REFUNDED'].includes(
-    (bookingStatus || '').toUpperCase(),
-  );
+  const isTerminal = [
+    'IN_PROGRESS',
+    'AWAITING_REVIEW',
+    'COMBO_PHOTOS_APPROVED',
+    'RETURNED',
+    'CANCELLED',
+    'COMPLETED',
+    'REFUNDED',
+    'PARTIALLY_REFUNDED',
+  ].includes((bookingStatus || '').toUpperCase());
   const assignedSnap = schedule.assignedStaffSnapshot;
 
   const openPicker = async () => {

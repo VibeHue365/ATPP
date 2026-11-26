@@ -22,7 +22,7 @@ interface OrderActionDropdownProps {
   setSelectedBookingId: (id: string) => void;
   setIsDetailModalOpen: (open: boolean) => void;
   resolveRescheduleRequest: (order: Order, item: any, approved: boolean) => Promise<void>;
-  changeOrderStatus: (_id: string, apiStatus: string) => Promise<void>;
+  changeOrderStatus: (_id: string, apiStatus: string) => Promise<boolean | void>;
   setReportingOrder: (order: Order | null) => void;
   setSelectedItemId: (id: string) => void;
   setIncidentDesc: (desc: string) => void;

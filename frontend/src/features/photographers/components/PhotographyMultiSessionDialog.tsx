@@ -9,8 +9,12 @@ interface PhotographyMultiSessionDialogProps {
   sessions: PhotographySessionDraft[];
   minDate: string;
   includedDurationMinutes: number;
+  minimumSessionMinutes?: number;
   overtimeIncrementMinutes: number;
   maxOvertimeMinutes: number;
+  pricingUnit?: 'PER_SESSION' | 'PER_DAY' | 'PER_BOOKING';
+  includedDayCount?: number | null;
+  includedSessionCount?: number | null;
   errors: PhotographyQuoteError[];
   onAdd: () => void;
   onGenerateRange: (from: string, to: string) => void;
@@ -30,8 +34,12 @@ export const PhotographyMultiSessionDialog: React.FC<PhotographyMultiSessionDial
   sessions,
   minDate,
   includedDurationMinutes,
+  minimumSessionMinutes,
   overtimeIncrementMinutes,
   maxOvertimeMinutes,
+  pricingUnit = 'PER_SESSION',
+  includedDayCount,
+  includedSessionCount,
   errors,
   onAdd,
   onGenerateRange,
@@ -63,6 +71,7 @@ export const PhotographyMultiSessionDialog: React.FC<PhotographyMultiSessionDial
   const firstDate = sessionDates[0];
   const lastDate = sessionDates[sessionDates.length - 1];
   const hasBlockingErrors = errors.length > 0;
+  const generalErrors = errors.filter((error) => !error.clientId);
   const canConfirm = sessions.length > 0 && completedSessions === sessions.length && !hasBlockingErrors;
 
   return createPortal(
@@ -101,10 +110,35 @@ export const PhotographyMultiSessionDialog: React.FC<PhotographyMultiSessionDial
             </div>
           </div>
 
+          <div className="ppd-multi-pricing-note" role="note">
+            {pricingUnit === 'PER_DAY' ? (
+              <span>
+                <strong>Gói tính theo ngày:</strong> Các buổi trong cùng 1 ngày được gộp chung vào 1 giá ngày (chỉ tính tăng giờ nếu tổng thời lượng trong ngày vượt gói).
+              </span>
+            ) : pricingUnit === 'PER_BOOKING' ? (
+              <span>
+                <strong>Gói trọn đơn:</strong> Bao gồm tối đa{' '}
+                {includedDayCount ? `${includedDayCount} ngày` : 'số ngày theo gói'} và{' '}
+                {includedSessionCount ? `${includedSessionCount} buổi` : 'số buổi theo gói'}. Buổi thêm hoặc thời lượng vượt sẽ tính phụ thu tự động.
+              </span>
+            ) : (
+              <span>
+                <strong>Gói tính theo buổi:</strong> Mỗi buổi chụp (ví dụ sáng + chiều hoặc nhiều ngày) được tính như 1 gói cơ bản, cộng phụ thu tăng giờ nếu buổi đó vượt thời lượng gói.
+              </span>
+            )}
+          </div>
+
+          {generalErrors.map((err, idx) => (
+            <p key={`general-err-${idx}`} className="ppd-error" style={{ marginBottom: 12 }}>
+              {err.message}
+            </p>
+          ))}
+
           <PhotographyMultiSessionEditor
             sessions={sessions}
             minDate={minDate}
             includedDurationMinutes={includedDurationMinutes}
+            minimumSessionMinutes={minimumSessionMinutes}
             overtimeIncrementMinutes={overtimeIncrementMinutes}
             maxOvertimeMinutes={maxOvertimeMinutes}
             errors={errors}

@@ -281,7 +281,6 @@ export class PhotographyHoldService {
     const staffAssignments = await this.assertCapacityAndAssignStaff(
       photographyPackage.providerId,
       sessions,
-      dto.preferredStaffId,
       session,
     );
 
@@ -1261,7 +1260,6 @@ export class PhotographyHoldService {
     const staffAssignments = await this.assertCapacityAndAssignStaff(
       photographyPackage.providerId,
       sessions,
-      dto.preferredStaffId,
       session,
     );
 
@@ -1484,7 +1482,6 @@ export class PhotographyHoldService {
   private async assertCapacityAndAssignStaff(
     providerId: Types.ObjectId,
     requested: HoldSession[],
-    preferredStaffId: string | undefined,
     session: ClientSession,
   ): Promise<Map<string, StaffAssignmentDecision>> {
     if (!this.staffAvailabilityService) {
@@ -1509,7 +1506,8 @@ export class PhotographyHoldService {
         };
       }),
       {
-        preferredStaffId: preferredStaffId ?? null,
+        preferredStaffId: null,
+        deferStaffAssignment: true,
         session,
       },
     );

@@ -48,8 +48,10 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
   const [summary, setSummary] = useState<ProviderStaffSummary | null>(null);
   const [items, setItems] = useState<ProviderStaffItem[]>([]);
 
-  // Capacity state
+  // Capacity state (2A: Auto = active staff count, or Manual ceiling)
+  const [capacityMode, setCapacityMode] = useState<'AUTO' | 'MANUAL'>('AUTO');
   const [maxConcurrentInput, setMaxConcurrentInput] = useState<string>('1');
+  const [dailyLimitEnabled, setDailyLimitEnabled] = useState<boolean>(false);
   const [maxDailyInput, setMaxDailyInput] = useState<string>('');
   const [savingCapacity, setSavingCapacity] = useState(false);
 
@@ -102,13 +104,19 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
       const res = await staffApi.listMine();
       setSummary(res.summary);
       setItems(Array.isArray(res.items) ? res.items : []);
+      const hasManualCap =
+        res.summary.maxConcurrentSessions !== null &&
+        res.summary.maxConcurrentSessions !== undefined &&
+        res.summary.maxConcurrentSessions > 0;
+      setCapacityMode(hasManualCap ? 'MANUAL' : 'AUTO');
       setMaxConcurrentInput(
         String(
           res.summary.maxConcurrentSessions ??
             res.summary.effectiveCapacity ??
-            1,
+            Math.max(1, res.summary.activeStaff ?? 1),
         ),
       );
+      setDailyLimitEnabled(res.summary.maxDailySessions != null);
       setMaxDailyInput(
         res.summary.maxDailySessions != null
           ? String(res.summary.maxDailySessions)
@@ -135,25 +143,34 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
     e.preventDefault();
     const activeCount = summary?.activeStaff ?? 0;
     const maxAllowed = Math.max(1, activeCount);
-    const parsedConcurrent = Number(maxConcurrentInput);
-    if (
-      !Number.isInteger(parsedConcurrent) ||
-      parsedConcurrent < 1 ||
-      parsedConcurrent > maxAllowed
-    ) {
-      toast.error(
-        activeCount === 0
-          ? 'Studio chưa có thợ hoạt động nên sức chứa đồng thời tối đa là 1.'
-          : `Số ca đồng thời phải nằm trong khoảng từ 1 đến ${activeCount}.`,
-      );
-      return;
+
+    let nextMaxConcurrent: number | null = null;
+    if (capacityMode === 'MANUAL') {
+      const parsedConcurrent = Number(maxConcurrentInput);
+      if (
+        !Number.isInteger(parsedConcurrent) ||
+        parsedConcurrent < 1 ||
+        parsedConcurrent > maxAllowed
+      ) {
+        toast.error(
+          activeCount === 0
+            ? 'Studio chưa có thợ hoạt động nên sức chứa đồng thời tối đa là 1.'
+            : `Số ca đồng thời phải nằm trong khoảng từ 1 đến ${activeCount}.`,
+        );
+        return;
+      }
+      nextMaxConcurrent = parsedConcurrent;
     }
 
     let parsedDaily: number | null = null;
-    if (maxDailyInput.trim() !== '') {
+    if (dailyLimitEnabled) {
+      if (maxDailyInput.trim() === '') {
+        toast.error('Vui lòng nhập giới hạn tối đa ca/ngày hoặc tắt tuỳ chọn này.');
+        return;
+      }
       parsedDaily = Number(maxDailyInput);
-      if (!Number.isInteger(parsedDaily) || parsedDaily < 1) {
-        toast.error('Giới hạn số ca mỗi ngày phải là số nguyên >= 1.');
+      if (!Number.isInteger(parsedDaily) || parsedDaily < 1 || parsedDaily > 100) {
+        toast.error('Giới hạn số ca mỗi ngày phải là số nguyên từ 1 đến 100.');
         return;
       }
     }
@@ -161,10 +178,14 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
     try {
       setSavingCapacity(true);
       await staffApi.updateCapacity({
-        maxConcurrentSessions: parsedConcurrent,
+        maxConcurrentSessions: nextMaxConcurrent,
         maxDailySessions: parsedDaily,
       });
-      toast.success('Đã cập nhật cấu hình sức chứa nhận ca của Studio.');
+      toast.success(
+        capacityMode === 'AUTO'
+          ? 'Đã bật chế độ Tự động mở slot theo số thợ rảnh.'
+          : `Đã lưu giới hạn tối đa ${nextMaxConcurrent} ca đồng thời mỗi khung giờ.`,
+      );
       await loadStaff();
     } catch (err: any) {
       toast.error(err?.message || 'Không thể cập nhật sức chứa.');
@@ -463,9 +484,12 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
             {summary?.effectiveCapacity ?? 1} ca / khung giờ
           </span>
           <span className="pstaff-kpi-meta">
+            {summary?.maxConcurrentSessions == null
+              ? 'Tự động theo số thợ rảnh'
+              : `Giới hạn thủ công: tối đa ${summary.maxConcurrentSessions} ca/giờ`}
             {summary?.maxDailySessions
-              ? `Giới hạn tối đa: ${summary.maxDailySessions} ca/ngày`
-              : 'Không giới hạn tổng ca/ngày'}
+              ? ` · ${summary.maxDailySessions} ca/ngày`
+              : ''}
           </span>
         </div>
 
@@ -489,7 +513,7 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
             {summary?.pendingAssignmentCount ?? 0}
           </span>
           <span className="pstaff-kpi-meta">
-            Có thể chọn thợ trong Chi tiết đơn đặt lịch
+            Chọn thợ khi duyệt đơn trong Đơn đặt lịch
           </span>
         </div>
       </div>
@@ -524,44 +548,141 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
         </div>
       )}
 
-      {/* Capacity Settings */}
+      {/* Capacity Settings (2A: Auto default + Optional Manual Cap) */}
       <form className="pstaff-capacity-card" onSubmit={handleSaveCapacity}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <SlidersHorizontal size={18} color="#8E1B2E" />
-          <strong style={{ fontSize: '15px', color: '#231f20' }}>
-            Cấu hình sức chứa nhận ca đồng thời
-          </strong>
-        </div>
-        <div className="pstaff-capacity-form">
-          <div className="pstaff-field">
-            <label htmlFor="pstaff-max-concurrent">
-              Số ca đồng thời tối đa (1 – {Math.max(1, summary?.activeStaff ?? 0)})
-            </label>
-            <input
-              id="pstaff-max-concurrent"
-              type="number"
-              min={1}
-              max={Math.max(1, summary?.activeStaff ?? 1)}
-              className="pstaff-input"
-              value={maxConcurrentInput}
-              onChange={(e) => setMaxConcurrentInput(e.target.value)}
-            />
+        <div className="pstaff-capacity-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <SlidersHorizontal size={18} color="#8E1B2E" />
+            <strong style={{ fontSize: '15px', color: '#231f20' }}>
+              Cấu hình sức chứa nhận ca đồng thời
+            </strong>
           </div>
+          <span
+            className={`pstaff-capacity-pill ${
+              summary?.maxConcurrentSessions == null ? 'is-auto' : 'is-manual'
+            }`}
+          >
+            Đang mở: {summary?.effectiveCapacity ?? 1} ca / khung giờ
+            {summary?.maxConcurrentSessions == null ? ' (Tự động)' : ' (Giới hạn trần)'}
+          </span>
+        </div>
 
-          <div className="pstaff-field">
-            <label htmlFor="pstaff-max-daily">
-              Giới hạn tối đa ca / ngày (tuỳ chọn)
+        <div className="pstaff-mode-grid" role="radiogroup" aria-label="Chế độ tính sức chứa nhận ca">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={capacityMode === 'AUTO'}
+            className={`pstaff-mode-option ${capacityMode === 'AUTO' ? 'is-active' : ''}`}
+            onClick={() => setCapacityMode('AUTO')}
+          >
+            <div className="pstaff-mode-option__top">
+              <span className="pstaff-mode-dot" />
+              <strong>Tự động theo số thợ rảnh</strong>
+              <span className="pstaff-mode-badge">Khuyên dùng</span>
+            </div>
+            <p className="pstaff-mode-option__desc">
+              Có bao nhiêu thợ hoạt động (không báo bận) sẽ tự động mở bấy nhiêu suất trong cùng 1 khung giờ.
+              Hiện tại: <strong>{Math.max(1, summary?.activeStaff ?? 0)} ca/giờ</strong>.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            role="radio"
+            aria-checked={capacityMode === 'MANUAL'}
+            className={`pstaff-mode-option ${capacityMode === 'MANUAL' ? 'is-active' : ''}`}
+            onClick={() => {
+              setCapacityMode('MANUAL');
+              if (!maxConcurrentInput || Number(maxConcurrentInput) < 1) {
+                setMaxConcurrentInput(String(Math.max(1, summary?.activeStaff ?? 1)));
+              }
+            }}
+          >
+            <div className="pstaff-mode-option__top">
+              <span className="pstaff-mode-dot" />
+              <strong>Giới hạn trần thủ công</strong>
+            </div>
+            <p className="pstaff-mode-option__desc">
+              Chủ động đặt mức tối đa nhận trùng giờ (VD: có 3 thợ nhưng chỉ mở 2 ca để chừa thợ dự bị).
+            </p>
+          </button>
+        </div>
+
+        <div className="pstaff-capacity-form">
+          {capacityMode === 'MANUAL' && (
+            <div className="pstaff-field">
+              <label htmlFor="pstaff-max-concurrent">
+                Số ca đồng thời tối đa (1 – {Math.max(1, summary?.activeStaff ?? 0)})
+              </label>
+              <input
+                id="pstaff-max-concurrent"
+                type="number"
+                min={1}
+                max={Math.max(1, summary?.activeStaff ?? 1)}
+                className="pstaff-input"
+                value={maxConcurrentInput}
+                onChange={(e) => setMaxConcurrentInput(e.target.value)}
+              />
+            </div>
+          )}
+
+          <div className="pstaff-daily-box">
+            <label className="pstaff-daily-toggle">
+              <input
+                type="checkbox"
+                checked={dailyLimitEnabled}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setDailyLimitEnabled(checked);
+                  if (checked && maxDailyInput.trim() === '') {
+                    const activeCount = Math.max(1, summary?.activeStaff ?? 1);
+                    setMaxDailyInput(String(activeCount * 3));
+                  }
+                }}
+              />
+              <span>Bật giới hạn tổng số ca chụp trong 1 ngày (tuỳ chọn)</span>
             </label>
-            <input
-              id="pstaff-max-daily"
-              type="number"
-              min={1}
-              max={100}
-              placeholder="Để trống = không giới hạn"
-              className="pstaff-input"
-              value={maxDailyInput}
-              onChange={(e) => setMaxDailyInput(e.target.value)}
-            />
+
+            {!dailyLimitEnabled ? (
+              <p className="pstaff-daily-note">
+                Đang tắt — Không giới hạn tổng ca/ngày, Studio nhận khách theo sức chứa từng khung giờ.
+              </p>
+            ) : (
+              <div className="pstaff-field" style={{ minWidth: 0 }}>
+                <label htmlFor="pstaff-max-daily">
+                  Giới hạn tối đa ca / ngày
+                </label>
+                <input
+                  id="pstaff-max-daily"
+                  type="number"
+                  min={1}
+                  max={100}
+                  placeholder="VD: 9"
+                  className="pstaff-input"
+                  value={maxDailyInput}
+                  onChange={(e) => setMaxDailyInput(e.target.value)}
+                />
+                {(() => {
+                  const activeStaffCount = summary?.activeStaff ?? 0;
+                  const parsedDailyPreview = Number(maxDailyInput);
+                  if (
+                    activeStaffCount >= 2 &&
+                    Number.isInteger(parsedDailyPreview) &&
+                    parsedDailyPreview >= 1 &&
+                    parsedDailyPreview <= activeStaffCount
+                  ) {
+                    return (
+                      <p className="pstaff-daily-warn" role="status">
+                        Lưu ý: Con số này giới hạn TỔNG số ca của cả ngày (sáng + chiều + tối),
+                        không phải số ca cùng 1 giờ. Với {activeStaffCount} thợ, mức thông thường
+                        nên từ {activeStaffCount * 2}–{activeStaffCount * 3} ca/ngày trở lên.
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+            )}
           </div>
 
           <button
@@ -576,7 +697,7 @@ export const StaffManagementPanel: React.FC<StaffManagementPanelProps> = ({
         {(summary?.activeStaff ?? 0) === 0 && (
           <p style={{ margin: 0, fontSize: '12.5px', color: '#7d736b' }}>
             Studio chưa thêm thợ chụp nào nên mặc định nhận tối đa 1 ca mỗi
-            khung giờ. Hãy thêm thợ chụp để mở rộng khả năng nhận đơn trùng giờ.
+            khung giờ. Hãy thêm thợ chụp để tự động mở rộng khả năng nhận nhiều khách cùng giờ.
           </p>
         )}
       </form>

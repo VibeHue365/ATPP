@@ -78,9 +78,16 @@ export function OrderStaffAssignmentSection({
   const assignedSnapshot = schedule.assignedStaffSnapshot;
   const assignedStaffId = schedule.assignedStaffId || assignedSnapshot?.staffId;
   const bookingStatus = String(order.status || '').toUpperCase();
-  const canAssign = !['COMPLETED', 'CANCELLED', 'REFUNDED', 'PARTIALLY_REFUNDED'].includes(
-    bookingStatus,
-  );
+  const canAssign = ![
+    'IN_PROGRESS',
+    'AWAITING_REVIEW',
+    'COMBO_PHOTOS_APPROVED',
+    'RETURNED',
+    'COMPLETED',
+    'CANCELLED',
+    'REFUNDED',
+    'PARTIALLY_REFUNDED',
+  ].includes(bookingStatus);
 
   const handleOpenPicker = async () => {
     if (pickerOpen) {

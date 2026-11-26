@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X, AlertTriangle, Upload } from 'lucide-react';
 import { PhotoshootDetailHeader } from './PhotoshootDetailHeader';
 import { PhotoshootMainCard } from './PhotoshootMainCard';
-import { PhotoshootInfoColumns } from './PhotoshootInfoColumns';
+import { PhotoshootInfoColumns, type PhotoshootSessionSummary } from './PhotoshootInfoColumns';
 import { PhotoshootDeliveredGallery } from './PhotoshootDeliveredGallery';
 import { PhotoshootBottomActionBar } from './PhotoshootBottomActionBar';
 import { AssignedStaffContactCard } from './AssignedStaffContactCard';
@@ -51,15 +51,26 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
   const title = pkgObj?.name || item.packageSnapshot?.name || item.name || 'Gói Chụp Ảnh Nghệ Thuật';
   const image = pkgObj?.coverImage || pkgObj?.images?.[0] || item.coverImage || item.images?.[0] || item.image;
   const code = booking?.bookingCode || (booking?._id ? 'PS-' + booking._id.slice(-4) : 'PS-TAGO');
-  const activePhotoshootSchedule =
-    (Array.isArray(booking?.schedules)
-      ? booking.schedules.find(
+  const activePhotoshootSchedules = Array.isArray(booking?.schedules)
+    ? booking.schedules
+        .filter(
           (s: any) =>
             s?.scheduleType === 'PHOTOSHOOT' &&
             s?.status !== 'CANCELLED' &&
             s?.status !== 'EXPIRED',
-        ) || booking.schedules.find((s: any) => s?.scheduleType === 'PHOTOSHOOT')
-      : null) || null;
+        )
+        .sort(
+          (a: any, b: any) =>
+            new Date(a?.startsAt || a?.scheduledDate || 0).getTime() -
+            new Date(b?.startsAt || b?.scheduledDate || 0).getTime(),
+        )
+    : [];
+  const activePhotoshootSchedule =
+    activePhotoshootSchedules[0] ||
+    (Array.isArray(booking?.schedules)
+      ? booking.schedules.find((s: any) => s?.scheduleType === 'PHOTOSHOOT')
+      : null) ||
+    null;
   const assignedStaff = activePhotoshootSchedule?.assignedStaffSnapshot || null;
   const studioName = provider?.businessName || provider?.fullName || pkgObj?.photographerName || 'Studio đối tác';
   const photographerName = assignedStaff?.name
@@ -67,12 +78,89 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
     : studioName;
   const photographerPhone = assignedStaff?.phone || provider?.phone || provider?.businessPhone || '1900 9999';
 
+  const formatDurationLabel = (mins: number) => {
+    if (!mins || mins <= 0) return '';
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (!h) return `${m} phút`;
+    return m ? `${h} giờ ${m} phút` : `${h} giờ`;
+  };
+
+  const formatScheduleTimeRange = (sch: any): string => {
+    if (sch?.timeSlot) return sch.timeSlot;
+    if (sch?.startsAt && sch?.endsAt) {
+      const fmt = new Intl.DateTimeFormat('en-GB', {
+        timeZone: sch.timezone || 'Asia/Ho_Chi_Minh',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+      return `${fmt.format(new Date(sch.startsAt))} - ${fmt.format(new Date(sch.endsAt))}`;
+    }
+    return '';
+  };
+
   // Schedule & Time
-  const rawDate = item.shootDate || item.startDate || booking?.startDate;
+  const rawDate = item.shootDate || activePhotoshootSchedule?.startsAt || item.startDate || booking?.startDate;
   const shootDateStr = rawDate
     ? new Date(rawDate).toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit' })
     : 'Chưa cập nhật ngày chụp';
-  const timeSlotStr = item.shootTimeSlot || '09:00 - 11:00';
+  const timeSlotStr = item.shootTimeSlot || formatScheduleTimeRange(activePhotoshootSchedule) || '09:00 - 11:00';
+
+  const includedDurationMins = Number(
+    activePhotoshootSchedule?.includedDurationMinutes ??
+      item.packageSnapshot?.includedDurationMinutes ??
+      pkgObj?.includedDurationMinutes ??
+      (pkgObj?.durationHours ? Math.round(pkgObj.durationHours * 60) : 0),
+  );
+  const totalOvertimeMinutes = activePhotoshootSchedules.reduce((sum: number, sch: any) => {
+    const explicit = Number(sch?.overtimeMinutes ?? 0);
+    if (explicit > 0) return sum + explicit;
+    if (sch?.startsAt && sch?.endsAt && includedDurationMins > 0) {
+      const actualMins = Math.round(
+        (new Date(sch.endsAt).getTime() - new Date(sch.startsAt).getTime()) / 60000,
+      );
+      return sum + Math.max(0, actualMins - includedDurationMins);
+    }
+    return sum;
+  }, 0);
+  const actualSingleDurationMins = (() => {
+    if (activePhotoshootSchedule?.startsAt && activePhotoshootSchedule?.endsAt) {
+      return Math.round(
+        (new Date(activePhotoshootSchedule.endsAt).getTime() -
+          new Date(activePhotoshootSchedule.startsAt).getTime()) /
+          60000,
+      );
+    }
+    return includedDurationMins + totalOvertimeMinutes;
+  })();
+  const durationDisplayText = actualSingleDurationMins > 0
+    ? totalOvertimeMinutes > 0 && activePhotoshootSchedules.length <= 1
+      ? `${formatDurationLabel(actualSingleDurationMins)} (gồm +${formatDurationLabel(totalOvertimeMinutes)} tăng giờ)`
+      : formatDurationLabel(actualSingleDurationMins)
+    : undefined;
+
+  const sessionSummaries: PhotoshootSessionSummary[] = activePhotoshootSchedules.map((sch: any, idx: number) => {
+    const start = sch?.startsAt ? new Date(sch.startsAt) : null;
+    const end = sch?.endsAt ? new Date(sch.endsAt) : null;
+    const mins = start && end ? Math.round((end.getTime() - start.getTime()) / 60000) : 0;
+    const dateVal = sch?.startsAt || sch?.scheduledDate || sch?.providerLocalDate;
+    const dateText = dateVal
+      ? new Date(dateVal).toLocaleDateString('vi-VN', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          timeZone: 'Asia/Ho_Chi_Minh',
+        })
+      : 'Theo lịch';
+    return {
+      label: `Buổi ${idx + 1}`,
+      dateText,
+      timeSlot: formatScheduleTimeRange(sch) || timeSlotStr,
+      durationText: mins > 0 ? formatDurationLabel(mins) : undefined,
+      overtimeMinutes: Number(sch?.overtimeMinutes ?? 0),
+    };
+  });
 
   // Parse shoot location robustly
   const rawLocation =
@@ -108,7 +196,20 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
   const concept = item.concept || pkgObj?.concept || 'Áo dài Cổ phong / Hoàng cung';
 
   // Pricing
-  const packagePrice = (item.unitPrice || 0) * (item.quantity || 1) || booking?.pricingSummary?.subTotal || 0;
+  const breakdownOvertime = Array.isArray(item?.priceBreakdown)
+    ? item.priceBreakdown
+        .filter((b: any) => b?.type === 'OVERTIME')
+        .reduce((sum: number, b: any) => sum + Number(b?.amount || 0), 0)
+    : 0;
+  const overtimeFee = Number(booking?.pricingSummary?.overtimeFee ?? breakdownOvertime ?? 0);
+  const rawItemTotal = (item.unitPrice || 0) * (item.quantity || 1);
+  const packagePrice =
+    overtimeFee > 0
+      ? Number(booking?.pricingSummary?.subTotal ?? Math.max(0, rawItemTotal - overtimeFee))
+      : rawItemTotal || booking?.pricingSummary?.subTotal || 0;
+  const voucherDiscount = Number(
+    booking?.pricingSummary?.voucherDiscountTotal ?? booking?.pricingSummary?.discountAmount ?? 0,
+  );
   const serviceFee = booking?.pricingSummary?.serviceFee || 0;
   const depositFee = item.depositAmount || booking?.pricingSummary?.depositTotal || 0;
   const totalPrice = booking?.pricingSummary?.grandTotal || booking?.totalAmount || 0;
@@ -255,15 +356,27 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
             <span>${photographerName}</span>
           </div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-            <span>Giá gói dịch vụ:</span>
+            <span>${overtimeFee > 0 ? 'Giá gói cơ bản:' : 'Giá gói dịch vụ:'}</span>
             <span>${packagePrice.toLocaleString('vi-VN')}đ</span>
           </div>
-          {serviceFee > 0 && (
+          ${overtimeFee > 0 ? `
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px; color: #8E1B2E; font-weight: 600;">
+              <span>Phí tăng giờ${totalOvertimeMinutes > 0 ? ` (+${formatDurationLabel(totalOvertimeMinutes)})` : ''}:</span>
+              <span>+${overtimeFee.toLocaleString('vi-VN')}đ</span>
+            </div>
+          ` : ''}
+          ${serviceFee > 0 ? `
             <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
               <span>Phụ phí:</span>
               <span>${serviceFee.toLocaleString('vi-VN')}đ</span>
             </div>
-          )}
+          ` : ''}
+          ${voucherDiscount > 0 ? `
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px; color: #047857; font-weight: 600;">
+              <span>Ưu đãi voucher:</span>
+              <span>-${voucherDiscount.toLocaleString('vi-VN')}đ</span>
+            </div>
+          ` : ''}
           <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
             <span>Tiền cọc giữ lịch:</span>
             <span>${depositFee.toLocaleString('vi-VN')}đ</span>
@@ -370,11 +483,16 @@ export const ProfilePhotoshootDetailPage: React.FC<ProfilePhotoshootDetailPagePr
       <PhotoshootInfoColumns
         shootDate={shootDateStr}
         shootTimeSlot={timeSlotStr}
+        durationText={durationDisplayText}
+        sessions={sessionSummaries}
         locationName={locationName}
         locationAddress={locationAddress}
         photographerName={photographerName}
         photographerPhone={photographerPhone}
         packagePrice={packagePrice}
+        overtimeFee={overtimeFee}
+        overtimeMinutes={totalOvertimeMinutes}
+        voucherDiscount={voucherDiscount}
         serviceFee={serviceFee}
         depositFee={depositFee}
         totalPrice={totalPrice}
