@@ -48,6 +48,10 @@ import {
   ProviderOrderWorkflowModal,
   type ProviderWorkflowMode,
 } from '@/components/provider/orders/ProviderOrderWorkflowModal';
+import {
+  ApproveStaffPickerModal,
+  useApproveStaffPicker,
+} from '@/components/provider/orders/ApproveStaffPickerModal';
 
 export default function ProviderOrdersScreen() {
   const { user } = useAuth();
@@ -57,6 +61,7 @@ export default function ProviderOrdersScreen() {
   }>();
   const { unreadCount, bookingSyncVersion, bumpBookingSync, pushLocalBanner } =
     useNotifications();
+  const approveStaffPicker = useApproveStaffPicker();
   const [headerAvatarFailed, setHeaderAvatarFailed] = useState(false);
 
   const userAvatarUri = !headerAvatarFailed
@@ -435,14 +440,26 @@ export default function ProviderOrdersScreen() {
   };
 
   // Perform status change (CONFIRMED / IN_PROGRESS / CANCELLED only)
-  const handleStatusChange = async (order: any, nextStatus: string, note?: string) => {
+  const submitStatusChange = async (
+    order: any,
+    nextStatus: string,
+    note?: string,
+    assignedStaffId?: string,
+    assignedStaffName?: string,
+  ) => {
     setActionLoading(true);
     try {
-      await providerApi.updateBookingStatus(order._id, nextStatus, note);
+      await providerApi.updateBookingStatus(
+        order._id,
+        nextStatus,
+        assignedStaffId ? { note, assignedStaffId } : note,
+      );
       bumpBookingSync(order._id);
       pushLocalBanner({
         title: `Đã cập nhật đơn #${order.bookingCode || ''}`,
-        content: note || `Đơn hàng đã chuyển sang trạng thái ${bookingStatus[nextStatus]?.label || nextStatus}.`,
+        content: assignedStaffName
+          ? `Đã chấp nhận lịch chụp và phân công thợ ${assignedStaffName}.`
+          : note || `Đơn hàng đã chuyển sang trạng thái ${bookingStatus[nextStatus]?.label || nextStatus}.`,
         type: 'BOOKING_UPDATED',
         metadata: {
           bookingId: order._id,
@@ -451,7 +468,13 @@ export default function ProviderOrdersScreen() {
           targetRole: 'provider',
         },
       });
-      show(`Đã cập nhật trạng thái đơn #${order.bookingCode || ''}!`, 'success');
+      show(
+        assignedStaffName
+          ? `Đã chấp nhận đơn #${order.bookingCode || ''} & phân công ${assignedStaffName}!`
+          : `Đã cập nhật trạng thái đơn #${order.bookingCode || ''}!`,
+        'success',
+      );
+      approveStaffPicker.close();
       setDetailModalVisible(false);
       void loadOrders(true);
     } catch (err: any) {
@@ -460,6 +483,23 @@ export default function ProviderOrdersScreen() {
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const handleStatusChange = async (order: any, nextStatus: string, note?: string) => {
+    if (nextStatus === 'CONFIRMED') {
+      try {
+        const openedPicker = await approveStaffPicker.checkNeedsStaffPicker(order, note);
+        if (openedPicker) {
+          setDetailModalVisible(false);
+          return;
+        }
+      } catch (err: any) {
+        const msg = err?.response?.data?.message || 'Không thể tải danh sách thợ chụp rảnh';
+        show(Array.isArray(msg) ? msg[0] : msg, 'error');
+        return;
+      }
+    }
+    await submitStatusChange(order, nextStatus, note);
   };
 
   // Confirm Escrow Release (calls confirm-no-incident per rental item!)
@@ -721,6 +761,29 @@ export default function ProviderOrdersScreen() {
           void loadOrders(true);
         }}
         actionLoading={actionLoading}
+      />
+
+      {/* 6B. Option 1A: Mandatory Staff Picker when Approving Photoshoot */}
+      <ApproveStaffPickerModal
+        visible={approveStaffPicker.visible}
+        bookingCode={approveStaffPicker.pendingOrder?.bookingCode}
+        dateKey={approveStaffPicker.dateKey}
+        timeSlot={approveStaffPicker.timeSlot}
+        staff={approveStaffPicker.staff}
+        loading={approveStaffPicker.loading}
+        submitting={actionLoading}
+        onClose={approveStaffPicker.close}
+        onConfirm={(staffId, staffName) => {
+          if (approveStaffPicker.pendingOrder) {
+            void submitStatusChange(
+              approveStaffPicker.pendingOrder,
+              'CONFIRMED',
+              approveStaffPicker.pendingNote,
+              staffId,
+              staffName,
+            );
+          }
+        }}
       />
 
       {/* 7. Unified Web-Synced Workflow Modal (Handover Photos / Drive Link / Incident / Cancel) */}

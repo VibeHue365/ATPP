@@ -51,6 +51,10 @@ import {
   ProviderOrderWorkflowModal,
   type ProviderWorkflowMode,
 } from '@/components/provider/orders/ProviderOrderWorkflowModal';
+import {
+  ApproveStaffPickerModal,
+  useApproveStaffPicker,
+} from '@/components/provider/orders/ApproveStaffPickerModal';
 import { setPendingProductFormState } from '@/utils/providerFormBridge';
 import { ProviderJobNavigationModal } from '@/components/provider/ProviderJobNavigationModal';
 
@@ -60,6 +64,7 @@ export default function ProviderDashboardScreen() {
   const { show } = useToast();
   const { unreadCount, bookingSyncVersion, bumpBookingSync, pushLocalBanner } =
     useNotifications();
+  const approveStaffPicker = useApproveStaffPicker();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -339,12 +344,28 @@ export default function ProviderDashboardScreen() {
   };
 
   // Order Management Actions right on Home screen (100% synced with RentalFulfillment + Photoshoot)
-  const handleStatusChange = async (order: any, nextStatus: string, note?: string) => {
+  const submitStatusChange = async (
+    order: any,
+    nextStatus: string,
+    note?: string,
+    assignedStaffId?: string,
+    assignedStaffName?: string,
+  ) => {
     setActionLoading(true);
     try {
-      await providerApi.updateBookingStatus(order._id, nextStatus, { note });
+      await providerApi.updateBookingStatus(
+        order._id,
+        nextStatus,
+        assignedStaffId ? { note, assignedStaffId } : { note },
+      );
       bumpBookingSync(order._id);
-      show(`Đã cập nhật trạng thái đơn #${order.bookingCode || ''}!`, 'success');
+      show(
+        assignedStaffName
+          ? `Đã chấp nhận đơn #${order.bookingCode || ''} & phân công ${assignedStaffName}!`
+          : `Đã cập nhật trạng thái đơn #${order.bookingCode || ''}!`,
+        'success',
+      );
+      approveStaffPicker.close();
       setDetailModalVisible(false);
       void fetchAllData();
     } catch (e: any) {
@@ -353,6 +374,23 @@ export default function ProviderDashboardScreen() {
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const handleStatusChange = async (order: any, nextStatus: string, note?: string) => {
+    if (nextStatus === 'CONFIRMED') {
+      try {
+        const openedPicker = await approveStaffPicker.checkNeedsStaffPicker(order, note);
+        if (openedPicker) {
+          setDetailModalVisible(false);
+          return;
+        }
+      } catch (e: any) {
+        const msg = e?.response?.data?.message || 'Không thể tải danh sách thợ chụp rảnh';
+        show(Array.isArray(msg) ? msg[0] : msg, 'error');
+        return;
+      }
+    }
+    await submitStatusChange(order, nextStatus, note);
   };
 
   const handleRentalAction = async (
@@ -1193,6 +1231,28 @@ export default function ProviderDashboardScreen() {
         onOpenNavigationMap={(order) => {
           setNavOrder(order);
           setNavModalVisible(true);
+        }}
+      />
+
+      <ApproveStaffPickerModal
+        visible={approveStaffPicker.visible}
+        bookingCode={approveStaffPicker.pendingOrder?.bookingCode}
+        dateKey={approveStaffPicker.dateKey}
+        timeSlot={approveStaffPicker.timeSlot}
+        staff={approveStaffPicker.staff}
+        loading={approveStaffPicker.loading}
+        submitting={actionLoading}
+        onClose={approveStaffPicker.close}
+        onConfirm={(staffId, staffName) => {
+          if (approveStaffPicker.pendingOrder) {
+            void submitStatusChange(
+              approveStaffPicker.pendingOrder,
+              'CONFIRMED',
+              approveStaffPicker.pendingNote,
+              staffId,
+              staffName,
+            );
+          }
         }}
       />
 

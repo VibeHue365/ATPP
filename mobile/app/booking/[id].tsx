@@ -885,6 +885,13 @@ function BookingDetail() {
 
         <Section title="Chi tiết thanh toán & Tiền cọc">
           <Price label="Chi phí dịch vụ" value={booking.pricingSummary?.subTotal} />
+          {Boolean(booking.pricingSummary?.overtimeFee) && (
+            <Price
+              label="Phí tăng giờ chụp"
+              value={booking.pricingSummary?.overtimeFee}
+              accent
+            />
+          )}
           <Price label="Ưu đãi giảm giá" value={-(booking.pricingSummary?.discountAmount ?? 0)} />
           <Price
             label="Tiền cọc giữ đồ (Hoàn 100%)"

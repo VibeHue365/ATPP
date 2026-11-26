@@ -18,7 +18,11 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, useFocusEffect, type Href } from 'expo-router';
 import { providerApi } from '@/apis/providerApi';
-import { staffApi, type ProviderStaffItem } from '@/apis/staffApi';
+import {
+  staffApi,
+  type ProviderStaffItem,
+  type ProviderStaffSummary,
+} from '@/apis/staffApi';
 import { useToast } from '@/contexts/ToastContext';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { FontFamily } from '@/constants/theme';
@@ -50,6 +54,10 @@ import {
   ProviderOrderWorkflowModal,
   type ProviderWorkflowMode,
 } from '@/components/provider/orders/ProviderOrderWorkflowModal';
+import {
+  ApproveStaffPickerModal,
+  useApproveStaffPicker,
+} from '@/components/provider/orders/ApproveStaffPickerModal';
 
 type ScheduleFilterType = 'ALL' | 'PICKUP' | 'RETURN' | 'PHOTOSHOOT';
 
@@ -96,6 +104,7 @@ export default function ProviderSchedulesScreen() {
 
   const [typeFilter, setTypeFilter] = useState<ScheduleFilterType>('ALL');
   const [staffMembers, setStaffMembers] = useState<ProviderStaffItem[]>([]);
+  const [staffSummary, setStaffSummary] = useState<ProviderStaffSummary | null>(null);
   const [staffFilter, setStaffFilter] = useState<string>('ALL');
   const [selectedDayKey, setSelectedDayKey] = useState<string>('ALL_DAYS');
   const [viewMode, setViewMode] = useState<'LIST' | 'MAP'>('LIST');
@@ -107,6 +116,7 @@ export default function ProviderSchedulesScreen() {
   const [workflowMode, setWorkflowMode] = useState<ProviderWorkflowMode>(null);
   const [workflowItemId, setWorkflowItemId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const approveStaffPicker = useApproveStaffPicker();
   const [blockedDates, setBlockedDates] = useState<string[]>([]);
 
   // Recurring Working Hours & Date Block Modal state
@@ -149,6 +159,7 @@ export default function ProviderSchedulesScreen() {
       }
       if (staffRes.status === 'fulfilled' && Array.isArray(staffRes.value?.items)) {
         setStaffMembers(staffRes.value.items);
+        setStaffSummary(staffRes.value.summary ?? null);
       }
       if (schedRes.status === 'fulfilled' && Array.isArray(schedRes.value)) {
         const blocked = schedRes.value
@@ -559,13 +570,29 @@ export default function ProviderSchedulesScreen() {
     }
   };
 
-  const handleStatusUpdate = async (order: any, nextStatus: string, note?: string) => {
+  const submitStatusUpdate = async (
+    order: any,
+    nextStatus: string,
+    note?: string,
+    assignedStaffId?: string,
+    assignedStaffName?: string,
+  ) => {
     if (!order?._id) return;
     setActionLoading(true);
     try {
-      await providerApi.updateBookingStatus(order._id, nextStatus, { note });
+      await providerApi.updateBookingStatus(
+        order._id,
+        nextStatus,
+        assignedStaffId ? { note, assignedStaffId } : { note },
+      );
       bumpBookingSync(order._id);
-      show(`Đã cập nhật lịch hẹn đơn #${order.bookingCode || ''}!`, 'success');
+      show(
+        assignedStaffName
+          ? `Đã chấp nhận đơn #${order.bookingCode || ''} & phân công ${assignedStaffName}!`
+          : `Đã cập nhật lịch hẹn đơn #${order.bookingCode || ''}!`,
+        'success',
+      );
+      approveStaffPicker.close();
       setDetailVisible(false);
       void loadScheduleData();
     } catch (e: any) {
@@ -574,6 +601,24 @@ export default function ProviderSchedulesScreen() {
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const handleStatusUpdate = async (order: any, nextStatus: string, note?: string) => {
+    if (!order?._id) return;
+    if (nextStatus === 'CONFIRMED') {
+      try {
+        const openedPicker = await approveStaffPicker.checkNeedsStaffPicker(order, note);
+        if (openedPicker) {
+          setDetailVisible(false);
+          return;
+        }
+      } catch (e: any) {
+        const msg = e?.response?.data?.message || 'Không thể tải danh sách thợ chụp rảnh';
+        show(Array.isArray(msg) ? msg[0] : msg, 'error');
+        return;
+      }
+    }
+    await submitStatusUpdate(order, nextStatus, note);
   };
 
   const handleRentalAction = async (
@@ -1166,6 +1211,145 @@ export default function ProviderSchedulesScreen() {
             />
           }
         >
+          {/* Per-Slot Capacity Load Summary for Studio Owner (when a day is selected or shoots exist) */}
+          {selectedDayKey !== 'ALL_DAYS' && staffMembers.length > 0 && (() => {
+            const activeStaffPool = staffMembers.filter((st) => st.status === 'ACTIVE');
+            const baseCap = Math.max(
+              1,
+              staffSummary?.effectiveCapacity ?? (activeStaffPool.length || 1),
+            );
+            const maxDaily = staffSummary?.maxDailySessions ?? null;
+            const dayShoots = timelineItems.filter(
+              (it) =>
+                it.type === 'PHOTOSHOOT' &&
+                it.dateStr === selectedDayKey &&
+                it.status !== 'CANCELLED' &&
+                it.status !== 'REFUNDED',
+            );
+
+            const grouped = new Map<
+              string,
+              { label: string; count: number; unassigned: number }
+            >();
+            for (const sh of dayShoots) {
+              const label = (sh.timeLabel || 'Theo lịch hẹn').replace('-', ' – ');
+              const prev = grouped.get(label) || { label, count: 0, unassigned: 0 };
+              prev.count += 1;
+              if (!sh.assignedStaffId) prev.unassigned += 1;
+              grouped.set(label, prev);
+            }
+            const rows = Array.from(grouped.values()).sort((a, b) =>
+              a.label.localeCompare(b.label),
+            );
+            const dailyRem =
+              maxDaily && maxDaily > 0 ? Math.max(0, maxDaily - dayShoots.length) : null;
+
+            return (
+              <View style={styles.slotLoadCard}>
+                <View style={styles.slotLoadHeader}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="layers-outline" size={14} color="#8E1B2E" />
+                    <Text style={styles.slotLoadTitle}>TẢI SUẤT KHUNG GIỜ TRONG NGÀY</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.slotLoadDailyPill,
+                      dailyRem === 0 && { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.slotLoadDailyText,
+                        dailyRem === 0 && { color: '#B91C1C' },
+                      ]}
+                    >
+                      {maxDaily
+                        ? `Ngày: ${dayShoots.length}/${maxDaily} ca`
+                        : `${dayShoots.length} ca · Tối đa ${baseCap}/giờ`}
+                    </Text>
+                  </View>
+                </View>
+
+                {rows.length === 0 ? (
+                  <Text style={styles.slotLoadEmpty}>
+                    Chưa có ca chụp nào — toàn bộ khung giờ mở tối đa {baseCap} suất/giờ.
+                  </Text>
+                ) : (
+                  <View style={{ gap: 7 }}>
+                    {rows.map((row) => {
+                      const rawRem = Math.max(0, baseCap - row.count);
+                      const rem = dailyRem !== null ? Math.min(rawRem, dailyRem) : rawRem;
+                      const isFull = rem <= 0;
+                      const isLast = !isFull && rem === 1 && baseCap > 1;
+                      const fillPct = Math.min(100, Math.round((row.count / baseCap) * 100));
+
+                      return (
+                        <View
+                          key={row.label}
+                          style={[
+                            styles.slotLoadRow,
+                            isFull && { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
+                          ]}
+                        >
+                          <View style={{ flex: 1, gap: 4 }}>
+                            <Text style={styles.slotLoadTime}>{row.label}</Text>
+                            <View style={styles.slotLoadBarBg}>
+                              <View
+                                style={[
+                                  styles.slotLoadBarFill,
+                                  {
+                                    width: `${fillPct}%`,
+                                    backgroundColor: isFull
+                                      ? '#DC2626'
+                                      : isLast
+                                        ? '#EA580C'
+                                        : '#10B981',
+                                  },
+                                ]}
+                              />
+                            </View>
+                          </View>
+                          <View style={{ alignItems: 'flex-end', gap: 3 }}>
+                            <View
+                              style={[
+                                styles.slotLoadBadge,
+                                isFull
+                                  ? { backgroundColor: '#FEE2E2' }
+                                  : isLast
+                                    ? { backgroundColor: '#FFEDD5' }
+                                    : { backgroundColor: '#ECFDF5' },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.slotLoadBadgeText,
+                                  isFull
+                                    ? { color: '#B91C1C' }
+                                    : isLast
+                                      ? { color: '#C2410C' }
+                                      : { color: '#047857' },
+                                ]}
+                              >
+                                {isFull
+                                  ? `Đã kín (${row.count}/${baseCap})`
+                                  : `Nhận ${row.count}/${baseCap} · Còn ${rem}`}
+                              </Text>
+                            </View>
+                            {row.unassigned > 0 && (
+                              <Text style={styles.slotLoadUnassigned}>
+                                {row.unassigned} đơn chờ phân thợ
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            );
+          })()}
+
           {/* Daily Multi-Stop Route Map Banner / View */}
           {filteredItems.length > 0 && (
             <View style={styles.routeMapBannerCard}>
@@ -1556,6 +1740,28 @@ export default function ProviderSchedulesScreen() {
               .catch(() => undefined);
           }
           void loadScheduleData();
+        }}
+      />
+
+      <ApproveStaffPickerModal
+        visible={approveStaffPicker.visible}
+        bookingCode={approveStaffPicker.pendingOrder?.bookingCode}
+        dateKey={approveStaffPicker.dateKey}
+        timeSlot={approveStaffPicker.timeSlot}
+        staff={approveStaffPicker.staff}
+        loading={approveStaffPicker.loading}
+        submitting={actionLoading}
+        onClose={approveStaffPicker.close}
+        onConfirm={(staffId, staffName) => {
+          if (approveStaffPicker.pendingOrder) {
+            void submitStatusUpdate(
+              approveStaffPicker.pendingOrder,
+              'CONFIRMED',
+              approveStaffPicker.pendingNote,
+              staffId,
+              staffName,
+            );
+          }
         }}
       />
 
@@ -2406,5 +2612,87 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     fontFamily: FontFamily.bodySemiBold,
     color: '#0369A1',
+  },
+  slotLoadCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E7DAC9',
+    padding: 13,
+    marginBottom: 12,
+    gap: 9,
+  },
+  slotLoadHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  slotLoadTitle: {
+    fontSize: 11,
+    fontFamily: FontFamily.bodyBold,
+    color: '#8E1B2E',
+    letterSpacing: 0.4,
+  },
+  slotLoadDailyPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: '#FCF9F2',
+    borderWidth: 1,
+    borderColor: '#E7DAC9',
+  },
+  slotLoadDailyText: {
+    fontSize: 10.5,
+    fontFamily: FontFamily.bodyBold,
+    color: '#6B5E54',
+  },
+  slotLoadEmpty: {
+    fontSize: 12,
+    fontFamily: FontFamily.body,
+    color: '#6B5E54',
+  },
+  slotLoadRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: '#FAF7F2',
+    borderWidth: 1,
+    borderColor: '#ECE5DB',
+  },
+  slotLoadTime: {
+    fontSize: 12,
+    fontFamily: FontFamily.bodyBold,
+    color: '#1F2937',
+  },
+  slotLoadBarBg: {
+    height: 5,
+    width: 96,
+    borderRadius: 999,
+    backgroundColor: '#E5E7EB',
+    overflow: 'hidden',
+  },
+  slotLoadBarFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  slotLoadBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  slotLoadBadgeText: {
+    fontSize: 10.5,
+    fontFamily: FontFamily.bodyBold,
+  },
+  slotLoadUnassigned: {
+    fontSize: 10,
+    fontFamily: FontFamily.bodySemiBold,
+    color: '#B45309',
   },
 });

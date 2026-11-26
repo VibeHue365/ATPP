@@ -39,8 +39,10 @@ export default function ProviderStaffManagementScreen() {
   const [summary, setSummary] = useState<ProviderStaffSummary | null>(null);
   const [staffList, setStaffList] = useState<ProviderStaffItem[]>([]);
 
-  // Studio capacity settings inputs
+  // Studio capacity settings inputs (2A: Auto default + Optional Manual ceiling)
+  const [capacityMode, setCapacityMode] = useState<'AUTO' | 'MANUAL'>('AUTO');
   const [maxConcurrentInput, setMaxConcurrentInput] = useState('');
+  const [dailyLimitEnabled, setDailyLimitEnabled] = useState(false);
   const [maxDailyInput, setMaxDailyInput] = useState('');
   const [savingCapacity, setSavingCapacity] = useState(false);
 
@@ -90,11 +92,16 @@ export default function ProviderStaffManagementScreen() {
         const res = await staffApi.listMine();
         setSummary(res.summary);
         setStaffList(Array.isArray(res.items) ? res.items : []);
+        const hasManualCap =
+          res.summary?.maxConcurrentSessions != null &&
+          res.summary.maxConcurrentSessions > 0;
+        setCapacityMode(hasManualCap ? 'MANUAL' : 'AUTO');
         setMaxConcurrentInput(
           res.summary?.maxConcurrentSessions != null
             ? String(res.summary.maxConcurrentSessions)
-            : '',
+            : String(Math.max(1, res.summary?.activeStaff ?? 1)),
         );
+        setDailyLimitEnabled(res.summary?.maxDailySessions != null);
         setMaxDailyInput(
           res.summary?.maxDailySessions != null
             ? String(res.summary.maxDailySessions)
@@ -118,18 +125,34 @@ export default function ProviderStaffManagementScreen() {
   }, [loadStaff]);
 
   const handleSaveCapacity = async () => {
-    const concTrim = maxConcurrentInput.trim();
-    const dailyTrim = maxDailyInput.trim();
-    const maxConcurrent = concTrim ? Number(concTrim) : null;
-    const maxDaily = dailyTrim ? Number(dailyTrim) : null;
+    const activeCount = summary?.activeStaff ?? 0;
+    const maxAllowed = Math.max(1, activeCount);
 
-    if (concTrim && (!Number.isInteger(maxConcurrent) || (maxConcurrent ?? 0) < 1)) {
-      show('Số ca trùng giờ tối đa phải là số nguyên >= 1 hoặc để trống', 'error');
-      return;
+    let maxConcurrent: number | null = null;
+    if (capacityMode === 'MANUAL') {
+      const concTrim = maxConcurrentInput.trim();
+      const parsed = Number(concTrim);
+      if (!concTrim || !Number.isInteger(parsed) || parsed < 1 || parsed > maxAllowed) {
+        show(
+          activeCount === 0
+            ? 'Studio chưa có thợ hoạt động nên sức chứa đồng thời tối đa là 1'
+            : `Số ca trùng giờ tối đa phải nằm trong khoảng 1 – ${activeCount}`,
+          'error',
+        );
+        return;
+      }
+      maxConcurrent = parsed;
     }
-    if (dailyTrim && (!Number.isInteger(maxDaily) || (maxDaily ?? 0) < 1)) {
-      show('Giới hạn ca/ngày phải là số nguyên >= 1 hoặc để trống', 'error');
-      return;
+
+    let maxDaily: number | null = null;
+    if (dailyLimitEnabled) {
+      const dailyTrim = maxDailyInput.trim();
+      const parsedDaily = Number(dailyTrim);
+      if (!dailyTrim || !Number.isInteger(parsedDaily) || parsedDaily < 1 || parsedDaily > 100) {
+        show('Giới hạn ca/ngày phải là số nguyên từ 1 đến 100', 'error');
+        return;
+      }
+      maxDaily = parsedDaily;
     }
 
     setSavingCapacity(true);
@@ -138,7 +161,12 @@ export default function ProviderStaffManagementScreen() {
         maxConcurrentSessions: maxConcurrent,
         maxDailySessions: maxDaily,
       });
-      show('Đã cập nhật năng lực tiếp nhận của Studio', 'success');
+      show(
+        capacityMode === 'AUTO'
+          ? 'Đã bật chế độ Tự động mở slot theo số thợ rảnh'
+          : `Đã lưu giới hạn tối đa ${maxConcurrent} ca trùng giờ`,
+        'success',
+      );
       await loadStaff(true);
     } catch (err) {
       show(getApiErrorMessage(err, 'Không thể lưu năng lực'), 'error');
@@ -486,36 +514,162 @@ export default function ProviderStaffManagementScreen() {
             </View>
           )}
 
-          {/* Capacity Settings */}
+          {/* Capacity Settings (2A: Auto default + Optional Manual Cap) */}
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>NĂNG LỰC TIẾP NHẬN SONG SONG</Text>
-            <Text style={styles.helper}>
-              Khống chế số đơn trùng giờ tối đa Studio nhận cùng lúc (hữu ích khi muốn giữ biên dự phòng dù có nhiều thợ).
-            </Text>
+            <View style={styles.capHeaderRow}>
+              <Text style={styles.sectionTitle}>NĂNG LỰC TIẾP NHẬN SONG SONG</Text>
+              <View
+                style={[
+                  styles.capPill,
+                  summary?.maxConcurrentSessions == null
+                    ? styles.capPillAuto
+                    : styles.capPillManual,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.capPillText,
+                    summary?.maxConcurrentSessions == null
+                      ? styles.capPillTextAuto
+                      : styles.capPillTextManual,
+                  ]}
+                >
+                  {summary?.effectiveCapacity ?? 1} ca/giờ ·{' '}
+                  {summary?.maxConcurrentSessions == null ? 'Tự động' : 'Giới hạn trần'}
+                </Text>
+              </View>
+            </View>
 
-            <View style={styles.capInputsRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.inputLbl}>Tối đa ca trùng giờ</Text>
+            <View style={styles.modeStack}>
+              <Pressable
+                onPress={() => setCapacityMode('AUTO')}
+                style={[
+                  styles.modeOption,
+                  capacityMode === 'AUTO' && styles.modeOptionActive,
+                ]}
+              >
+                <View style={styles.modeOptionTop}>
+                  <View
+                    style={[
+                      styles.modeRadio,
+                      capacityMode === 'AUTO' && styles.modeRadioActive,
+                    ]}
+                  />
+                  <Text style={styles.modeTitle}>Tự động theo số thợ rảnh</Text>
+                  <View style={styles.modeRecBadge}>
+                    <Text style={styles.modeRecText}>Khuyên dùng</Text>
+                  </View>
+                </View>
+                <Text style={styles.modeDesc}>
+                  Tự động mở đúng bằng số thợ hoạt động không báo bận (hiện tại:{' '}
+                  {Math.max(1, summary?.activeStaff ?? 0)} ca/giờ).
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  setCapacityMode('MANUAL');
+                  if (!maxConcurrentInput.trim()) {
+                    setMaxConcurrentInput(String(Math.max(1, summary?.activeStaff ?? 1)));
+                  }
+                }}
+                style={[
+                  styles.modeOption,
+                  capacityMode === 'MANUAL' && styles.modeOptionActive,
+                ]}
+              >
+                <View style={styles.modeOptionTop}>
+                  <View
+                    style={[
+                      styles.modeRadio,
+                      capacityMode === 'MANUAL' && styles.modeRadioActive,
+                    ]}
+                  />
+                  <Text style={styles.modeTitle}>Giới hạn trần thủ công</Text>
+                </View>
+                <Text style={styles.modeDesc}>
+                  Chủ động giới hạn số khách tối đa trong 1 khung giờ (VD: chừa thợ dự bị).
+                </Text>
+              </Pressable>
+            </View>
+
+            {capacityMode === 'MANUAL' && (
+              <View>
+                <Text style={styles.inputLbl}>
+                  Tối đa ca trùng giờ (1–{Math.max(1, summary?.activeStaff ?? 1)})
+                </Text>
                 <TextInput
                   value={maxConcurrentInput}
                   onChangeText={setMaxConcurrentInput}
                   keyboardType="number-pad"
-                  placeholder="Theo số thợ ACTIVE"
+                  placeholder={String(Math.max(1, summary?.activeStaff ?? 1))}
                   placeholderTextColor="#94A3B8"
                   style={styles.input}
                 />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.inputLbl}>Giới hạn ca/ngày</Text>
-                <TextInput
-                  value={maxDailyInput}
-                  onChangeText={setMaxDailyInput}
-                  keyboardType="number-pad"
-                  placeholder="Không giới hạn"
-                  placeholderTextColor="#94A3B8"
-                  style={styles.input}
+            )}
+
+            <View style={styles.dailyBox}>
+              <View style={styles.dailyToggleRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.dailyTitle}>
+                    Giới hạn tổng ca chụp / ngày (tuỳ chọn)
+                  </Text>
+                  <Text style={styles.dailySub}>
+                    {dailyLimitEnabled
+                      ? 'Giới hạn tổng số ca cả ngày từ sáng đến tối.'
+                      : 'Đang tắt — không giới hạn tổng ca trong ngày.'}
+                  </Text>
+                </View>
+                <Switch
+                  value={dailyLimitEnabled}
+                  onValueChange={(checked) => {
+                    setDailyLimitEnabled(checked);
+                    if (checked && !maxDailyInput.trim()) {
+                      const activeCount = Math.max(1, summary?.activeStaff ?? 1);
+                      setMaxDailyInput(String(activeCount * 3));
+                    }
+                  }}
+                  trackColor={{ false: '#CBD5E1', true: '#F2B8C6' }}
+                  thumbColor={dailyLimitEnabled ? '#BA0049' : '#FFFFFF'}
                 />
               </View>
+
+              {dailyLimitEnabled && (
+                <View style={{ gap: 6 }}>
+                  <Text style={styles.inputLbl}>Số ca tối đa cả ngày (1–100)</Text>
+                  <TextInput
+                    value={maxDailyInput}
+                    onChangeText={setMaxDailyInput}
+                    keyboardType="number-pad"
+                    placeholder="VD: 9"
+                    placeholderTextColor="#94A3B8"
+                    style={styles.input}
+                  />
+                  {(() => {
+                    const activeStaffCount = summary?.activeStaff ?? 0;
+                    const parsedDailyPreview = Number(maxDailyInput);
+                    if (
+                      activeStaffCount >= 2 &&
+                      Number.isInteger(parsedDailyPreview) &&
+                      parsedDailyPreview >= 1 &&
+                      parsedDailyPreview <= activeStaffCount
+                    ) {
+                      return (
+                        <View style={styles.dailyWarnBox}>
+                          <Ionicons name="warning-outline" size={14} color="#B45309" />
+                          <Text style={styles.dailyWarnText}>
+                            Lưu ý: Con số này giới hạn TỔNG số ca cả ngày (sáng + chiều + tối),
+                            không phải cùng 1 giờ. Với {activeStaffCount} thợ, nên đặt từ{' '}
+                            {activeStaffCount * 2}–{activeStaffCount * 3} ca/ngày trở lên.
+                          </Text>
+                        </View>
+                      );
+                    }
+                    return null;
+                  })()}
+                </View>
+              )}
             </View>
 
             <Pressable
@@ -525,7 +679,7 @@ export default function ProviderStaffManagementScreen() {
             >
               <Ionicons name="save-outline" size={16} color="#FFFFFF" />
               <Text style={styles.saveCapText}>
-                {savingCapacity ? 'Đang lưu...' : 'Lưu năng lực tiếp nhận'}
+                {savingCapacity ? 'Đang lưu...' : 'Lưu cấu hình sức chứa'}
               </Text>
             </Pressable>
           </View>
@@ -1180,6 +1334,93 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
   },
+  capHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  capPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  capPillAuto: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  capPillManual: {
+    backgroundColor: '#FDF2F4',
+    borderColor: '#F2CFD6',
+  },
+  capPillText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 11,
+  },
+  capPillTextAuto: {
+    color: '#047857',
+  },
+  capPillTextManual: {
+    color: '#BA0049',
+  },
+  modeStack: {
+    gap: 8,
+  },
+  modeOption: {
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#E8DFD6',
+    backgroundColor: '#FCFBF9',
+    padding: 11,
+    gap: 4,
+  },
+  modeOptionActive: {
+    borderColor: '#BA0049',
+    backgroundColor: '#FFF7F9',
+  },
+  modeOptionTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  modeRadio: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+  },
+  modeRadioActive: {
+    borderColor: '#BA0049',
+    backgroundColor: '#BA0049',
+  },
+  modeTitle: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 13,
+    color: '#111418',
+  },
+  modeRecBadge: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  modeRecText: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 10,
+    color: '#047857',
+  },
+  modeDesc: {
+    fontFamily: FontFamily.body,
+    fontSize: 11.5,
+    lineHeight: 16.5,
+    color: '#5F6874',
+    paddingLeft: 24,
+  },
   inputLbl: {
     fontFamily: FontFamily.bodySemiBold,
     fontSize: 11.5,
@@ -1196,6 +1437,49 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.body,
     fontSize: 13,
     color: '#111418',
+  },
+  dailyBox: {
+    backgroundColor: '#FCFBF9',
+    borderWidth: 1,
+    borderColor: '#E8DFD6',
+    borderRadius: 12,
+    padding: 11,
+    gap: 8,
+  },
+  dailyToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  dailyTitle: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 12.5,
+    color: '#111418',
+  },
+  dailySub: {
+    fontFamily: FontFamily.body,
+    fontSize: 11.5,
+    color: '#5F6874',
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  dailyWarnBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 9,
+    padding: 9,
+  },
+  dailyWarnText: {
+    flex: 1,
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: 11.5,
+    color: '#92400E',
+    lineHeight: 16.5,
   },
   saveCapBtn: {
     flexDirection: 'row',
