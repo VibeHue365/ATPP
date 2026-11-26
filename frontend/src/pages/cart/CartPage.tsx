@@ -65,6 +65,9 @@ export const CartPage: React.FC = () => {
 
   // Contract states
   const [pendingContractBookingId, setPendingContractBookingId] = useState<string | null>(null);
+  const [pendingContractBookingIds, setPendingContractBookingIds] = useState<string[]>([]);
+  const [totalContractCount, setTotalContractCount] = useState<number>(0);
+  const [pendingCheckoutBookingIds, setPendingCheckoutBookingIds] = useState<string[]>([]);
   const [pendingPaymentPurpose, setPendingPaymentPurpose] = useState<string>('FULL_PAYMENT');
   const [isContractModalOpen, setIsContractModalOpen] = useState(false);
 
@@ -929,7 +932,12 @@ export const CartPage: React.FC = () => {
 
           if (eligibilityItems.length > 0) {
             const eligRes = await contractService.checkEligibility(eligibilityItems);
-            if (!eligRes.eligible && eligRes.ineligibleItems.length > 0) {
+            const isMixedContractCart = eligRes.ineligibleItems.some(
+              (item) => item.reason === 'MIXED_CONTRACT_FLOW_UNSUPPORTED',
+            );
+            // Mixed carts are split into independent bookings below.  Only a
+            // real product/provider eligibility failure must stop checkout here.
+            if (!eligRes.eligible && !isMixedContractCart && eligRes.ineligibleItems.length > 0) {
               const firstFail = eligRes.ineligibleItems[0];
               toast.error(firstFail.message);
               setIsLoading(false);
@@ -992,18 +1000,14 @@ export const CartPage: React.FC = () => {
         };
       };
 
-      // Nhóm các sản phẩm thuê lẻ theo (Cửa hàng + Ngày thuê) - Tuyệt đối không gộp chung với Combo
+      // Nhóm toàn bộ sản phẩm thuê lẻ theo cửa hàng. Mỗi sản phẩm vẫn giữ
+      // lịch thuê riêng trong booking item và snapshot hợp đồng.
       const rentalBatchesMap = new Map<string, typeof standaloneProductItems>();
       standaloneProductItems.forEach((it) => {
         const { providerId, providerName } = resolveItemShopInfo(it);
-        const from = it.rentalFrom || it.startDate || '';
-        const to = it.rentalTo || it.endDate || from;
-        const fromStr = from ? new Date(from).toISOString().split('T')[0] : '';
-        const toStr = to ? new Date(to).toISOString().split('T')[0] : '';
-        const key = `${providerId}___${fromStr}___${toStr}`;
-        const list = rentalBatchesMap.get(key) || [];
+        const list = rentalBatchesMap.get(providerId) || [];
         list.push({ ...it, providerId, providerName } as any);
-        rentalBatchesMap.set(key, list);
+        rentalBatchesMap.set(providerId, list);
       });
 
       // Xây dựng danh sách các đơn hàng độc lập sẽ được tạo
@@ -1017,14 +1021,8 @@ export const CartPage: React.FC = () => {
         photoItem?: typeof selectedItems[0];
         comboProducts?: typeof selectedItems;
         rentalBatch?: {
-          key: string;
           providerId: string;
           providerName: string;
-          fromStr: string;
-          toStr: string;
-          fFrom: string;
-          fTo: string;
-          dayCount: number;
           items: typeof standaloneProductItems;
         };
       }
@@ -1041,7 +1039,7 @@ export const CartPage: React.FC = () => {
 
         bookingUnits.push({
           type: 'COMBO',
-          title: `🎁 Gói Combo: ${comboName}`,
+          title: `Gói Combo: ${comboName}`,
           subtitle: `Dịch vụ trọn gói (Áo dài & Chụp ảnh)`,
           detailsHtml: `<strong>Trang phục:</strong> ${prodNames || 'Áo dài'}<br/><strong>Nhiếp ảnh:</strong> ${photo?.photographerName || 'Nhiếp ảnh gia'}`,
           subTotal,
@@ -1055,7 +1053,7 @@ export const CartPage: React.FC = () => {
       standalonePhotoItems.forEach((photo) => {
         bookingUnits.push({
           type: 'STANDALONE_PHOTO',
-          title: `📸 Gói chụp ảnh: ${photo.packageName || photo.name || 'Gói chụp ảnh'}`,
+          title: `Gói chụp ảnh: ${photo.packageName || photo.name || 'Gói chụp ảnh'}`,
           subtitle: `Nhiếp ảnh gia: ${photo.photographerName || 'Chuyên nghiệp'}`,
           detailsHtml: `<strong>Lịch chụp:</strong> ${photo.shootDate ? new Date(photo.shootDate).toLocaleDateString('vi-VN') : 'Linh hoạt'} (${photo.shootTimeSlot || 'Chưa chọn giờ'})<br/><strong>Địa điểm:</strong> ${photo.shootLocation || 'Huế'}`,
           subTotal: photo.basePrice || 0,
@@ -1063,37 +1061,48 @@ export const CartPage: React.FC = () => {
         });
       });
 
-      // 3. Thêm các đơn thuê áo dài lẻ (tách theo từng shop & từng đợt ngày)
-      Array.from(rentalBatchesMap.entries()).forEach(([key, items]) => {
-        const [providerId, fromStr, toStr] = key.split('___');
+      // 3. Thêm các đơn thuê áo dài lẻ (mỗi shop một booking/hợp đồng)
+      Array.from(rentalBatchesMap.entries()).forEach(([providerId, items]) => {
         const providerName = (items[0] as any)?.providerName || 'Cửa hàng';
-        const fFrom = fromStr ? new Date(fromStr).toLocaleDateString('vi-VN') : 'Chưa đặt';
-        const fTo = toStr ? new Date(toStr).toLocaleDateString('vi-VN') : '—';
-        let dayCount = 1;
-        if (fromStr && toStr) {
-          const diffMs = new Date(toStr).getTime() - new Date(fromStr).getTime();
-          dayCount = Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24)) + 1);
-        }
-        const namesWithSizes = items
-          .map((i) => `${i.name || i.productName || 'Áo dài'}${i.size ? ` (Size ${i.size})` : ''}`)
-          .join(', ');
+        const rentalSchedules = new Set(
+          items.map((item) => {
+            const from = item.rentalFrom || item.startDate || '';
+            const to = item.rentalTo || item.endDate || from;
+            return `${from}___${to}`;
+          }),
+        );
+        const scheduleLabel = rentalSchedules.size === 1
+          ? (() => {
+              const [schedule] = [...rentalSchedules];
+              const [from, to] = schedule.split('___');
+              const fromLabel = from ? new Date(from).toLocaleDateString('vi-VN') : 'Chưa đặt';
+              const toLabel = to ? new Date(to).toLocaleDateString('vi-VN') : 'Chưa đặt';
+              return `Lịch nhận - trả: ${fromLabel} đến ${toLabel}`;
+            })()
+          : `${items.length} trang phục • ${rentalSchedules.size} lịch thuê riêng`;
+        const itemDetails = items
+          .map((item) => {
+            const name = item.name || item.productName || 'Áo dài';
+            const size = item.size ? `Size ${item.size}` : 'Freesize';
+            const from = item.rentalFrom || item.startDate;
+            const to = item.rentalTo || item.endDate || from;
+            const period = from
+              ? `${new Date(from).toLocaleDateString('vi-VN')} – ${to ? new Date(to).toLocaleDateString('vi-VN') : 'Chưa đặt'}`
+              : 'Chưa chọn lịch';
+            return `<div><strong>${name}</strong> · ${size} · ${period}</div>`;
+          })
+          .join('');
         const subTotal = items.reduce((sum, i) => sum + (i.basePrice || 0) * (i.quantity || 1), 0);
 
         bookingUnits.push({
           type: 'STANDALONE_RENTAL',
-          title: `🏪 Thuê trang phục: ${providerName}`,
-          subtitle: `Lịch nhận - trả: ${fFrom} đến ${fTo} (${dayCount} ngày)`,
-          detailsHtml: `<strong>Trang phục:</strong> ${namesWithSizes}`,
+          title: `Thuê trang phục: ${providerName}`,
+          subtitle: scheduleLabel,
+          detailsHtml: itemDetails,
           subTotal,
           rentalBatch: {
-            key,
             providerId,
             providerName,
-            fromStr,
-            toStr,
-            fFrom,
-            fTo,
-            dayCount,
             items,
           },
         });
@@ -1116,50 +1125,69 @@ export const CartPage: React.FC = () => {
           modalTitle = 'Tách đơn Combo & Gói chụp riêng';
           reasonText = `Giỏ hàng của bạn bao gồm <strong>Gói Combo</strong> và <strong>Gói chụp ảnh riêng</strong>. Hệ thống sẽ tự động tách thành <strong>${bookingUnits.length} đơn hàng độc lập</strong>:`;
         } else {
-          modalTitle = 'Tách đơn hàng theo Cửa hàng & Lịch thuê';
-          reasonText = `Đơn hàng của bạn sẽ được tự động tách thành <strong>${bookingUnits.length} đơn hàng độc lập</strong> theo từng cửa hàng & đợt thuê:`;
+          modalTitle = 'Tách đơn hàng theo cửa hàng';
+          reasonText = `Đơn hàng của bạn sẽ được tự động tách thành <strong>${bookingUnits.length} đơn hàng độc lập</strong> theo từng cửa hàng:`;
         }
 
         const unitsHtml = bookingUnits
           .map(
-            (u, idx) => `
-          <div style="background: #FCFAF8; border: 1px solid #ECE5DB; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; text-align: left;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-weight: 800; color: #8E1B2E; font-size: 13.5px;">Đơn ${idx + 1}: ${u.title}</span>
-              <span style="font-weight: 700; color: #231F20; font-size: 13px;">${u.subTotal.toLocaleString('vi-VN')}đ</span>
+            (u, idx) => {
+              const unitIcon = u.type === 'COMBO' ? '✦' : u.type === 'STANDALONE_PHOTO' ? '▣' : '⌂';
+              return `
+          <article class="vh-split-order-card">
+            <div class="vh-split-order-card__header">
+              <div class="vh-split-order-card__identity">
+                <span class="vh-split-order-card__number">Đơn ${String(idx + 1).padStart(2, '0')}</span>
+                <span class="vh-split-order-card__icon" aria-hidden="true">${unitIcon}</span>
+                <strong class="vh-split-order-card__title">${u.title}</strong>
+              </div>
+              <strong class="vh-split-order-card__price">${u.subTotal.toLocaleString('vi-VN')}đ</strong>
             </div>
-            <div style="font-size: 12.5px; color: #78350F; margin-bottom: 4px;">
+            <div class="vh-split-order-card__schedule">
               ${u.subtitle}
             </div>
-            <div style="font-size: 12.5px; color: #574D4F; line-height: 1.5;">
+            <div class="vh-split-order-card__details">
               ${u.detailsHtml}
             </div>
-          </div>
-        `,
+          </article>
+        `;
+            },
           )
           .join('');
 
         const confirmRes = await Swal.fire({
           title: modalTitle,
           html: `
-            <div style="font-size: 13.5px; color: #4A3F35; line-height: 1.6; text-align: left;">
-              <p style="margin-bottom: 12px;">
+            <div class="vh-split-order-content">
+              <div class="vh-split-order-summary">
+                <span class="vh-split-order-summary__count">${bookingUnits.length} đơn hàng</span>
+                <p class="vh-split-order-summary__text">
                 ${reasonText}
-              </p>
-              ${unitsHtml}
-              <div style="background: #FFFBEB; border: 1px solid #FCD34D; border-radius: 8px; padding: 10px 12px; margin-top: 12px; font-size: 12.5px; color: #78350F;">
-                <strong>Bạn có chắc chắn muốn tiến hành đặt không?</strong><br/>
-                <em>Hệ thống sẽ tạo <strong>${bookingUnits.length} đơn hàng độc lập</strong> để đảm bảo quản lý và đối soát chính xác.<br/>
-                ✨ Bạn chỉ cần <strong>thanh toán chung 1 lần duy nhất</strong> cho toàn bộ các đơn hàng này!</em>
+                </p>
+              </div>
+              <div class="vh-split-order-list">${unitsHtml}</div>
+              <div class="vh-split-order-payment-note">
+                <span class="vh-split-order-payment-note__icon" aria-hidden="true">✓</span>
+                <div>
+                  <strong>Thanh toán một lần cho toàn bộ đơn hàng</strong>
+                  <p>Hệ thống tự tách ${bookingUnits.length} đơn để các cửa hàng xử lý chính xác; bạn không cần thanh toán riêng từng đơn.</p>
+                </div>
               </div>
             </div>
           `,
-          icon: 'warning',
           showCancelButton: true,
-          confirmButtonText: `Xác nhận đặt & Thanh toán chung (${bookingUnits.length} đơn)`,
-          cancelButtonText: 'Kiểm tra lại giỏ hàng',
+          confirmButtonText: `Đặt & thanh toán ${bookingUnits.length} đơn`,
+          cancelButtonText: 'Quay lại giỏ hàng',
           confirmButtonColor: '#8E1B2E',
           cancelButtonColor: '#7D736B',
+          customClass: {
+            popup: 'vh-order-split-modal',
+            title: 'vh-order-split-modal__title',
+            htmlContainer: 'vh-order-split-modal__body',
+            actions: 'vh-order-split-modal__actions',
+            confirmButton: 'vh-order-split-modal__confirm',
+            cancelButton: 'vh-order-split-modal__cancel',
+          },
         });
 
         if (!confirmRes.isConfirmed) {
@@ -1306,25 +1334,30 @@ export const CartPage: React.FC = () => {
         }
       }
 
-      // Xóa tất cả các mục đã đặt khỏi giỏ hàng
-      selectedItems.forEach((it) => removeFromCart(it.id));
-
       const allBookingIds = createdBookings.map((b) => b.bookingId);
-      const primaryBooking = createdBookings[0];
       const targetPaymentPurpose = createdBookings.some((b) => b.paymentPurpose === 'DEPOSIT_PAYMENT')
         ? 'DEPOSIT_PAYMENT'
         : 'FULL_PAYMENT';
 
-      // Kiểm tra hợp đồng điện tử nếu chỉ có 1 đơn
-      if (
-        allBookingIds.length === 1 &&
-        CONTRACTS_V2_ENABLED &&
-        primaryBooking.contractFlowVersion !== null
-      ) {
+      // Only contract-enabled bookings require an acknowledgement. Legacy
+      // bookings remain in the same aggregated payment without extra steps.
+      const contractBookingIds = createdBookings
+        .filter((booking) => booking.contractFlowVersion === 2)
+        .map((booking) => booking.bookingId);
+      if (CONTRACTS_V2_ENABLED && contractBookingIds.length > 0) {
         try {
-          const readiness = await contractService.getBookingReadiness(primaryBooking.bookingId);
-          if (readiness.requirement === 'REQUIRED' && !readiness.ready) {
-            setPendingContractBookingId(primaryBooking.bookingId);
+          const unacceptedContractBookingIds: string[] = [];
+          for (const bookingId of contractBookingIds) {
+            const readiness = await contractService.getBookingReadiness(bookingId);
+            if (readiness.requirement === 'REQUIRED' && !readiness.ready) {
+              unacceptedContractBookingIds.push(bookingId);
+            }
+          }
+          if (unacceptedContractBookingIds.length > 0) {
+            setPendingContractBookingId(unacceptedContractBookingIds[0]);
+            setPendingContractBookingIds(unacceptedContractBookingIds.slice(1));
+            setTotalContractCount(unacceptedContractBookingIds.length);
+            setPendingCheckoutBookingIds(allBookingIds);
             setPendingPaymentPurpose(targetPaymentPurpose);
             setIsContractModalOpen(true);
             setIsLoading(false);
@@ -1639,28 +1672,52 @@ export const CartPage: React.FC = () => {
         <ContractReviewModal
           isOpen={isContractModalOpen}
           bookingId={pendingContractBookingId}
+          currentStep={totalContractCount > 0 ? totalContractCount - pendingContractBookingIds.length : undefined}
+          totalSteps={totalContractCount > 0 ? totalContractCount : undefined}
           onClose={async () => {
             const bId = pendingContractBookingId;
+            const bookingIdsToCancel = [
+              bId,
+              ...pendingContractBookingIds,
+              ...pendingCheckoutBookingIds.filter((id) => id !== bId),
+            ].filter((id): id is string => Boolean(id));
             setIsContractModalOpen(false);
             setPendingContractBookingId(null);
-            if (bId) {
-              try {
-                await httpClient.post(`/bookings/${bId}/cancel`, {
-                  reason: 'Khách hàng đóng giao diện chấp thuận hợp đồng',
-                });
-                toast.info('Đã hủy giữ chỗ. Số lượng sản phẩm đã được mở lại cho giỏ hàng.');
-              } catch (e) {
-                console.warn('Failed to auto-cancel unaccepted contract booking:', e);
-              }
+            setPendingContractBookingIds([]);
+            setTotalContractCount(0);
+            setPendingCheckoutBookingIds([]);
+            try {
+              await Promise.all(
+                [...new Set(bookingIdsToCancel)].map((bookingId) =>
+                  httpClient.post(`/bookings/${bookingId}/cancel`, {
+                    reason: 'Khách hàng đóng giao diện chấp thuận hợp đồng',
+                  }),
+                ),
+              );
+              toast.info('Đã hủy giữ chỗ. Số lượng sản phẩm đã được mở lại cho giỏ hàng.');
+            } catch (e) {
+              console.warn('Failed to auto-cancel pending checkout bookings:', e);
             }
           }}
           onAllAccepted={() => {
             const bId = pendingContractBookingId;
             const purpose = pendingPaymentPurpose;
+            const nextContractBookingId = pendingContractBookingIds[0];
+            if (nextContractBookingId) {
+              setPendingContractBookingId(nextContractBookingId);
+              setPendingContractBookingIds((ids) => ids.slice(1));
+              return;
+            }
+            const bookingIds = pendingCheckoutBookingIds.length > 0
+              ? pendingCheckoutBookingIds
+              : bId ? [bId] : [];
             setIsContractModalOpen(false);
             setPendingContractBookingId(null);
-            if (bId) {
-              void proceedToPayment(bId, purpose);
+            setPendingContractBookingIds([]);
+            setTotalContractCount(0);
+            setPendingCheckoutBookingIds([]);
+            if (bookingIds.length > 0) {
+              void proceedToPayment(bookingIds, purpose);
             }
           }}
         />

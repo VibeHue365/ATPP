@@ -308,6 +308,38 @@ export const ProviderPolicyForm: React.FC = () => {
       }
     }
 
+    const orderedTiers: Array<{ name: string; rule?: TierCompensationRule | null }> = [
+      { name: 'Hư hỏng nhẹ', rule: minorDamage },
+      { name: 'Hư hỏng vừa', rule: moderateDamage },
+      { name: 'Hư hỏng nặng', rule: severeDamage },
+      { name: 'Mất trang phục', rule: totalLoss },
+    ];
+    for (let i = 0; i < orderedTiers.length; i++) {
+      for (let j = i + 1; j < orderedTiers.length; j++) {
+        const lighter = orderedTiers[i];
+        const heavier = orderedTiers[j];
+        if (!lighter.rule || !heavier.rule) continue;
+        if (
+          lighter.rule.method === 'PERCENTAGE_ON_ASSET' &&
+          heavier.rule.method === 'PERCENTAGE_ON_ASSET' &&
+          typeof lighter.rule.percentageOfAsset === 'number' &&
+          typeof heavier.rule.percentageOfAsset === 'number' &&
+          heavier.rule.percentageOfAsset < lighter.rule.percentageOfAsset
+        ) {
+          return `Tỷ lệ bồi thường của '${heavier.name}' (${heavier.rule.percentageOfAsset}%) không được thấp hơn '${lighter.name}' (${lighter.rule.percentageOfAsset}%).`;
+        }
+        if (
+          lighter.rule.method === 'FIXED_FEE' &&
+          heavier.rule.method === 'FIXED_FEE' &&
+          typeof lighter.rule.fixedFeeAmount === 'number' &&
+          typeof heavier.rule.fixedFeeAmount === 'number' &&
+          heavier.rule.fixedFeeAmount < lighter.rule.fixedFeeAmount
+        ) {
+          return `Phí bồi thường của '${heavier.name}' không được thấp hơn '${lighter.name}'.`;
+        }
+      }
+    }
+
     return null;
   };
 

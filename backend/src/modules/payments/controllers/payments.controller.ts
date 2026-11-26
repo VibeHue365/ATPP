@@ -220,7 +220,11 @@ export class PaymentsController {
             'Số tiền webhook không khớp giao dịch.',
           );
         }
-        if (isV2)
+        if (
+          isV2 ||
+          (Array.isArray(payment.relatedBookingIds) &&
+            payment.relatedBookingIds.length > 0)
+        )
           await this.paymentsService.confirmPayment(payment.paymentCode, {
             source: 'WEBHOOK',
             orderCode,

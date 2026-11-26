@@ -88,6 +88,11 @@ import {
   ReservationStatus,
 } from '../../products/schemas/inventory-reservation.schema';
 import { ContractPolicyService } from '../../contracts/contract-policy.service';
+import { composeLocationAddress } from '../utils/location-address';
+import {
+  calculateItemizedContractCancellation,
+  type ContractCancellationRule,
+} from '../utils/itemized-contract-cancellation';
 import { BookingCreationService } from './booking-creation.service';
 import {
   IsString,
@@ -853,7 +858,12 @@ export class BookingsService implements OnApplicationBootstrap {
     }
     const coordinates = source.geo?.coordinates;
     return {
-      address: source.addressLine.trim(),
+      address: composeLocationAddress(
+        source.addressLine,
+        source.ward,
+        source.district,
+        source.city,
+      ),
       ward: source.ward ?? null,
       district: source.district ?? null,
       city: source.city ?? null,
@@ -5103,6 +5113,33 @@ export class BookingsService implements OnApplicationBootstrap {
     );
   }
 
+  private async getContractCancellationRulesByProvider(
+    bookingId: Types.ObjectId,
+  ): Promise<Map<string, ContractCancellationRule[]>> {
+    const result = new Map<string, ContractCancellationRule[]>();
+    const contracts = await this.bookingModel.db
+      .collection('digital_contracts')
+      .find({ bookingId, flowVersion: 2 })
+      .toArray();
+    for (const contract of contracts) {
+      if (!contract.currentVersionId || !contract.providerId) continue;
+      const version = await this.bookingModel.db
+        .collection('contract_versions')
+        .findOne({ _id: contract.currentVersionId, contractId: contract._id });
+      const rules = version?.snapshot?.policies?.providerCancellationPolicy
+        ?.refundRules;
+      if (!Array.isArray(rules) || rules.length === 0) continue;
+      result.set(
+        contract.providerId.toString(),
+        rules.map((rule: any) => ({
+          daysBeforeRental: Number(rule.daysBeforeRental),
+          refundPercentage: Number(rule.refundPercentage),
+        })),
+      );
+    }
+    return result;
+  }
+
   /** Hủy đơn → trigger hoàn tiền cọc (PaymentsService.refundDeposit) */
   async cancelBooking(
     bookingId: string,
@@ -5195,8 +5232,60 @@ export class BookingsService implements OnApplicationBootstrap {
     let refundAmount = 0;
     let penaltyReason = '';
     let diffInHours: number | undefined;
+    let itemizedContractCancellation: ReturnType<
+      typeof calculateItemizedContractCancellation
+    > | null = null;
 
-    if (isCustomer && booking.status !== BookingStatus.PendingPayment) {
+    if (
+      isCustomer &&
+      booking.status !== BookingStatus.PendingPayment &&
+      booking.contractFlowVersion === 2 &&
+      booking.bookingType === BookingType.AoDaiRental
+    ) {
+      const items = await this.bookingItemModel.find({
+        bookingId: booking._id,
+        itemType: BookingItemType.Product,
+      });
+      const rulesByProvider =
+        await this.getContractCancellationRulesByProvider(booking._id);
+      const everyItemHasPolicy =
+        items.length > 0 &&
+        items.every((item) =>
+          Boolean(item.rentalFrom) &&
+          rulesByProvider.has(item.providerId.toString()),
+        );
+      if (everyItemHasPolicy) {
+        itemizedContractCancellation = calculateItemizedContractCancellation({
+          now,
+          rulesByProvider,
+          items: items.map((item) => ({
+            id: item._id.toString(),
+            providerId: item.providerId.toString(),
+            rentalFrom: item.rentalFrom!,
+            unitPrice: item.unitPrice,
+            depositAmount: item.depositAmount,
+            quantity: item.quantity,
+            discountAmount:
+              (item.comboDiscountAmount || 0) +
+              (item.shopVoucherDiscountAmount || 0) +
+              (item.platformVoucherDiscountAmount || 0),
+          })),
+        });
+        isFreeCancel = itemizedContractCancellation.penaltyAmount === 0;
+        const affectedItems = itemizedContractCancellation.breakdown.filter(
+          (row) => row.refundPercentage < 100,
+        ).length;
+        penaltyReason = affectedItems
+          ? `Chính sách hủy được tính riêng theo lịch thuê của từng sản phẩm; ${affectedItems}/${items.length} sản phẩm không còn trong mốc hoàn 100% tiền thuê.`
+          : '';
+      }
+    }
+
+    if (
+      isCustomer &&
+      booking.status !== BookingStatus.PendingPayment &&
+      !itemizedContractCancellation
+    ) {
       // Tìm booking items để lấy start date sớm nhất
       const items = await this.bookingItemModel.find({
         bookingId: booking._id,
@@ -5337,6 +5426,13 @@ export class BookingsService implements OnApplicationBootstrap {
       refundAmount = 0;
       penaltyAmount = 0;
       isFreeCancel = true;
+    } else if (itemizedContractCancellation) {
+      refundAmount = Math.min(
+        grandTotal,
+        itemizedContractCancellation.refundAmount,
+      );
+      penaltyAmount = Math.max(0, grandTotal - refundAmount);
+      isFreeCancel = penaltyAmount === 0;
     } else if (isFreeCancel && !isNoShow) {
       refundAmount = grandTotal;
     } else if (isNoShow || (diffInHours !== undefined && diffInHours < 12)) {
@@ -5472,7 +5568,9 @@ export class BookingsService implements OnApplicationBootstrap {
         ? 'Đơn hàng đã được hủy trước khi thanh toán.'
         : isFreeCancel
           ? `Đơn hàng đã được hủy thành công. Hoàn tiền 100% (${refundAmount.toLocaleString('vi-VN')}đ).`
-          : `Đơn hàng đã bị hủy. Khách bị phạt mất cọc dịch vụ (${penaltyAmount.toLocaleString('vi-VN')}đ). Hoàn cọc giữ đồ & số dư (${refundAmount.toLocaleString('vi-VN')}đ). Lý do phạt: ${penaltyReason}`,
+          : itemizedContractCancellation
+            ? `Đơn hàng đã bị hủy. Khấu trừ ${penaltyAmount.toLocaleString('vi-VN')}đ theo chính sách hủy và lịch thuê riêng của từng sản phẩm; hoàn lại ${refundAmount.toLocaleString('vi-VN')}đ. ${penaltyReason}`
+            : `Đơn hàng đã bị hủy. Khách bị phạt mất cọc dịch vụ (${penaltyAmount.toLocaleString('vi-VN')}đ). Hoàn cọc giữ đồ & số dư (${refundAmount.toLocaleString('vi-VN')}đ). Lý do phạt: ${penaltyReason}`,
       changedBy: userId ? new Types.ObjectId(userId) : null,
     });
 

@@ -6,7 +6,7 @@ import { ScheduleUrgentAttentionSection } from './ScheduleUrgentAttentionSection
 import { ScheduleDataTable, type ScheduleRowItem } from './ScheduleDataTable';
 import { useAuth } from '../../../auth/hooks/useAuth';
 import { includesVietnamese } from '../../../../utils/vietnameseUtils';
-import { getBookingStatusMeta } from '../../../../utils/bookingStatus';
+import { getBookingStatusMeta, isBookingDepositSettled } from '../../../../utils/bookingStatus';
 import '../ProfilePage.css';
 
 interface ProfileScheduleTabProps {
@@ -143,7 +143,8 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
             (t.note?.includes('sự cố') || t.note?.includes('báo cáo') || t.note?.includes('đền bù') || t.note?.includes('hỏng'))
           )
         );
-        const meta = getBookingStatusMeta(b.status, { hasPendingIncident: hasIncident });
+        const isDepositSettled = isBookingDepositSettled(b);
+        const meta = getBookingStatusMeta(b.status, { hasPendingIncident: hasIncident, isDepositSettled });
         const statusLabel = meta.label.toUpperCase();
         const statusBg = meta.bg;
         const statusColor = meta.color;
@@ -164,7 +165,7 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
         } else if (b.status === 'COMBO_PHOTOS_APPROVED') {
           statusSubtext = 'Chờ hoàn tất trả đồ';
         } else if (b.status === 'RETURNED') {
-          statusSubtext = 'Đã trả đồ, chờ hoàn cọc';
+          statusSubtext = isDepositSettled ? 'Đã hoàn tất kiểm tra & hoàn cọc' : 'Đã trả đồ, chờ hoàn cọc';
         } else if (b.status === 'COMPLETED') {
           statusSubtext = 'Đã hoàn tất trải nghiệm';
         } else if (b.status === 'DISPUTED') {
@@ -305,7 +306,8 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
             (t.note?.includes('sự cố') || t.note?.includes('báo cáo') || t.note?.includes('đền bù') || t.note?.includes('hỏng'))
           )
         );
-        const meta = getBookingStatusMeta(b.status, { hasPendingIncident: hasIncident });
+        const isDepositSettled = isBookingDepositSettled(b);
+        const meta = getBookingStatusMeta(b.status, { hasPendingIncident: hasIncident, isDepositSettled });
         const statusLabel = meta.label.toUpperCase();
         const statusBg = meta.bg;
         const statusColor = meta.color;
@@ -331,7 +333,7 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
           } else if (b.status === 'RETURN_PENDING') {
             statusSubtext = hasIncident ? 'Shop yêu cầu đền bù hư hỏng' : 'Đang kiểm tra trả đồ';
           } else if (b.status === 'RETURNED') {
-            statusSubtext = 'Đã trả đồ · Chờ hoàn cọc';
+            statusSubtext = isDepositSettled ? 'Đã hoàn tất kiểm tra & hoàn cọc' : 'Đã trả đồ · Chờ hoàn cọc';
           } else if (b.status === 'COMPLETED') {
             statusSubtext = 'Đã hoàn tất đơn thuê';
           }

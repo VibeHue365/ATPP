@@ -82,6 +82,7 @@ import {
   TurnaroundStatus,
   createRentalFulfillment,
 } from '../schemas/rental-fulfillment.types';
+import { composeLocationAddress } from '../utils/location-address';
 
 export interface BookingCreationServiceDeps {
   bookingsRepository: BookingsRepository;
@@ -238,10 +239,12 @@ export class BookingCreationService {
     const loc = !useBusiness && customLoc ? customLoc : provider?.address;
     if (!loc) return undefined;
     const address =
-      [loc.addressLine || loc.address, loc.ward, loc.district, loc.city]
-        .filter((part) => typeof part === 'string' && part.trim().length > 0)
-        .map((part) => part.trim())
-        .join(', ') || 'Tại cửa hàng đối tác';
+      composeLocationAddress(
+        loc.addressLine || loc.address,
+        loc.ward,
+        loc.district,
+        loc.city,
+      ) || 'Tại cửa hàng đối tác';
     const hasValidGeo =
       Array.isArray(loc?.geo?.coordinates) && loc.geo.coordinates.length === 2;
     return {
@@ -459,7 +462,6 @@ export class BookingCreationService {
     const promotionId: Types.ObjectId | null = null;
 
     const todayStr = new Date().toISOString().split('T')[0];
-    const rentalDateRanges = new Set<string>();
     for (const item of dto.items) {
       if (item.rentalFrom) {
         const itemDateStr = new Date(item.rentalFrom)
@@ -481,21 +483,6 @@ export class BookingCreationService {
           );
         }
       }
-      if (item.rentalFrom || item.rentalTo) {
-        const fromStr = item.rentalFrom
-          ? new Date(item.rentalFrom).toISOString().split('T')[0]
-          : '';
-        const toStr = item.rentalTo
-          ? new Date(item.rentalTo).toISOString().split('T')[0]
-          : '';
-        rentalDateRanges.add(`${fromStr}_${toStr}`);
-      }
-    }
-
-    if (rentalDateRanges.size > 1) {
-      throw new BadRequestException(
-        'Tất cả trang phục trong cùng một đơn thuê phải có cùng thời gian nhận và trả đồ. Vui lòng tạo đơn riêng cho từng đợt thuê để đảm bảo lịch trình và hợp đồng chính xác.',
-      );
     }
 
     try {
@@ -1075,27 +1062,6 @@ export class BookingCreationService {
         throw new BadRequestException(
           'Đơn hàng không thể chứa sản phẩm từ nhiều đối tác hoặc cửa hàng khác nhau. Vui lòng tách đơn theo từng cửa hàng.',
         );
-      }
-
-      if (
-        dto.bookingType === BookingType.AoDaiRental &&
-        itemDetails.length > 1
-      ) {
-        const dateRanges = new Set(
-          itemDetails.map(
-            (it) =>
-              `${it.rentalFrom ? new Date(it.rentalFrom).toISOString().split('T')[0] : ''}_${
-                it.rentalTo
-                  ? new Date(it.rentalTo).toISOString().split('T')[0]
-                  : ''
-              }`,
-          ),
-        );
-        if (dateRanges.size > 1) {
-          throw new BadRequestException(
-            'Mỗi đơn thuê áo dài chỉ áp dụng cho một khoảng thời gian nhận/trả duy nhất. Vui lòng tách đơn theo từng đợt thuê.',
-          );
-        }
       }
 
       const travelFee = dto.travelFee || 0;

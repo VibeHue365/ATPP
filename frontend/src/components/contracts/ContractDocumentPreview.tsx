@@ -143,6 +143,10 @@ export const ContractDocumentPreview: React.FC<ContractDocumentPreviewProps> = (
 
     const firstRentalFrom = items[0]?.rentalFrom;
     const firstRentalTo = items[0]?.rentalTo;
+    const rentalPeriods = new Set(
+      items.map((item: any) => `${String(item.rentalFrom || '')}___${String(item.rentalTo || '')}`),
+    );
+    const hasMultipleRentalPeriods = rentalPeriods.size > 1;
     let rentalDays = 0;
     if (firstRentalFrom && firstRentalTo) {
       const fromD = new Date(firstRentalFrom).getTime();
@@ -152,7 +156,9 @@ export const ContractDocumentPreview: React.FC<ContractDocumentPreviewProps> = (
       }
     }
     const daysLabel = rentalDays > 0 ? ` (${rentalDays} ngày)` : '';
-    const periodStr = `Từ ngày ${formatShortDate(firstRentalFrom)} đến ngày ${formatShortDate(firstRentalTo)}${daysLabel}`;
+    const periodStr = hasMultipleRentalPeriods
+      ? 'Theo lịch thuê riêng của từng sản phẩm trong bảng chi tiết'
+      : `Từ ngày ${formatShortDate(firstRentalFrom)} đến ngày ${formatShortDate(firstRentalTo)}${daysLabel}`;
     const pickupLoc = formatAddress(
       items[0]?.pickupReturnLocation || provider.address,
       'Tại cửa hàng Bên Cho Thuê',
@@ -247,6 +253,7 @@ export const ContractDocumentPreview: React.FC<ContractDocumentPreviewProps> = (
                   <th>Sản phẩm & Phân loại</th>
                   <th style={{ width: '60px', textAlign: 'center' }}>Size</th>
                   <th style={{ width: '45px', textAlign: 'center' }}>SL</th>
+                  <th style={{ width: '150px' }}>Lịch thuê</th>
                   <th style={{ width: '100px', textAlign: 'right' }}>Đơn giá thuê</th>
                   <th style={{ width: '110px', textAlign: 'right' }}>Thành tiền</th>
                 </tr>
@@ -270,6 +277,11 @@ export const ContractDocumentPreview: React.FC<ContractDocumentPreviewProps> = (
                       </td>
                       <td style={{ textAlign: 'center' }}>{it.size || 'Freesize'}</td>
                       <td style={{ textAlign: 'center' }}>{q}</td>
+                      <td className="vh-doc-item-period">
+                        <span>{formatShortDate(it.rentalFrom)}</span>
+                        <span className="vh-doc-item-period__separator">→</span>
+                        <span>{formatShortDate(it.rentalTo)}</span>
+                      </td>
                       <td style={{ textAlign: 'right' }}>{formatVnd(uPrice)}</td>
                       <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatVnd(lTotal)}</td>
                     </tr>
@@ -502,7 +514,7 @@ export const ContractDocumentPreview: React.FC<ContractDocumentPreviewProps> = (
                 <h5>ĐIỀU 5: CHÍNH SÁCH HỦY ĐƠN VÀ HOÀN TIỀN</h5>
                 <ul>
                   <li>
-                    <strong>Thời điểm xác định yêu cầu hủy:</strong> Tính theo thời điểm (timestamp) hệ thống ghi nhận Bên B gửi yêu cầu hủy đơn thành công so với mốc thời gian nhận đồ (rentalFrom) quy định tại <strong>Phần II</strong>.
+                    <strong>Thời điểm xác định yêu cầu hủy:</strong> Tỷ lệ hoàn tiền thuê được tính riêng cho từng sản phẩm, dựa trên thời điểm hệ thống ghi nhận yêu cầu hủy so với mốc nhận đồ (rentalFrom) của chính sản phẩm đó tại <strong>Phần II</strong>. Tiền cọc của sản phẩm được hoàn lại khi hủy trước thời điểm nhận đồ.
                   </li>
                   <li>
                     <strong>Biểu phí và tỷ lệ hoàn tiền thuê (các khoảng thời gian không chồng lấn):</strong>

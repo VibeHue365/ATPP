@@ -638,6 +638,43 @@ export class ProviderContractPolicyService {
         }
       }
 
+      // Severity ordering check: minor <= moderate <= severe <= totalLoss
+      const orderedTiers = [
+        { label: 'Hư hỏng nhẹ', rule: damageCompensation.minorDamage },
+        { label: 'Hư hỏng vừa', rule: damageCompensation.moderateDamage },
+        { label: 'Hư hỏng nặng', rule: damageCompensation.severeDamage },
+        { label: 'Mất hoàn toàn', rule: damageCompensation.totalLoss },
+      ];
+      for (let i = 0; i < orderedTiers.length; i++) {
+        for (let j = i + 1; j < orderedTiers.length; j++) {
+          const lighter = orderedTiers[i];
+          const heavier = orderedTiers[j];
+          if (!lighter.rule || !heavier.rule) continue;
+          if (
+            lighter.rule.method === 'PERCENTAGE_ON_ASSET' &&
+            heavier.rule.method === 'PERCENTAGE_ON_ASSET' &&
+            typeof lighter.rule.percentageOfAsset === 'number' &&
+            typeof heavier.rule.percentageOfAsset === 'number' &&
+            heavier.rule.percentageOfAsset < lighter.rule.percentageOfAsset
+          ) {
+            throw new UnprocessableEntityException(
+              `TECHNICAL_VALIDATION_ERROR: Tỷ lệ bồi thường của '${heavier.label}' (${heavier.rule.percentageOfAsset}%) không được thấp hơn '${lighter.label}' (${lighter.rule.percentageOfAsset}%).`,
+            );
+          }
+          if (
+            lighter.rule.method === 'FIXED_FEE' &&
+            heavier.rule.method === 'FIXED_FEE' &&
+            typeof lighter.rule.fixedFeeAmount === 'number' &&
+            typeof heavier.rule.fixedFeeAmount === 'number' &&
+            heavier.rule.fixedFeeAmount < lighter.rule.fixedFeeAmount
+          ) {
+            throw new UnprocessableEntityException(
+              `TECHNICAL_VALIDATION_ERROR: Phí bồi thường của '${heavier.label}' không được thấp hơn '${lighter.label}'.`,
+            );
+          }
+        }
+      }
+
       if (
         typeof damageCompensation.incidentNotificationHours === 'number' &&
         damageCompensation.incidentNotificationHours < 1

@@ -206,6 +206,34 @@ export class PaymentsService {
       return this.createV2PaymentIntent(booking, purpose, v2Amount);
     }
 
+    // A cart can contain independent legacy and Contracts V2 bookings in one
+    // checkout. Legacy bookings do not need a contract, but every V2 booking
+    // must still have a current customer consent before it can share the link.
+    // Without this guard, the multi-booking branch below would accidentally
+    // bypass the V2 consent requirement.
+    const contractBookings = bookings.filter(
+      (candidate) =>
+        candidate.contractFlowVersion === 2 &&
+        candidate.bookingType !== BookingType.Photography,
+    );
+    if (contractBookings.length > 0) {
+      if (!this.contractsV2Enabled)
+        throw new ServiceUnavailableException('CONTRACTS_V2_DISABLED');
+      for (const contractBooking of contractBookings) {
+        const contractAmount = await this.calculatePaymentAmount(
+          contractBooking,
+          purpose,
+        );
+        const decision = await this.contractCheckoutGuard.evaluate(
+          contractBooking._id.toString(),
+          contractAmount,
+          purpose,
+        );
+        if (!decision.binding)
+          throw new ConflictException('CONTRACT_BINDING_REQUIRED');
+      }
+    }
+
     // Check for existing PENDING payment for the same booking — reuse if found
     const existingPendingPayment =
       await this.paymentsRepository.findPendingPaymentByBooking(bookingId);
@@ -612,6 +640,13 @@ export class PaymentsService {
       );
     const visible: typeof payments = [];
     for (const payment of payments) {
+      const isMultiBooking =
+        Array.isArray(payment.relatedBookingIds) &&
+        payment.relatedBookingIds.length > 0;
+      if (isMultiBooking) {
+        visible.push(payment);
+        continue;
+      }
       const query = this.bookingModel.findById(payment.bookingId);
       const booking =
         query && typeof (query as any).lean === 'function'
@@ -1002,7 +1037,12 @@ export class PaymentsService {
         'Không tìm thấy đơn đặt lịch tương ứng với giao dịch.',
       );
     }
+    const isMultiBookingPayment =
+      Array.isArray(candidate.relatedBookingIds) &&
+      candidate.relatedBookingIds.length > 0;
+
     if (
+      !isMultiBookingPayment &&
       booking.contractFlowVersion === 2 &&
       booking.bookingType !== BookingType.Photography
     ) {
@@ -1029,6 +1069,49 @@ export class PaymentsService {
       if (candidate.status === PaymentStatus.Pending && !evidence)
         throw new ForbiddenException('V2_PAYMENT_EVIDENCE_REQUIRED');
       return this.confirmV2Payment(candidate, booking);
+    }
+
+    if (isMultiBookingPayment) {
+      const bundleBookings = await this.bookingModel.find({
+        _id: { $in: [candidate.bookingId, ...(candidate.relatedBookingIds || [])] },
+      });
+      const v2BundleBookings = bundleBookings.filter(
+        (b) =>
+          b.contractFlowVersion === 2 &&
+          b.bookingType !== BookingType.Photography,
+      );
+      if (v2BundleBookings.length > 0) {
+        if (!this.contractsV2Enabled)
+          throw new ServiceUnavailableException('CONTRACTS_V2_DISABLED');
+        if (candidate.status === PaymentStatus.Pending && !evidence)
+          throw new ForbiddenException('V2_PAYMENT_EVIDENCE_REQUIRED');
+        for (const v2Booking of v2BundleBookings) {
+          try {
+            const v2Amount = await this.calculatePaymentAmount(
+              v2Booking,
+              candidate.purpose,
+            );
+            const decision = await this.contractCheckoutGuard.evaluate(
+              v2Booking._id.toString(),
+              v2Amount,
+              candidate.purpose,
+            );
+            if (!decision.binding) {
+              return this.acknowledgeV2ForReview(
+                candidate,
+                booking,
+                'CONTRACT_BINDING_STALE',
+              );
+            }
+          } catch {
+            return this.acknowledgeV2ForReview(
+              candidate,
+              booking,
+              'CONTRACT_BINDING_STALE',
+            );
+          }
+        }
+      }
     }
     if (
       candidate.status !== PaymentStatus.Pending &&

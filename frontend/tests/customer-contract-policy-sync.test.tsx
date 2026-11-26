@@ -205,4 +205,56 @@ describe('P0 Verification: Customer Contract A4 Preview reflects Approved Provid
     expect(fullText).toContain('Quy định thuê trang phục theo niêm yết shop.');
     expect(fullText).toContain('Hủy trước 48h hoàn 100% cọc.');
   });
+
+  it('5. Lists every garment and its own rental period for a multi-item shop contract', () => {
+    const multiItemSnapshot = {
+      ...sampleSnapshotWithStructuredPolicies,
+      providerItems: [
+        {
+          productName: 'Áo dài cách tân',
+          size: 'L',
+          quantity: 1,
+          unitPrice: 810000,
+          depositAmount: 20000,
+          rentalFrom: '2026-12-11T00:00:00.000+07:00',
+          rentalTo: '2026-12-25T23:59:59.999+07:00',
+        },
+        {
+          productName: 'Áo dài rồng',
+          size: 'XXL',
+          quantity: 1,
+          unitPrice: 750000,
+          depositAmount: 20000,
+          rentalFrom: '2026-12-12T00:00:00.000+07:00',
+          rentalTo: '2026-12-26T23:59:59.999+07:00',
+        },
+      ],
+      pricing: {
+        bookingSummary: {
+          subTotal: 1560000,
+          depositTotal: 40000,
+          discountAmount: 0,
+          grandTotal: 1600000,
+        },
+      },
+    };
+
+    const { container } = render(
+      <ContractDocumentPreview
+        contractId="contract-multi-item"
+        contractCode="VH-HD-MULTI-001"
+        renderedText={JSON.stringify({ snapshot: multiItemSnapshot })}
+        snapshot={multiItemSnapshot}
+      />,
+    );
+
+    const fullText = container.textContent || '';
+    expect(fullText).toContain('Áo dài cách tân');
+    expect(fullText).toContain('Áo dài rồng');
+    expect(fullText).toContain('11/12/2026');
+    expect(fullText).toContain('26/12/2026');
+    expect(fullText).toContain('Theo lịch thuê riêng của từng sản phẩm trong bảng chi tiết');
+    expect(fullText).toMatch(/1\.600\.000\s*đ/);
+    expect(container.querySelectorAll('.vh-doc-table tbody tr')).toHaveLength(2);
+  });
 });

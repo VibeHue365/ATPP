@@ -1,7 +1,7 @@
 import type { useToast } from '../../../components/feedback/Toast';
 import { bookingsApi } from '../api/providerDashboardApi';
 import { formatLocationAddress } from '../../../utils/addressFormat';
-import { getBookingStatusLabel } from '../../../utils/bookingStatus';
+import { getBookingStatusLabel, isBookingDepositSettled } from '../../../utils/bookingStatus';
 import type { Order } from '../types';
 import type { useProviderOrderState } from './useProviderOrderState';
 
@@ -92,6 +92,7 @@ export function createOrderDataActions({ setLoadingOrders, setOrders, actionMenu
 
         const formattedStatus = getBookingStatusLabel(b.status, {
           hasPendingIncident: b.incident?.status === 'PENDING_CUSTOMER',
+          isDepositSettled: isBookingDepositSettled(b),
           uppercase: true,
         });
 

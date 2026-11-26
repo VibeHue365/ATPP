@@ -115,6 +115,7 @@ export function OrderDetailDrawer({
   const [locallySubmittedPickupIds, setLocallySubmittedPickupIds] = useState<Set<string>>(new Set());
   const [locallyReturnedIds, setLocallyReturnedIds] = useState<Set<string>>(new Set());
   const [locallySettledIds, setLocallySettledIds] = useState<Set<string>>(new Set());
+  const [syncedOrderId, setSyncedOrderId] = useState<string | null>(null);
   const [identityCardInfo, setIdentityCardInfo] = useState<{
     hasIdentityCard?: boolean;
     hasFrontImage?: boolean;
@@ -201,12 +202,17 @@ export function OrderDetailDrawer({
 
   const onSelectOrderRef = useRef(onSelectOrder);
   onSelectOrderRef.current = onSelectOrder;
-  const lastFetchedIdRef = useRef<string | null>(null);
 
   // Initial fetch when drawer opens: Immediately populate full booking details (incident, fulfillment, etc.)
   useEffect(() => {
-    if (!order?._id || lastFetchedIdRef.current === order._id) return;
-    lastFetchedIdRef.current = order._id;
+    if (!order?._id) {
+      setSyncedOrderId(null);
+      return;
+    }
+    if (syncedOrderId === order._id) return;
+    setLocallySubmittedPickupIds(new Set());
+    setLocallyReturnedIds(new Set());
+    setLocallySettledIds(new Set());
     let isSubscribed = true;
     httpClient
       .get<any>('/api/bookings/' + order._id)
@@ -217,11 +223,18 @@ export function OrderDetailDrawer({
       })
       .catch((err) => {
         console.warn('Initial fetch for booking in drawer failed:', err);
+      })
+      .finally(() => {
+        if (isSubscribed) {
+          setSyncedOrderId(order._id);
+        }
       });
     return () => {
       isSubscribed = false;
     };
-  }, [order?._id]);
+  }, [order?._id, syncedOrderId]);
+
+  const isSyncingOrderDetail = Boolean(order?._id && syncedOrderId !== order._id);
 
   // Targeted event-driven refresh: Only refetch current booking if booking_updated matches this order
   useEffect(() => {
@@ -4208,7 +4221,24 @@ export function OrderDetailDrawer({
               <span>In phiếu hẹn</span>
             </button>
 
-            {!isCancelled && !isOrderCompleted && !isSingleReturnedAndInspecting && !isCustomerReturnPending && !isSingleInUse && !hasIncidentPending && !hasDispute && (
+            {isSyncingOrderDetail ? (
+              <span
+                style={{
+                  fontSize: '12.5px',
+                  fontWeight: 600,
+                  color: '#64748B',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 12px',
+                }}
+              >
+                <Clock size={14} />
+                <span>Đang đồng bộ trạng thái...</span>
+              </span>
+            ) : (
+              <>
+                {!isCancelled && !isOrderCompleted && !isSingleReturnedAndInspecting && !isCustomerReturnPending && !isSingleInUse && !hasIncidentPending && !hasDispute && (
               <button
                 type="button"
                 className="p-drawer-danger-btn"
@@ -4288,7 +4318,7 @@ export function OrderDetailDrawer({
                   title="Yêu cầu đền bù sự cố hư hỏng hoặc vi phạm"
                 >
                   <AlertTriangle size={14} />
-                  <span>⚠️ Yêu cầu đền bù</span>
+                  <span>Yêu cầu đền bù</span>
                 </button>
                 {isOverdueForSettlement ? (
                   <button
@@ -4619,7 +4649,7 @@ export function OrderDetailDrawer({
                   title="Yêu cầu đền bù sự cố hư hỏng hoặc vi phạm"
                 >
                   <AlertTriangle size={14} />
-                  <span>⚠️ Yêu cầu đền bù</span>
+                  <span>Yêu cầu đền bù</span>
                 </button>
                 {isOverdueForSettlement ? (
                   <button
@@ -4707,6 +4737,8 @@ export function OrderDetailDrawer({
                 <CheckCircle size={15} color="#10B981" />
                 <span>Đơn đã hoàn tất</span>
               </span>
+            )}
+              </>
             )}
           </div>
         </div>

@@ -37,6 +37,8 @@ export interface ContractReviewModalProps {
     [key: string]: unknown;
   };
   onAllAccepted: () => void;
+  currentStep?: number;
+  totalSteps?: number;
 }
 
 export const ContractReviewModal: React.FC<ContractReviewModalProps> = ({
@@ -45,6 +47,8 @@ export const ContractReviewModal: React.FC<ContractReviewModalProps> = ({
   bookingId,
   bookingData,
   onAllAccepted,
+  currentStep,
+  totalSteps,
 }) => {
   const toast = useToast();
 
@@ -85,6 +89,16 @@ export const ContractReviewModal: React.FC<ContractReviewModalProps> = ({
     currentContract?.versionState === 'DECLINED';
   const isStale =
     currentProviderReadiness?.status === 'STALE_SNAPSHOT';
+  const hasMoreSteps = Boolean(
+    totalSteps && currentStep && totalSteps > 1 && currentStep < totalSteps,
+  );
+  const stepSuffix =
+    totalSteps && totalSteps > 1 && currentStep
+      ? ` (Hợp đồng ${currentStep}/${totalSteps})`
+      : '';
+  const proceedButtonLabel = hasMoreSteps
+    ? `Tiếp tục hợp đồng tiếp theo (${currentStep}/${totalSteps})`
+    : 'Tiếp tục thanh toán PayOS';
 
   const handleOpenPdf = async () => {
     if (!currentContract) return;
@@ -348,9 +362,9 @@ export const ContractReviewModal: React.FC<ContractReviewModalProps> = ({
           <div className="vh-contract-modal-title">
             <ShieldCheck size={22} />
             <span>
-              {isQuickMode
+              {(isQuickMode
                 ? 'Thỏa thuận Thuê nhanh Trang phục'
-                : 'Xem xét & Chấp thuận Hợp đồng Điện tử'}
+                : 'Xem xét & Chấp thuận Hợp đồng Điện tử') + stepSuffix}
             </span>
           </div>
           <button
@@ -922,7 +936,7 @@ export const ContractReviewModal: React.FC<ContractReviewModalProps> = ({
                 <CreditCard size={16} />
                 <span>
                   {isAllAccepted
-                    ? 'Tiếp tục thanh toán PayOS'
+                    ? proceedButtonLabel
                     : `Còn ${totalCount - acceptedCount} hợp đồng chưa chấp thuận`}
                 </span>
               </button>
@@ -935,7 +949,7 @@ export const ContractReviewModal: React.FC<ContractReviewModalProps> = ({
                 data-testid="btn-proceed-to-payment"
               >
                 <CreditCard size={16} />
-                <span>Tiếp tục thanh toán PayOS</span>
+                <span>{proceedButtonLabel}</span>
               </button>
             ) : null}
           </div>

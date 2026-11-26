@@ -18,6 +18,7 @@ interface RentalBottomActionBarProps {
   onConfirmComplete?: () => void;
   onContinuePayment?: () => void;
   canCustomerConfirmCompletion?: boolean;
+  isDepositSettled?: boolean;
   hasSubmittedReturn?: boolean;
 }
 
@@ -34,6 +35,7 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
   onConfirmComplete,
   onContinuePayment,
   canCustomerConfirmCompletion = false,
+  isDepositSettled = false,
   hasSubmittedReturn = false,
 }) => {
   const currentStatus = status || 'CONFIRMED';
@@ -407,15 +409,19 @@ export const RentalBottomActionBar: React.FC<RentalBottomActionBarProps> = ({
                 gap: '6px',
                 padding: '10px 18px',
                 borderRadius: '10px',
-                backgroundColor: '#FEF3C7',
-                border: '1px solid #FCD34D',
-                color: '#B45309',
+                backgroundColor: isDepositSettled ? '#ECFDF5' : '#FEF3C7',
+                border: isDepositSettled ? '1px solid #A7F3D0' : '1px solid #FCD34D',
+                color: isDepositSettled ? '#047857' : '#B45309',
                 fontSize: '13px',
                 fontWeight: 700
               }}
             >
-              <Clock size={15} />
-              <span>Shop đang giặt ủi / Admin đang tất toán cọc</span>
+              {isDepositSettled ? <CheckCircle2 size={15} /> : <Clock size={15} />}
+              <span>
+                {isDepositSettled
+                  ? 'Đã hoàn tất · Tiền cọc đã được hoàn trả'
+                  : 'Shop đang giặt ủi / Admin đang tất toán cọc'}
+              </span>
             </div>
           )}
         </>

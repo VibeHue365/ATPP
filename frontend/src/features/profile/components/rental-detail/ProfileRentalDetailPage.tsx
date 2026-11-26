@@ -12,7 +12,7 @@ import { PrivateEvidenceImage } from '../../../../components/common/PrivateEvide
 import Swal from 'sweetalert2';
 import { httpClient } from '../../../../services/httpClient';
 import { useSocket } from '../../../../context/SocketContext';
-import { getBookingStatusLabel } from '../../../../utils/bookingStatus';
+import { getBookingStatusLabel, isBookingDepositSettled } from '../../../../utils/bookingStatus';
 
 interface ProfileRentalDetailPageProps {
   booking?: any;
@@ -1969,6 +1969,7 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
         onDisagreeIncident={handleDisagreeIncident}
         onContinuePayment={() => onContinuePayment?.(booking?._id)}
         canCustomerConfirmCompletion={Boolean(booking?.canCustomerConfirmCompletion)}
+        isDepositSettled={isBookingDepositSettled(booking)}
         hasSubmittedReturn={Boolean(
           booking?.customerReturnEvidence?.submittedAt ||
             booking?.customerReturnEvidence?.evidencePhotos?.length ||

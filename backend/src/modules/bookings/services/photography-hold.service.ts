@@ -63,6 +63,7 @@ import {
   toIctMinutes,
 } from './staff-availability.service';
 import { bumpProviderAvailabilityVersion } from './provider-availability-version';
+import { composeLocationAddress } from '../utils/location-address';
 
 const HOLD_DURATION_MS = 10 * 60 * 1000;
 const BUSINESS_TIME_ZONE = 'Asia/Ho_Chi_Minh';
@@ -1841,7 +1842,12 @@ export class PhotographyHoldService {
     }
     const coordinates = source.geo?.coordinates;
     return {
-      address: source.addressLine.trim(),
+      address: composeLocationAddress(
+        source.addressLine,
+        source.ward,
+        source.district,
+        source.city,
+      ),
       ward: source.ward ?? null,
       district: source.district ?? null,
       city: source.city ?? null,

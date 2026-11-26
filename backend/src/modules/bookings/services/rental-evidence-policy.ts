@@ -6,13 +6,25 @@ const PICKUP_WINDOW_MS = 24 * 60 * 60 * 1000;
 const RETURN_BEFORE_MS = 24 * 60 * 60 * 1000;
 const RETURN_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
+function allowEarlyHandoverUpload(): boolean {
+  if (process.env.ALLOW_EARLY_RENTAL_PICKUP === 'false') {
+    return false;
+  }
+  if (process.env.ALLOW_EARLY_RENTAL_PICKUP === 'true') {
+    return true;
+  }
+  return (
+    process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test'
+  );
+}
+
 export function assertRentalEvidenceUploadWindow(input: {
   purpose: 'PICKUP' | 'RETURN';
   dueAt: Date | null | undefined;
   now?: Date;
   isAdmin?: boolean;
 }): void {
-  if (input.isAdmin) return;
+  if (input.isAdmin || allowEarlyHandoverUpload()) return;
   if (!input.dueAt || Number.isNaN(new Date(input.dueAt).getTime())) {
     throw new BadRequestException('Đơn thuê chưa có thời điểm giao/nhận hợp lệ để tải ảnh bàn giao.');
   }

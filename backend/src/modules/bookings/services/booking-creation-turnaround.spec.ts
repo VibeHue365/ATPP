@@ -238,6 +238,99 @@ describe('BookingCreationService - Turnaround Integration (Phase 1)', () => {
     ).not.toHaveBeenCalled();
   });
 
+  it('allows two garments from the same shop to keep different rental periods in one booking', async () => {
+    const providerId = new Types.ObjectId();
+    const firstProductId = new Types.ObjectId();
+    const secondProductId = new Types.ObjectId();
+    const firstInventoryId = new Types.ObjectId();
+    const secondInventoryId = new Types.ObjectId();
+
+    mockProductModel.findById.mockImplementation((productId: Types.ObjectId | string) => ({
+      session: jest.fn().mockResolvedValue({
+        _id: productId,
+        providerId,
+        basePrice: productId.toString() === firstProductId.toString() ? 100000 : 200000,
+        depositAmount: 20000,
+        name: productId.toString() === firstProductId.toString() ? 'Áo dài đỏ' : 'Áo dài xanh',
+      }),
+    }));
+    mockProviderModel.findById.mockReturnValue({
+      session: jest.fn().mockResolvedValue({
+        _id: providerId,
+        status: 'ACTIVE',
+        useSlotLeases: false,
+      }),
+    });
+    mockInventoryItemModel.find.mockImplementation((filter: any) => ({
+      session: jest.fn().mockResolvedValue([
+        {
+          _id: filter.productId.toString() === firstProductId.toString()
+            ? firstInventoryId
+            : secondInventoryId,
+          productId: filter.productId,
+          size: 'M',
+          color: 'RED',
+          status: 'AVAILABLE',
+        },
+      ]),
+    }));
+    mockVoucherPricingService.calculatePricing.mockReturnValue({
+      isValid: true,
+      subTotal: 300000,
+      depositTotal: 40000,
+      comboDiscountTotal: 0,
+      voucherDiscountTotal: 0,
+      platformSubsidyAmount: 0,
+      amountDueNow: 340000,
+      travelFee: 0,
+      serviceFee: 0,
+      grandTotal: 340000,
+      voucherSnapshot: null,
+      itemAllocations: [{}, {}],
+    });
+
+    await service.createBooking('666666666666666666666666', {
+      bookingType: 'AODAI_RENTAL' as any,
+      items: [
+        {
+          productId: firstProductId.toString(),
+          rentalType: 'DAILY',
+          rentalFrom: '2026-11-20T00:00:00.000Z',
+          rentalTo: '2026-11-21T00:00:00.000Z',
+          selectedSize: 'M',
+          selectedColor: 'RED',
+          quantity: 1,
+        },
+        {
+          productId: secondProductId.toString(),
+          rentalType: 'DAILY',
+          rentalFrom: '2026-11-24T00:00:00.000Z',
+          rentalTo: '2026-11-27T00:00:00.000Z',
+          selectedSize: 'M',
+          selectedColor: 'RED',
+          quantity: 1,
+        },
+      ],
+    });
+
+    expect(mockBookingsRepo.createBooking).toHaveBeenCalledTimes(1);
+    expect(mockBookingsRepo.createBookingItem).toHaveBeenCalledTimes(2);
+    const savedItems = mockBookingsRepo.createBookingItem.mock.calls.map(
+      ([item]: [any]) => item,
+    );
+    expect(savedItems.map((item: any) => item.productId.toString())).toEqual([
+      firstProductId.toString(),
+      secondProductId.toString(),
+    ]);
+    expect(
+      savedItems.map((item: any) =>
+        item.rentalFrom.toLocaleDateString('en-CA', {
+          timeZone: 'Asia/Bangkok',
+        }),
+      ),
+    ).toEqual(['2026-11-20', '2026-11-24']);
+  });
+
   it('HOURLY rental with useSlotLeases = true: acquires upfront block lease and populates turnaround snapshot', async () => {
     const productId = new Types.ObjectId();
     const providerId = new Types.ObjectId();

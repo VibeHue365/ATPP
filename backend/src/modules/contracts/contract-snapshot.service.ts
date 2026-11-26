@@ -13,6 +13,7 @@ import {
   parseValidReplacementValue,
 } from './contract-source.types';
 import { resolveDamageCompensationRules } from './schemas/provider-contract-policy.schema';
+import { composeLocationAddress } from '../bookings/utils/location-address';
 
 interface ProductSource {
   _id: Types.ObjectId;
@@ -164,17 +165,12 @@ export class ContractSnapshotService {
             ? customPickup
             : (provider.address as any);
         const formattedAddress =
-          [
+          composeLocationAddress(
             loc?.addressLine || loc?.fullAddress || loc?.address,
             loc?.ward,
             loc?.district,
             loc?.city,
-          ]
-            .filter(
-              (part) => typeof part === 'string' && part.trim().length > 0,
-            )
-            .map((part) => part.trim())
-            .join(', ') || 'Tại cửa hàng cung cấp';
+          ) || 'Tại cửa hàng cung cấp';
         const hasValidGeo =
           Array.isArray(loc?.geo?.coordinates) &&
           loc.geo.coordinates.length === 2;

@@ -216,15 +216,46 @@ export function normalizeBookingStatusCode(
   return LEGACY_BOOKING_LABEL_TO_CODE[upper] ?? null;
 }
 
+export function isBookingDepositSettled(booking: any): boolean {
+  if (!booking) return false;
+  const refundStatus = String(
+    booking?.rentalDepositRefund?.status || '',
+  ).toUpperCase();
+  if (['REFUNDED', 'SUCCEEDED', 'COMPLETED'].includes(refundStatus)) {
+    return true;
+  }
+  const items = Array.isArray(booking?.items) ? booking.items : [];
+  const rentalItems = items.filter(
+    (it: any) =>
+      it?.itemType === 'PRODUCT' ||
+      it?.productId ||
+      (!it?.itemType && !it?.photographyPackageId),
+  );
+  if (rentalItems.length === 0) return false;
+  return rentalItems.every((it: any) =>
+    ['FULLY_RELEASED', 'PARTIALLY_DEDUCTED', 'FULLY_DEDUCTED'].includes(
+      String(
+        it?.rentalFulfillment?.depositSettlementStatus || '',
+      ).toUpperCase(),
+    ),
+  );
+}
+
 export function getBookingStatusMeta(
   status: string | undefined | null,
-  options?: { hasPendingIncident?: boolean },
+  options?: { hasPendingIncident?: boolean; isDepositSettled?: boolean },
 ): StatusMeta {
   const code = normalizeBookingStatusCode(status);
   if (code) {
     if (code === 'RETURN_PENDING' && options?.hasPendingIncident) {
       return makeMeta(code, 'Chờ khách duyệt sự cố', 'danger', {
         shortLabel: 'Chờ duyệt sự cố',
+        group: 'ACTIVE',
+      });
+    }
+    if (code === 'RETURNED' && options?.isDepositSettled) {
+      return makeMeta(code, 'Hoàn tất · Đã hoàn cọc', 'success', {
+        shortLabel: 'Đã hoàn cọc',
         group: 'ACTIVE',
       });
     }
@@ -235,7 +266,11 @@ export function getBookingStatusMeta(
 
 export function getBookingStatusLabel(
   status: string | undefined | null,
-  options?: { hasPendingIncident?: boolean; uppercase?: boolean },
+  options?: {
+    hasPendingIncident?: boolean;
+    isDepositSettled?: boolean;
+    uppercase?: boolean;
+  },
 ): string {
   const label = getBookingStatusMeta(status, options).label;
   return options?.uppercase ? label.toUpperCase() : label;

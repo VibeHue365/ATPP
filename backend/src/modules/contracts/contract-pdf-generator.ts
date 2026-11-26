@@ -13,6 +13,7 @@ import {
   formatDateVn,
   formatShortDateVn,
 } from './contract-consistency-validator';
+import { composeLocationAddress } from '../bookings/utils/location-address';
 
 export interface ContractPdfInput {
   contractCode: string;
@@ -70,18 +71,8 @@ function formatAddress(addr: unknown, fallback = ''): string {
     const district = ((a.district || '') as string).trim();
     const city = ((a.city || a.province || '') as string).trim();
 
-    const parts: string[] = [];
-    if (rawLine) parts.push(rawLine);
-    if (ward && !rawLine.toLowerCase().includes(ward.toLowerCase())) {
-      parts.push(ward);
-    }
-    if (district && !rawLine.toLowerCase().includes(district.toLowerCase())) {
-      parts.push(district);
-    }
-    if (city && !rawLine.toLowerCase().includes(city.toLowerCase())) {
-      parts.push(city);
-    }
-    if (parts.length > 0) return parts.join(', ');
+    const composed = composeLocationAddress(rawLine, ward, district, city);
+    if (composed) return composed;
   }
   return fallback;
 }
@@ -305,7 +296,7 @@ export function buildContractTermsLines(
   if (cancelPolicy) {
     lines.push('ĐIỀU 5: CHÍNH SÁCH HỦY ĐƠN VÀ HOÀN TIỀN');
     lines.push(
-      '- Thời điểm xác định yêu cầu hủy: Tính theo thời điểm (timestamp) hệ thống ghi nhận Bên B gửi yêu cầu hủy đơn thành công so với mốc thời gian nhận đồ (rentalFrom) quy định tại Phần II.',
+      '- Thời điểm xác định yêu cầu hủy: Tỷ lệ hoàn tiền thuê được tính riêng cho từng sản phẩm, dựa trên thời điểm hệ thống ghi nhận yêu cầu hủy so với mốc nhận đồ (rentalFrom) của chính sản phẩm đó tại Phần II. Tiền cọc của sản phẩm được hoàn lại khi hủy trước thời điểm nhận đồ.',
     );
     lines.push(
       '- Biểu phí và tỷ lệ hoàn tiền thuê (các khoảng thời gian không chồng lấn):',
@@ -978,6 +969,7 @@ export class ContractPdfGenerator {
     const items = input.snapshot.providerItems || [];
     let firstRentalFrom: unknown = null;
     let firstRentalTo: unknown = null;
+    const rentalPeriods = new Set<string>();
 
     items.forEach((item, index) => {
       const name = str(
@@ -1000,6 +992,16 @@ export class ContractPdfGenerator {
       const rTo = item.rentalTo || (item as any).endDate || rFrom;
       if (!firstRentalFrom && rFrom) firstRentalFrom = rFrom;
       if (!firstRentalTo && rTo) firstRentalTo = rTo;
+      if (rFrom || rTo) {
+        rentalPeriods.add(`${String(rFrom || '')}___${String(rTo || '')}`);
+      }
+
+      const itemFromStr = rFrom ? formatShortDate(rFrom) : '';
+      const itemToStr = rTo ? formatShortDate(rTo) : '';
+      const itemPeriodStr =
+        itemFromStr && itemFromStr !== 'N/A'
+          ? `Lịch thuê: ${itemFromStr} -> ${itemToStr && itemToStr !== 'N/A' ? itemToStr : itemFromStr}`
+          : null;
 
       const repVal =
         Number((item as any).replacementValue || (item as any).declaredValue) ||
@@ -1008,9 +1010,10 @@ export class ContractPdfGenerator {
         repVal > 0 ? `Giá trị bồi hoàn: ${formatVnd(repVal)}` : null;
 
       const nameLines = wrapText(fullDesc, regularFont, 8, colWidths[1] - 8);
-      const totalTextLines = repValStr
-        ? nameLines.length + 1
-        : nameLines.length;
+      const metaLines = [repValStr, itemPeriodStr].filter(
+        (line): line is string => Boolean(line),
+      );
+      const totalTextLines = nameLines.length + metaLines.length;
       const rowHeight = Math.max(22, totalTextLines * 11 + 8);
 
       if (layout.currentY - rowHeight < layout.bottomLimit) {
@@ -1053,15 +1056,15 @@ export class ContractPdfGenerator {
           color: COLOR_TEXT_MAIN,
         });
       });
-      if (repValStr) {
-        layout.currentPage.drawText(repValStr, {
+      metaLines.forEach((mLine, mIdx) => {
+        layout.currentPage.drawText(mLine, {
           x: cellX + 4,
-          y: rowY + rowHeight - 12 - nameLines.length * 11,
+          y: rowY + rowHeight - 12 - (nameLines.length + mIdx) * 11,
           size: 7,
           font: regularFont,
           color: COLOR_TEXT_MUTED,
         });
-      }
+      });
       cellX += colWidths[1];
 
       // Size
@@ -1130,7 +1133,10 @@ export class ContractPdfGenerator {
       }
     }
     const daysLabel = rentalDays > 0 ? ` (${rentalDays} ngày)` : '';
-    const periodStr = `Thời gian thuê: ${fromStr && fromStr !== 'N/A' ? fromStr : 'Theo thỏa thuận'} đến ${toStr && toStr !== 'N/A' ? toStr : 'Theo thỏa thuận'}${daysLabel}`;
+    const hasMultipleRentalPeriods = rentalPeriods.size > 1;
+    const periodStr = hasMultipleRentalPeriods
+      ? 'Thời gian thuê: Theo lịch thuê riêng của từng sản phẩm trong bảng chi tiết'
+      : `Thời gian thuê: ${fromStr && fromStr !== 'N/A' ? fromStr : 'Theo thỏa thuận'} đến ${toStr && toStr !== 'N/A' ? toStr : 'Theo thỏa thuận'}${daysLabel}`;
     const pickupLoc = formatAddress(
       (items[0]?.pickupReturnLocation as any)?.address ||
         items[0]?.pickupReturnLocation ||

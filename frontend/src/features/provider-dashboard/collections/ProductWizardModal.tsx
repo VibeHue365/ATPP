@@ -727,6 +727,30 @@ export function ProductWizardModal({
                       />
                       <span className="pwm-input-unit">VND</span>
                     </div>
+                    {(() => {
+                      const repValNum = Number(prodReplacementValue);
+                      const basePriceNum = Number(prodBasePrice);
+                      if (repValNum > 0 && basePriceNum > 0 && repValNum < basePriceNum) {
+                        return (
+                          <div
+                            data-testid="replacement-value-warning"
+                            style={{
+                              marginTop: '8px',
+                              padding: '10px 12px',
+                              borderRadius: '8px',
+                              border: '1px solid #F59E0B',
+                              background: '#FFFBEB',
+                              color: '#92400E',
+                              fontSize: '12px',
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            <strong>Cảnh báo tỷ lệ bất thường:</strong> Giá trị bồi hoàn ({repValNum.toLocaleString('vi-VN')}đ) đang thấp hơn giá thuê/ngày ({basePriceNum.toLocaleString('vi-VN')}đ). Vui lòng kiểm tra lại để tránh thiệt hại cho Shop nếu trang phục bị hư hỏng nặng hoặc mất.
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                     <div style={{ marginTop: '8px', padding: '10px 12px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '12px', color: '#475569', lineHeight: 1.6 }}>
                       <p style={{ margin: '0 0 4px', fontWeight: 600, color: '#1E293B' }}>
                         Lưu ý quan trọng về Giá trị bồi hoàn:
