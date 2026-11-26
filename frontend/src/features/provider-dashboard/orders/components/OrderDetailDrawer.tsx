@@ -1268,6 +1268,89 @@ export function OrderDetailDrawer({
     }
   };
 
+  const isOverdueForSettlement =
+    Boolean((order as any)?.overdueTracking?.isOverdue) ||
+    Number((order as any)?.overdueTracking?.calculatedLateFee ?? order?.pricingSummary?.lateFee ?? 0) > 0;
+
+  const handleSettleOverdueReturn = async () => {
+    if (!order?._id) return;
+    const depositTotal = Number(
+      (order as any)?.deposit || (order as any)?.depositTotal || order?.pricingSummary?.depositTotal || 0,
+    );
+    const lateFee = Math.min(
+      Number((order as any)?.overdueTracking?.calculatedLateFee ?? order?.pricingSummary?.lateFee ?? 0),
+      depositTotal,
+    );
+    const refundAmt = Math.max(0, depositTotal - lateFee);
+
+    const res = await Swal.fire({
+      title: 'Đối soát quá hạn & Hoàn cọc dư',
+      html: `
+        <div style="text-align: left; font-size: 13px; color: #374151; line-height: 1.6;">
+          <p style="margin: 0 0 12px;">Đơn hàng này trả áo quá hạn. Hệ thống sẽ tất toán dòng tiền theo quy chế như sau:</p>
+          <div style="background: #FFFBEB; border: 1px solid #FCD34D; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px;">
+            <div style="display: flex; justify-content: space-between;">
+              <span>Tiền cọc gốc đang ký quỹ:</span>
+              <strong>${depositTotal.toLocaleString('vi-VN')}đ</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; color: #DC2626;">
+              <span>Khấu trừ phạt quá hạn (+vào ví &amp; quyết toán Shop):</span>
+              <strong>-${lateFee.toLocaleString('vi-VN')}đ</strong>
+            </div>
+            <div style="border-top: 1px dashed #F59E0B; margin: 4px 0;"></div>
+            <div style="display: flex; justify-content: space-between; color: #16A34A; font-size: 14px;">
+              <span><strong>Hoàn lại cọc dư cho Khách:</strong></span>
+              <strong>${refundAmt.toLocaleString('vi-VN')}đ</strong>
+            </div>
+          </div>
+        </div>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#D97706',
+      cancelButtonColor: '#6B7280',
+      confirmButtonText: 'Xác nhận đối soát & hoàn cọc dư',
+      cancelButtonText: 'Kiểm tra lại',
+    });
+    if (!res.isConfirmed) return;
+
+    setIsConfirmingNoIncident(true);
+    try {
+      const response: any = await httpClient.post(`/api/bookings/${order._id}/overdue/reverse`, {});
+      const deducted = response?.lateFeeDeducted ?? lateFee;
+      const refunded = response?.depositRefunded ?? refundAmt;
+      if (fetchOrders) await fetchOrders(true, true);
+      try {
+        const fresh: any = await httpClient.get(`/api/bookings/${order._id}`);
+        if (fresh && onSelectOrderRef.current) {
+          onSelectOrderRef.current({
+            ...order,
+            ...fresh,
+            rawStatus: fresh.status || 'COMPLETED',
+            overdueTracking: fresh.overdueTracking || null,
+          });
+        }
+      } catch {
+        // ignore
+      }
+      await Swal.fire({
+        icon: 'success',
+        title: 'Đã đối soát quá hạn thành công!',
+        html: `
+          <div style="font-size: 13px; color: #374151; line-height: 1.6;">
+            <div>• Đã cộng <strong>+${Number(deducted).toLocaleString('vi-VN')}đ</strong> tiền phạt quá hạn vào <strong>Ví &amp; Quyết toán Shop</strong>.</div>
+            <div>• Đã hoàn trả <strong>${Number(refunded).toLocaleString('vi-VN')}đ</strong> tiền cọc dư về <strong>Khách hàng</strong>.</div>
+          </div>
+        `,
+        confirmButtonColor: '#059669',
+      });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Không thể đối soát quá hạn.');
+    } finally {
+      setIsConfirmingNoIncident(false);
+    }
+  };
+
   const handleReceiveAllRentalReturns = async () => {
     if (!order?._id || !rentalItems.length) return;
     const pendingReturns = rentalItems.filter(
@@ -1308,6 +1391,49 @@ export function OrderDetailDrawer({
       toast.error(err?.response?.data?.message || err?.message || 'Không thể xác nhận nhận lại áo.');
     } finally {
       setIsReceivingReturn(false);
+    }
+  };
+
+  const handleConfirmAllNoIncident = async () => {
+    if (!order?._id || !rentalItems.length) return;
+    const returnedItems = rentalItems.filter(
+      (item) => item.rentalFulfillment?.status === 'RETURNED' &&
+        !['FULLY_RELEASED', 'PARTIALLY_DEDUCTED', 'FULLY_DEDUCTED'].includes(item.rentalFulfillment?.depositSettlementStatus),
+    );
+    if (!returnedItems.length) return;
+
+    const res = await Swal.fire({
+      title: 'Xác nhận không có sự cố?',
+      text: 'Áo dài và phụ kiện nguyên vẹn. Hệ thống sẽ tạo yêu cầu hoàn cọc cho khách hàng và chuyển trang phục sang trạng thái Giặt ủi (CLEANING).',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: '✓ Xác nhận hoàn cọc',
+      cancelButtonText: 'Kiểm tra lại',
+      confirmButtonColor: '#059669',
+      cancelButtonColor: '#6B7280',
+    });
+
+    if (!res.isConfirmed) return;
+
+    setIsConfirmingNoIncident(true);
+    try {
+      for (const item of returnedItems) {
+        await httpClient.post(
+          `/api/bookings/${order._id}/items/${item._id}/rental/confirm-no-incident`,
+          { note: 'Không có sự cố từ thanh tác vụ nhanh' }
+        );
+        setLocallySettledIds((prev) => new Set(prev).add(item._id));
+      }
+      toast.success('Đã xác nhận không có sự cố và hoàn tất thủ tục hoàn cọc cho khách hàng!');
+      if (fetchOrders) await fetchOrders(true, true);
+      const fresh = await httpClient.get<any>('/api/bookings/' + order._id);
+      if (fresh && onSelectOrderRef.current) {
+        onSelectOrderRef.current(fresh);
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Không thể xác nhận hoàn cọc.');
+    } finally {
+      setIsConfirmingNoIncident(false);
     }
   };
 
@@ -2162,7 +2288,9 @@ export function OrderDetailDrawer({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <AlertTriangle size={17} color="#D97706" />
                           <span style={{ fontSize: '13.5px', fontWeight: 750, color: '#92400E' }}>
-                            ĐỐI SOÁT PHÍ QUÁ HẠN (ĐƠN ĐÃ HOÀN TẤT)
+                            {rawStatus === 'COMPLETED'
+                              ? 'ĐỐI SOÁT PHÍ QUÁ HẠN (ĐƠN ĐÃ HOÀN TẤT)'
+                              : 'ĐỐI SOÁT PHÍ QUÁ HẠN (CHỜ TẤT TOÁN CỌC)'}
                           </span>
                         </div>
                         {minutesOverdue > 0 && (
@@ -2173,11 +2301,11 @@ export function OrderDetailDrawer({
                       </div>
                       <div style={{ fontSize: '12.5px', color: '#78350F', lineHeight: 1.55 }}>
                         <div>
-                          • Đơn hàng này từng quá hạn trả áo và đã được khấu trừ{' '}
-                          <strong style={{ color: '#B45309' }}>-{resolvedLateFee.toLocaleString('vi-VN')}đ</strong> tiền phạt từ tiền cọc của khách (đã cộng vào ví Shop).
+                          • Đơn hàng này từng quá hạn trả áo và {rawStatus === 'COMPLETED' ? 'đã được khấu trừ' : 'sẽ khấu trừ'}{' '}
+                          <strong style={{ color: '#B45309' }}>-{resolvedLateFee.toLocaleString('vi-VN')}đ</strong> tiền phạt từ tiền cọc của khách {rawStatus === 'COMPLETED' ? '(đã cộng vào ví Shop).' : '(cộng vào ví Shop khi đối soát).'}
                         </div>
                         <div>
-                          • Phần tiền cọc còn lại đã hoàn trả về cho khách hàng:{' '}
+                          • Phần tiền cọc còn lại {rawStatus === 'COMPLETED' ? 'đã hoàn trả' : 'sẽ hoàn trả'} về cho khách hàng:{' '}
                           <strong style={{ color: '#15803D' }}>{resolvedDepositRefund.toLocaleString('vi-VN')}đ</strong>.
                         </div>
                       </div>
@@ -4149,18 +4277,43 @@ export function OrderDetailDrawer({
               </>
             )}
 
-            {/* 3. Shop đã nhận lại áo (RETURNED) -> Báo sự cố nếu có */}
+            {/* 3. Shop đã nhận lại áo (RETURNED) -> Chọn: Không có sự cố hoặc Báo sự cố */}
             {isSingleRentalItem && isSingleReturnedAndInspecting && (
-              <button
-                type="button"
-                className="p-drawer-danger-btn"
-                onClick={() => onOpenIncidentReport(order)}
-                style={{ padding: '8px 14px', fontSize: '13px' }}
-                title="Yêu cầu đền bù sự cố hư hỏng hoặc vi phạm"
-              >
-                <AlertTriangle size={14} />
-                <span>⚠️ Yêu cầu đền bù</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="p-drawer-danger-btn"
+                  onClick={() => onOpenIncidentReport(order)}
+                  style={{ padding: '8px 14px', fontSize: '13px' }}
+                  title="Yêu cầu đền bù sự cố hư hỏng hoặc vi phạm"
+                >
+                  <AlertTriangle size={14} />
+                  <span>⚠️ Yêu cầu đền bù</span>
+                </button>
+                {isOverdueForSettlement ? (
+                  <button
+                    type="button"
+                    className="p-drawer-primary-btn"
+                    style={{ backgroundColor: '#D97706', border: 'none', color: '#FFFFFF' }}
+                    onClick={() => void handleSettleOverdueReturn()}
+                    disabled={isConfirmingNoIncident}
+                  >
+                    <CheckCircle size={14} />
+                    <span>{isConfirmingNoIncident ? 'Đang đối soát...' : '⚖️ Đối soát quá hạn & Hoàn cọc dư'}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="p-drawer-primary-btn"
+                    style={{ backgroundColor: '#059669', border: 'none', color: '#FFFFFF' }}
+                    onClick={() => void handleConfirmNoIncident()}
+                    disabled={isConfirmingNoIncident}
+                  >
+                    <CheckCircle size={14} />
+                    <span>{isConfirmingNoIncident ? 'Đang xử lý...' : '✓ Không có sự cố (Hoàn cọc)'}</span>
+                  </button>
+                )}
+              </>
             )}
 
             {isSingleRentalItem && hasIncidentPending && (
@@ -4457,16 +4610,41 @@ export function OrderDetailDrawer({
               rentalItems.length > 0 &&
               rentalItems.every((i) => ['RETURNED', 'COMPLETED'].includes(i.rentalFulfillment?.status)) &&
               rentalItems.some((i) => i.rentalFulfillment?.status === 'RETURNED' && !['FULLY_RELEASED', 'PARTIALLY_DEDUCTED', 'FULLY_DEDUCTED'].includes(i.rentalFulfillment?.depositSettlementStatus)) && (
-              <button
-                type="button"
-                className="p-drawer-danger-btn"
-                onClick={() => onOpenIncidentReport(order)}
-                style={{ padding: '8px 14px', fontSize: '13px' }}
-                title="Yêu cầu đền bù sự cố hư hỏng hoặc vi phạm"
-              >
-                <AlertTriangle size={14} />
-                <span>⚠️ Yêu cầu đền bù</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="p-drawer-danger-btn"
+                  onClick={() => onOpenIncidentReport(order)}
+                  style={{ padding: '8px 14px', fontSize: '13px' }}
+                  title="Yêu cầu đền bù sự cố hư hỏng hoặc vi phạm"
+                >
+                  <AlertTriangle size={14} />
+                  <span>⚠️ Yêu cầu đền bù</span>
+                </button>
+                {isOverdueForSettlement ? (
+                  <button
+                    type="button"
+                    className="p-drawer-primary-btn"
+                    style={{ backgroundColor: '#D97706', border: 'none', color: '#FFFFFF' }}
+                    onClick={() => void handleSettleOverdueReturn()}
+                    disabled={isConfirmingNoIncident}
+                  >
+                    <CheckCircle size={14} />
+                    <span>{isConfirmingNoIncident ? 'Đang đối soát...' : '⚖️ Đối soát quá hạn & Hoàn cọc dư'}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="p-drawer-primary-btn"
+                    style={{ backgroundColor: '#059669', border: 'none', color: '#FFFFFF' }}
+                    onClick={() => void handleConfirmAllNoIncident()}
+                    disabled={isConfirmingNoIncident}
+                  >
+                    <CheckCircle size={14} />
+                    <span>{isConfirmingNoIncident ? 'Đang xử lý...' : '✓ Không có sự cố (Hoàn cọc)'}</span>
+                  </button>
+                )}
+              </>
             )}
 
             {['PICKED_UP', 'RETURN_PENDING', 'OVERDUE'].includes(rawStatus) && (

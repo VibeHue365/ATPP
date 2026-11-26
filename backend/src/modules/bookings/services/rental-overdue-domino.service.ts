@@ -581,13 +581,11 @@ export class RentalOverdueDominoService {
       .exec();
     if (!items.length) return false;
 
-    const allReturned = items.every((item: any) =>
-      [
-        RentalFulfillmentStatus.Returned,
-        RentalFulfillmentStatus.Completed,
-      ].includes(item.rentalFulfillment?.status),
+    const allInspectedAndConfirmed = items.every(
+      (item: any) =>
+        item.rentalFulfillment?.status === RentalFulfillmentStatus.Completed,
     );
-    if (!allReturned) return false;
+    if (!allInspectedAndConfirmed) return false;
 
     await this.reverseOverdueOnReturn(bookingId);
     return true;
@@ -710,13 +708,54 @@ export class RentalOverdueDominoService {
         : `Khách đã trả áo & hoàn tất đơn. Đối soát quá hạn: Trừ phí trễ ${calculatedLateFee.toLocaleString('vi-VN')}đ (đã cộng ví Shop), hoàn lại cọc dư ${remainingDepositRefund.toLocaleString('vi-VN')}đ cho khách.`,
     });
 
-    // Khôi phục áo vào trạng thái giặt ủi
+    // Khôi phục áo vào trạng thái giặt ủi (tìm InventoryItem qua InventoryReservation hoặc BookingItem.inventoryItemId)
     try {
-      const inventoryItemModel = this.bookingModel.db.model('InventoryItem');
-      await inventoryItemModel.updateMany(
-        { bookingId: booking._id },
-        { $set: { status: RentalInventoryStatus.Cleaning } },
+      const reservationModel = this.bookingModel.db.model('InventoryReservation');
+      const itemObjectIds = targetItems.map((it: any) => it._id).filter(Boolean);
+      const reservations = itemObjectIds.length
+        ? await reservationModel
+            .find({ bookingItemId: { $in: itemObjectIds } })
+            .select({ inventoryItemId: 1 })
+            .lean()
+            .exec()
+        : [];
+      if (itemObjectIds.length > 0) {
+        await reservationModel
+          .updateMany(
+            {
+              bookingItemId: { $in: itemObjectIds },
+              status: { $in: ['CONFIRMED', 'TEMP_RESERVED'] },
+            },
+            { $set: { status: 'COMPLETED' } },
+          )
+          .exec();
+      }
+      const inventoryItemIds = new Set<any>(
+        (reservations as any[]).map((r) => r.inventoryItemId).filter(Boolean),
       );
+      for (const it of targetItems) {
+        if ((it as any)?.inventoryItemId) {
+          inventoryItemIds.add((it as any).inventoryItemId);
+        }
+        if ((it as any)?.rentalFulfillment?.inventoryItemId) {
+          inventoryItemIds.add((it as any).rentalFulfillment.inventoryItemId);
+        }
+      }
+      if (inventoryItemIds.size > 0) {
+        const inventoryItemModel = this.bookingModel.db.model('InventoryItem');
+        await inventoryItemModel.updateMany(
+          {
+            _id: { $in: Array.from(inventoryItemIds) },
+            status: { $ne: RentalInventoryStatus.Maintenance },
+          },
+          {
+            $set: {
+              status: RentalInventoryStatus.Cleaning,
+              operationalAvailableFrom: now,
+            },
+          },
+        );
+      }
     } catch {
       // ignore
     }

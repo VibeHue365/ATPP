@@ -2,9 +2,11 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
   Optional,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -74,6 +76,7 @@ export class RentalFulfillmentWorkflowService {
     @Optional()
     private readonly notificationsService?: NotificationsService,
     @Optional()
+    @Inject(forwardRef(() => RentalOverdueDominoService))
     private readonly overdueDominoService?: RentalOverdueDominoService,
   ) {}
 
@@ -213,17 +216,9 @@ export class RentalFulfillmentWorkflowService {
       conditionNote: input.conditionNote,
     });
 
-    // Overdue returns use their own late-fee/refund settlement once every
-    // rental item has physically been received by the shop.
-    if (this.overdueDominoService) {
-      const settled = await this.overdueDominoService.settleIfFullyReturned(
-        access.bookingId.toString(),
-      );
-      if (settled) return updated;
-    }
-
     // markReturned chỉ chuyển hiện vật sang trạng thái chờ kiểm tra (ReturnedPendingInspection).
     // Tuyệt đối KHÔNG tự chuyển sang CLEANING và KHÔNG gọi refund coordinator trước khi shop kiểm tra.
+    // Kể cả đơn quá hạn cũng phải chờ Shop xác nhận "Không có sự cố (Hoàn cọc)" hoặc "Yêu cầu đền bù".
     await this.syncBookingProgress(access.bookingId, access.actor);
     return updated;
   }
@@ -244,6 +239,15 @@ export class RentalFulfillmentWorkflowService {
       actor: access.actor,
       note,
     });
+
+    // Nếu đơn từng quá hạn: thực hiện đối soát phí phạt quá hạn + hoàn cọc dư + cộng ví/quyết toán Shop tại bước xác nhận không có sự cố này
+    if (this.overdueDominoService) {
+      const settledOverdue =
+        await this.overdueDominoService.settleIfFullyReturned(
+          access.bookingId.toString(),
+        );
+      if (settledOverdue) return updated;
+    }
 
     // Sau khi xác nhận không có sự cố, chuyển hiện vật sang CLEANING và gán operationalAvailableFrom
     const item = await this.bookingItemModel
@@ -306,6 +310,16 @@ export class RentalFulfillmentWorkflowService {
         availableFrom,
       );
     }
+
+    await reservationModel
+      .updateMany(
+        {
+          bookingItemId: access.itemId,
+          status: { $in: ['CONFIRMED', 'TEMP_RESERVED'] },
+        },
+        { $set: { status: 'COMPLETED' } },
+      )
+      .exec();
 
     await this.rentalDepositRefundCoordinator.coordinate(
       access.bookingId.toString(),
@@ -548,6 +562,19 @@ export class RentalFulfillmentWorkflowService {
       );
     }
     await this.syncBookingProgress(access.bookingId, access.actor);
+    const reservationModel = this.bookingItemModel.db.model(
+      'InventoryReservation',
+    );
+    await reservationModel
+      .updateMany(
+        {
+          bookingItemId: access.itemId,
+          status: { $in: ['CONFIRMED', 'TEMP_RESERVED'] },
+        },
+        { $set: { status: 'COMPLETED' } },
+      )
+      .exec();
+
     await this.rentalDepositRefundCoordinator.coordinate(
       access.bookingId.toString(),
     );

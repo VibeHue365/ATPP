@@ -2059,7 +2059,9 @@ export class PaymentsService {
 
           if (
             depositAmt > 0 &&
-            (booking as any).rentalDepositRefund?.status !== 'NO_REFUND'
+            !['NO_REFUND', 'REFUNDED', 'REQUESTED'].includes(
+              (booking as any).rentalDepositRefund?.status,
+            )
           ) {
             const intents = await this.createRefundIntents(
               booking._id,

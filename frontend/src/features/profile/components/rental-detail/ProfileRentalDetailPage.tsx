@@ -1263,11 +1263,11 @@ export const ProfileRentalDetailPage: React.FC<ProfileRentalDetailPageProps> = (
             </div>
             <div style={{ fontSize: '13px', color: '#78350F', lineHeight: 1.6 }}>
               <div>
-                • Do đơn thuê trả áo quá hạn, hệ thống đã khấu trừ phí phạt quá hạn{' '}
+                • Do đơn thuê trả áo quá hạn, hệ thống {currentStatus === 'COMPLETED' ? 'đã khấu trừ' : 'sẽ khấu trừ'} phí phạt quá hạn{' '}
                 <strong style={{ color: '#B45309' }}>-{resolvedLateFee.toLocaleString('vi-VN')}đ</strong> từ tiền cọc ban đầu ({depositFee.toLocaleString('vi-VN')}đ).
               </div>
               <div>
-                • Số tiền cọc còn lại đã hoàn trả cho bạn:{' '}
+                • Số tiền cọc còn lại {currentStatus === 'COMPLETED' ? 'đã hoàn trả' : 'sẽ hoàn trả'} cho bạn:{' '}
                 <strong style={{ color: '#15803D' }}>{resolvedDepositRefund.toLocaleString('vi-VN')}đ</strong>.
               </div>
             </div>
