@@ -1,0 +1,215 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  mongodb:
+    image: mongo:7
+    container_name: tago-mongodb
+    restart: unless-stopped
+    command:
+      - mongod
+      - --replSet
+      - rs0
+      - --bind_ip_all
+      - --keyFile
+      - /etc/mongo-keyfile
+      - --wiredTigerCacheSizeGB
+      - "1.5"
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:?MONGO_ROOT_USER is required in deploy/.env.core}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?MONGO_ROOT_PASSWORD is required in deploy/.env.core}
+      MONGO_INITDB_DATABASE: ${MONGO_DB_NAME:-vibehue}
+    # Port 27017 chi duoc mo noi bo cho VM 2 (tago-ai) qua GCP VPC Firewall.
+    # KHONG BAO GIO mo port 27017 ra 0.0.0.0/0.
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./secrets/mongo-keyfile:/etc/mongo-keyfile:ro
+    mem_limit: 2560m
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.adminCommand(\"ping\").ok' | grep -q 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 25s
+    logging: *default-logging
+    networks:
+      - tago-core
+
+  # Tu dong khoi tao Replica Set rs0 (bat buoc cho MongoDB transactions trong bookings)
+  mongo-init-rs:
+    image: mongo:7
+    container_name: tago-mongo-init-rs
+    restart: "no"
+    network_mode: "service:mongodb"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      MONGO_ROOT_USER: ${MONGO_ROOT_USER:?MONGO_ROOT_USER is required in deploy/.env.core}
+      MONGO_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?MONGO_ROOT_PASSWORD is required in deploy/.env.core}
+    entrypoint: ["/bin/bash", "-ec"]
+    command:
+      - |
+        echo "[mongo-init-rs] Checking MongoDB Replica Set rs0..."
+        mongosh "mongodb://127.0.0.1:27017/admin" \
+          -u "$$MONGO_ROOT_USER" \
+          -p "$$MONGO_ROOT_PASSWORD" \
+          --authenticationDatabase admin \
+          --quiet <<'EOF'
+        try {
+          const status = rs.status();
+          if (status.ok === 1) {
+            print("[mongo-init-rs] Replica set rs0 already initialized.");
+          }
+        } catch (err) {
+          print("[mongo-init-rs] Initializing replica set rs0...");
+          rs.initiate({
+            _id: "rs0",
+            members: [{ _id: 0, host: "mongodb:27017" }]
+          });
+        }
+        EOF
+
+        for i in $$(seq 1 30); do
+          IS_PRIMARY=$$(mongosh "mongodb://127.0.0.1:27017/admin" \
+            -u "$$MONGO_ROOT_USER" \
+            -p "$$MONGO_ROOT_PASSWORD" \
+            --authenticationDatabase admin \
+            --quiet --eval "db.hello().isWritablePrimary" | tail -n 1 | tr -d '\r')
+          if [ "$$IS_PRIMARY" = "true" ]; then
+            echo "[mongo-init-rs] MongoDB rs0 is PRIMARY and ready."
+            exit 0
+          fi
+          echo "[mongo-init-rs] Waiting for rs0 PRIMARY ($$i/30)..."
+          sleep 2
+        done
+        echo "[mongo-init-rs] ERROR: Timed out waiting for MongoDB rs0 PRIMARY."
+        exit 1
+    logging: *default-logging
+
+  redis:
+    image: redis:7-alpine
+    container_name: tago-redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 384mb
+      - --maxmemory-policy
+      - allkeys-lru
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - redis_data:/data
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+    networks:
+      - tago-core
+
+  # MinIO chi chay noi bo de luu tru rieng tu (KYC, CCCD ma hoa, hop dong PDF).
+  # Backend stream file qua API co xac thuc -> khong expose port ra internet.
+  minio:
+    image: minio/minio:latest
+    container_name: tago-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required in deploy/.env.core}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required in deploy/.env.core}
+    volumes:
+      - minio_data:/data
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+    networks:
+      - tago-core
+
+  # QUAN TRONG: Giu dung 1 container backend duy nhat vi Socket.IO activeConnections
+  # dang luu in-memory va co 13 NestJS @Cron job chay dinh ky.
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: tago-backend
+    restart: unless-stopped
+    env_file:
+      - ../backend/.env
+    environment:
+      NODE_ENV: production
+      TZ: Asia/Ho_Chi_Minh
+      NODE_OPTIONS: --max-old-space-size=2048
+    volumes:
+      - backend_uploads:/app/uploads
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      mongo-init-rs:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    mem_limit: 2560m
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging: *default-logging
+    networks:
+      - tago-core
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: tago-caddy
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      API_DOMAIN: ${API_DOMAIN:?API_DOMAIN is required in deploy/.env.core}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    mem_limit: 256m
+    logging: *default-logging
+    networks:
+      - tago-core
+
+volumes:
+  mongodb_data:
+  redis_data:
+  minio_data:
+  backend_uploads:
+  caddy_data:
+  caddy_config:
+
+networks:
+  tago-core:
+    driver: bridge

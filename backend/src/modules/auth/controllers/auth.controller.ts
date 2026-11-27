@@ -1,4 +1,5 @@
 import { Throttle } from '@nestjs/throttler';
+import { randomBytes } from 'crypto';
 import {
   Body,
   Controller,
@@ -172,7 +173,17 @@ export class AuthController {
     if (redirectUri) {
       const sep = redirectUri.includes('?') ? '&' : '?';
       const finalUrl = `${redirectUri}${sep}code=${encodeURIComponent(result.code)}`;
+      const escapedHref = finalUrl
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      const scriptNonce = randomBytes(16).toString('base64');
 
+      response.setHeader(
+        'Content-Security-Policy',
+        `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${scriptNonce}'; frame-ancestors 'none'`,
+      );
       response.setHeader('Content-Type', 'text/html; charset=utf-8');
       response.send(`<!DOCTYPE html>
 <html>
@@ -185,9 +196,9 @@ export class AuthController {
       <h2 style="color:#BA0049;margin:0 0 12px;font-family:serif;font-size:26px;letter-spacing:1px;">TàGo</h2>
       <p style="color:#2D2D2D;font-weight:600;font-size:15px;margin:0 0 8px;">Đăng nhập Google thành công!</p>
       <p style="color:#777;font-size:13px;margin:0 0 20px;line-height:1.5;">Đang quay lại ứng dụng TàGo...</p>
-      <a href="${finalUrl}" style="display:block;background:#BA0049;color:#fff;text-decoration:none;padding:12px;border-radius:10px;font-weight:600;font-size:14px;">Mở ứng dụng TàGo</a>
+      <a href="${escapedHref}" style="display:block;background:#BA0049;color:#fff;text-decoration:none;padding:12px;border-radius:10px;font-weight:600;font-size:14px;">Mở ứng dụng TàGo</a>
     </div>
-    <script>
+    <script nonce="${scriptNonce}">
       window.location.href = ${JSON.stringify(finalUrl)};
     </script>
   </body>

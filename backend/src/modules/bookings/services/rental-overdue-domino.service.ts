@@ -911,16 +911,20 @@ export class RentalOverdueDominoService {
   }
 
   /**
-   * 7. Giả lập đơn trễ hạn phục vụ Demo/Test (chỉ hoạt động ngoài production).
+   * 7. Giả lập đơn trễ hạn phục vụ Demo/Test.
+   * Ở môi trường production mặc định bị chặn; chỉ cho phép khi đặt ALLOW_OVERDUE_SIMULATION=true.
    */
   async simulateOverdueForDemo(
     bookingId: string,
     user: AuthUser,
     hoursOverdue = 1,
   ): Promise<any> {
-    if (process.env.NODE_ENV === 'production') {
+    if (
+      process.env.NODE_ENV === 'production' &&
+      process.env.ALLOW_OVERDUE_SIMULATION !== 'true'
+    ) {
       throw new ForbiddenException(
-        'Chức năng giả lập chỉ khả dụng ở môi trường thử nghiệm.',
+        'Chức năng giả lập chỉ khả dụng ở môi trường thử nghiệm hoặc khi bật ALLOW_OVERDUE_SIMULATION=true.',
       );
     }
     const booking = await this.bookingModel.findById(bookingId).exec();

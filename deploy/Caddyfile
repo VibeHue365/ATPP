@@ -1,0 +1,18 @@
+{$API_DOMAIN} {
+    encode zstd gzip
+
+    # Cho phep upload anh/tai lieu/hop dong len toi 25MB
+    request_body {
+        max_size 25MB
+    }
+
+    # Proxy HTTP + WebSocket (Socket.IO) sang NestJS backend
+    # Caddy tu dong chuyen tiep WebSocket Upgrade va X-Forwarded-For / X-Forwarded-Proto
+    reverse_proxy backend:3000 {
+        flush_interval -1
+        transport http {
+            dial_timeout 10s
+            response_header_timeout 120s
+        }
+    }
+}

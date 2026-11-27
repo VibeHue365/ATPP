@@ -1,8 +1,25 @@
 import JSZip from 'jszip';
+import { API_BASE_URL } from '../config/env';
+
+const resolveDownloadUrl = (rawUrl: string): string => {
+  if (!rawUrl) return rawUrl;
+  if (
+    rawUrl.startsWith('http://') ||
+    rawUrl.startsWith('https://') ||
+    rawUrl.startsWith('data:') ||
+    rawUrl.startsWith('blob:')
+  ) {
+    return rawUrl;
+  }
+  const base = API_BASE_URL.replace(/\/+$/, '');
+  const path = rawUrl.startsWith('/') ? rawUrl : `/${rawUrl}`;
+  return `${base}${path}`;
+};
 
 export const downloadSinglePhoto = async (photoUrl: string, fileName: string) => {
+  const resolvedUrl = resolveDownloadUrl(photoUrl);
   try {
-    const res = await fetch(photoUrl);
+    const res = await fetch(resolvedUrl);
     const blob = await res.blob();
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -13,7 +30,7 @@ export const downloadSinglePhoto = async (photoUrl: string, fileName: string) =>
     document.body.removeChild(a);
     URL.revokeObjectURL(blobUrl);
   } catch (_err) {
-    window.open(photoUrl, '_blank');
+    window.open(resolvedUrl, '_blank');
   }
 };
 
@@ -32,9 +49,7 @@ export const downloadPhotosAsZip = async (
 
     for (let i = 0; i < photos.length; i++) {
       const photo = photos[i];
-      const photoUrl = photo.startsWith('http')
-        ? photo
-        : `${import.meta.env.VITE_API_URL || ''}${photo}`;
+      const photoUrl = resolveDownloadUrl(photo);
       try {
         const response = await fetch(photoUrl);
         const blob = await response.blob();

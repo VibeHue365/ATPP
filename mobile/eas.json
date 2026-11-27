@@ -1,0 +1,43 @@
+{
+  "cli": {
+    "version": ">= 15.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.tago.id.vn",
+        "EXPO_PUBLIC_SOCKET_URL": "https://api.tago.id.vn",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "replace-with-google-web-client-id.apps.googleusercontent.com",
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "replace-with-eas-project-id"
+      }
+    },
+    "production": {
+      "channel": "production",
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.tago.id.vn",
+        "EXPO_PUBLIC_SOCKET_URL": "https://api.tago.id.vn",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "replace-with-google-web-client-id.apps.googleusercontent.com",
+        "EXPO_PUBLIC_EAS_PROJECT_ID": "replace-with-eas-project-id"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

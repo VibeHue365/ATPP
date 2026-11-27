@@ -2,3 +2,6 @@
 docs/refactor-baselines/provider-dashboard-2026-09-21/ProviderDashboard.tsx -text
 docs/refactor-baselines/provider-dashboard-2026-09-21/providerServiceProfile.css -text
 frontend/src/pages/providerdashboard/providerServiceProfile.css -text
+
+# Ensure shell scripts always use LF line endings for Ubuntu/Linux VMs.
+*.sh text eol=lf

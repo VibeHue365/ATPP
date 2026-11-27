@@ -454,10 +454,10 @@ export class PaymentsController {
 
           <!-- JAVASCRIPT FOR LIVE UPDATE & API CALL -->
           <script>
-            const amount = ${amount};
-            const memo = "${memo}";
-            const code = "${payment.paymentCode}";
-            const frontendUrl = "${frontendUrl}";
+            const amount = ${Number(amount) || 0};
+            const memo = ${JSON.stringify(memo)};
+            const code = ${JSON.stringify(payment.paymentCode)};
+            const frontendUrl = ${JSON.stringify(frontendUrl)};
 
             const bankSelect = document.getElementById('bank-select');
             const accInput = document.getElementById('acc-input');
@@ -599,7 +599,20 @@ export class PaymentsController {
         </body>
         </html>
       `;
-      res.setHeader('Content-Type', 'text/html');
+      res.setHeader(
+        'Content-Security-Policy',
+        [
+          "default-src 'self'",
+          "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com",
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+          "font-src 'self' https://fonts.gstatic.com",
+          "img-src 'self' data: blob: https://img.vietqr.io",
+          "connect-src 'self'",
+          "object-src 'none'",
+          "frame-ancestors 'none'",
+        ].join('; '),
+      );
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.send(html);
     } catch {
       res.status(404).send('Không tìm thấy thông tin thanh toán.');

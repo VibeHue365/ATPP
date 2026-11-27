@@ -1,0 +1,59 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # Chay tren VM 2 (tago-ai). Port 8000 & 8010 chi mo noi bo cho VM 1 (tago-core)
+  # qua GCP VPC Firewall — KHONG mo cong khai ra internet.
+  ai-service:
+    build:
+      context: ../ai-service
+      dockerfile: Dockerfile
+    container_name: tago-ai-service
+    restart: unless-stopped
+    env_file:
+      - ../ai-service/.env
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+    ports:
+      - "8000:8000"
+    mem_limit: 6g
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=3)"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+    logging: *default-logging
+    networks:
+      - tago-ai
+
+  ocr-service:
+    build:
+      context: ../ocr-service
+      dockerfile: Dockerfile
+    container_name: tago-ocr-service
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      TESSERACT_LANG: ${TESSERACT_LANG:-vie+eng}
+      TESSERACT_PSM: ${TESSERACT_PSM:-6}
+      OCR_TIMEOUT_SECONDS: ${OCR_TIMEOUT_SECONDS:-30}
+    ports:
+      - "8010:8010"
+    mem_limit: 1536m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging: *default-logging
+    networks:
+      - tago-ai
+
+networks:
+  tago-ai:
+    driver: bridge

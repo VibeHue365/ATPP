@@ -34,6 +34,9 @@ backend/uploads/
 **/.env.local
 **/.env.*.local
 **/*.local
+deploy/.env.core
+deploy/.env.ai
+deploy/secrets/
 
 # OS files
 .DS_Store
