@@ -2,7 +2,7 @@
 
 Tài liệu này hướng dẫn từng bước triển khai trọn bộ hệ thống **TàGo** (Web, Mobile APK, NestJS Backend, MongoDB Replica Set, Redis, MinIO, AI Service PyTorch/CLIP/Gemini, OCR Tesseract) theo **Phương án A** — tối ưu độ ổn định, chịu tải tốt trong 1–3 tháng vận hành thực tế và tận dụng tối đa Google Cloud Free Trial (\$300 / 90 ngày).
 
-> Trong suốt tài liệu, thay `tago.id.vn` và `api.tago.id.vn` bằng tên miền thật của bạn.
+> Trong suốt tài liệu, thay `tagohue.app` và `api.tagohue.app` bằng tên miền thật của bạn.
 
 ---
 
@@ -11,11 +11,11 @@ Tài liệu này hướng dẫn từng bước triển khai trọn bộ hệ th�
 ```text
 Người dùng (Web / Mobile APK)
    │
-   ├── https://tago.id.vn ──────────────► Vercel CDN (React 19 + Vite SPA)
+   ├── https://tagohue.app ──────────────► Vercel CDN (React 19 + Vite SPA)
    │
    ├── Ảnh công khai ───────────────────► Cloudinary CDN
    │
-   └── https://api.tago.id.vn ──────────► Cloudflare DNS ──► VM 1: tago-core (GCP Singapore)
+   └── https://api.tagohue.app ──────────► Cloudflare DNS ──► VM 1: tago-core (GCP Singapore)
                                                               ├── Caddy (Auto HTTPS + WebSocket/Socket.IO)
                                                               ├── Backend NestJS (1 container duy nhất, UTC+7)
                                                               ├── MongoDB 7 (Replica Set rs0 + Auth)
@@ -115,7 +115,7 @@ Vào Cloudflare → **DNS → Records** của tên miền:
    - Name: `api`
    - IPv4 address: `<CORE_PUBLIC_IP>`
    - Proxy status: **DNS only (Mây xám)** trước khi cấp chứng chỉ SSL lần đầu.
-2. Sau khi Caddy cấp chứng chỉ HTTPS thành công và `https://api.tago.id.vn/health` trả về `200 OK`:
+2. Sau khi Caddy cấp chứng chỉ HTTPS thành công và `https://api.tagohue.app/health` trả về `200 OK`:
    - Bạn có thể giữ **Mây xám** (tối ưu nhất cho WebSocket/Socket.IO), hoặc bật **Mây cam** nhưng bắt buộc vào **SSL/TLS → Overview** chọn chế độ **Full (strict)**.
    - **Tuyệt đối KHÔNG chọn Flexible** (sẽ gây vòng lặp redirect 308/521 với Caddy).
 
@@ -167,9 +167,9 @@ MONGODB_URI=mongodb://<MONGO_ROOT_USER>:<MONGO_ROOT_PASSWORD>@mongodb:27017/vibe
 REDIS_URL=redis://redis:6379
 
 # Khai báo đầy đủ domain web (ngăn cách bằng dấu phẩy, không có dấu / ở cuối)
-FRONTEND_URL=https://tago.id.vn,https://www.tago.id.vn
-API_PUBLIC_URL=https://api.tago.id.vn
-BACKEND_URL=https://api.tago.id.vn
+FRONTEND_URL=https://tagohue.app,https://www.tagohue.app
+API_PUBLIC_URL=https://api.tagohue.app
+BACKEND_URL=https://api.tagohue.app
 BODY_LIMIT=10mb
 POLICY_ACTIVATION_MODE=COMPENSATION
 
@@ -186,7 +186,7 @@ BCRYPT_SALT_ROUNDS=12
 GOOGLE_CLIENT_ID=<WEB_CLIENT_ID>.apps.googleusercontent.com
 GOOGLE_ANDROID_CLIENT_ID=<ANDROID_CLIENT_ID>.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=<WEB_CLIENT_SECRET>
-GOOGLE_CALLBACK_URL=https://api.tago.id.vn/auth/google/callback
+GOOGLE_CALLBACK_URL=https://api.tagohue.app/auth/google/callback
 
 # Email SMTP
 MAIL_HOST=smtp.gmail.com
@@ -194,7 +194,7 @@ MAIL_PORT=587
 MAIL_SECURE=false
 MAIL_USER=<EMAIL_GUI_THU>
 MAIL_PASSWORD=<GMAIL_APP_PASSWORD_16_KY_TU>
-MAIL_FROM=TàGo <no-reply@tago.id.vn>
+MAIL_FROM=TàGo <no-reply@tagohue.app>
 
 # Cloudinary (ảnh công khai)
 CLOUDINARY_CLOUD_NAME=<CLOUD_NAME>
@@ -211,7 +211,7 @@ MINIO_PROVIDER_DOCUMENT_BUCKET=provider-documents
 MINIO_AUTO_CREATE_BUCKETS=true
 
 # Tài khoản Admin khởi tạo
-BOOTSTRAP_ADMIN_EMAIL=admin@tago.id.vn
+BOOTSTRAP_ADMIN_EMAIL=admin@tagohue.app
 BOOTSTRAP_ADMIN_PASSWORD=<MAT_KHAU_ADMIN_MANH>
 BOOTSTRAP_ADMIN_NAME=TàGo Admin
 
@@ -241,7 +241,7 @@ docker compose --env-file deploy/.env.core -f deploy/docker-compose.core.yml up 
 Kiểm tra trạng thái (tất cả container `mongodb`, `redis`, `minio`, `backend`, `caddy` phải là `Up (healthy)` và `mongo-init-rs` là `Exited (0)`):
 ```bash
 docker compose --env-file deploy/.env.core -f deploy/docker-compose.core.yml ps
-curl -i https://api.tago.id.vn/health
+curl -i https://api.tagohue.app/health
 ```
 Kết quả chuẩn trả về HTTP `200`:
 ```json
@@ -280,8 +280,8 @@ MONGO_URL=mongodb://<MONGO_ROOT_USER>:<MONGO_ROOT_PASSWORD>@<CORE_INTERNAL_IP>:2
 DB_NAME=aodai_platform
 NESTJS_DB_NAME=vibehue
 
-BACKEND_URL=https://api.tago.id.vn
-FRONTEND_URL=https://tago.id.vn
+BACKEND_URL=https://api.tagohue.app
+FRONTEND_URL=https://tagohue.app
 
 VISUAL_SEARCH_ENABLED=true
 PRODUCT_DRAFT_ENABLED=true
@@ -320,12 +320,12 @@ curl http://<AI_INTERNAL_IP>:8010/health
    - **Framework Preset**: `Vite` (tự nhận diện)
    - File [frontend/vercel.json](frontend/vercel.json) đã cấu hình sẵn SPA rewrite và `Permissions-Policy` cho Camera + Geolocation trên HTTPS.
 3. Khai báo **Environment Variables** trên Vercel:
-   - `VITE_API_BASE_URL` = `https://api.tago.id.vn`
-   - `VITE_SOCKET_URL` = `https://api.tago.id.vn`
+   - `VITE_API_BASE_URL` = `https://api.tagohue.app`
+   - `VITE_SOCKET_URL` = `https://api.tagohue.app`
    - `VITE_CONTRACTS_V2_ENABLED` = `false` (đồng bộ với backend)
    - `VITE_CONTRACTS_TIERED_ENABLED` = `false`
 4. Nhấn **Deploy**.
-5. Vào **Project Settings → Domains** để gắn tên miền chính (`tago.id.vn`, `www.tago.id.vn`) và thêm record DNS mà Vercel yêu cầu trên Cloudflare.
+5. Vào **Project Settings → Domains** để gắn tên miền chính (`tagohue.app`, `www.tagohue.app`) và thêm record DNS mà Vercel yêu cầu trên Cloudflare.
 
 ---
 
@@ -334,10 +334,10 @@ curl http://<AI_INTERNAL_IP>:8010/health
 ### 8.1. Google Cloud Console (APIs & Services → Credentials)
 1. **Web Application OAuth Client**:
    - **Authorized JavaScript origins**:
-     - `https://tago.id.vn`
-     - `https://www.tago.id.vn`
+     - `https://tagohue.app`
+     - `https://www.tagohue.app`
    - **Authorized redirect URIs**:
-     - `https://api.tago.id.vn/auth/google/callback`
+     - `https://api.tagohue.app/auth/google/callback`
 2. **Android OAuth Client**:
    - **Package name**: `com.vibehue.mobile`
    - **SHA-1 certificate fingerprint**: Lấy từ `eas credentials` ở bước 8.3 bên dưới.
@@ -355,8 +355,8 @@ eas init
 eas update:configure
 ```
 Mở [mobile/eas.json](mobile/eas.json) và điền đúng các giá trị thật trong profile `preview` (và `production`):
-- `EXPO_PUBLIC_API_URL`: `https://api.tago.id.vn`
-- `EXPO_PUBLIC_SOCKET_URL`: `https://api.tago.id.vn`
+- `EXPO_PUBLIC_API_URL`: `https://api.tagohue.app`
+- `EXPO_PUBLIC_SOCKET_URL`: `https://api.tagohue.app`
 - `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`: `<WEB_CLIENT_ID>.apps.googleusercontent.com`
 - `EXPO_PUBLIC_EAS_PROJECT_ID`: `<PROJECT_ID_TU_EAS_INIT>`
 
@@ -401,7 +401,7 @@ docker exec -i tago-mongodb mongorestore \
 ```
 
 ### 9.2. Giám sát uptime miễn phí (UptimeRobot)
-- Tạo monitor kiểu **HTTP(s)** trên [uptimerobot.com](https://uptimerobot.com) kiểm tra `https://api.tago.id.vn/health` mỗi **5 phút** (endpoint này đã được gắn `@SkipThrottle()` nên không bao giờ bị rate-limit).
+- Tạo monitor kiểu **HTTP(s)** trên [uptimerobot.com](https://uptimerobot.com) kiểm tra `https://api.tagohue.app/health` mỗi **5 phút** (endpoint này đã được gắn `@SkipThrottle()` nên không bao giờ bị rate-limit).
 
 ---
 
@@ -423,7 +423,7 @@ Mỗi khi team merge code mới lên Git:
 
 ## 11. Checklist nghiệm thu 8 luồng chính sau khi deploy
 
-1. **Health & SSL**: `https://api.tago.id.vn/health` trả `200 OK`, chứng chỉ ổ khóa HTTPS hợp lệ, không còn lỗi mixed content.
+1. **Health & SSL**: `https://api.tagohue.app/health` trả `200 OK`, chứng chỉ ổ khóa HTTPS hợp lệ, không còn lỗi mixed content.
 2. **Auth Web & Mobile**: Đăng nhập Email/Password + Google OAuth trên Web và Mobile APK (kiểm tra redirect về app `tago://` không bị chặn CSP).
 3. **Upload Media**: Upload ảnh sản phẩm / avatar (Cloudinary) và upload hồ sơ KYC / tạo hợp đồng PDF có dấu tiếng Việt chuẩn (`NotoSans` trên MinIO).
 4. **Booking & Thanh toán**: Đặt thuê áo dài + chụp ảnh (kiểm tra MongoDB transaction), mở trang PayOS Simulator (`/payments/checkout/:code`) bấm xác nhận thành công.
@@ -436,8 +436,8 @@ Mỗi khi team merge code mới lên Git:
 
 ## 12. Xử lý nhanh các sự cố thường gặp
 
-- **Lỗi `ERR_TOO_MANY_REDIRECTS` khi mở `https://api.tago.id.vn`**: Kiểm tra Cloudflare SSL/TLS đang để `Flexible` → đổi sang **Full (strict)** hoặc tắt proxy (Mây xám).
-- **Lỗi `CORS` trên Web**: Kiểm tra `FRONTEND_URL` trong `backend/.env` đã có đúng `https://tago.id.vn` (không có `/` cuối) và đã restart backend.
+- **Lỗi `ERR_TOO_MANY_REDIRECTS` khi mở `https://api.tagohue.app`**: Kiểm tra Cloudflare SSL/TLS đang để `Flexible` → đổi sang **Full (strict)** hoặc tắt proxy (Mây xám).
+- **Lỗi `CORS` trên Web**: Kiểm tra `FRONTEND_URL` trong `backend/.env` đã có đúng `https://tagohue.app` (không có `/` cuối) và đã restart backend.
 - **Google OAuth Mobile bị lỗi `DEVELOPER_ERROR` (code 10)**: SHA-1 trong Google Cloud Android OAuth Client chưa khớp SHA-1 từ `eas credentials --platform android`, hoặc `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` điền nhầm Android Client ID thay vì Web Client ID.
 - **AI Service không đọc được danh sách sản phẩm**: Kiểm tra `MONGO_URL` trong `ai-service/.env` đã có `&directConnection=true` và rule firewall `allow-tago-ai-to-mongo` đã gắn đúng tag `tago-ai` / `tago-core`.
 - **Lỗi MongoDB `Transaction numbers are only allowed on a replica set member`**: Kiểm tra `docker logs tago-mongo-init-rs` và đảm bảo `MONGODB_URI` có `&replicaSet=rs0`.

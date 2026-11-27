@@ -18,8 +18,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.tago.id.vn",
-        "EXPO_PUBLIC_SOCKET_URL": "https://api.tago.id.vn",
+        "EXPO_PUBLIC_API_URL": "https://api.tagohue.app",
+        "EXPO_PUBLIC_SOCKET_URL": "https://api.tagohue.app",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "replace-with-google-web-client-id.apps.googleusercontent.com",
         "EXPO_PUBLIC_EAS_PROJECT_ID": "replace-with-eas-project-id"
       }
@@ -30,8 +30,8 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.tago.id.vn",
-        "EXPO_PUBLIC_SOCKET_URL": "https://api.tago.id.vn",
+        "EXPO_PUBLIC_API_URL": "https://api.tagohue.app",
+        "EXPO_PUBLIC_SOCKET_URL": "https://api.tagohue.app",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "replace-with-google-web-client-id.apps.googleusercontent.com",
         "EXPO_PUBLIC_EAS_PROJECT_ID": "replace-with-eas-project-id"
       }
