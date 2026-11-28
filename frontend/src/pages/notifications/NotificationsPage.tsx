@@ -147,7 +147,10 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
                 type: 'BOOKING',
                 isRead: true,
                 createdAt: b.updatedAt || b.createdAt || new Date().toISOString(),
-                metadata: { bookingId: b._id, url: '/dashboard/profile?tab=rentals' }
+                metadata: {
+                  bookingId: b._id,
+                  url: `/dashboard/profile?tab=schedule&bookingId=${encodeURIComponent(String(b._id))}`,
+                }
               });
             }
           });
@@ -217,10 +220,19 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
     }
     if (noti.metadata?.tab) {
       navigate(`${ROUTES.ADMIN_DASHBOARD}?tab=${noti.metadata.tab}`);
+    } else if (
+      noti.metadata?.bookingId &&
+      (!noti.metadata?.url || String(noti.metadata.url).includes('tab=rentals'))
+    ) {
+      navigate(
+        `${ROUTES.PROFILE}?tab=schedule&bookingId=${encodeURIComponent(String(noti.metadata.bookingId))}`,
+      );
     } else if (noti.metadata?.url) {
-      navigate(noti.metadata.url);
-    } else if (noti.metadata?.bookingId) {
-      navigate(ROUTES.PROFILE);
+      navigate(
+        String(noti.metadata.url).includes('tab=rentals')
+          ? `${ROUTES.PROFILE}?tab=schedule&category=rental`
+          : noti.metadata.url,
+      );
     }
   };
 

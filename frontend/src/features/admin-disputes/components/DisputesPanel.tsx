@@ -846,15 +846,7 @@ export function DisputesPanel() {
                       {/* Mã khiếu nại + Thumbnail */}
                       <td>
                         <div className="df-cell-code">
-                          <img
-                            src={
-                              service === 'PHOTO'
-                                ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'
-                                : 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=100&auto=format&fit=crop&q=80'
-                            }
-                            alt="thumb"
-                            className="df-booking-thumb"
-                          />
+                          <div className="df-booking-thumb" style={{ backgroundColor: '#F3EFE8' }} aria-hidden="true" />
                           <div>
                             <div className="df-booking-code">{dCode}</div>
                             <div style={{ fontSize: '11px', color: '#64748b' }}>{bCode}</div>

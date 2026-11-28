@@ -28,6 +28,7 @@ type OrdersPanelProps = Pick<ReturnType<typeof useProviderOrderState>,
   tabs: { label: string; count: number; }[];
   attentionTabs: { label: string; count: number; }[];
   filterBaseOrders: Order[];
+  allTimeBaseOrders?: Order[];
   hasAodaiCapability: boolean | undefined;
   hasPhotographyCapability: boolean | undefined;
   monthlyRevenue: number;
@@ -43,6 +44,7 @@ export function OrdersPanel({
   tabs,
   attentionTabs,
   filterBaseOrders,
+  allTimeBaseOrders,
   setOrderTab,
   orderTab,
   hasAodaiCapability,
@@ -119,6 +121,61 @@ export function OrdersPanel({
     setIncidentActionType('CLEANING');
   };
 
+  const handleExportOrdersCsv = React.useCallback(() => {
+    if (filteredOrders.length === 0) {
+      toast.info('Không có đơn hàng nào trong danh sách hiện tại để xuất CSV.');
+      return;
+    }
+
+    const escapeCsvCell = (raw: unknown): string => {
+      const text = String(raw ?? '').replace(/\r?\n/g, ' ').trim();
+      const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
+
+    const headers = [
+      'Mã đơn',
+      'Khách hàng',
+      'Email',
+      'Số điện thoại',
+      'Sản phẩm / Dịch vụ',
+      'Loại dịch vụ',
+      'Ngày đặt',
+      'Tổng tiền (VNĐ)',
+      'Trạng thái',
+    ];
+
+    const rows = filteredOrders.map((order) => [
+      order.bookingCode || order.id || order._id,
+      order.customerName || '',
+      order.customerEmail || '',
+      order.customerPhone || '',
+      order.productName || order.serviceName || '',
+      order.bookingType || '',
+      order.orderDate || '',
+      order.totalAmount ?? 0,
+      order.status || order.rawStatus || '',
+    ]);
+
+    const csvContent =
+      '\uFEFF' +
+      [headers, ...rows]
+        .map((row) => row.map(escapeCsvCell).join(','))
+        .join('\r\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `tago-don-dat-lich-${dateStamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success(`Đã xuất ${filteredOrders.length} đơn hàng ra tệp CSV.`);
+  }, [filteredOrders, toast]);
+
   return (
     <main className="p-orders-container">
       {/* 1. Page Header */}
@@ -131,7 +188,7 @@ export function OrdersPanel({
         </div>
         <button
           type="button"
-          onClick={() => toast.info('Tính năng xuất CSV đang được phát triển.')}
+          onClick={handleExportOrdersCsv}
           className="p-orders-export-btn"
         >
           <Download size={15} />
@@ -160,6 +217,7 @@ export function OrdersPanel({
         tabs={tabs}
         attentionTabs={attentionTabs}
         orders={filterBaseOrders}
+        allTimeOrders={allTimeBaseOrders}
         orderMonthFilter={orderMonthFilter}
         setOrderMonthFilter={setOrderMonthFilter}
       />

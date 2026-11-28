@@ -49,7 +49,7 @@ describe('AdminStatsService (VS-103, VS-104, VS-105)', () => {
     refreshTokenModel = { updateMany: jest.fn() };
     providerVerificationModel = { countDocuments: jest.fn(), find: jest.fn() };
     disputeModel = { countDocuments: jest.fn(), find: jest.fn() };
-    reviewModel = { countDocuments: jest.fn() };
+    reviewModel = { countDocuments: jest.fn(), find: jest.fn() };
     comboPromotionModel = { countDocuments: jest.fn() };
     inventoryItemModel = { aggregate: jest.fn(), countDocuments: jest.fn() };
     analyticsService = {
@@ -620,6 +620,140 @@ describe('AdminStatsService (VS-103, VS-104, VS-105)', () => {
       expect(cityQuery['address.city'].test('Hồ Chí Minh')).toBe(true);
       expect(bookingModel.countDocuments).toHaveBeenCalledWith({
         providerIds: { $in: [providerId] },
+      });
+    });
+  });
+
+  describe('Top partners & provider directory fixes', () => {
+    it('aggregates top partners by providerIds without stock avatar fallbacks', async () => {
+      const p1 = new Types.ObjectId();
+      const p2 = new Types.ObjectId();
+      bookingModel.aggregate.mockResolvedValue([
+        { _id: p1, count: 16 },
+        { _id: p2, count: 8 },
+      ]);
+      providerModel.find.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          populate: jest.fn().mockReturnValue({
+            lean: jest.fn().mockResolvedValue([
+              {
+                _id: p1,
+                businessName: 'Áo Dài Cổ Phong Vibe',
+                media: { logoUrl: 'https://cdn.vibehue.vn/logo1.png' },
+              },
+              {
+                _id: p2,
+                businessName: 'Huế Áo Dài Studio',
+                media: { logoUrl: null },
+                userId: { profile: { avatarUrl: null } },
+              },
+            ]),
+          }),
+        }),
+      });
+
+      const result = await (service as any).getTopPartners();
+
+      expect(bookingModel.aggregate).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            $match: expect.objectContaining({
+              providerIds: { $exists: true, $ne: [] },
+            }),
+          }),
+          expect.objectContaining({ $unwind: '$providerIds' }),
+          expect.objectContaining({
+            $group: { _id: '$providerIds', count: { $sum: 1 } },
+          }),
+        ]),
+      );
+      expect(result).toEqual([
+        {
+          rank: 1,
+          name: 'Áo Dài Cổ Phong Vibe',
+          bookings: 16,
+          avatar: 'https://cdn.vibehue.vn/logo1.png',
+        },
+        {
+          rank: 2,
+          name: 'Huế Áo Dài Studio',
+          bookings: 8,
+          avatar: '',
+        },
+      ]);
+    });
+
+    it('sorts providers by bookings_desc, keeps unreviewed rating at 0, and leaves missing avatars empty', async () => {
+      const emptyNewProviderId = new Types.ObjectId();
+      const activeOldProviderId = new Types.ObjectId();
+
+      providerModel.countDocuments.mockResolvedValue(2);
+      providerModel.find.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        populate: jest.fn().mockReturnThis(),
+        sort: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue([
+          {
+            _id: emptyNewProviderId,
+            businessName: 'New Empty Shop',
+            createdAt: new Date('2026-11-20T00:00:00.000Z'),
+            status: 'ACTIVE',
+            rating: { averageRating: 4.9, totalReviews: 0 },
+            media: {},
+          },
+          {
+            _id: activeOldProviderId,
+            businessName: 'Busy Active Shop',
+            createdAt: new Date('2026-07-01T00:00:00.000Z'),
+            status: 'ACTIVE',
+            rating: { averageRating: 4.8, totalReviews: 5 },
+            media: { logoUrl: 'https://cdn.vibehue.vn/busy.png' },
+          },
+        ]),
+      });
+      productModel.find.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([]),
+        }),
+      });
+      bookingModel.aggregate.mockResolvedValue([
+        {
+          _id: activeOldProviderId,
+          totalRevenue: 6000000,
+          completedCount: 16,
+          totalCount: 16,
+        },
+      ]);
+      providerVerificationModel.find.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([]),
+        }),
+      });
+      reviewModel.find.mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        sort: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue([]),
+        }),
+      });
+
+      const result = await service.getAllProviders(1, 10, undefined, 'bookings_desc');
+
+      expect(result.items[0]).toMatchObject({
+        businessName: 'Busy Active Shop',
+        completedBookings: 16,
+        rating: 4.8,
+        totalReviews: 5,
+        avatar: 'https://cdn.vibehue.vn/busy.png',
+      });
+      expect(result.items[1]).toMatchObject({
+        businessName: 'New Empty Shop',
+        completedBookings: 0,
+        rating: 0,
+        totalReviews: 0,
+        avatar: '',
       });
     });
   });

@@ -65,16 +65,6 @@ const CHANGE_TARGET_OPTIONS = [
   { id: 'BUSINESS_PROFILE', label: 'Thông tin hồ sơ kinh doanh' },
 ];
 
-const LOCAL_PARTNER_AVATARS = [
-  '/hoang_minh.webp',
-  '/avatar_hanna.webp',
-  '/avatar_mai_anh.webp',
-  '/avatar_minh_tam.webp',
-  '/lam_ngoc.webp',
-  '/le_thao.webp',
-  '/tran_bao.webp',
-];
-
 export function PartnerVerificationManagement() {
   // Main Data States
   const [items, setItems] = useState<any[]>([]);
@@ -84,12 +74,12 @@ export function PartnerVerificationManagement() {
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [metrics, setMetrics] = useState<AdminVerificationMetrics>({
-    total: 64,
-    submitted: 18,
-    underReview: 12,
-    needsChanges: 8,
-    approved: 20,
-    rejected: 6,
+    total: 0,
+    submitted: 0,
+    underReview: 0,
+    needsChanges: 0,
+    approved: 0,
+    rejected: 0,
   });
 
   // Filters State
@@ -104,13 +94,6 @@ export function PartnerVerificationManagement() {
 
   const handleAvatarError = (key: string) => {
     setAvatarErrors((prev) => ({ ...prev, [key]: true }));
-  };
-
-  const getInitials = (name?: string) => {
-    if (!name) return 'ĐT';
-    const parts = name.trim().split(/\s+/);
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   };
 
   // Multi-Selection State
@@ -816,7 +799,7 @@ export function PartnerVerificationManagement() {
                 </td>
               </tr>
             ) : (
-              items.map((item, rowIdx) => {
+              items.map((item) => {
                 const id = item.verificationId || item._id;
                 const isSelected = selectedIds.includes(id);
                 const status = (item.status || 'DRAFT').toUpperCase();
@@ -824,11 +807,9 @@ export function PartnerVerificationManagement() {
                 const bp = item.businessProfile || {};
                 const name = bp.businessName || item.businessName || 'Đối tác chưa đặt tên';
                 const owner = bp.ownerName || 'Chủ doanh nghiệp';
-                const phone = bp.phone || '0901 234 567';
+                const phone = bp.phone || 'Chưa cập nhật';
                 const province = bp.province || 'Thừa Thiên Huế';
-                const avatar =
-                  bp.avatar ||
-                  LOCAL_PARTNER_AVATARS[rowIdx % LOCAL_PARTNER_AVATARS.length];
+                const avatar = bp.avatar || '';
                 const code = item.partnerCode || `#DT${String(id).slice(-5).toUpperCase()}`;
 
                 const caps = item.requestedCapabilities || [];
@@ -850,10 +831,12 @@ export function PartnerVerificationManagement() {
 
                     <td>
                       <div className="pv-partner-cell">
-                        {avatarErrors[id] ? (
-                          <div className="pv-partner-avatar-fallback">
-                            {getInitials(name)}
-                          </div>
+                        {!avatar || avatarErrors[id] ? (
+                          <div
+                            className="pv-partner-avatar-fallback"
+                            style={{ background: '#F3F4F6' }}
+                            aria-hidden="true"
+                          />
                         ) : (
                           <img
                             src={avatar}
@@ -1069,20 +1052,16 @@ export function PartnerVerificationManagement() {
             <div className="pv-drawer-header-card">
               <div className="pv-dh-main">
                 <div className="pv-dh-left">
-                  {avatarErrors[`drawer_${activeVerification.verificationId || activeVerification._id}`] ? (
-                    <div className="pv-dh-avatar-fallback">
-                      {getInitials(
-                        activeVerification.businessProfile?.businessName ||
-                        activeVerification.businessName ||
-                        'Partner'
-                      )}
-                    </div>
+                  {!activeVerification.businessProfile?.avatar ||
+                  avatarErrors[`drawer_${activeVerification.verificationId || activeVerification._id}`] ? (
+                    <div
+                      className="pv-dh-avatar-fallback"
+                      style={{ background: '#F3F4F6' }}
+                      aria-hidden="true"
+                    />
                   ) : (
                     <img
-                      src={
-                        activeVerification.businessProfile?.avatar ||
-                        LOCAL_PARTNER_AVATARS[0]
-                      }
+                      src={activeVerification.businessProfile.avatar}
                       alt=""
                       className="pv-dh-avatar"
                       onError={() =>
@@ -1262,7 +1241,7 @@ export function PartnerVerificationManagement() {
                         <div className="pv-info-item">
                           <span className="info-label">Người đại diện pháp luật</span>
                           <span className="info-val">
-                            {activeVerification.businessProfile?.ownerName || 'Nguyễn Thị Mai'}
+                            {activeVerification.businessProfile?.ownerName || 'Chưa cập nhật'}
                           </span>
                         </div>
 
@@ -1276,7 +1255,7 @@ export function PartnerVerificationManagement() {
                         <div className="pv-info-item">
                           <span className="info-label">Số điện thoại</span>
                           <span className="info-val">
-                            {activeVerification.businessProfile?.phone || '0901 234 567'}
+                            {activeVerification.businessProfile?.phone || 'Chưa cập nhật'}
                           </span>
                         </div>
 
@@ -1509,15 +1488,20 @@ export function PartnerVerificationManagement() {
                         {(activeVerification.internalNotes && activeVerification.internalNotes.length > 0) ? (
                           activeVerification.internalNotes.map((note: any, idx: number) => (
                             <div key={idx} className="pv-note-item">
-                              <img
-                                src={note.avatar || LOCAL_PARTNER_AVATARS[0]}
-                                alt={note.adminName}
-                                className="pv-note-avatar"
-                                onError={(e) => {
-                                  e.currentTarget.onerror = null;
-                                  e.currentTarget.src = LOCAL_PARTNER_AVATARS[0];
-                                }}
-                              />
+                              {note.avatar && !avatarErrors[`note_${idx}`] ? (
+                                <img
+                                  src={note.avatar}
+                                  alt={note.adminName}
+                                  className="pv-note-avatar"
+                                  onError={() => handleAvatarError(`note_${idx}`)}
+                                />
+                              ) : (
+                                <div
+                                  className="pv-note-avatar"
+                                  style={{ background: '#F3F4F6' }}
+                                  aria-hidden="true"
+                                />
+                              )}
                               <div className="pv-note-content">
                                 <div className="pv-note-head">
                                   <span className="pv-note-author">{note.adminName || 'System Admin'}</span>

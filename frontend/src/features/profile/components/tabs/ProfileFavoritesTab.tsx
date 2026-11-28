@@ -149,12 +149,17 @@ export const ProfileFavoritesTab: React.FC = () => {
                 }}
                 onClick={() => navigate(`/rentals/${prod._id}`)}
               >
-                <div style={{ height: '220px', position: 'relative', overflow: 'hidden' }}>
-                  <img
-                    src={prod.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'}
-                    alt={prod.name}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
+                <div style={{ height: '220px', position: 'relative', overflow: 'hidden', backgroundColor: '#F5F2ED' }}>
+                  {prod.images?.[0] && (
+                    <img
+                      src={getFirstMediaUrl(prod.images[0])}
+                      alt={prod.name}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  )}
                   <span
                     style={{
                       position: 'absolute',
@@ -241,19 +246,25 @@ export const ProfileFavoritesTab: React.FC = () => {
               }}
               onClick={() => navigate(`/photographers`)}
             >
-              <div style={{ height: '180px', position: 'relative', overflow: 'hidden' }}>
-                <img
-                  src={
-                    getFirstMediaUrl(
-                      photo.packages?.[0]?.images?.[0],
-                      photo.coverImage,
-                      photo.media?.coverUrl,
-                      photo.media?.images?.[0]
-                    ) || '/avatar_hanna.webp'
-                  }
-                  alt={photo.businessName || photo.name}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
+              <div style={{ height: '180px', position: 'relative', overflow: 'hidden', backgroundColor: '#F5F2ED' }}>
+                {(() => {
+                  const photoCover = getFirstMediaUrl(
+                    photo.packages?.[0]?.images?.[0],
+                    photo.coverImage,
+                    photo.media?.coverUrl,
+                    photo.media?.images?.[0]
+                  );
+                  return photoCover ? (
+                    <img
+                      src={photoCover}
+                      alt={photo.businessName || photo.name}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  ) : null;
+                })()}
                 <span
                   style={{
                     position: 'absolute',

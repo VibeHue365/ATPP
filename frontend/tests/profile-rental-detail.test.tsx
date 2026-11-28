@@ -149,6 +149,38 @@ describe('ProfileRentalDetailPage address object regression test', () => {
       expect(screen.getByText('15 Lê Lợi, Phú Hội, TP. Huế')).toBeDefined();
     }, { timeout: 5000 });
   });
+
+  it('opens booking detail modal from overview ?bookingId and closes it cleanly without reopening', async () => {
+    render(
+      <MemoryRouter initialEntries={[`/dashboard/profile?tab=overview&bookingId=${mockBookingWithObjectAddress._id}`]}>
+        <ProfilePage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/CHI TIẾT ĐƠN HÀNG:\s*B7318383185/i)).toBeDefined();
+    }, { timeout: 5000 });
+
+    const closeBtn = screen.getByRole('button', { name: 'Close modal' });
+    fireEvent.click(closeBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/CHI TIẾT ĐƠN HÀNG:\s*B7318383185/i)).toBeNull();
+    }, { timeout: 5000 });
+  });
+
+  it('opens full detail view directly when navigated to ?tab=schedule&bookingId', async () => {
+    render(
+      <MemoryRouter initialEntries={[`/dashboard/profile?tab=schedule&category=rental&bookingId=${mockBookingWithObjectAddress._id}`]}>
+        <ProfilePage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Chi tiết lịch thuê')).toBeDefined();
+      expect(screen.getByText('B7318383185')).toBeDefined();
+    }, { timeout: 5000 });
+  });
 });
 
 describe('Customer Pickup Inspection and Reporting Workflow Suite', () => {

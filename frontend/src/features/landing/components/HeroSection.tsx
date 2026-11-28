@@ -41,8 +41,8 @@ interface TopProductData {
   image: string;
 }
 
-const DEFAULT_PHOTO_IMG = 'https://images.unsplash.com/photo-1544005313-94ddf0286df2';
-const DEFAULT_COMBO_IMG = 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';
+const DEFAULT_PHOTO_IMG = '';
+const DEFAULT_COMBO_IMG = '';
 
 const DEFAULT_FALLBACK_PACKAGE: TopPhotoshootData = {
   id: 'pkg-default-1',
@@ -50,7 +50,7 @@ const DEFAULT_FALLBACK_PACKAGE: TopPhotoshootData = {
   name: 'Gói Chụp Ảnh Nghệ Thuật',
   providerName: 'TàGo Heritage Photography',
   price: 1500000,
-  image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=600&auto=format&fit=crop',
+  image: '',
   rating: 4.9,
 };
 
@@ -450,11 +450,16 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
             {/* Thumbnail Box */}
             <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden shrink-0 bg-stone-200 border border-stone-200/80 shadow-2xs">
-              <img
-                src={topPackage?.image || DEFAULT_PHOTO_IMG}
-                alt={topPackage ? topPackage.name : 'Chụp kỷ yếu'}
-                className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700 ease-out will-change-transform"
-              />
+              {topPackage?.image ? (
+                <img
+                  src={topPackage.image}
+                  alt={topPackage.name}
+                  className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700 ease-out will-change-transform"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : null}
             </div>
           </div>
 
@@ -509,11 +514,16 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
               {/* Thumbnail Box */}
               <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden shrink-0 bg-stone-200 border border-stone-200/80 shadow-2xs">
-                <img
-                  src={topCombo.image || DEFAULT_COMBO_IMG}
-                  alt={topCombo.name}
-                  className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700 ease-out will-change-transform"
-                />
+                {topCombo.image ? (
+                  <img
+                    src={topCombo.image}
+                    alt={topCombo.name}
+                    className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700 ease-out will-change-transform"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                ) : null}
               </div>
             </div>
           ) : (
@@ -574,11 +584,16 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
               {/* Thumbnail Box */}
               <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden shrink-0 bg-stone-200 border border-stone-200/80 shadow-2xs">
-                <img
-                  src={topProduct?.image || secondPackage?.image || DEFAULT_PHOTO_IMG}
-                  alt={topProduct?.name || secondPackage?.name || 'Áo dài'}
-                  className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700 ease-out will-change-transform"
-                />
+                {(topProduct?.image || secondPackage?.image) ? (
+                  <img
+                    src={topProduct?.image || secondPackage?.image || ''}
+                    alt={topProduct?.name || secondPackage?.name || 'Áo dài'}
+                    className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700 ease-out will-change-transform"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                ) : null}
               </div>
             </div>
           )}

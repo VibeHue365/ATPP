@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { httpClient } from '../../../services/httpClient';
-import { ArrowUp, Sparkles, Brain, Cpu, Image, X } from 'lucide-react';
+import { ArrowUp, Sparkles, Brain, Cpu, Image, RotateCcw, X } from 'lucide-react';
 import { useToast } from '../../../components/feedback/Toast';
+import { getMediaUrl } from '../../../shared/media/mediaUrl';
 
 interface RecommendedProduct {
   _id?: string;
@@ -24,16 +26,65 @@ interface Message {
 
 interface AIChatBotProps {
   onClose?: () => void;
+  storageKey?: string;
+  isVisible?: boolean;
 }
 
-export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
+const DEFAULT_STORAGE_KEY = 'tago_stylist_chat_v1_guest';
+const MAX_PERSISTED_MESSAGES = 50;
+
+const WELCOME_MESSAGE: Message = {
+  sender: 'ai',
+  text: 'Xin chào quý khách. Tôi là Stylist AI của TàGo, đồng hành tư vấn kiểu dáng, chất liệu lụa tơ tằm và phối áo dài tôn vóc dáng riêng biệt của bạn. Bạn đang chuẩn bị trang phục cho dịp nào ạ?',
+};
+
+function loadPersistedMessages(storageKey: string): Message[] {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return [WELCOME_MESSAGE];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) return [WELCOME_MESSAGE];
+    const valid = parsed.filter(
+      (item): item is Message =>
+        Boolean(item) &&
+        (item.sender === 'user' || item.sender === 'ai') &&
+        typeof item.text === 'string',
+    );
+    return valid.length > 0 ? valid.slice(-MAX_PERSISTED_MESSAGES) : [WELCOME_MESSAGE];
+  } catch {
+    return [WELCOME_MESSAGE];
+  }
+}
+
+function persistMessages(storageKey: string, messages: Message[]): void {
+  const trimmed = messages.slice(-MAX_PERSISTED_MESSAGES);
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(trimmed));
+  } catch {
+    // Quota exceeded (often due to base64 image previews): strip data URLs and retry so text history is never lost.
+    try {
+      const compact = trimmed.map((msg) =>
+        msg.image && msg.image.startsWith('data:')
+          ? { ...msg, image: undefined }
+          : msg,
+      );
+      localStorage.setItem(storageKey, JSON.stringify(compact));
+    } catch {
+      // Ignore storage failures in private browsing modes
+    }
+  }
+}
+
+export const AIChatBot: React.FC<AIChatBotProps> = ({
+  onClose,
+  storageKey = DEFAULT_STORAGE_KEY,
+  isVisible = true,
+}) => {
   const toast = useToast();
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      sender: 'ai',
-      text: 'Xin chào quý khách. Tôi là Stylist AI của TàGo, đồng hành tư vấn kiểu dáng, chất liệu lụa tơ tằm và phối áo dài tôn vóc dáng riêng biệt của bạn. Bạn đang chuẩn bị trang phục cho dịp nào ạ?',
-    },
-  ]);
+  const navigate = useNavigate();
+  const [messages, setMessages] = useState<Message[]>(() =>
+    loadPersistedMessages(storageKey),
+  );
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState<{ base64: string; mimeType: string; previewUrl: string } | null>(null);
@@ -41,12 +92,31 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, isLoading]);
+    persistMessages(storageKey, messages);
+  }, [storageKey, messages]);
+
+  useEffect(() => {
+    if (isVisible) {
+      scrollToBottom();
+    }
+  }, [messages, isLoading, isVisible]);
+
+  const handleResetConversation = () => {
+    if (isLoading) return;
+    setMessages([WELCOME_MESSAGE]);
+    setInput('');
+    setSelectedImage(null);
+    try {
+      localStorage.removeItem(storageKey);
+    } catch {
+      // Ignore storage failures
+    }
+    toast.info('Đã bắt đầu cuộc trò chuyện mới.');
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -104,7 +174,13 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
     setIsLoading(true);
 
     try {
-      let res: any;
+      let res: {
+        answer: string;
+        category?: string;
+        source?: string;
+        confidence?: number;
+        recommended_products?: RecommendedProduct[];
+      };
       if (imgToSend) {
         res = await httpClient.post('/ai/chat/with-image', {
           message: text,
@@ -126,7 +202,7 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
           recommended_products: res.recommended_products,
         },
       ]);
-    } catch (err: any) {
+    } catch {
       setMessages((prev) => [
         ...prev,
         {
@@ -234,35 +310,74 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
           </div>
         </div>
 
-        {onClose && (
-          <button
-            onClick={onClose}
-            aria-label="Đóng cửa sổ tư vấn"
-            style={{
-              width: '30px',
-              height: '30px',
-              borderRadius: '50%',
-              background: 'rgba(0, 0, 0, 0.04)',
-              border: 'none',
-              color: '#57534E',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.2s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(0, 0, 0, 0.08)';
-              e.currentTarget.style.color = '#1C1917';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(0, 0, 0, 0.04)';
-              e.currentTarget.style.color = '#57534E';
-            }}
-          >
-            <X size={15} />
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {messages.length > 1 && (
+            <button
+              type="button"
+              onClick={handleResetConversation}
+              disabled={isLoading}
+              title="Cuộc trò chuyện mới"
+              aria-label="Cuộc trò chuyện mới"
+              style={{
+                width: '30px',
+                height: '30px',
+                borderRadius: '50%',
+                background: 'rgba(0, 0, 0, 0.04)',
+                border: 'none',
+                color: '#57534E',
+                cursor: isLoading ? 'not-allowed' : 'pointer',
+                opacity: isLoading ? 0.5 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                if (!isLoading) {
+                  e.currentTarget.style.background = 'rgba(142, 27, 46, 0.1)';
+                  e.currentTarget.style.color = '#8E1B2E';
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(0, 0, 0, 0.04)';
+                e.currentTarget.style.color = '#57534E';
+              }}
+            >
+              <RotateCcw size={14} />
+            </button>
+          )}
+
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Đóng cửa sổ tư vấn"
+              style={{
+                width: '30px',
+                height: '30px',
+                borderRadius: '50%',
+                background: 'rgba(0, 0, 0, 0.04)',
+                border: 'none',
+                color: '#57534E',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(0, 0, 0, 0.08)';
+                e.currentTarget.style.color = '#1C1917';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(0, 0, 0, 0.04)';
+                e.currentTarget.style.color = '#57534E';
+              }}
+            >
+              <X size={15} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Conversation Thread */}
@@ -378,14 +493,16 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
                       }}
                     >
                       <div style={{ height: '94px', background: '#F5F2EF', position: 'relative' }}>
-                        <img
-                          src={prod.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=300&q=80'}
-                          alt={prod.name}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=300&q=80';
-                          }}
-                        />
+                        {prod.images?.[0] && (
+                          <img
+                            src={getMediaUrl(prod.images[0])}
+                            alt={prod.name}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        )}
                         <span
                           style={{
                             position: 'absolute',
@@ -433,13 +550,15 @@ export const AIChatBot: React.FC<AIChatBotProps> = ({ onClose }) => {
                           </p>
                         </div>
                         <button
+                          type="button"
                           onClick={() => {
-                            const el = document.getElementById('rentals');
-                            if (el) {
-                              el.scrollIntoView({ behavior: 'smooth' });
+                            const productId = prod._id || prod.id;
+                            if (productId) {
+                              navigate(`/rentals/${encodeURIComponent(String(productId))}`);
                             } else {
-                              window.location.href = '/rentals';
+                              navigate('/rentals');
                             }
+                            onClose?.();
                           }}
                           style={{
                             marginTop: '8px',

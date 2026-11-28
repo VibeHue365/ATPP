@@ -9,12 +9,39 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Booking, BookingStatus } from '../../bookings/schemas/booking.schema';
 import { SETTLEMENT_ERROR_CODES } from '../constants/settlement-error-codes';
+import { SettlementStatus } from '../constants/settlement-status.enum';
 import {
   QueryProviderSettlementsDto,
   QuerySettlementsDto,
 } from '../dto/settlement.dto';
 import { Settlement } from '../schemas/settlement.schema';
 import { SettlementsService } from './settlements.service';
+
+export interface SettlementSummaryBucket {
+  amount: number;
+  count: number;
+}
+
+export interface AdminSettlementsSummary {
+  pending: SettlementSummaryBucket;
+  settled: SettlementSummaryBucket;
+  held: SettlementSummaryBucket;
+  cancelled: SettlementSummaryBucket;
+  totalCount: number;
+}
+
+export interface ProviderSettlementsSummary {
+  totalGrossRevenue: number;
+  totalPlatformFee: number;
+  totalCompensation: number;
+  totalNetEarnings: number;
+  pending: SettlementSummaryBucket;
+  settled: SettlementSummaryBucket;
+  held: SettlementSummaryBucket;
+  cancelled: SettlementSummaryBucket;
+  activeCount: number;
+  totalCount: number;
+}
 
 @Injectable()
 export class SettlementQueryService {
@@ -29,11 +56,15 @@ export class SettlementQueryService {
   async findAdminSettlements(query: QuerySettlementsDto) {
     this.assertValidDateRange(query.fromDate, query.toDate);
     const filter = this.buildFilter(query);
+    const summaryFilter = this.buildFilter({
+      ...query,
+      status: undefined,
+    });
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
 
-    const [items, total] = await Promise.all([
+    const [items, total, summaryRows] = await Promise.all([
       this.settlementModel
         .find(filter)
         .populate('bookingId', 'bookingCode status completedAt createdAt')
@@ -43,7 +74,69 @@ export class SettlementQueryService {
         .limit(limit)
         .lean(),
       this.settlementModel.countDocuments(filter),
+      this.settlementModel.aggregate<{
+        _id: SettlementStatus;
+        amount: number;
+        count: number;
+      }>([
+        { $match: summaryFilter },
+        {
+          $group: {
+            _id: '$status',
+            amount: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$status', SettlementStatus.Cancelled] },
+                  {
+                    $ifNull: [
+                      '$netAmount',
+                      { $ifNull: ['$payableAmount', 0] },
+                    ],
+                  },
+                  { $ifNull: ['$payableAmount', 0] },
+                ],
+              },
+            },
+            count: { $sum: 1 },
+          },
+        },
+      ]),
     ]);
+
+    const byStatus = new Map(
+      summaryRows.map((row) => [
+        row._id,
+        {
+          amount: Number(row.amount || 0),
+          count: Number(row.count || 0),
+        },
+      ]),
+    );
+
+    const pending = byStatus.get(SettlementStatus.ReadyToSettle) ?? {
+      amount: 0,
+      count: 0,
+    };
+    const settled = byStatus.get(SettlementStatus.Settled) ?? {
+      amount: 0,
+      count: 0,
+    };
+    const held = byStatus.get(SettlementStatus.OnHold) ?? {
+      amount: 0,
+      count: 0,
+    };
+    const cancelled = byStatus.get(SettlementStatus.Cancelled) ?? {
+      amount: 0,
+      count: 0,
+    };
+
+    const summary: AdminSettlementsSummary = {
+      pending,
+      settled,
+      held,
+      cancelled,
+      totalCount: pending.count + settled.count + held.count + cancelled.count,
+    };
 
     return {
       items,
@@ -53,6 +146,7 @@ export class SettlementQueryService {
         total,
         totalPages: Math.ceil(total / limit),
       },
+      summary,
     };
   }
 
@@ -98,11 +192,18 @@ export class SettlementQueryService {
       ...query,
       providerId: providerId.toString(),
     });
+    const hasDateFilter = Boolean(query.fromDate || query.toDate);
+    const filteredSummaryFilter = this.buildFilter({
+      ...query,
+      providerId: providerId.toString(),
+      status: undefined,
+    });
+    const lifetimeFilter: Record<string, unknown> = { providerId };
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
 
-    const [items, total] = await Promise.all([
+    const [items, total, lifetimeSummary, filteredSummary] = await Promise.all([
       this.settlementModel
         .find(filter)
         .populate('bookingId', 'bookingCode status completedAt createdAt')
@@ -111,6 +212,10 @@ export class SettlementQueryService {
         .limit(limit)
         .lean(),
       this.settlementModel.countDocuments(filter),
+      this.aggregateProviderSummary(lifetimeFilter),
+      hasDateFilter
+        ? this.aggregateProviderSummary(filteredSummaryFilter)
+        : Promise.resolve(null),
     ]);
 
     return {
@@ -121,6 +226,93 @@ export class SettlementQueryService {
         total,
         totalPages: Math.ceil(total / limit),
       },
+      summary: filteredSummary ?? lifetimeSummary,
+      lifetimeSummary,
+    };
+  }
+
+  private async aggregateProviderSummary(
+    matchFilter: Record<string, unknown>,
+  ): Promise<ProviderSettlementsSummary> {
+    const rows = await this.settlementModel.aggregate<{
+      _id: SettlementStatus;
+      amount: number;
+      gross: number;
+      fee: number;
+      compensation: number;
+      count: number;
+    }>([
+      { $match: matchFilter },
+      {
+        $group: {
+          _id: '$status',
+          amount: {
+            $sum: {
+              $cond: [
+                { $eq: ['$status', SettlementStatus.Cancelled] },
+                {
+                  $ifNull: ['$netAmount', { $ifNull: ['$payableAmount', 0] }],
+                },
+                { $ifNull: ['$payableAmount', 0] },
+              ],
+            },
+          },
+          gross: { $sum: { $ifNull: ['$grossAmount', 0] } },
+          fee: {
+            $sum: {
+              $add: [
+                { $ifNull: ['$commissionAmount', 0] },
+                {
+                  $ifNull: [
+                    '$allocatedPlatformFee',
+                    { $ifNull: ['$fixedPlatformFee', 0] },
+                  ],
+                },
+              ],
+            },
+          },
+          compensation: { $sum: { $ifNull: ['$compensationAmount', 0] } },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const byStatus = new Map(
+      rows.map((row) => [
+        row._id,
+        {
+          amount: Number(row.amount || 0),
+          gross: Number(row.gross || 0),
+          fee: Number(row.fee || 0),
+          compensation: Number(row.compensation || 0),
+          count: Number(row.count || 0),
+        },
+      ]),
+    );
+
+    const empty = { amount: 0, gross: 0, fee: 0, compensation: 0, count: 0 };
+    const pendingRow = byStatus.get(SettlementStatus.ReadyToSettle) ?? empty;
+    const settledRow = byStatus.get(SettlementStatus.Settled) ?? empty;
+    const heldRow = byStatus.get(SettlementStatus.OnHold) ?? empty;
+    const cancelledRow = byStatus.get(SettlementStatus.Cancelled) ?? empty;
+
+    const activeRows = [pendingRow, settledRow, heldRow];
+
+    return {
+      totalGrossRevenue: activeRows.reduce((s, r) => s + r.gross, 0),
+      totalPlatformFee: activeRows.reduce((s, r) => s + r.fee, 0),
+      totalCompensation: activeRows.reduce((s, r) => s + r.compensation, 0),
+      totalNetEarnings: activeRows.reduce((s, r) => s + r.amount, 0),
+      pending: { amount: pendingRow.amount, count: pendingRow.count },
+      settled: { amount: settledRow.amount, count: settledRow.count },
+      held: { amount: heldRow.amount, count: heldRow.count },
+      cancelled: { amount: cancelledRow.amount, count: cancelledRow.count },
+      activeCount: pendingRow.count + settledRow.count + heldRow.count,
+      totalCount:
+        pendingRow.count +
+        settledRow.count +
+        heldRow.count +
+        cancelledRow.count,
     };
   }
 

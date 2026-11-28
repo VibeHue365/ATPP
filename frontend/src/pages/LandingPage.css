@@ -209,6 +209,29 @@
   user-select: none;
 }
 
+.lume-landing #service-finder .sfb-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 0 0 4px 0;
+  min-height: 10px;
+}
+
+.lume-landing #service-finder .sfb-field-header label {
+  margin: 0 !important;
+}
+
+.lume-landing #service-finder .sfb-field-badge {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  color: rgba(142, 27, 46, 0.72);
+  white-space: nowrap;
+  flex-shrink: 0;
+  user-select: none;
+}
+
 .lume-landing #service-finder input {
   height: 24px;
   font-size: 13.5px;
@@ -247,6 +270,10 @@
   font-weight: 600;
   color: #231F20;
   line-height: 24px;
+}
+
+.lume-landing #service-finder .sdp-trigger-sub {
+  line-height: 1.2;
 }
 
 .lume-landing #service-finder .sdp-trigger-placeholder {

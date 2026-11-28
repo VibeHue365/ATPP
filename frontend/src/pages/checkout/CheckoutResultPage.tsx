@@ -43,6 +43,24 @@ export interface PaymentStatusResponse {
 const MAX_POLL_COUNT = 30;
 const POLL_INTERVAL_MS = 2000;
 
+function resolveScheduleCategoryParam(
+  bookingType?: string,
+): 'rental' | 'photoshoot' | 'combo' {
+  const normalized = String(bookingType || '').toUpperCase();
+  if (normalized === 'COMBO') return 'combo';
+  if (normalized === 'PHOTOGRAPHY') return 'photoshoot';
+  return 'rental';
+}
+
+function buildOrderDetailUrl(data: PaymentStatusResponse | null): string {
+  const category = resolveScheduleCategoryParam(data?.bookingType);
+  const params = new URLSearchParams({ tab: 'schedule', category });
+  if (data?.bookingId) {
+    params.set('bookingId', data.bookingId);
+  }
+  return `${ROUTES.PROFILE}?${params.toString()}`;
+}
+
 export const CheckoutResultPage: React.FC = () => {
   const routeParams = useParams<{ code?: string }>();
   const [searchParams] = useSearchParams();
@@ -225,6 +243,24 @@ export const CheckoutResultPage: React.FC = () => {
   const cancelled = state === 'CANCELLED';
   const isError = state === 'ERROR';
 
+  const orderDetailUrl = buildOrderDetailUrl(paymentData);
+  const bookingCategory = resolveScheduleCategoryParam(paymentData?.bookingType);
+  const successSummaryCopy =
+    bookingCategory === 'photoshoot'
+      ? {
+          text: 'Lịch chụp của bạn đã được xác nhận. Studio sẽ chuẩn bị ekip và liên hệ trước buổi chụp.',
+          cta: 'Xem chi tiết lịch chụp →',
+        }
+      : bookingCategory === 'combo'
+        ? {
+            text: 'Đơn Combo của bạn đã được xác nhận. Đối tác sẽ chuẩn bị trang phục và lịch chụp theo hẹn.',
+            cta: 'Xem chi tiết combo →',
+          }
+        : {
+            text: 'Đơn thuê của bạn đã được xác nhận. Shop sẽ chuẩn bị trang phục sẵn sàng trước giờ hẹn nhận.',
+            cta: 'Xem chi tiết đơn thuê →',
+          };
+
   return (
     <main
       className={
@@ -353,12 +389,10 @@ export const CheckoutResultPage: React.FC = () => {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <ShoppingBag size={18} color="#76141c" style={{ flexShrink: 0 }} />
-                <span>
-                  Đơn thuê của bạn đã được xác nhận. Shop sẽ chuẩn bị trang phục sẵn sàng trước giờ hẹn nhận.
-                </span>
+                <span>{successSummaryCopy.text}</span>
               </div>
               <Link
-                to={`${ROUTES.PROFILE}?tab=schedule&category=rental`}
+                to={orderDetailUrl}
                 style={{
                   fontSize: '12.5px',
                   fontWeight: 700,
@@ -367,7 +401,7 @@ export const CheckoutResultPage: React.FC = () => {
                   whiteSpace: 'nowrap',
                 }}
               >
-                Xem lịch thuê →
+                {successSummaryCopy.cta}
               </Link>
             </div>
           )
@@ -420,15 +454,7 @@ export const CheckoutResultPage: React.FC = () => {
           {(success || reviewRequired || timeout) && (
             <Link
               className="checkout-result-button primary"
-              to={
-                paymentData?.contractFlowVersion === 2 &&
-                CONTRACTS_V2_ENABLED &&
-                paymentData?.bookingType !== 'AODAI_RENTAL' &&
-                (paymentData?.bookingType === 'COMBO' ||
-                  paymentData?.bookingType === 'PHOTOGRAPHY')
-                  ? `${ROUTES.PROFILE}?tab=contracts`
-                  : `${ROUTES.PROFILE}?tab=schedule&category=rental`
-              }
+              to={orderDetailUrl}
             >
               <ShoppingBag size={18} /> Xem đơn hàng <ArrowRight size={17} />
             </Link>

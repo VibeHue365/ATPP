@@ -882,7 +882,7 @@ export const AccessControl: React.FC = () => {
               <div className="ac-kpi-info">
                 <span className="ac-kpi-label">Tổng người dùng</span>
                 <span className="ac-kpi-value">{metrics.totalUsers}</span>
-                <span className="ac-kpi-trend">↑ 12% so với tháng trước</span>
+                <span className="ac-kpi-trend" style={{ color: '#64748b' }}>Toàn bộ tài khoản hệ thống</span>
               </div>
             </div>
 
@@ -894,7 +894,11 @@ export const AccessControl: React.FC = () => {
               <div className="ac-kpi-info">
                 <span className="ac-kpi-label">Khách hàng</span>
                 <span className="ac-kpi-value">{metrics.customers}</span>
-                <span className="ac-kpi-trend">↑ 10% so với tháng trước</span>
+                <span className="ac-kpi-trend" style={{ color: '#64748b' }}>
+                  {metrics.totalUsers > 0
+                    ? `${Math.round((metrics.customers / metrics.totalUsers) * 100)}% tổng người dùng`
+                    : 'Chưa có dữ liệu'}
+                </span>
               </div>
             </div>
 
@@ -906,7 +910,11 @@ export const AccessControl: React.FC = () => {
               <div className="ac-kpi-info">
                 <span className="ac-kpi-label">Đối tác (Provider)</span>
                 <span className="ac-kpi-value">{metrics.providers}</span>
-                <span className="ac-kpi-trend">↑ 20% so với tháng trước</span>
+                <span className="ac-kpi-trend" style={{ color: '#64748b' }}>
+                  {metrics.totalUsers > 0
+                    ? `${Math.round((metrics.providers / metrics.totalUsers) * 100)}% tổng người dùng`
+                    : 'Chưa có dữ liệu'}
+                </span>
               </div>
             </div>
 
@@ -919,7 +927,9 @@ export const AccessControl: React.FC = () => {
                 <span className="ac-kpi-label">Quản trị viên</span>
                 <span className="ac-kpi-value">{metrics.admins}</span>
                 <span className="ac-kpi-trend" style={{ color: '#64748b' }}>
-                  ↑ 0% so với tháng trước
+                  {metrics.totalUsers > 0
+                    ? `${Math.round((metrics.admins / metrics.totalUsers) * 100)}% tổng người dùng`
+                    : 'Chưa có dữ liệu'}
                 </span>
               </div>
             </div>

@@ -43,6 +43,7 @@ export interface Provider {
   businessName: string;
   ownerName: string;
   avatar?: string;
+  coverUrl?: string;
   email: string;
   phone: string;
   website?: string;
@@ -53,7 +54,9 @@ export interface Provider {
   bankAccount?: string;
   bankName?: string;
   createdAt?: string;
+  createdAtIso?: string | null;
   rating: number;
+  totalReviews?: number;
   totalProducts: number;
   completedBookings?: number;
   totalBookings?: number;

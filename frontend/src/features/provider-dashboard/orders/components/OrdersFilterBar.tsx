@@ -22,6 +22,7 @@ interface OrdersFilterBarProps {
   tabs: { label: string; count: number }[];
   attentionTabs: { label: string; count: number }[];
   orders: Order[];
+  allTimeOrders?: Order[];
   orderMonthFilter: string;
   setOrderMonthFilter: React.Dispatch<React.SetStateAction<string>>;
 }
@@ -37,6 +38,7 @@ export function OrdersFilterBar({
   tabs,
   attentionTabs,
   orders,
+  allTimeOrders,
   orderMonthFilter,
   setOrderMonthFilter,
 }: OrdersFilterBarProps) {
@@ -47,7 +49,25 @@ export function OrdersFilterBar({
     }
     return orders.filter(orderHasRentalItems);
   }, [orders, bookingTypeFilter]);
-  const rentalTabs = React.useMemo(() => buildRentalOrderTabs(rentalCountOrders), [rentalCountOrders]);
+  const allTimeRentalOrders = React.useMemo(() => {
+    const base = allTimeOrders ?? orders;
+    if (bookingTypeFilter === 'AODAI_RENTAL' || bookingTypeFilter === 'COMBO') {
+      return base.filter((order) => order.bookingType === bookingTypeFilter);
+    }
+    return base.filter(orderHasRentalItems);
+  }, [allTimeOrders, orders, bookingTypeFilter]);
+  const rentalTabs = React.useMemo(() => {
+    const monthlyTabs = buildRentalOrderTabs(rentalCountOrders);
+    const allTimeTabs = buildRentalOrderTabs(allTimeRentalOrders);
+    return monthlyTabs.map((tab, idx) => {
+      const tabFilter = parseRentalOrderTab(tab.id);
+      // Overdue & return-due-today are live operational alerts: always show all-time count
+      // unless the user explicitly keeps a month filter active while already on that tab.
+      const isUrgentLiveQueue = tabFilter === 'OVERDUE' || tabFilter === 'RETURN_DUE_TODAY';
+      const useAllTimeCount = isUrgentLiveQueue && (orderTab !== tab.id || !orderMonthFilter);
+      return useAllTimeCount ? allTimeTabs[idx] : tab;
+    });
+  }, [rentalCountOrders, allTimeRentalOrders, orderTab, orderMonthFilter]);
   const visibleAttentionTabs = React.useMemo(
     () => attentionTabs.filter((tab) => tab.count > 0 || tab.label === orderTab),
     [attentionTabs, orderTab],
@@ -118,8 +138,12 @@ export function OrdersFilterBar({
                 <button
                   key={tab.id}
                   onClick={() => {
+                    const nextFilter = parseRentalOrderTab(tab.id);
                     setOrderTab(tab.id);
                     if (bookingTypeFilter === 'Tất cả') setBookingTypeFilter('HAS_RENTAL');
+                    if (nextFilter === 'OVERDUE' || nextFilter === 'RETURN_DUE_TODAY') {
+                      setOrderMonthFilter('');
+                    }
                     setActivePage(1);
                   }}
                   className={`p-status-tab-btn p-rental-status-tab ${isActive ? 'active' : ''}`}

@@ -120,7 +120,7 @@ export function createOrderDataActions({ setLoadingOrders, setOrders, actionMenu
           bookingCode: b.bookingCode || '',
           customerName: custName,
           customerEmail: custEmail,
-          customerPhone: cust?.phone || cust?.profile?.phoneNumber || b.contactPhone || b.customerPhone || '0901 234 567',
+          customerPhone: cust?.phone || cust?.profile?.phoneNumber || b.contactPhone || b.customerPhone || '',
           customerAvatar: cust?.avatar || cust?.profile?.avatar || '',
           customerInitials: initials,
           productName,
@@ -159,7 +159,7 @@ export function createOrderDataActions({ setLoadingOrders, setOrders, actionMenu
               'Tại cửa hàng đối tác'
             );
           })(),
-          customerNotes: b.customerNotes || b.notes || b.note || 'Chụp ảnh và thuê áo dài cho kỷ niệm tốt nghiệp.',
+          customerNotes: b.customerNotes || b.notes || b.note || '',
           pricingSummary: b.pricingSummary,
           paymentSummary: b.paymentSummary,
           pickupDamageReport: b.pickupDamageReport || null,

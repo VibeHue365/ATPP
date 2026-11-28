@@ -234,7 +234,18 @@ export function PromotionsPanel({
                           const prod = myProductsList.find(p => p._id === cProductId);
                           return (
                             <div style={{ display: 'flex', gap: '10px', padding: '8px', border: '1px solid var(--color-primary)', borderRadius: '8px', backgroundColor: 'var(--color-primary-trans)', alignItems: 'center' }}>
-                              <img src={prod?.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'} alt={prod?.name} style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }} />
+                              {prod?.images?.[0] ? (
+                                <img
+                                  src={prod.images[0]}
+                                  alt={prod?.name}
+                                  style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover', backgroundColor: '#F3EFE8' }}
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                  }}
+                                />
+                              ) : (
+                                <div style={{ width: '40px', height: '40px', borderRadius: '6px', backgroundColor: '#F3EFE8', flexShrink: 0 }} aria-hidden="true" />
+                              )}
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{prod?.name}</div>
                                 <div style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: 600 }}>{prod?.basePrice?.toLocaleString('vi-VN')}đ</div>
@@ -261,7 +272,18 @@ export function PromotionsPanel({
                           const pkg = photoPackages.find(p => p._id === cPackageId);
                           return (
                             <div style={{ display: 'flex', gap: '10px', padding: '8px', border: '1px solid var(--color-primary)', borderRadius: '8px', backgroundColor: 'var(--color-primary-trans)', alignItems: 'center' }}>
-                              <img src={pkg?.images?.[0] || 'https://images.unsplash.com/photo-1617627143750-d86bc21e42bb'} alt={pkg?.name} style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }} />
+                              {pkg?.images?.[0] ? (
+                                <img
+                                  src={pkg.images[0]}
+                                  alt={pkg?.name}
+                                  style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover', backgroundColor: '#F3EFE8' }}
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                  }}
+                                />
+                              ) : (
+                                <div style={{ width: '40px', height: '40px', borderRadius: '6px', backgroundColor: '#F3EFE8', flexShrink: 0 }} aria-hidden="true" />
+                              )}
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pkg?.name}</div>
                                 <div style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: 600 }}>{pkg?.price?.toLocaleString('vi-VN')}đ ({pkg?.durationHours}h)</div>
@@ -479,7 +501,18 @@ export function PromotionsPanel({
                               onClick={() => { setCProductId(prod._id); setIsAoDaiModalOpen(false); }}
                               style={{ display: 'flex', gap: '12px', padding: '12px', border: cProductId === prod._id ? '2px solid var(--color-primary)' : '1px solid #E2E8F0', borderRadius: '12px', cursor: 'pointer', backgroundColor: cProductId === prod._id ? 'var(--color-primary-trans)' : 'white', transition: 'all 0.2s', alignItems: 'center' }}
                             >
-                              <img src={prod.images?.[0] || 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b'} alt={prod.name} style={{ width: '50px', height: '50px', borderRadius: '8px', objectFit: 'cover' }} />
+                              {prod.images?.[0] ? (
+                                <img
+                                  src={prod.images[0]}
+                                  alt={prod.name}
+                                  style={{ width: '50px', height: '50px', borderRadius: '8px', objectFit: 'cover', backgroundColor: '#F3EFE8' }}
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                  }}
+                                />
+                              ) : (
+                                <div style={{ width: '50px', height: '50px', borderRadius: '8px', backgroundColor: '#F3EFE8', flexShrink: 0 }} aria-hidden="true" />
+                              )}
                               <div style={{ flex: 1 }}>
                                 <strong style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>{prod.name}</strong>
                                 <div style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 700, marginTop: '2px' }}>{prod.basePrice?.toLocaleString('vi-VN')}đ</div>
@@ -515,7 +548,18 @@ export function PromotionsPanel({
                               onClick={() => { setCPackageId(pkg._id); setIsPackageModalOpen(false); }}
                               style={{ display: 'flex', gap: '12px', padding: '12px', border: cPackageId === pkg._id ? '2px solid var(--color-primary)' : '1px solid #E2E8F0', borderRadius: '12px', cursor: 'pointer', backgroundColor: cPackageId === pkg._id ? 'var(--color-primary-trans)' : 'white', transition: 'all 0.2s', alignItems: 'center' }}
                             >
-                              <img src={pkg.images?.[0] || 'https://images.unsplash.com/photo-1617627143750-d86bc21e42bb'} alt={pkg.name} style={{ width: '50px', height: '50px', borderRadius: '8px', objectFit: 'cover' }} />
+                              {pkg.images?.[0] ? (
+                                <img
+                                  src={pkg.images[0]}
+                                  alt={pkg.name}
+                                  style={{ width: '50px', height: '50px', borderRadius: '8px', objectFit: 'cover', backgroundColor: '#F3EFE8' }}
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                  }}
+                                />
+                              ) : (
+                                <div style={{ width: '50px', height: '50px', borderRadius: '8px', backgroundColor: '#F3EFE8', flexShrink: 0 }} aria-hidden="true" />
+                              )}
                               <div style={{ flex: 1 }}>
                                 <strong style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>{pkg.name}</strong>
                                 <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>Thời lượng: {pkg.durationHours}h</div>

@@ -25,12 +25,19 @@ const rentalFilterDefinitions: Array<{
   { filter: 'OVERDUE', label: 'Quá hạn', itemLabel: 'áo quá hạn' },
 ];
 
+const isRentalItem = (item: NonNullable<Order['items']>[number] | undefined) => {
+  if (!item) return false;
+  if (item.rentalFulfillment) return true;
+  const itemType = String(item.itemType || '').toUpperCase();
+  return itemType === 'PRODUCT' || Boolean(item.productId) || Boolean(item.rentalTo) || Boolean(item.rentalFrom);
+};
+
 export const orderHasRentalItems = (order: Order) =>
-  (order.items || []).some((item) => Boolean(item?.rentalFulfillment));
+  (order.items || []).some((item) => isRentalItem(item)) || order.bookingType === 'AODAI_RENTAL';
 
 const getRentalItems = (order: Order) =>
-  (order.items || []).filter((item) =>
-    item?.rentalFulfillment && item.rentalFulfillment.status !== 'CANCELLED',
+  (order.items || []).filter(
+    (item) => isRentalItem(item) && item?.rentalFulfillment?.status !== 'CANCELLED',
   );
 
 const orderCanMatchRentalFilter = (order: Order, filter: RentalOrderFilter) => {
@@ -59,31 +66,69 @@ const itemMatchesRentalFilter = (
   item: NonNullable<Order['items']>[number],
   filter: RentalOrderFilter,
   todayKey: string,
+  order?: Order,
 ) => {
   const fulfillment = item?.rentalFulfillment;
   const status = fulfillment?.status || 'PENDING';
+  const isItemFinalized = status === 'RETURNED' || status === 'COMPLETED' || status === 'CANCELLED';
+  if (isItemFinalized) return false;
+
+  const bookingStatus = order ? normalizeBookingStatusCode(order.rawStatus || order.status) : '';
+  const isBookingInUse =
+    bookingStatus === 'PICKED_UP' ||
+    bookingStatus === 'RETURN_PENDING' ||
+    bookingStatus === 'OVERDUE';
+
   const pickupFiles = fulfillment?.pickupEvidence?.files;
   const hasPickupEvidence = Array.isArray(pickupFiles) && pickupFiles.length > 0;
   const dueValue = fulfillment?.returnDueAt || item?.rentalTo;
   const dueDate = dueValue ? new Date(dueValue) : null;
   const hasValidDueDate = Boolean(dueDate && !Number.isNaN(dueDate.getTime()));
   const dueDateKey = hasValidDueDate && dueDate ? toLocalDateKey(dueDate) : null;
-  const isAwaitingReturn = status === 'PICKED_UP' || status === 'CUSTOMER_RETURN_REQUESTED';
-  const isOverdue = status === 'OVERDUE' || Boolean(
-    isAwaitingReturn && dueDate && hasValidDueDate && dueDate.getTime() < Date.now(),
-  );
+  const isPastDue = Boolean(dueDate && hasValidDueDate && dueDate.getTime() < Date.now());
 
-  if (filter === 'PREPARE') return status === 'PENDING';
-  if (filter === 'SEND_HANDOVER') return status === 'READY_FOR_PICKUP' && !hasPickupEvidence;
-  if (filter === 'AWAITING_CUSTOMER_CONFIRMATION') return status === 'READY_FOR_PICKUP' && hasPickupEvidence;
+  const isAwaitingReturn =
+    status === 'PICKED_UP' ||
+    status === 'CUSTOMER_RETURN_REQUESTED' ||
+    (isBookingInUse && (status === 'PENDING' || status === 'READY_FOR_PICKUP'));
+
+  const isOverdue =
+    status === 'OVERDUE' ||
+    (isAwaitingReturn && isPastDue) ||
+    (bookingStatus === 'OVERDUE' && (isPastDue || !hasValidDueDate)) ||
+    (Boolean(order?.overdueTracking?.isOverdue) && isBookingInUse);
+
   if (filter === 'OVERDUE') return isOverdue;
+  if (isOverdue) return false;
+
+  if (filter === 'PREPARE') return !isBookingInUse && status === 'PENDING';
+  if (filter === 'SEND_HANDOVER') return !isBookingInUse && status === 'READY_FOR_PICKUP' && !hasPickupEvidence;
+  if (filter === 'AWAITING_CUSTOMER_CONFIRMATION') return !isBookingInUse && status === 'READY_FOR_PICKUP' && hasPickupEvidence;
   if (filter === 'RETURN_DUE_TODAY') {
-    return isAwaitingReturn && !isOverdue && dueDateKey === todayKey;
+    return isAwaitingReturn && dueDateKey === todayKey;
   }
   if (filter === 'RENTING') {
-    return isAwaitingReturn && !isOverdue && dueDateKey !== todayKey;
+    return isAwaitingReturn && dueDateKey !== todayKey;
   }
   return false;
+};
+
+const orderMatchesRentalFilterWithToday = (
+  order: Order,
+  filter: RentalOrderFilter,
+  todayKey: string,
+) => {
+  if (!orderCanMatchRentalFilter(order, filter)) return false;
+  const rentalItems = getRentalItems(order);
+  if (rentalItems.length === 0) {
+    const bookingStatus = normalizeBookingStatusCode(order.rawStatus || order.status);
+    return (
+      filter === 'OVERDUE' &&
+      orderHasRentalItems(order) &&
+      (bookingStatus === 'OVERDUE' || Boolean(order.overdueTracking?.isOverdue))
+    );
+  }
+  return rentalItems.some((item) => itemMatchesRentalFilter(item, filter, todayKey, order));
 };
 
 export const buildRentalOrderTabs = (orders: Order[]) => {
@@ -92,24 +137,25 @@ export const buildRentalOrderTabs = (orders: Order[]) => {
   return rentalFilterDefinitions.map(({ filter, label }) => ({
     id: getRentalOrderTabId(filter),
     label,
-    count: orders.filter((order) =>
-      orderCanMatchRentalFilter(order, filter) &&
-      getRentalItems(order).some((item) => itemMatchesRentalFilter(item, filter, todayKey)),
-    ).length,
+    count: orders.filter((order) => orderMatchesRentalFilterWithToday(order, filter, todayKey)).length,
   }));
 };
 
 export const orderMatchesRentalFilter = (order: Order, filter: RentalOrderFilter) => {
-  if (!orderCanMatchRentalFilter(order, filter)) return false;
   const todayKey = toLocalDateKey();
-  return getRentalItems(order).some((item) => itemMatchesRentalFilter(item, filter, todayKey));
+  return orderMatchesRentalFilterWithToday(order, filter, todayKey);
 };
 
 export const getRentalOrderMatchLabel = (order: Order, filter: RentalOrderFilter) => {
   if (!orderCanMatchRentalFilter(order, filter)) return null;
   const todayKey = toLocalDateKey();
   const rentalItems = getRentalItems(order);
-  const matchedCount = rentalItems.filter((item) => itemMatchesRentalFilter(item, filter, todayKey)).length;
+  if (rentalItems.length === 0) {
+    return orderMatchesRentalFilterWithToday(order, filter, todayKey) ? 'Đơn quá hạn trả' : null;
+  }
+  const matchedCount = rentalItems.filter((item) =>
+    itemMatchesRentalFilter(item, filter, todayKey, order),
+  ).length;
   if (matchedCount === 0) return null;
   const definition = rentalFilterDefinitions.find((entry) => entry.filter === filter);
   return `${matchedCount}/${rentalItems.length} ${definition?.itemLabel || 'áo cần xử lý'}`;

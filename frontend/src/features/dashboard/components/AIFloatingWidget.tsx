@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
+import { useAuth } from '../../auth/hooks/useAuth';
 import { AIChatBot } from './AIChatBot';
 import '../../../pages/LandingPage.css';
 
@@ -8,6 +9,10 @@ export const AIFloatingWidget: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const location = useLocation();
+  const { user } = useAuth();
+
+  const userKey = user?.id || (user as { _id?: string } | null)?._id || 'guest';
+  const storageKey = `tago_stylist_chat_v1_${userKey}`;
 
   // Hide on internal management dashboards
   const isDashboard =
@@ -31,27 +36,33 @@ export const AIFloatingWidget: React.FC = () => {
         alignItems: 'flex-end',
       }}
     >
-      {/* Modern Minimalist Glassmorphism Chat Window */}
-      {isOpen ? (
-        <div
-          className="lume-chat-popup"
-          style={{
-            width: 'min(385px, calc(100vw - 32px))',
-            height: 'min(590px, calc(100vh - 48px))',
-            background: 'rgba(255, 255, 255, 0.96)',
-            backdropFilter: 'blur(28px)',
-            WebkitBackdropFilter: 'blur(28px)',
-            borderRadius: '24px',
-            boxShadow:
-              '0 24px 70px -12px rgba(28, 25, 23, 0.18), 0 10px 30px -4px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.06)',
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          <AIChatBot onClose={() => setIsOpen(false)} />
-        </div>
-      ) : (
+      {/* Keep AIChatBot mounted while minimized so draft input, scroll, and in-flight AI replies survive toggling */}
+      <div
+        className="lume-chat-popup"
+        aria-hidden={!isOpen}
+        style={{
+          width: 'min(385px, calc(100vw - 32px))',
+          height: 'min(590px, calc(100vh - 48px))',
+          background: 'rgba(255, 255, 255, 0.96)',
+          backdropFilter: 'blur(28px)',
+          WebkitBackdropFilter: 'blur(28px)',
+          borderRadius: '24px',
+          boxShadow:
+            '0 24px 70px -12px rgba(28, 25, 23, 0.18), 0 10px 30px -4px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.06)',
+          overflow: 'hidden',
+          display: isOpen ? 'flex' : 'none',
+          flexDirection: 'column',
+        }}
+      >
+        <AIChatBot
+          key={storageKey}
+          storageKey={storageKey}
+          isVisible={isOpen}
+          onClose={() => setIsOpen(false)}
+        />
+      </div>
+
+      {!isOpen && (
         /* Luxury Concierge Floating Pill / Orb */
         <div
           className="lume-ai-btn-wrapper"
@@ -91,6 +102,7 @@ export const AIFloatingWidget: React.FC = () => {
 
           {/* Trigger Button - Pearl Glass & Imperial Wine Red Sparkle */}
           <button
+            type="button"
             onClick={() => setIsOpen(true)}
             title="TàGo Stylist AI - Tư vấn phong cách Áo Dài"
             aria-label="Mở TàGo Stylist AI"

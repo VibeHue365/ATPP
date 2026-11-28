@@ -528,13 +528,22 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
   // Dynamic Header Stats
   const headerStats = useMemo(() => {
     let activeRentals = 0;
+    let upcomingRentals = 0;
     let upcomingShoots = 0;
     let upcomingCombos = 0;
 
     if (bookings && bookings.length > 0) {
       bookings.forEach((b) => {
-        const isConfirmed = b.status === 'CONFIRMED' || b.status === 'PICKUP_PENDING';
-        const isPickedUp = b.status === 'PICKED_UP' || b.status === 'IN_PROGRESS';
+        const isUpcoming =
+          b.status === 'CONFIRMED' ||
+          b.status === 'DEPOSIT_PAID' ||
+          b.status === 'PICKUP_PENDING';
+        const isInUse =
+          b.status === 'PICKED_UP' ||
+          b.status === 'IN_PROGRESS' ||
+          b.status === 'RETURN_PENDING' ||
+          b.status === 'OVERDUE' ||
+          b.status === 'AWAITING_REVIEW';
 
         const isCombo =
           b.bookingType === 'COMBO' ||
@@ -542,7 +551,7 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
             b.items?.some((i: any) => i.itemType === 'PRODUCT' || i.productId));
 
         if (isCombo) {
-          if (isConfirmed || isPickedUp) {
+          if (isUpcoming || isInUse) {
             upcomingCombos++;
           }
         } else {
@@ -550,10 +559,14 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
             b.bookingType === 'PHOTOGRAPHY' ||
             (b.items && b.items.length > 0 && b.items.every((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE' || i.photographyPackageId));
 
-          if (isPhoto && (isConfirmed || isPickedUp)) {
-            upcomingShoots++;
-          } else if (!isPhoto && isPickedUp) {
+          if (isPhoto) {
+            if (isUpcoming || isInUse) {
+              upcomingShoots++;
+            }
+          } else if (isInUse) {
             activeRentals++;
+          } else if (isUpcoming) {
+            upcomingRentals++;
           }
         }
       });
@@ -561,6 +574,7 @@ export const ProfileScheduleTab: React.FC<ProfileScheduleTabProps> = ({
 
     return {
       activeRentals,
+      upcomingRentals,
       upcomingShoots,
       upcomingCombos,
       favoritesCount: (user as any)?.favorites?.length || 0

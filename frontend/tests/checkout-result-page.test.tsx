@@ -257,4 +257,36 @@ describe('P0: CheckoutResultPage Terminal States & Anti-Stuck Verification', () 
     expect(screen.getByText('Network error (500 Internal Server Error)')).toBeTruthy();
     expect(screen.getByText('Kiểm tra lại')).toBeTruthy();
   });
+
+  it('10. Routes "Xem đơn hàng" directly to the exact booking detail by bookingType and bookingId', async () => {
+    const cases = [
+      { bookingType: 'AODAI_RENTAL', expectedCategory: 'rental' },
+      { bookingType: 'PHOTOGRAPHY', expectedCategory: 'photoshoot' },
+      { bookingType: 'COMBO', expectedCategory: 'combo' },
+    ];
+
+    for (const { bookingType, expectedCategory } of cases) {
+      cleanup();
+      vi.mocked(httpClient.get).mockResolvedValueOnce({
+        paymentCode: 'PAYV2_6A9C904A98684B253C',
+        paymentStatus: 'SUCCESS',
+        bookingStatus: 'CONFIRMED',
+        bookingId: '6ad1e719168de211cf79fb6f',
+        bookingType,
+        confirmed: true,
+        needsManualReview: false,
+      });
+
+      renderWithCode();
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const viewOrderLink = screen.getByRole('link', { name: /Xem đơn hàng/i });
+      expect(viewOrderLink.getAttribute('href')).toBe(
+        `/dashboard/profile?tab=schedule&category=${expectedCategory}&bookingId=6ad1e719168de211cf79fb6f`,
+      );
+    }
+  });
 });

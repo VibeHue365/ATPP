@@ -17,13 +17,14 @@ import type {
   ProviderOverviewTask,
   ProviderOverviewTopService,
 } from '../types';
+import type { OverviewNavigateOptions } from '../ProviderOverviewPanel';
 
 interface ThreeColumnsProps {
   tasks?: ProviderOverviewTask[];
   topServices?: ProviderOverviewTopService[];
   activities?: ProviderOverviewRecentActivity[];
   isLoading?: boolean;
-  onNavigate?: (view: any) => void;
+  onNavigate?: (view: string, options?: OverviewNavigateOptions) => void;
 }
 
 function formatRelativeTime(dateStr: string): string {
@@ -130,7 +131,13 @@ export const OverviewThreeColumns: React.FC<ThreeColumnsProps> = ({
                 <div
                   key={task.id}
                   className="po-task-row"
-                  onClick={() => onNavigate?.(task.targetView)}
+                  onClick={() => onNavigate?.(task.targetView, { taskType: task.type })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onNavigate?.(task.targetView, { taskType: task.type });
+                    }
+                  }}
                   role="button"
                   tabIndex={0}
                 >

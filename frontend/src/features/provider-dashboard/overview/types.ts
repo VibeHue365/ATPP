@@ -2,6 +2,8 @@ export interface ProviderOverviewKpis {
   revenueThisMonth: number;
   revenueLastMonth: number;
   revenueChangePct: number | null;
+  lifetimeNetEarnings?: number;
+  lifetimeGrossRevenue?: number;
   selectedMonth?: string;
   selectedMonthLabel?: string;
   isCurrentMonth?: boolean;

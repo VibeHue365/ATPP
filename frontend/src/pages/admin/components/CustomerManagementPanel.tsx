@@ -84,20 +84,11 @@ export interface CustomerDetailItem {
   spent: number;
 }
 
-const LOCAL_CUSTOMER_AVATARS = [
-  '/avatar_mai_anh.webp',
-  '/avatar_minh_tam.webp',
-  '/avatar_hanna.webp',
-  '/hoang_minh.webp',
-  '/lam_ngoc.webp',
-  '/tran_bao.webp',
-  '/le_thao.webp',
-];
-
 export function CustomerManagementPanel() {
   const toast = useToast();
 
   const [customerList, setCustomerList] = useState<CustomerDetailItem[]>([]);
+  const [failedAvatars, setFailedAvatars] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetailItem | null>(null);
   const [customerDetail, setCustomerDetail] = useState<CustomerDetailResponse | null>(null);
@@ -255,7 +246,7 @@ export function CustomerManagementPanel() {
           const safeAvatar =
             c.avatar && c.avatar.trim().length > 0 && !c.avatar.includes('unsplash.com') && !c.avatar.includes('example.com')
               ? c.avatar
-              : LOCAL_CUSTOMER_AVATARS[idx % LOCAL_CUSTOMER_AVATARS.length];
+              : '';
 
           return {
             id: c.id,
@@ -575,9 +566,8 @@ export function CustomerManagementPanel() {
             <span className="lume-cust-kpi-label">Tổng tài khoản khách hàng</span>
           </div>
           <div className="lume-cust-kpi-value">{metrics.totalCustomers.toLocaleString('vi-VN')}</div>
-          <div className="lume-cust-kpi-trend positive">
-            <span>▲ +12.5%</span>
-            <span className="lume-cust-kpi-subtext">so với tháng trước</span>
+          <div className="lume-cust-kpi-trend">
+            <span className="lume-cust-kpi-subtext">Tổng tài khoản trên hệ thống</span>
           </div>
         </div>
 
@@ -591,8 +581,11 @@ export function CustomerManagementPanel() {
           </div>
           <div className="lume-cust-kpi-value">{metrics.newThisMonth.toLocaleString('vi-VN')}</div>
           <div className="lume-cust-kpi-trend positive">
-            <span>▲ +18.2%</span>
-            <span className="lume-cust-kpi-subtext">so với tháng trước</span>
+            <span className="lume-cust-kpi-subtext">
+              {metrics.totalCustomers > 0
+                ? `Chiếm ${Math.round((metrics.newThisMonth / metrics.totalCustomers) * 100)}% tổng khách hàng`
+                : 'Chưa có đăng ký mới'}
+            </span>
           </div>
         </div>
 
@@ -606,8 +599,11 @@ export function CustomerManagementPanel() {
           </div>
           <div className="lume-cust-kpi-value">{metrics.activeCustomers.toLocaleString('vi-VN')}</div>
           <div className="lume-cust-kpi-trend positive">
-            <span>▲ +6.3%</span>
-            <span className="lume-cust-kpi-subtext">so với tháng trước</span>
+            <span className="lume-cust-kpi-subtext">
+              {metrics.totalCustomers > 0
+                ? `${Math.round((metrics.activeCustomers / metrics.totalCustomers) * 100)}% tổng tài khoản`
+                : 'Chưa có dữ liệu'}
+            </span>
           </div>
         </div>
 
@@ -620,9 +616,10 @@ export function CustomerManagementPanel() {
             <span className="lume-cust-kpi-label">Cần kiểm tra</span>
           </div>
           <div className="lume-cust-kpi-value">{metrics.needsCheck.toLocaleString('vi-VN')}</div>
-          <div className="lume-cust-kpi-trend alert">
-            <span>▲ +25.0%</span>
-            <span className="lume-cust-kpi-subtext">so với tháng trước</span>
+          <div className={`lume-cust-kpi-trend ${metrics.needsCheck > 0 ? 'alert' : ''}`}>
+            <span className="lume-cust-kpi-subtext">
+              {metrics.needsCheck > 0 ? 'Tài khoản cần rà soát' : 'Không có tài khoản cảnh báo'}
+            </span>
           </div>
         </div>
 
@@ -635,9 +632,12 @@ export function CustomerManagementPanel() {
             <span className="lume-cust-kpi-label">Bị khóa / tạm ngưng</span>
           </div>
           <div className="lume-cust-kpi-value">{metrics.bannedCustomers.toLocaleString('vi-VN')}</div>
-          <div className="lume-cust-kpi-trend alert">
-            <span>▲ +8.3%</span>
-            <span className="lume-cust-kpi-subtext">so với tháng trước</span>
+          <div className={`lume-cust-kpi-trend ${metrics.bannedCustomers > 0 ? 'alert' : ''}`}>
+            <span className="lume-cust-kpi-subtext">
+              {metrics.totalCustomers > 0 && metrics.bannedCustomers > 0
+                ? `${Math.round((metrics.bannedCustomers / metrics.totalCustomers) * 100)}% tổng tài khoản`
+                : 'Không có tài khoản bị khóa'}
+            </span>
           </div>
         </div>
 
@@ -650,9 +650,10 @@ export function CustomerManagementPanel() {
             <span className="lume-cust-kpi-label">Có tranh chấp / hoàn tiền</span>
           </div>
           <div className="lume-cust-kpi-value">{metrics.disputesOrRefunds.toLocaleString('vi-VN')}</div>
-          <div className="lume-cust-kpi-trend alert">
-            <span>▲ +32.1%</span>
-            <span className="lume-cust-kpi-subtext">so với tháng trước</span>
+          <div className={`lume-cust-kpi-trend ${metrics.disputesOrRefunds > 0 ? 'alert' : ''}`}>
+            <span className="lume-cust-kpi-subtext">
+              {metrics.disputesOrRefunds > 0 ? 'Cần theo dõi xử lý' : 'Không có vụ việc tồn đọng'}
+            </span>
           </div>
         </div>
       </div>
@@ -821,7 +822,7 @@ export function CustomerManagementPanel() {
                       </td>
                     </tr>
                   ) : (
-                    paginatedCustomers.map((cust, rowIdx) => {
+                    paginatedCustomers.map((cust) => {
                       const isSelected = selectedCustomer?.id === cust.id;
                       const isChecked = selectedIds.has(cust.id);
 
@@ -855,20 +856,21 @@ export function CustomerManagementPanel() {
                         {/* Khách hàng */}
                         <td>
                           <div className="lume-cust-user-row">
-                            {cust.avatar ? (
+                            {cust.avatar && !failedAvatars[cust.id] ? (
                               <img
                                 src={cust.avatar}
                                 alt={cust.fullName}
                                 className="lume-cust-avatar-img"
-                                onError={(e) => {
-                                  e.currentTarget.onerror = null;
-                                  e.currentTarget.src = LOCAL_CUSTOMER_AVATARS[rowIdx % LOCAL_CUSTOMER_AVATARS.length];
-                                }}
+                                onError={() =>
+                                  setFailedAvatars((prev) => ({ ...prev, [cust.id]: true }))
+                                }
                               />
                             ) : (
-                              <div className="lume-cust-avatar-initials">
-                                {cust.fullName.charAt(0).toUpperCase()}
-                              </div>
+                              <div
+                                className="lume-cust-avatar-initials"
+                                style={{ background: '#F3F4F6' }}
+                                aria-hidden="true"
+                              />
                             )}
                             <div className="lume-cust-user-text">
                               <span className="lume-cust-full-name">{cust.fullName}</span>
@@ -1083,23 +1085,24 @@ export function CustomerManagementPanel() {
             {/* Profile Card */}
             <div className="lume-cust-panel-profile">
               <div className="lume-cust-avatar-wrapper">
-                {selectedCustomer.avatar ? (
+                {selectedCustomer.avatar && !failedAvatars[selectedCustomer.id] ? (
                   <img
                     src={selectedCustomer.avatar}
                     alt={selectedCustomer.fullName}
                     className="lume-cust-panel-avatar"
-                    onError={(e) => {
-                      e.currentTarget.onerror = null;
-                      e.currentTarget.src = LOCAL_CUSTOMER_AVATARS[0];
-                    }}
+                    onError={() =>
+                      setFailedAvatars((prev) => ({
+                        ...prev,
+                        [selectedCustomer.id]: true,
+                      }))
+                    }
                   />
                 ) : (
                   <div
                     className="lume-cust-avatar-initials"
-                    style={{ width: 50, height: 50, fontSize: 17, fontWeight: 700 }}
-                  >
-                    {selectedCustomer.fullName.charAt(0).toUpperCase()}
-                  </div>
+                    style={{ width: 50, height: 50, background: '#F3F4F6' }}
+                    aria-hidden="true"
+                  />
                 )}
                 <div
                   className={`lume-cust-status-dot-indicator ${

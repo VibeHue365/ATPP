@@ -6,7 +6,7 @@ import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { PortfolioItemFormModal } from '../../features/photographers/components/PortfolioItemFormModal';
 
-import { ProviderOverviewPanel } from '../../features/provider-dashboard/overview/ProviderOverviewPanel';
+import { ProviderOverviewPanel, type OverviewNavigateOptions } from '../../features/provider-dashboard/overview/ProviderOverviewPanel';
 import { createAnalyticsActions } from '../../features/provider-dashboard/analytics/createAnalyticsActions';
 import { useProviderAnalyticsState } from '../../features/provider-dashboard/analytics/useProviderAnalyticsState';
 
@@ -40,7 +40,7 @@ import { createIncidentActions } from '../../features/provider-dashboard/orders/
 import { createOrderDataActions } from '../../features/provider-dashboard/orders/createOrderDataActions';
 import { IncidentReportModal } from '../../features/provider-dashboard/orders/IncidentReportModal';
 import { getOrderGroup } from '../../features/provider-dashboard/orders/orderHelpers';
-import { orderHasRentalItems, orderMatchesRentalFilter, parseRentalOrderTab } from '../../features/provider-dashboard/orders/rentalOrderFilters';
+import { getRentalOrderTabId, orderHasRentalItems, orderMatchesRentalFilter, parseRentalOrderTab } from '../../features/provider-dashboard/orders/rentalOrderFilters';
 import { getBookingStatusGroup, normalizeBookingStatusCode } from '../../utils/bookingStatus';
 
 import { useProviderIncidentState } from '../../features/provider-dashboard/orders/useProviderIncidentState';
@@ -230,7 +230,22 @@ export const ProviderDashboard: React.FC = () => {
     setCComment, searchCustId, setSearchCustId, trustScoreResult, setTrustScoreResult,
   } = useProviderTrustState();
 
-  const { payouts, setPayouts, isLoadingPayouts, setIsLoadingPayouts } = useProviderPayoutsState();
+  const {
+    payouts,
+    setPayouts,
+    isLoadingPayouts,
+    setIsLoadingPayouts,
+    payoutsError,
+    setPayoutsError,
+    payoutSummary,
+    setPayoutSummary,
+    payoutLifetimeSummary,
+    setPayoutLifetimeSummary,
+    payoutPagination,
+    setPayoutPagination,
+    payoutFilters,
+    setPayoutFilters,
+  } = useProviderPayoutsState();
 
   const {
     businessName, setBusinessName, phone, setPhone, addressLine, setAddressLine, city, setCity,
@@ -348,6 +363,12 @@ export const ProviderDashboard: React.FC = () => {
   const { fetchPayouts } = createPayoutActions({
     setPayouts,
     setIsLoadingPayouts,
+    setPayoutsError,
+    setPayoutSummary,
+    setPayoutLifetimeSummary,
+    setPayoutPagination,
+    payoutFilters,
+    setPayoutFilters,
   });
 
   const { handleUpdateProfile } = createProfileActions({
@@ -803,13 +824,67 @@ export const ProviderDashboard: React.FC = () => {
 
   const roleFilteredOrders = React.useMemo(() => {
     if (hasAodaiCapability && !hasPhotographyCapability) {
-      return orders.filter(o => o.bookingType === 'AODAI_RENTAL');
+      return orders.filter(o => o.bookingType === 'AODAI_RENTAL' || orderHasRentalItems(o));
     }
     if (hasPhotographyCapability && !hasAodaiCapability) {
       return orders.filter(o => o.bookingType === 'PHOTOGRAPHY');
     }
     return orders;
   }, [orders, hasAodaiCapability, hasPhotographyCapability]);
+
+  const handleOverviewNavigate = React.useCallback((rawView: string, options?: OverviewNavigateOptions) => {
+    const normalizedView = (rawView === 'rental-operations' ? 'orders' : rawView) as Parameters<typeof setCurrentView>[0];
+    const taskType = options?.taskType;
+
+    if (taskType === 'RETURN_OVERDUE') {
+      setOrderTab(getRentalOrderTabId('OVERDUE'));
+      if (hasAodaiCapability && hasPhotographyCapability) {
+        setBookingTypeFilter('HAS_RENTAL');
+      }
+      setOrderMonthFilter('');
+      setActivePage(1);
+      setCurrentView('orders');
+      return;
+    }
+
+    if (taskType === 'RETURN_DUE') {
+      setOrderTab(getRentalOrderTabId('RETURN_DUE_TODAY'));
+      if (hasAodaiCapability && hasPhotographyCapability) {
+        setBookingTypeFilter('HAS_RENTAL');
+      }
+      setOrderMonthFilter('');
+      setActivePage(1);
+      setCurrentView('orders');
+      return;
+    }
+
+    if (taskType === 'CONFIRM_BOOKING') {
+      setOrderTab('Chờ xử lý');
+      setOrderMonthFilter('');
+      setActivePage(1);
+      setCurrentView('orders');
+      return;
+    }
+
+    if (normalizedView === 'orders' && options) {
+      if (options.orderTab) setOrderTab(options.orderTab);
+      if (options.bookingTypeFilter && hasAodaiCapability && hasPhotographyCapability) {
+        setBookingTypeFilter(options.bookingTypeFilter);
+      }
+      if (options.clearMonthFilter) setOrderMonthFilter('');
+      setActivePage(1);
+    }
+
+    setCurrentView(normalizedView);
+  }, [
+    hasAodaiCapability,
+    hasPhotographyCapability,
+    setActivePage,
+    setBookingTypeFilter,
+    setCurrentView,
+    setOrderMonthFilter,
+    setOrderTab,
+  ]);
 
   const monthFilteredOrders = React.useMemo(() => {
     if (!orderMonthFilter) return roleFilteredOrders;
@@ -921,7 +996,7 @@ export const ProviderDashboard: React.FC = () => {
               notifications={notifications}
               chartTimeRange={chartTimeRange}
               onPeriodChange={handlePeriodChange}
-              onNavigate={setCurrentView}
+              onNavigate={handleOverviewNavigate}
             />
           </main>
         )}
@@ -949,7 +1024,7 @@ export const ProviderDashboard: React.FC = () => {
 
         {currentView === 'orders' && (
           <OrdersPanel
-            {...{ toast, tabs, attentionTabs, setOrderTab, orderTab, hasAodaiCapability, hasPhotographyCapability, orders, filterBaseOrders: monthFilteredOrders, setBookingTypeFilter, bookingTypeFilter, orderMonthFilter, setOrderMonthFilter, monthlyRevenue, loadingOrders, filteredOrders, setSelectedBookingId, setIsDetailModalOpen, setActionMenuId, actionMenuId, resolveRescheduleRequest, changeOrderStatus, setReportingOrder, setSelectedItemId, setIncidentDesc, setIncidentPhotos, setIncidentAmount, setIncidentActionType, activePage, setActivePage, fetchOrders }}
+            {...{ toast, tabs, attentionTabs, setOrderTab, orderTab, hasAodaiCapability, hasPhotographyCapability, orders, filterBaseOrders: monthFilteredOrders, allTimeBaseOrders: roleFilteredOrders, setBookingTypeFilter, bookingTypeFilter, orderMonthFilter, setOrderMonthFilter, monthlyRevenue, loadingOrders, filteredOrders, setSelectedBookingId, setIsDetailModalOpen, setActionMenuId, actionMenuId, resolveRescheduleRequest, changeOrderStatus, setReportingOrder, setSelectedItemId, setIncidentDesc, setIncidentPhotos, setIncidentAmount, setIncidentActionType, activePage, setActivePage, fetchOrders }}
             onOpenChat={() => setCurrentView('chat')}
           />
         )}
@@ -1018,7 +1093,19 @@ export const ProviderDashboard: React.FC = () => {
         )}
 
         {currentView === 'payouts' && (
-          <PayoutsPanel {...{ isLoadingProvider, isLoadingPayouts, payouts, setSelectedBookingId, setIsDetailModalOpen }} />
+          <PayoutsPanel
+            isLoadingProvider={isLoadingProvider}
+            isLoadingPayouts={isLoadingPayouts}
+            payoutsError={payoutsError}
+            payouts={payouts}
+            payoutSummary={payoutSummary}
+            payoutLifetimeSummary={payoutLifetimeSummary}
+            payoutPagination={payoutPagination}
+            payoutFilters={payoutFilters}
+            fetchPayouts={fetchPayouts}
+            setSelectedBookingId={setSelectedBookingId}
+            setIsDetailModalOpen={setIsDetailModalOpen}
+          />
         )}
 
         {/* ==================== ROLE MANAGEMENT VIEW ==================== */}

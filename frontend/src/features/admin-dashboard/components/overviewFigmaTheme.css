@@ -813,6 +813,12 @@
   border-radius: 50%;
   object-fit: cover;
   background: #E5E7EB;
+  flex-shrink: 0;
+}
+
+.lume-partner-avatar--empty {
+  background: #F3F4F6;
+  border: 1px solid #E5E7EB;
 }
 
 .lume-partner-name {

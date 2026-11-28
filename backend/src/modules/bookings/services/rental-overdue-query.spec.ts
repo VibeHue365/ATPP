@@ -18,10 +18,15 @@ describe('rental overdue query', () => {
     });
   });
 
-  it('returns the aggregation count', async () => {
+  it('counts distinct overdue bookings and excludes already returned items', async () => {
     const exec = jest.fn().mockResolvedValue([{ total: 3 }]);
     const aggregate = jest.fn().mockReturnValue({ exec });
     await expect(countOverdueRentals({ aggregate } as any)).resolves.toBe(3);
+    const pipeline = aggregate.mock.calls[0][0];
+    expect(pipeline[0].$match['rentalFulfillment.status']).toEqual({
+      $nin: ['RETURNED', 'COMPLETED', 'CANCELLED'],
+    });
+    expect(pipeline).toContainEqual({ $group: { _id: '$booking._id' } });
   });
 
   it.each([

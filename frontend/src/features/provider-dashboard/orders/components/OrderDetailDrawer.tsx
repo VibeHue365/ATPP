@@ -32,7 +32,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import type { Order } from '../types';
-import traditionalAoDaiImg from '../../../../assets/images/onboarding_traditional.webp';
+import { getMediaUrl } from '../../../../shared/media/mediaUrl';
 import { RentalEvidenceImage } from '../../../rentals/components/RentalEvidenceImage';
 import { OrderStaffAssignmentCard } from './OrderStaffAssignmentCard';
 import { getRentalFulfillmentMeta, normalizeBookingStatusCode } from '../../../../utils/bookingStatus';
@@ -1479,8 +1479,6 @@ export function OrderDetailDrawer({
     }
   };
 
-  const photoPackageImg = 'https://images.unsplash.com/photo-1528127269322-539801943592?auto=format&fit=crop&w=300&q=80';
-
   // Dynamic progress info & time remaining computation
   const progressInfo = useMemo(() => {
     if (isOrderCompleted) {
@@ -2576,14 +2574,27 @@ export function OrderDetailDrawer({
                         <MessageSquare size={13} />
                         <span>Nhắn tin</span>
                       </button>
-                      <a
-                        href={`tel:${order.customerPhone || '0901234567'}`}
-                        className="p-card-edit-btn"
-                        style={{ textDecoration: 'none' }}
-                      >
-                        <Phone size={13} />
-                        <span>Gọi khách</span>
-                      </a>
+                      {order.customerPhone ? (
+                        <a
+                          href={`tel:${order.customerPhone}`}
+                          className="p-card-edit-btn"
+                          style={{ textDecoration: 'none' }}
+                        >
+                          <Phone size={13} />
+                          <span>Gọi khách</span>
+                        </a>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled
+                          className="p-card-edit-btn"
+                          style={{ opacity: 0.55, cursor: 'not-allowed' }}
+                          title="Khách hàng chưa cập nhật số điện thoại"
+                        >
+                          <Phone size={13} />
+                          <span>Gọi khách</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -2821,7 +2832,7 @@ export function OrderDetailDrawer({
                   {/* Real dynamic items */}
                   {(!order.items || order.items.length === 0) ? (
                     <div className="p-drawer-item-card">
-                      <img src={traditionalAoDaiImg} alt={order.productName} className="p-drawer-item-img" />
+                      <div className="p-drawer-item-img" style={{ backgroundColor: '#F1F5F9' }} aria-hidden="true" />
                       <div className="p-drawer-item-info">
                         <div className="p-drawer-item-name">{order.productName || 'Sản phẩm/Dịch vụ đặt lịch'}</div>
                         <div className="p-drawer-item-specs">Số lượng: 1</div>
@@ -2834,7 +2845,8 @@ export function OrderDetailDrawer({
                     order.items.map((item: any, idx: number) => {
                       const isProd = item.itemType === 'PRODUCT';
                       const itemName = item.name || item.productId?.name || item.photographyPackageId?.name || (isProd ? 'Áo dài truyền thống' : 'Gói chụp ảnh');
-                      const itemImg = item.productId?.images?.[0] || item.photographyPackageId?.images?.[0] || (isProd ? traditionalAoDaiImg : photoPackageImg);
+                      const rawItemImg = item.productId?.images?.[0] || item.photographyPackageId?.images?.[0] || item.images?.[0] || '';
+                      const itemImg = rawItemImg ? getMediaUrl(rawItemImg) : '';
                       const linePrice = Number(item.subtotal || (item.unitPrice || item.price || 0) * (item.quantity || 1));
                       const depositAmt = Number(item.depositAmount || 0);
                       const itemRentalFrom = getRentalFrom(item);
@@ -2842,14 +2854,18 @@ export function OrderDetailDrawer({
 
                       return (
                         <div key={item._id || idx} className="p-drawer-item-card" style={{ marginBottom: idx < order.items!.length - 1 ? '10px' : 0 }}>
-                          <img
-                            src={typeof itemImg === 'string' && itemImg.startsWith('http') ? itemImg : (isProd ? traditionalAoDaiImg : photoPackageImg)}
-                            alt={itemName}
-                            className="p-drawer-item-img"
-                            onError={(e) => {
-                              (e.currentTarget as HTMLImageElement).src = isProd ? traditionalAoDaiImg : photoPackageImg;
-                            }}
-                          />
+                          {itemImg ? (
+                            <img
+                              src={itemImg}
+                              alt={itemName}
+                              className="p-drawer-item-img"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <div className="p-drawer-item-img" style={{ backgroundColor: '#F1F5F9' }} aria-hidden="true" />
+                          )}
                           <div className="p-drawer-item-info">
                             <div className="p-drawer-item-name">{itemName}</div>
                             <div className="p-drawer-item-specs">
@@ -4791,27 +4807,44 @@ export function OrderDetailDrawer({
                 </div>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>
-                    {order.customerName || 'Nguyễn Thảo My'}
+                    {order.customerName || 'Khách hàng'}
                   </div>
                   <div style={{ fontSize: '12px', color: '#64748B' }}>
-                    {order.customerPhone || '0901 234 567'}
+                    {order.customerPhone || 'Chưa cập nhật số điện thoại'}
                   </div>
                 </div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <a
-                  href={`tel:${order.customerPhone || '0901234567'}`}
-                  className="p-drawer-primary-btn"
-                  style={{
-                    textDecoration: 'none',
-                    justifyContent: 'center',
-                    backgroundColor: '#16A34A',
-                  }}
-                >
-                  <Phone size={15} />
-                  <span>Gọi điện thoại ({order.customerPhone || '0901 234 567'})</span>
-                </a>
+                {order.customerPhone ? (
+                  <a
+                    href={`tel:${order.customerPhone}`}
+                    className="p-drawer-primary-btn"
+                    style={{
+                      textDecoration: 'none',
+                      justifyContent: 'center',
+                      backgroundColor: '#16A34A',
+                    }}
+                  >
+                    <Phone size={15} />
+                    <span>Gọi điện thoại ({order.customerPhone})</span>
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="p-drawer-primary-btn"
+                    style={{
+                      justifyContent: 'center',
+                      backgroundColor: '#CBD5E1',
+                      color: '#64748B',
+                      cursor: 'not-allowed',
+                    }}
+                  >
+                    <Phone size={15} />
+                    <span>Khách chưa cập nhật SĐT</span>
+                  </button>
+                )}
 
                 <button
                   type="button"

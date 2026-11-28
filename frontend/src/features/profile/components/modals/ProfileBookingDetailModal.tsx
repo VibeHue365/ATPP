@@ -479,9 +479,9 @@ export const ProfileBookingDetailModal: React.FC<ProfileBookingDetailModalProps>
               return (
                 <div key={idx} style={{ display: 'flex', gap: '16px', border: '1px solid #ECE5DB', borderRadius: '12px', padding: '16px 18px', backgroundColor: '#FFFFFF', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
                   <ImageWithFallback
-                    src={itemImage || (isProduct ? undefined : 'https://images.unsplash.com/photo-1537633552985-df8429e8048b')}
+                    src={itemImage || undefined}
                     alt={itemName}
-                    fallback={<div style={{ width: '74px', height: '90px', borderRadius: '8px', background: '#F8F5F1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', color: '#8C827A' }}>Ảnh</div>}
+                    fallback={<div style={{ width: '74px', height: '90px', borderRadius: '8px', background: '#F8F5F1' }} aria-hidden="true" />}
                     style={{ width: '74px', height: '90px', objectFit: 'cover', borderRadius: '8px' }}
                   />
 

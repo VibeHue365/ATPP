@@ -12,6 +12,9 @@ export function RevenuePanel() {
   const transactions = useAdminTransactions();
   const total = stats.data?.revenue?.total ?? 0;
   const commission = stats.data?.revenue?.commission ?? 0;
+  const partnerNet = Math.max(0, total - commission);
+  const effectiveRate = total > 0 ? Number(((commission / total) * 100).toFixed(1)) : null;
+  const partnerRate = effectiveRate != null ? Number((100 - effectiveRate).toFixed(1)) : null;
 
   return (
     <section className="admin-dashboard-panel">
@@ -27,8 +30,18 @@ export function RevenuePanel() {
 
       <div className="admin-analytics-metrics admin-analytics-metrics--three">
         <MetricCard label="Tổng doanh số giao dịch" value={formatCurrency(total)} detail="Cập nhật tự động từ PayOS" tone="burgundy" />
-        <MetricCard label="Doanh thu hệ thống (10%)" value={formatCurrency(commission)} detail="Khấu trừ trực tiếp trên mỗi đơn thành công" tone="gold" />
-        <MetricCard label="Đối tác thực nhận (90%)" value={formatCurrency(Math.max(0, total - commission))} detail="Doanh thu chi trả đối tác" tone="olive" />
+        <MetricCard
+          label="Doanh thu hệ thống (Hoa hồng)"
+          value={formatCurrency(commission)}
+          detail={effectiveRate != null ? `Tỷ lệ hoa hồng thực tế: ${effectiveRate}% tổng doanh số` : 'Khấu trừ theo chính sách hoa hồng hiện hành'}
+          tone="gold"
+        />
+        <MetricCard
+          label="Đối tác thực nhận"
+          value={formatCurrency(partnerNet)}
+          detail={partnerRate != null ? `Chiếm ${partnerRate}% tổng doanh số chi trả đối tác` : 'Doanh thu chi trả đối tác'}
+          tone="olive"
+        />
       </div>
 
       <RevenueLineChart

@@ -14,6 +14,7 @@ export function buildRentalOverduePipeline(options: RentalOverdueQueryOptions = 
   const itemMatch: Record<string, unknown> = {
     itemType: 'PRODUCT',
     rentalTo: { $ne: null, $lt: now },
+    'rentalFulfillment.status': { $nin: ['RETURNED', 'COMPLETED', 'CANCELLED'] },
   };
   if (options.providerId) itemMatch.providerId = options.providerId;
   return [
@@ -30,6 +31,7 @@ export async function countOverdueRentals(
 ): Promise<number> {
   const rows = await bookingItemModel.aggregate([
     ...buildRentalOverduePipeline(options),
+    { $group: { _id: '$booking._id' } },
     { $count: 'total' },
   ]).exec();
   return rows[0]?.total ?? 0;

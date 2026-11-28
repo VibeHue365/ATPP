@@ -137,4 +137,43 @@ describe('Provider business helpers', () => {
     expect(orderMatchesRentalFilter(orders[1], 'PREPARE')).toBe(false);
     expect(orderMatchesRentalFilter(orders[1], 'OVERDUE')).toBe(false);
   });
+
+  it('matches legacy and booking-level overdue rentals while excluding returned items', () => {
+    const pastDate = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+    const legacyOverdueOrder = {
+      _id: 'legacy-overdue',
+      bookingType: 'AODAI_RENTAL',
+      status: 'Đang thuê',
+      rawStatus: 'PICKED_UP',
+      items: [
+        { itemType: 'PRODUCT', rentalTo: pastDate },
+      ],
+    } as any;
+    const statusOverdueOrder = {
+      _id: 'status-overdue',
+      bookingType: 'COMBO',
+      status: 'Quá hạn trả',
+      rawStatus: 'OVERDUE',
+      items: [
+        { itemType: 'PRODUCT', rentalTo: pastDate, rentalFulfillment: { status: 'PENDING' } },
+      ],
+    } as any;
+    const returnedItemOrder = {
+      _id: 'returned-item-overdue-booking',
+      bookingType: 'AODAI_RENTAL',
+      status: 'Đang thuê',
+      rawStatus: 'PICKED_UP',
+      items: [
+        { itemType: 'PRODUCT', rentalTo: pastDate, rentalFulfillment: { status: 'RETURNED' } },
+      ],
+    } as any;
+
+    expect(orderMatchesRentalFilter(legacyOverdueOrder, 'OVERDUE')).toBe(true);
+    expect(orderMatchesRentalFilter(statusOverdueOrder, 'OVERDUE')).toBe(true);
+    expect(orderMatchesRentalFilter(returnedItemOrder, 'OVERDUE')).toBe(false);
+    expect(getRentalOrderMatchLabel(legacyOverdueOrder, 'OVERDUE')).toBe('1/1 áo quá hạn');
+
+    const tabs = buildRentalOrderTabs([legacyOverdueOrder, statusOverdueOrder, returnedItemOrder]);
+    expect(tabs.find((t) => t.label === 'Quá hạn')?.count).toBe(2);
+  });
 });

@@ -1,8 +1,8 @@
 import type { ComboDeal } from '../types/combo.types';
 import { API_BASE_URL } from '../../../config/env';
 
-export const DEFAULT_AODAI_IMAGE_FALLBACK = 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b';
-export const DEFAULT_PACKAGE_IMAGE_FALLBACK = 'https://images.unsplash.com/photo-1617627143750-d86bc21e42bb';
+export const DEFAULT_AODAI_IMAGE_FALLBACK = '';
+export const DEFAULT_PACKAGE_IMAGE_FALLBACK = '';
 
 export interface ComboPricingSummary {
   originalPrice: number;

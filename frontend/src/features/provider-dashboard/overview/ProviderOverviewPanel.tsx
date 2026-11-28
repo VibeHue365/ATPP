@@ -10,15 +10,22 @@ import { useProviderOverview } from './hooks/useProviderOverview';
 import { AlertCircle, RotateCcw } from 'lucide-react';
 import './providerOverview.css';
 
+export interface OverviewNavigateOptions {
+  taskType?: string;
+  orderTab?: string;
+  bookingTypeFilter?: string;
+  clearMonthFilter?: boolean;
+}
+
 interface ProviderOverviewPanelProps {
   provider?: { _id?: string; businessName?: string; capabilities?: string[] } | null;
   orders?: Order[];
   loadingOrders?: boolean;
   analyticsData?: AnalyticsData | null;
-  notifications?: Array<any>;
+  notifications?: Array<Record<string, unknown>>;
   chartTimeRange?: 'week' | 'month' | 'year';
   onPeriodChange?: (period: 'week' | 'month' | 'year') => void;
-  onNavigate?: (view: any) => void;
+  onNavigate?: (view: string, options?: OverviewNavigateOptions) => void;
 }
 
 export const ProviderOverviewPanel: React.FC<ProviderOverviewPanelProps> = ({

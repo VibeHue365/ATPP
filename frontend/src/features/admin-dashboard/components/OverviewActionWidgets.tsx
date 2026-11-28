@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   AlertCircle,
   AlertTriangle,
@@ -35,6 +35,16 @@ export const OverviewActionWidgets: React.FC<OverviewActionWidgetsProps> = ({
   alerts,
   onNavigateTab,
 }) => {
+  const [failedAvatars, setFailedAvatars] = useState<Set<string>>(new Set());
+
+  const markAvatarFailed = (key: string) => {
+    setFailedAvatars((prev) => {
+      if (prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+  };
   const getActivityIcon = (type: ActivityFeedItem['type']) => {
     switch (type) {
       case 'booking':
@@ -113,41 +123,52 @@ export const OverviewActionWidgets: React.FC<OverviewActionWidgetsProps> = ({
         </div>
 
         <div className="lume-widget-card__list">
-          {topPartners.map((partner) => (
-            <div key={partner.rank} className="lume-partner-row">
-              <div className="lume-partner-row__info">
-                <span
-                  className={`lume-rank-badge ${
-                    partner.rank === 1
-                      ? 'lume-rank-badge--1'
-                      : partner.rank === 2
-                      ? 'lume-rank-badge--2'
-                      : partner.rank === 3
-                      ? 'lume-rank-badge--3'
-                      : 'lume-rank-badge--other'
-                  }`}
-                >
-                  {partner.rank}
+          {topPartners.map((partner) => {
+            const avatarKey = `${partner.rank}-${partner.avatar || ''}`;
+            const hasValidAvatar =
+              Boolean(partner.avatar && partner.avatar.trim()) &&
+              !failedAvatars.has(avatarKey);
+
+            return (
+              <div key={partner.rank} className="lume-partner-row">
+                <div className="lume-partner-row__info">
+                  <span
+                    className={`lume-rank-badge ${
+                      partner.rank === 1
+                        ? 'lume-rank-badge--1'
+                        : partner.rank === 2
+                        ? 'lume-rank-badge--2'
+                        : partner.rank === 3
+                        ? 'lume-rank-badge--3'
+                        : 'lume-rank-badge--other'
+                    }`}
+                  >
+                    {partner.rank}
+                  </span>
+
+                  {hasValidAvatar ? (
+                    <img
+                      src={partner.avatar}
+                      alt={partner.name}
+                      className="lume-partner-avatar"
+                      onError={() => markAvatarFailed(avatarKey)}
+                    />
+                  ) : (
+                    <div
+                      className="lume-partner-avatar lume-partner-avatar--empty"
+                      aria-hidden="true"
+                    />
+                  )}
+
+                  <span className="lume-partner-name">{partner.name}</span>
+                </div>
+
+                <span className="lume-partner-bookings">
+                  {partner.bookings} booking
                 </span>
-
-                <img
-                  src={partner.avatar}
-                  alt={partner.name}
-                  className="lume-partner-avatar"
-                  onError={(e) => {
-                    // Fallback to a solid color if image fails
-                    (e.target as HTMLElement).style.display = 'none';
-                  }}
-                />
-
-                <span className="lume-partner-name">{partner.name}</span>
               </div>
-
-              <span className="lume-partner-bookings">
-                {partner.bookings} booking
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

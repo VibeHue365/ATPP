@@ -54,25 +54,35 @@ export const ComboCard: React.FC<ComboCardProps> = ({ combo }) => {
       <div className="lume-combo-card-visual">
         {/* Split Images */}
         <div className="lume-combo-card-split-images">
-          <div className="lume-combo-card-img-wrapper left">
-            <img
-              src={aoDaiImg}
-              alt={combo.productId?.name || 'Trang phục áo dài'}
-              loading="lazy"
-              className="lume-combo-card-img"
-            />
+          <div className="lume-combo-card-img-wrapper left" style={{ backgroundColor: '#F3EFE8' }}>
+            {aoDaiImg && (
+              <img
+                src={aoDaiImg}
+                alt={combo.productId?.name || 'Trang phục áo dài'}
+                loading="lazy"
+                className="lume-combo-card-img"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            )}
             <span className="lume-combo-card-img-tag">Áo dài</span>
           </div>
 
           <div className="lume-combo-card-split-divider" />
 
-          <div className="lume-combo-card-img-wrapper right">
-            <img
-              src={packageImg}
-              alt={combo.photographyPackageId?.name || 'Gói chụp ảnh'}
-              loading="lazy"
-              className="lume-combo-card-img"
-            />
+          <div className="lume-combo-card-img-wrapper right" style={{ backgroundColor: '#F3EFE8' }}>
+            {packageImg && (
+              <img
+                src={packageImg}
+                alt={combo.photographyPackageId?.name || 'Gói chụp ảnh'}
+                loading="lazy"
+                className="lume-combo-card-img"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            )}
             <span className="lume-combo-card-img-tag">Chụp ảnh</span>
           </div>
         </div>

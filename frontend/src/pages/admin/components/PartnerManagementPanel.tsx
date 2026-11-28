@@ -28,6 +28,9 @@ import {
   Ban,
   CalendarCheck,
   MoveHorizontal,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { adminDirectoryApi } from '../../../features/admin-directory/api/adminDirectoryApi';
@@ -44,16 +47,19 @@ export interface PartnerDetailItem {
   businessName: string;
   ownerName: string;
   avatar: string;
+  coverUrl: string;
   email: string;
   phone: string;
   website?: string;
   capabilities: string[];
   date: string;
+  createdAtMs: number;
   totalProducts: number;
   completedBookings: number;
   totalBookings: number;
   completionRate: number;
   rating: number;
+  totalReviews: number;
   totalEarnings: number;
   status: string;
   statusLabel: string;
@@ -72,15 +78,41 @@ export interface PartnerDetailItem {
   reviews: ProviderReview[];
 }
 
-const LOCAL_PARTNER_AVATARS = [
-  '/hoang_minh.webp',
-  '/avatar_hanna.webp',
-  '/lam_ngoc.webp',
-  '/avatar_mai_anh.webp',
-  '/tran_bao.webp',
-  '/avatar_minh_tam.webp',
-  '/le_thao.webp',
-];
+type PartnerSortKey =
+  | 'bookings_desc'
+  | 'bookings_asc'
+  | 'revenue_desc'
+  | 'revenue_asc'
+  | 'rating_desc'
+  | 'rating_asc'
+  | 'products_desc'
+  | 'products_asc'
+  | 'newest'
+  | 'oldest';
+
+const parsePartnerDateMs = (iso?: string | null, displayDate?: string): number => {
+  if (iso) {
+    const t = new Date(iso).getTime();
+    if (Number.isFinite(t)) return t;
+  }
+  if (displayDate) {
+    const parts = displayDate.split('/').map(Number);
+    if (parts.length === 3 && parts.every((n) => Number.isFinite(n))) {
+      const [d, m, y] = parts;
+      return new Date(y, m - 1, d).getTime();
+    }
+  }
+  return 0;
+};
+
+const sanitizeOptionalImageUrl = (url?: string | null): string => {
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  if (!trimmed || trimmed.includes('unsplash.com') || trimmed.includes('example.com')) {
+    return '';
+  }
+  return trimmed;
+};
 
 export function PartnerManagementPanel() {
   const toast = useToast();
@@ -89,6 +121,16 @@ export function PartnerManagementPanel() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [selectedPartner, setSelectedPartner] = useState<PartnerDetailItem | null>(null);
   const [activePanelTab, setActivePanelTab] = useState<'overview' | 'info' | 'products' | 'reviews'>('overview');
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
+
+  const markImageFailed = useCallback((key: string) => {
+    setFailedImages((prev) => {
+      if (prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+  }, []);
 
   // 6 KPI metrics state directly from backend
   const [metrics, setMetrics] = useState({
@@ -100,12 +142,13 @@ export function PartnerManagementPanel() {
     disputesOrWarnings: 0,
   });
 
-  // Search & Filters
+  // Search, Filters & Sort
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [capabilityFilter, setCapabilityFilter] = useState<string>('ALL');
   const [ratingFilter, setRatingFilter] = useState<string>('ALL');
+  const [sortBy, setSortBy] = useState<PartnerSortKey>('bookings_desc');
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -184,7 +227,7 @@ export function PartnerManagementPanel() {
     setIsLoading(true);
     try {
       const [resProviders, resStats] = await Promise.allSettled([
-        adminDirectoryApi.providers(1, 50, debouncedSearchQuery),
+        adminDirectoryApi.providers(1, 200, debouncedSearchQuery, sortBy),
         adminStatsApi.get('month'),
       ]);
 
@@ -202,10 +245,8 @@ export function PartnerManagementPanel() {
             ? p.capability
             : ['AODAI_RENTAL'];
 
-          const safeAvatar =
-            p.avatar && p.avatar.trim().length > 0 && !p.avatar.includes('unsplash.com') && !p.avatar.includes('example.com')
-              ? p.avatar
-              : LOCAL_PARTNER_AVATARS[idx % LOCAL_PARTNER_AVATARS.length];
+          const safeAvatar = sanitizeOptionalImageUrl(p.avatar);
+          const safeCoverUrl = sanitizeOptionalImageUrl(p.coverUrl);
 
           const totalBookings = typeof p.totalBookings === 'number' ? p.totalBookings : 0;
           const completedBookings = typeof p.completedBookings === 'number' ? p.completedBookings : 0;
@@ -214,6 +255,11 @@ export function PartnerManagementPanel() {
             : totalBookings > 0
             ? Math.round((completedBookings / totalBookings) * 100)
             : 100;
+          const reviews = Array.isArray(p.reviews) ? p.reviews : [];
+          const totalReviews =
+            typeof p.totalReviews === 'number' ? p.totalReviews : reviews.length;
+          const rating =
+            typeof p.rating === 'number' && p.rating > 0 ? p.rating : 0;
 
           return {
             id: p.id,
@@ -221,16 +267,19 @@ export function PartnerManagementPanel() {
             businessName: p.businessName || 'Nhà cung cấp TàGo',
             ownerName: p.ownerName || 'Chủ cơ sở',
             avatar: safeAvatar,
+            coverUrl: safeCoverUrl,
             email: p.email || 'Chưa cập nhật',
             phone: p.phone || 'Chưa cập nhật',
             website: p.website || '',
             capabilities: caps,
             date: p.createdAt || 'Chưa cập nhật',
+            createdAtMs: parsePartnerDateMs(p.createdAtIso, p.createdAt),
             totalProducts: typeof p.totalProducts === 'number' ? p.totalProducts : 0,
             completedBookings,
             totalBookings,
             completionRate,
-            rating: p.rating && p.rating > 0 ? p.rating : 5.0,
+            rating,
+            totalReviews,
             totalEarnings: typeof p.totalEarnings === 'number' ? p.totalEarnings : 0,
             status: statusMeta.code,
             statusLabel: statusMeta.label,
@@ -246,7 +295,7 @@ export function PartnerManagementPanel() {
             bankName: p.bankName || 'Chưa liên kết',
             lastActive: 'Vừa xong',
             products: Array.isArray(p.products) ? p.products : [],
-            reviews: Array.isArray(p.reviews) ? p.reviews : [],
+            reviews,
           };
         });
         setPartnerList(loadedPartners);
@@ -277,7 +326,7 @@ export function PartnerManagementPanel() {
     } finally {
       setIsLoading(false);
     }
-  }, [debouncedSearchQuery, toast]);
+  }, [debouncedSearchQuery, sortBy, toast]);
 
   useEffect(() => {
     void fetchBackendData();
@@ -295,9 +344,9 @@ export function PartnerManagementPanel() {
     };
   }, [checkTableScroll, partnerList, selectedPartner]);
 
-  // Filter and search logic
+  // Filter, search, and sort logic
   const filteredPartners = useMemo(() => {
-    return partnerList.filter((partner) => {
+    const filtered = partnerList.filter((partner) => {
       // Search
       if (searchQuery.trim()) {
         const matches =
@@ -322,19 +371,97 @@ export function PartnerManagementPanel() {
         if (!hasCap) return false;
       }
 
-      // Rating
-      if (ratingFilter === 'HIGH' && partner.rating < 4.8) return false;
+      // Rating (unrated = 0 must not match HIGH/MEDIUM/LOW)
+      if (ratingFilter === 'HIGH' && (partner.rating <= 0 || partner.rating < 4.8)) return false;
       if (ratingFilter === 'MEDIUM' && (partner.rating < 4.0 || partner.rating >= 4.8)) return false;
-      if (ratingFilter === 'LOW' && partner.rating >= 4.0) return false;
+      if (ratingFilter === 'LOW' && (partner.rating <= 0 || partner.rating >= 4.0)) return false;
+      if (ratingFilter === 'NONE' && partner.rating > 0) return false;
 
       return true;
     });
-  }, [partnerList, searchQuery, statusFilter, capabilityFilter, ratingFilter]);
 
-  // Reset page on filter change
+    return [...filtered].sort((a, b) => {
+      switch (sortBy) {
+        case 'bookings_desc':
+          return (
+            b.completedBookings - a.completedBookings ||
+            b.totalBookings - a.totalBookings ||
+            b.totalProducts - a.totalProducts ||
+            b.createdAtMs - a.createdAtMs
+          );
+        case 'bookings_asc':
+          return (
+            a.completedBookings - b.completedBookings ||
+            a.totalBookings - b.totalBookings ||
+            b.createdAtMs - a.createdAtMs
+          );
+        case 'revenue_desc':
+          return (
+            b.totalEarnings - a.totalEarnings ||
+            b.completedBookings - a.completedBookings ||
+            b.createdAtMs - a.createdAtMs
+          );
+        case 'revenue_asc':
+          return (
+            a.totalEarnings - b.totalEarnings ||
+            a.completedBookings - b.completedBookings
+          );
+        case 'rating_desc': {
+          const aRated = a.rating > 0 ? 1 : 0;
+          const bRated = b.rating > 0 ? 1 : 0;
+          return (
+            bRated - aRated ||
+            b.rating - a.rating ||
+            b.totalReviews - a.totalReviews ||
+            b.completedBookings - a.completedBookings
+          );
+        }
+        case 'rating_asc': {
+          const aRated = a.rating > 0 ? 1 : 0;
+          const bRated = b.rating > 0 ? 1 : 0;
+          return (
+            bRated - aRated ||
+            a.rating - b.rating ||
+            a.totalReviews - b.totalReviews
+          );
+        }
+        case 'products_desc':
+          return (
+            b.totalProducts - a.totalProducts ||
+            b.completedBookings - a.completedBookings ||
+            b.createdAtMs - a.createdAtMs
+          );
+        case 'products_asc':
+          return (
+            a.totalProducts - b.totalProducts ||
+            b.createdAtMs - a.createdAtMs
+          );
+        case 'oldest':
+          return a.createdAtMs - b.createdAtMs;
+        case 'newest':
+        default:
+          return b.createdAtMs - a.createdAtMs;
+      }
+    });
+  }, [partnerList, searchQuery, statusFilter, capabilityFilter, ratingFilter, sortBy]);
+
+  const toggleColumnSort = (
+    descKey: PartnerSortKey,
+    ascKey: PartnerSortKey,
+  ) => {
+    setSortBy((prev) => (prev === descKey ? ascKey : descKey));
+  };
+
+  const renderSortIcon = (descKey: PartnerSortKey, ascKey: PartnerSortKey) => {
+    if (sortBy === descKey) return <ArrowDown size={12} />;
+    if (sortBy === ascKey) return <ArrowUp size={12} />;
+    return <ArrowUpDown size={11} style={{ opacity: 0.45 }} />;
+  };
+
+  // Reset page on filter or sort change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, statusFilter, capabilityFilter, ratingFilter, perPage]);
+  }, [searchQuery, statusFilter, capabilityFilter, ratingFilter, sortBy, perPage]);
 
   const totalItems = filteredPartners.length;
   const pageSizeNumber = perPage === 'all' ? (totalItems || 1) : perPage;
@@ -461,7 +588,7 @@ export function PartnerManagementPanel() {
       p.date,
       p.totalProducts,
       p.completedBookings,
-      p.rating,
+      p.rating > 0 ? p.rating.toFixed(1) : 'Chưa có',
       p.totalEarnings,
       p.isVerified ? 'Đã xác minh' : 'Chưa xác minh',
       p.statusLabel,
@@ -499,9 +626,8 @@ export function PartnerManagementPanel() {
             <span className="lume-partner-kpi-label">Tổng đối tác hệ thống</span>
           </div>
           <div className="lume-partner-kpi-value">{metrics.totalPartners.toLocaleString('vi-VN')}</div>
-          <div className="lume-partner-kpi-trend positive">
-            <span>▲ +8.1%</span>
-            <span className="lume-partner-kpi-subtext">so với tháng trước</span>
+          <div className="lume-partner-kpi-trend">
+            <span className="lume-partner-kpi-subtext">Tổng cửa hàng &amp; studio đã đăng ký</span>
           </div>
         </div>
 
@@ -515,8 +641,11 @@ export function PartnerManagementPanel() {
           </div>
           <div className="lume-partner-kpi-value">{metrics.newThisMonth.toLocaleString('vi-VN')}</div>
           <div className="lume-partner-kpi-trend positive">
-            <span>▲ +14.5%</span>
-            <span className="lume-partner-kpi-subtext">so với tháng trước</span>
+            <span className="lume-partner-kpi-subtext">
+              {metrics.totalPartners > 0
+                ? `Chiếm ${Math.round((metrics.newThisMonth / metrics.totalPartners) * 100)}% tổng đối tác`
+                : 'Chưa có đăng ký mới'}
+            </span>
           </div>
         </div>
 
@@ -530,8 +659,11 @@ export function PartnerManagementPanel() {
           </div>
           <div className="lume-partner-kpi-value">{metrics.activePartners.toLocaleString('vi-VN')}</div>
           <div className="lume-partner-kpi-trend positive">
-            <span>▲ +5.2%</span>
-            <span className="lume-partner-kpi-subtext">so với tháng trước</span>
+            <span className="lume-partner-kpi-subtext">
+              {metrics.totalPartners > 0
+                ? `${Math.round((metrics.activePartners / metrics.totalPartners) * 100)}% tổng đối tác`
+                : 'Chưa có đối tác hoạt động'}
+            </span>
           </div>
         </div>
 
@@ -544,9 +676,10 @@ export function PartnerManagementPanel() {
             <span className="lume-partner-kpi-label">Chờ xét duyệt hồ sơ</span>
           </div>
           <div className="lume-partner-kpi-value">{metrics.pendingVerifications.toLocaleString('vi-VN')}</div>
-          <div className="lume-partner-kpi-trend alert">
-            <span>▲ +33.3%</span>
-            <span className="lume-partner-kpi-subtext">hồ sơ cần xử lý</span>
+          <div className={`lume-partner-kpi-trend ${metrics.pendingVerifications > 0 ? 'alert' : ''}`}>
+            <span className="lume-partner-kpi-subtext">
+              {metrics.pendingVerifications > 0 ? 'Hồ sơ cần Admin duyệt' : 'Đã duyệt hết hồ sơ'}
+            </span>
           </div>
         </div>
 
@@ -559,9 +692,12 @@ export function PartnerManagementPanel() {
             <span className="lume-partner-kpi-label">Bị tạm ngưng / Khóa</span>
           </div>
           <div className="lume-partner-kpi-value">{metrics.suspendedPartners.toLocaleString('vi-VN')}</div>
-          <div className="lume-partner-kpi-trend alert">
-            <span>▲ +4.2%</span>
-            <span className="lume-partner-kpi-subtext">so với tháng trước</span>
+          <div className={`lume-partner-kpi-trend ${metrics.suspendedPartners > 0 ? 'alert' : ''}`}>
+            <span className="lume-partner-kpi-subtext">
+              {metrics.totalPartners > 0 && metrics.suspendedPartners > 0
+                ? `${Math.round((metrics.suspendedPartners / metrics.totalPartners) * 100)}% tổng đối tác`
+                : 'Không có đối tác bị khóa'}
+            </span>
           </div>
         </div>
 
@@ -574,9 +710,10 @@ export function PartnerManagementPanel() {
             <span className="lume-partner-kpi-label">Có khiếu nại dịch vụ</span>
           </div>
           <div className="lume-partner-kpi-value">{metrics.disputesOrWarnings.toLocaleString('vi-VN')}</div>
-          <div className="lume-partner-kpi-trend alert">
-            <span>▲ +18.0%</span>
-            <span className="lume-partner-kpi-subtext">cần hòa giải</span>
+          <div className={`lume-partner-kpi-trend ${metrics.disputesOrWarnings > 0 ? 'alert' : ''}`}>
+            <span className="lume-partner-kpi-subtext">
+              {metrics.disputesOrWarnings > 0 ? 'Đối tác cần hòa giải' : 'Không có khiếu nại'}
+            </span>
           </div>
         </div>
       </div>
@@ -654,6 +791,24 @@ export function PartnerManagementPanel() {
                     <option value="HIGH">Rất tốt (⭐ ≥ 4.8)</option>
                     <option value="MEDIUM">Khá (⭐ 4.0 - 4.7)</option>
                     <option value="LOW">Cần xem xét (⭐ &lt; 4.0)</option>
+                    <option value="NONE">Chưa có đánh giá</option>
+                  </select>
+                </div>
+
+                {/* Sắp xếp */}
+                <div className="lume-partner-filter-group">
+                  <span className="lume-partner-filter-label">Sắp xếp</span>
+                  <select
+                    className="lume-partner-select"
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as PartnerSortKey)}
+                  >
+                    <option value="bookings_desc">Booking nhiều nhất</option>
+                    <option value="revenue_desc">Doanh thu cao nhất</option>
+                    <option value="rating_desc">Đánh giá cao nhất</option>
+                    <option value="products_desc">Sản phẩm nhiều nhất</option>
+                    <option value="newest">Mới tham gia nhất</option>
+                    <option value="oldest">Tham gia lâu nhất</option>
                   </select>
                 </div>
               </div>
@@ -724,11 +879,56 @@ export function PartnerManagementPanel() {
                     <th>Đối tác & Thương hiệu</th>
                     <th>Dịch vụ</th>
                     <th>Liên hệ</th>
-                    <th>Ngày tham gia</th>
-                    <th style={{ textAlign: 'center' }}>Sản phẩm</th>
-                    <th style={{ textAlign: 'center' }}>Booking</th>
-                    <th style={{ textAlign: 'center' }}>Đánh giá</th>
-                    <th style={{ textAlign: 'right' }}>Doanh thu</th>
+                    <th>
+                      <button
+                        type="button"
+                        className={`lume-partner-sort-btn ${sortBy === 'newest' || sortBy === 'oldest' ? 'is-active' : ''}`}
+                        onClick={() => toggleColumnSort('newest', 'oldest')}
+                      >
+                        <span>Ngày tham gia</span>
+                        {renderSortIcon('newest', 'oldest')}
+                      </button>
+                    </th>
+                    <th style={{ textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        className={`lume-partner-sort-btn is-center ${sortBy === 'products_desc' || sortBy === 'products_asc' ? 'is-active' : ''}`}
+                        onClick={() => toggleColumnSort('products_desc', 'products_asc')}
+                      >
+                        <span>Sản phẩm</span>
+                        {renderSortIcon('products_desc', 'products_asc')}
+                      </button>
+                    </th>
+                    <th style={{ textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        className={`lume-partner-sort-btn is-center ${sortBy === 'bookings_desc' || sortBy === 'bookings_asc' ? 'is-active' : ''}`}
+                        onClick={() => toggleColumnSort('bookings_desc', 'bookings_asc')}
+                      >
+                        <span>Booking</span>
+                        {renderSortIcon('bookings_desc', 'bookings_asc')}
+                      </button>
+                    </th>
+                    <th style={{ textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        className={`lume-partner-sort-btn is-center ${sortBy === 'rating_desc' || sortBy === 'rating_asc' ? 'is-active' : ''}`}
+                        onClick={() => toggleColumnSort('rating_desc', 'rating_asc')}
+                      >
+                        <span>Đánh giá</span>
+                        {renderSortIcon('rating_desc', 'rating_asc')}
+                      </button>
+                    </th>
+                    <th style={{ textAlign: 'right' }}>
+                      <button
+                        type="button"
+                        className={`lume-partner-sort-btn is-right ${sortBy === 'revenue_desc' || sortBy === 'revenue_asc' ? 'is-active' : ''}`}
+                        onClick={() => toggleColumnSort('revenue_desc', 'revenue_asc')}
+                      >
+                        <span>Doanh thu</span>
+                        {renderSortIcon('revenue_desc', 'revenue_asc')}
+                      </button>
+                    </th>
                     <th>Xác thực</th>
                     <th>Trạng thái</th>
                     <th style={{ textAlign: 'center' }}>Thao tác</th>
@@ -750,9 +950,12 @@ export function PartnerManagementPanel() {
                       </td>
                     </tr>
                   ) : (
-                    paginatedPartners.map((partner, rowIdx) => {
+                    paginatedPartners.map((partner) => {
                       const isSelected = selectedPartner?.id === partner.id;
                       const isChecked = selectedIds.has(partner.id);
+                      const avatarKey = `avatar-${partner.id}-${partner.avatar}`;
+                      const showAvatarImg =
+                        Boolean(partner.avatar) && !failedImages.has(avatarKey);
 
                       return (
                         <tr
@@ -784,20 +987,15 @@ export function PartnerManagementPanel() {
                           {/* Đối tác & Thương hiệu */}
                           <td>
                             <div className="lume-partner-identity-row">
-                              {partner.avatar ? (
+                              {showAvatarImg ? (
                                 <img
                                   src={partner.avatar}
                                   alt={partner.businessName}
                                   className="lume-partner-avatar-img"
-                                  onError={(e) => {
-                                    e.currentTarget.onerror = null;
-                                    e.currentTarget.src = LOCAL_PARTNER_AVATARS[rowIdx % LOCAL_PARTNER_AVATARS.length];
-                                  }}
+                                  onError={() => markImageFailed(avatarKey)}
                                 />
                               ) : (
-                                <div className="lume-partner-avatar-initials">
-                                  {partner.businessName.charAt(0).toUpperCase()}
-                                </div>
+                                <div className="lume-partner-avatar-empty" aria-hidden="true" />
                               )}
                               <div className="lume-partner-identity-text">
                                 <span className="lume-partner-business-name">{partner.businessName}</span>
@@ -857,14 +1055,28 @@ export function PartnerManagementPanel() {
                           <td style={{ textAlign: 'center', fontWeight: 600 }}>{partner.totalProducts}</td>
 
                           {/* Booking */}
-                          <td style={{ textAlign: 'center', fontWeight: 600 }}>{partner.completedBookings}</td>
+                          <td
+                            style={{ textAlign: 'center', fontWeight: 600 }}
+                            title={`${partner.completedBookings} hoàn thành / ${partner.totalBookings} tổng đơn`}
+                          >
+                            <div>{partner.completedBookings}</div>
+                            {partner.totalBookings > partner.completedBookings && (
+                              <div className="lume-partner-booking-sub">
+                                / {partner.totalBookings} tổng
+                              </div>
+                            )}
+                          </td>
 
                           {/* Đánh giá */}
                           <td style={{ textAlign: 'center' }}>
-                            <span className="lume-partner-rating-pill">
-                              <Star size={11} fill="#F59E0B" color="#F59E0B" />
-                              {partner.rating.toFixed(1)}
-                            </span>
+                            {partner.rating > 0 ? (
+                              <span className="lume-partner-rating-pill">
+                                <Star size={11} fill="#F59E0B" color="#F59E0B" />
+                                {partner.rating.toFixed(1)}
+                              </span>
+                            ) : (
+                              <span className="lume-partner-rating-empty">Chưa có</span>
+                            )}
                           </td>
 
                           {/* Doanh thu */}
@@ -991,15 +1203,17 @@ export function PartnerManagementPanel() {
           <div className="lume-partner-detail-panel">
             {/* Cover Banner */}
             <div className="lume-partner-detail-cover">
-              <img
-                src="/partner_cover.jpg"
-                alt="Partner Cover"
-                className="lume-partner-cover-img"
-                onError={(e) => {
-                  e.currentTarget.onerror = null;
-                  e.currentTarget.src = '/hero_bg.webp';
-                }}
-              />
+              {selectedPartner.coverUrl &&
+              !failedImages.has(`cover-${selectedPartner.id}-${selectedPartner.coverUrl}`) ? (
+                <img
+                  src={selectedPartner.coverUrl}
+                  alt={selectedPartner.businessName}
+                  className="lume-partner-cover-img"
+                  onError={() =>
+                    markImageFailed(`cover-${selectedPartner.id}-${selectedPartner.coverUrl}`)
+                  }
+                />
+              ) : null}
               <button
                 type="button"
                 className="lume-partner-cover-close-btn"
@@ -1015,20 +1229,21 @@ export function PartnerManagementPanel() {
               {/* Overlapping Avatar & Status Pill Row */}
               <div className="lume-partner-profile-header-row">
                 <div className="lume-partner-avatar-floating-wrapper">
-                  {selectedPartner.avatar ? (
+                  {selectedPartner.avatar &&
+                  !failedImages.has(`avatar-${selectedPartner.id}-${selectedPartner.avatar}`) ? (
                     <img
                       src={selectedPartner.avatar}
                       alt={selectedPartner.businessName}
                       className="lume-partner-floating-avatar"
-                      onError={(e) => {
-                        e.currentTarget.onerror = null;
-                        e.currentTarget.src = LOCAL_PARTNER_AVATARS[0];
-                      }}
+                      onError={() =>
+                        markImageFailed(`avatar-${selectedPartner.id}-${selectedPartner.avatar}`)
+                      }
                     />
                   ) : (
-                    <div className="lume-partner-floating-avatar-initials">
-                      {selectedPartner.businessName.charAt(0).toUpperCase()}
-                    </div>
+                    <div
+                      className="lume-partner-floating-avatar-empty"
+                      aria-hidden="true"
+                    />
                   )}
                 </div>
 
@@ -1115,9 +1330,13 @@ export function PartnerManagementPanel() {
 
                     <div className="lume-partner-kpi-subcard">
                       <div className="lume-partner-kpi-subcard-top">
-                        <Star size={18} color="#EAB308" fill="#EAB308" />
+                        <Star
+                          size={18}
+                          color={selectedPartner.rating > 0 ? '#EAB308' : '#D1D5DB'}
+                          fill={selectedPartner.rating > 0 ? '#EAB308' : 'none'}
+                        />
                         <span className="lume-partner-kpi-subcard-val">
-                          {selectedPartner.rating ? selectedPartner.rating.toFixed(1) : '5.0'}
+                          {selectedPartner.rating > 0 ? selectedPartner.rating.toFixed(1) : 'Chưa có'}
                         </span>
                       </div>
                       <span className="lume-partner-kpi-subcard-label">Đánh giá trung bình</span>
@@ -1325,17 +1544,25 @@ export function PartnerManagementPanel() {
               {activePanelTab === 'products' && (
                 <div className="lume-partner-tab-list">
                   {selectedPartner.products && selectedPartner.products.length > 0 ? (
-                    selectedPartner.products.map((prod) => (
+                    selectedPartner.products.map((prod) => {
+                      const prodImgKey = `prod-${prod.id}-${prod.image || ''}`;
+                      const showProdImg =
+                        Boolean(prod.image) && !failedImages.has(prodImgKey);
+                      return (
                       <div key={prod.id} className="lume-partner-tab-card-item">
-                        <img
-                          src={prod.image || '/phuong_hoang.webp'}
-                          alt={prod.name}
-                          className="lume-partner-tab-card-thumb"
-                          onError={(e) => {
-                            e.currentTarget.onerror = null;
-                            e.currentTarget.src = '/phuong_hoang.webp';
-                          }}
-                        />
+                        {showProdImg ? (
+                          <img
+                            src={prod.image}
+                            alt={prod.name}
+                            className="lume-partner-tab-card-thumb"
+                            onError={() => markImageFailed(prodImgKey)}
+                          />
+                        ) : (
+                          <div
+                            className="lume-partner-tab-card-thumb lume-partner-tab-card-thumb--empty"
+                            aria-hidden="true"
+                          />
+                        )}
                         <div className="lume-partner-tab-card-info">
                           <div className="lume-partner-tab-card-header">
                             <span className="lume-partner-tab-card-title">{prod.name}</span>
@@ -1351,7 +1578,8 @@ export function PartnerManagementPanel() {
                           </div>
                         </div>
                       </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <div style={{ textAlign: 'center', padding: '36px 16px', color: '#9CA3AF' }}>
                       <ShoppingBag size={32} style={{ margin: '0 auto 8px', opacity: 0.4 }} />
@@ -1366,8 +1594,8 @@ export function PartnerManagementPanel() {
                 <div className="lume-partner-tab-list">
                   <div className="lume-partner-tab-card" style={{ padding: '12px 14px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 24, fontWeight: 800, color: '#111827' }}>
-                        {selectedPartner.rating ? selectedPartner.rating.toFixed(1) : '5.0'}
+                      <span style={{ fontSize: 24, fontWeight: 800, color: selectedPartner.rating > 0 ? '#111827' : '#9CA3AF' }}>
+                        {selectedPartner.rating > 0 ? selectedPartner.rating.toFixed(1) : 'Chưa có'}
                       </span>
                       <div>
                         <div style={{ display: 'flex', gap: 2 }}>
@@ -1375,14 +1603,18 @@ export function PartnerManagementPanel() {
                             <Star
                               key={idx}
                               size={14}
-                              color="#F59E0B"
-                              fill={idx < Math.round(selectedPartner.rating || 5) ? '#F59E0B' : 'none'}
+                              color={selectedPartner.rating > 0 ? '#F59E0B' : '#D1D5DB'}
+                              fill={
+                                selectedPartner.rating > 0 && idx < Math.round(selectedPartner.rating)
+                                  ? '#F59E0B'
+                                  : 'none'
+                              }
                             />
                           ))}
                         </div>
                         <span style={{ fontSize: 10.5, color: '#6B7280' }}>
-                          {selectedPartner.reviews && selectedPartner.reviews.length > 0
-                            ? `Dựa trên ${selectedPartner.reviews.length} lượt đánh giá thực tế`
+                          {selectedPartner.totalReviews > 0
+                            ? `Dựa trên ${selectedPartner.totalReviews} lượt đánh giá thực tế`
                             : 'Chưa có đánh giá thực tế'}
                         </span>
                       </div>
@@ -1390,19 +1622,20 @@ export function PartnerManagementPanel() {
                   </div>
 
                   {selectedPartner.reviews && selectedPartner.reviews.length > 0 ? (
-                    selectedPartner.reviews.map((rev) => (
+                    selectedPartner.reviews.map((rev) => {
+                      const revAvatarKey = `rev-${rev.id}-${rev.avatar || ''}`;
+                      const showRevAvatar =
+                        Boolean(rev.avatar) && !failedImages.has(revAvatarKey);
+                      return (
                       <div key={rev.id} className="lume-partner-tab-card" style={{ padding: '10px 12px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            {rev.avatar ? (
+                            {showRevAvatar ? (
                               <img
                                 src={rev.avatar}
                                 alt={rev.customerName}
                                 style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover' }}
-                                onError={(e) => {
-                                  e.currentTarget.onerror = null;
-                                  e.currentTarget.src = '/avatar_hanna.webp';
-                                }}
+                                onError={() => markImageFailed(revAvatarKey)}
                               />
                             ) : null}
                             <strong style={{ fontSize: 11.5, color: '#111827' }}>{rev.customerName}</strong>
@@ -1423,7 +1656,8 @@ export function PartnerManagementPanel() {
                           {rev.comment}
                         </p>
                       </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <div style={{ textAlign: 'center', padding: '36px 16px', color: '#9CA3AF' }}>
                       <Star size={32} style={{ margin: '0 auto 8px', opacity: 0.4 }} />

@@ -420,6 +420,34 @@
   white-space: nowrap;
 }
 
+.lume-partner-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.lume-partner-sort-btn.is-center {
+  justify-content: center;
+}
+
+.lume-partner-sort-btn.is-right {
+  justify-content: flex-end;
+}
+
+.lume-partner-sort-btn:hover,
+.lume-partner-sort-btn.is-active {
+  color: #881337;
+}
+
 .lume-partner-table tbody td {
   padding: 9px 8px;
   border-bottom: 1px solid #F3F4F6;
@@ -476,6 +504,15 @@
   justify-content: center;
   font-weight: 700;
   font-size: 12px;
+  flex-shrink: 0;
+}
+
+.lume-partner-avatar-empty {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #F3F4F6;
+  border: 1px solid #E5E7EB;
   flex-shrink: 0;
 }
 
@@ -577,6 +614,20 @@
   color: #B45309;
   font-size: 11px;
   font-weight: 700;
+}
+
+.lume-partner-rating-empty {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
+  color: #9CA3AF;
+}
+
+.lume-partner-booking-sub {
+  font-size: 10px;
+  font-weight: 500;
+  color: #9CA3AF;
+  line-height: 1.2;
 }
 
 /* Status & Verification Pills */
@@ -840,6 +891,20 @@
   justify-content: center;
   font-size: 24px;
   font-weight: 800;
+}
+
+.lume-partner-floating-avatar-empty {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: 3.5px solid #FFFFFF;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  background: #F3F4F6;
+}
+
+.lume-partner-tab-card-thumb--empty {
+  background: #F3F4F6;
+  border: 1px solid #E5E7EB;
 }
 
 .lume-partner-status-pill-badge {

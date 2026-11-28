@@ -210,9 +210,10 @@ export class AdminStatsController {
     @Query('page') page = 1,
     @Query('limit') limit = 10,
     @Query('search') search?: string,
+    @Query('sortBy') sortBy?: string,
   ) {
     this.checkAdminRole(user);
-    return this.adminStatsService.getAllProviders(+page, +limit, search);
+    return this.adminStatsService.getAllProviders(+page, +limit, search, sortBy);
   }
 
   @Get('bookings')

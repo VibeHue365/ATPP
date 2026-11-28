@@ -35,12 +35,10 @@ const labels: Record<Status, string> = {
   HIDDEN: "Đã ẩn",
 };
 
-const fallbackImage =
-  "https://images.unsplash.com/photo-1542038784456-1ea8e935640e?w=800";
-const resolveImageUrl = (url?: string) =>
-  !url || url.startsWith("http")
-    ? url || fallbackImage
-    : `${API_BASE_URL}${url}`;
+const resolveImageUrl = (url?: string) => {
+  if (!url) return "";
+  return url.startsWith("http") ? url : `${API_BASE_URL}${url}`;
+};
 
 export const PortfolioModerationManagement: React.FC = () => {
   const toast = useToast();
@@ -435,20 +433,22 @@ export const PortfolioModerationManagement: React.FC = () => {
                     overflow: "hidden",
                   }}
                 >
-                  <img
-                    src={resolveImageUrl(item.images[0])}
-                    onError={(event) => {
-                      event.currentTarget.src = fallbackImage;
-                    }}
-                    alt={item.title}
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                      transform: isHovered ? "scale(1.05)" : "scale(1)",
-                      transition: "transform 0.4s ease",
-                    }}
-                  />
+                  {resolveImageUrl(item.images[0]) && (
+                    <img
+                      src={resolveImageUrl(item.images[0])}
+                      onError={(event) => {
+                        event.currentTarget.style.display = "none";
+                      }}
+                      alt={item.title}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        transform: isHovered ? "scale(1.05)" : "scale(1)",
+                        transition: "transform 0.4s ease",
+                      }}
+                    />
+                  )}
                   {/* Status Badge */}
                   <span
                     style={{
@@ -865,18 +865,20 @@ export const PortfolioModerationManagement: React.FC = () => {
                       (e.currentTarget.style.transform = "scale(1)")
                     }
                   >
-                    <img
-                      src={resolveImageUrl(image)}
-                      onError={(event) => {
-                        event.currentTarget.src = fallbackImage;
-                      }}
-                      alt={`Ảnh portfolio ${idx + 1}`}
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "cover",
-                      }}
-                    />
+                    {resolveImageUrl(image) && (
+                      <img
+                        src={resolveImageUrl(image)}
+                        onError={(event) => {
+                          event.currentTarget.style.display = "none";
+                        }}
+                        alt={`Ảnh portfolio ${idx + 1}`}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                        }}
+                      />
+                    )}
                   </a>
                 ))}
               </div>

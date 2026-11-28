@@ -80,8 +80,15 @@ export const adminStatsApi = {
   getShopsOverview: () => httpClient.get<ShopsOverviewMetrics>('/api/v1/admin-stats/shops-overview'),
   getPhotographersOverview: () =>
     httpClient.get<PhotographerOverviewMetrics>('/api/v1/admin-stats/photographers-overview'),
-  getLowRatingPhotographers: () =>
-    httpClient.get<LowRatingPhotographerReport>('/api/v1/admin/photographers/low-rating'),
+  getLowRatingPhotographers: (threshold?: number) => {
+    const query =
+      typeof threshold === 'number' && Number.isFinite(threshold)
+        ? `?threshold=${encodeURIComponent(String(threshold))}`
+        : '';
+    return httpClient.get<LowRatingPhotographerReport>(
+      `/api/v1/admin/photographers/low-rating${query}`,
+    );
+  },
   getUserGrowth: (from?: string, to?: string) =>
     httpClient.get<UserGrowthMetrics>(
       `/api/v1/admin-stats/user-growth?${new URLSearchParams({ ...(from ? { from } : {}), ...(to ? { to } : {}) })}`

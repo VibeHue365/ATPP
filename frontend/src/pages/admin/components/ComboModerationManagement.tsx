@@ -116,10 +116,8 @@ export interface ComboApiResponse {
   metrics: ComboMetrics;
 }
 
-const fallbackImage = 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=600';
-
 const resolveImageUrl = (url?: string): string => {
-  if (!url) return fallbackImage;
+  if (!url) return '';
   if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) return url;
   if (url.startsWith('/uploads/') || url.startsWith('uploads/')) {
     const normalized = url.startsWith('/') ? url : `/${url}`;
@@ -165,11 +163,11 @@ export const ComboModerationManagement: React.FC = () => {
     changesRequested: 0,
     total: 0,
     trends: {
-      pending: '↑ 12% so với tuần trước',
-      approved: '↑ 18% so với tháng trước',
-      rejected: '↓ 11% so với tháng trước',
-      changesRequested: '↑ 33% so với tháng trước',
-      total: '↑ 26% so với tháng trước',
+      pending: '',
+      approved: '',
+      rejected: '',
+      changesRequested: '',
+      total: '',
     },
   });
   const [loading, setLoading] = useState<boolean>(true);
@@ -537,7 +535,7 @@ export const ComboModerationManagement: React.FC = () => {
     if (selectedCombo.image) list.push(selectedCombo.image);
     if (selectedCombo.productId?.images) list.push(...selectedCombo.productId.images);
     if (selectedCombo.photographyPackageId?.images) list.push(...selectedCombo.photographyPackageId.images);
-    return list.length > 0 ? Array.from(new Set(list)) : [fallbackImage];
+    return list.length > 0 ? Array.from(new Set(list)) : [];
   }, [selectedCombo]);
 
   return (
@@ -587,7 +585,10 @@ export const ComboModerationManagement: React.FC = () => {
             </div>
           </div>
           <div className="lume-combo-metric-trend up-red">
-            <span>{metrics.trends.pending || '↑ 12% so với tuần trước'}</span>
+            <span>
+              {metrics.trends.pending ||
+                (metrics.pending > 0 ? 'Đang chờ Admin kiểm duyệt' : 'Không có combo chờ duyệt')}
+            </span>
           </div>
         </div>
 
@@ -607,7 +608,12 @@ export const ComboModerationManagement: React.FC = () => {
             </div>
           </div>
           <div className="lume-combo-metric-trend up">
-            <span>{metrics.trends.approved || '↑ 18% so với tháng trước'}</span>
+            <span>
+              {metrics.trends.approved ||
+                (metrics.total > 0
+                  ? `${Math.round((metrics.approved / metrics.total) * 100)}% tổng combo`
+                  : 'Chưa có combo đã duyệt')}
+            </span>
           </div>
         </div>
 
@@ -627,7 +633,12 @@ export const ComboModerationManagement: React.FC = () => {
             </div>
           </div>
           <div className="lume-combo-metric-trend down">
-            <span>{metrics.trends.rejected || '↓ 11% so với tháng trước'}</span>
+            <span>
+              {metrics.trends.rejected ||
+                (metrics.total > 0
+                  ? `${Math.round((metrics.rejected / metrics.total) * 100)}% tổng combo`
+                  : 'Không có combo bị từ chối')}
+            </span>
           </div>
         </div>
 
@@ -647,7 +658,10 @@ export const ComboModerationManagement: React.FC = () => {
             </div>
           </div>
           <div className="lume-combo-metric-trend amber">
-            <span>{metrics.trends.changesRequested || '↑ 33% so với tháng trước'}</span>
+            <span>
+              {metrics.trends.changesRequested ||
+                (metrics.changesRequested > 0 ? 'Đang chờ đối tác chỉnh sửa' : 'Không có yêu cầu chỉnh sửa')}
+            </span>
           </div>
         </div>
 
@@ -667,7 +681,7 @@ export const ComboModerationManagement: React.FC = () => {
             </div>
           </div>
           <div className="lume-combo-metric-trend up">
-            <span>{metrics.trends.total || '↑ 26% so với tháng trước'}</span>
+            <span>{metrics.trends.total || 'Toàn bộ combo trên hệ thống'}</span>
           </div>
         </div>
       </div>
@@ -915,14 +929,18 @@ export const ComboModerationManagement: React.FC = () => {
 
                         {/* Thumbnail */}
                         <td>
-                          <img
-                            src={thumbUrl}
-                            alt={combo.name}
-                            className="lume-combo-thumb-cell"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = fallbackImage;
-                            }}
-                          />
+                          {thumbUrl ? (
+                            <img
+                              src={thumbUrl}
+                              alt={combo.name}
+                              className="lume-combo-thumb-cell"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <div className="lume-combo-thumb-cell" style={{ backgroundColor: '#F3EFE8' }} aria-hidden="true" />
+                          )}
                         </td>
 
                         {/* Name & Code */}
@@ -1258,21 +1276,25 @@ export const ComboModerationManagement: React.FC = () => {
               {/* CỘT TRÁI: Visuals + Mô tả + Dịch vụ bao gồm */}
               <div className="lume-combo-drawer-col">
                 {/* Showcase ảnh lớn */}
-                <div className="lume-combo-showcase-box">
-                  <img
-                    src={resolveImageUrl(currentImages[activeGalleryIndex] || currentImages[0])}
-                    alt={selectedCombo.name}
-                    className="lume-combo-showcase-img"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = fallbackImage;
-                    }}
-                  />
+                <div className="lume-combo-showcase-box" style={{ backgroundColor: '#F3EFE8' }}>
+                  {resolveImageUrl(currentImages[activeGalleryIndex] || currentImages[0]) && (
+                    <img
+                      src={resolveImageUrl(currentImages[activeGalleryIndex] || currentImages[0])}
+                      alt={selectedCombo.name}
+                      className="lume-combo-showcase-img"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  )}
                   <div className="lume-combo-showcase-badge">
                     {getCategoryLabel(selectedCombo)}
                   </div>
-                  <div className="lume-combo-showcase-counter">
-                    {activeGalleryIndex + 1} / {currentImages.length}
-                  </div>
+                  {currentImages.length > 0 && (
+                    <div className="lume-combo-showcase-counter">
+                      {activeGalleryIndex + 1} / {currentImages.length}
+                    </div>
+                  )}
                 </div>
 
                 {/* Dải thumbnails nếu có nhiều ảnh */}
@@ -1284,13 +1306,15 @@ export const ComboModerationManagement: React.FC = () => {
                         className={`lume-combo-thumb-item ${activeGalleryIndex === idx ? 'active' : ''}`}
                         onClick={() => setActiveGalleryIndex(idx)}
                       >
-                        <img
-                          src={resolveImageUrl(img)}
-                          alt={`Thumbnail ${idx + 1}`}
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = fallbackImage;
-                          }}
-                        />
+                        {resolveImageUrl(img) && (
+                          <img
+                            src={resolveImageUrl(img)}
+                            alt={`Thumbnail ${idx + 1}`}
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1425,15 +1449,22 @@ export const ComboModerationManagement: React.FC = () => {
                     {/* Partner Card */}
                     <div className="lume-combo-partner-profile-card">
                       <div className="lume-combo-partner-profile-left">
-                        <img
-                          src={
-                            selectedCombo.providerId?.avatar
-                              ? resolveImageUrl(selectedCombo.providerId.avatar)
-                              : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120'
-                          }
-                          alt="Avatar đối tác"
-                          className="lume-combo-partner-profile-avatar"
-                        />
+                        {selectedCombo.providerId?.avatar && resolveImageUrl(selectedCombo.providerId.avatar) ? (
+                          <img
+                            src={resolveImageUrl(selectedCombo.providerId.avatar)}
+                            alt="Avatar đối tác"
+                            className="lume-combo-partner-profile-avatar"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <div
+                            className="lume-combo-partner-profile-avatar"
+                            style={{ backgroundColor: '#EAE4DA' }}
+                            aria-hidden="true"
+                          />
+                        )}
                         <div>
                           <div className="lume-combo-partner-profile-name">
                             {selectedCombo.providerId?.businessName || 'Áo Dài Cố Đô'}

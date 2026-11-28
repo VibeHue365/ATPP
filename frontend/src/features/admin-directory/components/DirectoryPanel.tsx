@@ -203,7 +203,7 @@ function DirectoryTableHead({ kind }: { kind: DirectoryKind }) {
 function CustomerRow({ item, pending, onChangeStatus, onView }: { item: Customer; pending: boolean; onChangeStatus: (customer: Customer) => Promise<void>; onView: (item: Customer) => void }) {
   const isBanned = item.status === 'BANNED';
   return <tr className='admin-directory__clickable-row' onClick={(event) => { if (!(event.target as HTMLElement).closest('button')) onView(item); }}>
-    <td><div className="admin-directory__identity"><img src={item.avatar || '/avatar_hanna.webp'} alt="" /><div><strong>{item.fullName}</strong><small>ID: {item.id}</small></div></div></td>
+    <td><div className="admin-directory__identity">{item.avatar ? <img src={item.avatar} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /> : <span aria-hidden="true" style={{ width: 36, height: 36, borderRadius: '50%', background: '#EAE4DA', display: 'inline-block', flexShrink: 0 }} />}<div><strong>{item.fullName}</strong><small>ID: {item.id}</small></div></div></td>
     <td>{item.email}</td><td>{item.phone || 'Chưa cung cấp'}</td><td>{item.date || '—'}</td><td className="admin-directory__center">{item.bookings ?? 0}</td>
     <td className="admin-directory__center"><StatusBadge value={item.status} kind="customers" /></td>
     <td className="admin-directory__center"><button className={`admin-directory__icon-button ${isBanned ? 'is-positive' : 'is-danger'}`} type="button" disabled={pending} title={isBanned ? 'Mở khóa khách hàng' : 'Khóa khách hàng'} onClick={() => void onChangeStatus(item)}>{isBanned ? <CheckCircle2 size={15} /> : <Ban size={15} />}</button></td>
@@ -289,7 +289,7 @@ function DirectoryDetailDrawer({
 
         {isCustomer ? (
           <>
-            <div className='admin-directory__drawer-profile'><img src={item.avatar || '/avatar_hanna.webp'} alt='' /><StatusBadge value={item.status} /></div>
+            <div className='admin-directory__drawer-profile'>{item.avatar ? <img src={item.avatar} alt='' onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /> : <span aria-hidden='true' style={{ width: 48, height: 48, borderRadius: '50%', background: '#EAE4DA', display: 'inline-block', flexShrink: 0 }} />}<StatusBadge value={item.status} /></div>
             <DetailList rows={[
               ['Email', item.email || 'Chưa cung cấp'],
               ['Số điện thoại', item.phone || 'Chưa cung cấp'],

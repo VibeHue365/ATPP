@@ -77,11 +77,23 @@ export const ServiceFinderBar: React.FC = () => {
     }
   };
 
+  const dateModeBadge = (() => {
+    if (serviceType !== 'aodai') return null;
+    if (dateValue.rentalType === 'HOURLY') {
+      return dateValue.singleDate || dateValue.startDate ? 'Theo giờ' : null;
+    }
+    if (!dateValue.startDate) return null;
+    if (dateValue.endDate && dateValue.endDate !== dateValue.startDate) {
+      return 'Theo ngày';
+    }
+    return 'Trong ngày';
+  })();
+
   return (
     <section id="service-finder" className="w-full relative z-30">
       <form
         onSubmit={handleSearch}
-        className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1.05fr_1.35fr_1.05fr_1.4fr_1.05fr_minmax(140px,0.95fr)] gap-2.5 items-stretch"
+        className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1.25fr_1.05fr_1.55fr_1.05fr_minmax(140px,0.95fr)] gap-2.5 items-stretch"
       >
         {/* Field 1: DỊCH VỤ */}
         <div className="flex flex-col justify-center rounded-xl px-3.5 py-2 min-w-0 relative h-[62px]">
@@ -137,20 +149,28 @@ export const ServiceFinderBar: React.FC = () => {
 
         {/* Field 4: NGÀY CHỤP/THUÊ (Traveloka Dual Month & Hourly) */}
         <div className="flex flex-col justify-center rounded-xl px-3.5 py-2 min-w-0 relative h-[62px]">
-          <label htmlFor="finder-date" className="text-[10px] font-bold uppercase tracking-wider text-[#8E1B2E] leading-none mb-1 whitespace-nowrap">
-            {serviceType === 'photographer'
-              ? 'Ngày & Ca chụp'
-              : serviceType === 'combo'
-                ? 'Lịch Combo'
-                : dateValue.rentalType === 'HOURLY'
-                  ? 'Ngày & Giờ thuê'
-                  : 'Ngày nhận - trả'}
-          </label>
+          <div className="sfb-field-header flex items-center justify-between gap-2 mb-1 min-w-0">
+            <label htmlFor="finder-date" className="text-[10px] font-bold uppercase tracking-wider text-[#8E1B2E] leading-none whitespace-nowrap">
+              {serviceType === 'photographer'
+                ? 'Ngày & Ca chụp'
+                : serviceType === 'combo'
+                  ? 'Lịch Combo'
+                  : dateValue.rentalType === 'HOURLY'
+                    ? 'Ngày & Giờ thuê'
+                    : 'Ngày nhận - trả'}
+            </label>
+            {dateModeBadge && (
+              <span className="sfb-field-badge text-[10px] font-semibold leading-none text-[#8E1B2E]/75 whitespace-nowrap shrink-0">
+                {dateModeBadge}
+              </span>
+            )}
+          </div>
           <ServiceDatePicker
             id="finder-date"
             serviceType={serviceType}
             value={dateValue}
             onChange={setDateValue}
+            displayMode="inline"
           />
         </div>
 

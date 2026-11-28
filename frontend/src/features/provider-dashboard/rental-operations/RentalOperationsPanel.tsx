@@ -659,7 +659,7 @@ export function RentalOperationsPanel({
                           </div>
                           <div>
                             <span className="ro-cust-name">{order.customerName || 'Khách hàng'}</span>
-                            <span className="ro-cust-phone">{order.customerPhone || '0901 234 567'}</span>
+                            <span className="ro-cust-phone">{order.customerPhone || 'Chưa cập nhật'}</span>
                           </div>
                         </div>
                       </td>
@@ -888,14 +888,14 @@ export function RentalOperationsPanel({
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <strong style={{ fontSize: '14px', color: '#111827' }}>
-                            {currentItem.order.customerName || 'Nguyễn Thảo My'}
+                            {currentItem.order.customerName || 'Khách hàng'}
                           </strong>
                           <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', backgroundColor: '#F3E8FF', color: '#7E22CE' }}>
                             Khách hàng thân thiết
                           </span>
                         </div>
                         <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '2px' }}>
-                          📞 {currentItem.order.customerPhone || '0901 234 567'}<br />
+                          📞 {currentItem.order.customerPhone || 'Chưa cập nhật'}<br />
                           ✉️ {currentItem.order.customerEmail || 'Đang cập nhật'}
                         </div>
                       </div>
@@ -910,14 +910,27 @@ export function RentalOperationsPanel({
                         <MessageSquare size={14} />
                         <span>Nhắn tin</span>
                       </button>
-                      <a
-                        href={`tel:${currentItem.order.customerPhone || '0901234567'}`}
-                        className="ro-btn-contact"
-                        style={{ textDecoration: 'none' }}
-                      >
-                        <Phone size={14} />
-                        <span>Gọi điện</span>
-                      </a>
+                      {currentItem.order.customerPhone ? (
+                        <a
+                          href={`tel:${currentItem.order.customerPhone}`}
+                          className="ro-btn-contact"
+                          style={{ textDecoration: 'none' }}
+                        >
+                          <Phone size={14} />
+                          <span>Gọi điện</span>
+                        </a>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled
+                          className="ro-btn-contact"
+                          style={{ opacity: 0.55, cursor: 'not-allowed' }}
+                          title="Khách hàng chưa cập nhật số điện thoại"
+                        >
+                          <Phone size={14} />
+                          <span>Gọi điện</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -1233,14 +1246,27 @@ export function RentalOperationsPanel({
 
             {/* Drawer Sticky Footer Actions */}
             <div className="ro-drawer-footer">
-              <a
-                href={`tel:${currentItem.order.customerPhone || '0901234567'}`}
-                className="ro-btn-contact"
-                style={{ textDecoration: 'none', padding: '9px 14px' }}
-              >
-                <Phone size={14} />
-                <span>Liên hệ khách</span>
-              </a>
+              {currentItem.order.customerPhone ? (
+                <a
+                  href={`tel:${currentItem.order.customerPhone}`}
+                  className="ro-btn-contact"
+                  style={{ textDecoration: 'none', padding: '9px 14px' }}
+                >
+                  <Phone size={14} />
+                  <span>Liên hệ khách</span>
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="ro-btn-contact"
+                  style={{ padding: '9px 14px', opacity: 0.55, cursor: 'not-allowed' }}
+                  title="Khách hàng chưa cập nhật số điện thoại"
+                >
+                  <Phone size={14} />
+                  <span>Liên hệ khách</span>
+                </button>
+              )}
 
 
               <button

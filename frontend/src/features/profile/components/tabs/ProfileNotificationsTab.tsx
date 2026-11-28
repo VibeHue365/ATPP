@@ -3,7 +3,15 @@ import { Bell, CheckCheck, Clock, Calendar, CreditCard, Truck, RefreshCw, AlertT
 import { useNotifications, getTimeAgo } from '../../../notifications/hooks/useNotifications';
 import { getNotificationTypeMeta } from '../../../../utils/bookingStatus';
 
-export const ProfileNotificationsTab: React.FC = () => {
+interface ProfileNotificationsTabProps {
+  onOpenBooking?: (bookingId: string) => void;
+  onNavigateUrl?: (url: string) => void;
+}
+
+export const ProfileNotificationsTab: React.FC<ProfileNotificationsTabProps> = ({
+  onOpenBooking,
+  onNavigateUrl,
+}) => {
   const { notifications, loading, markAsRead, markAllAsRead, unreadCount } = useNotifications();
 
   const getVisual = (type: string) => {
@@ -77,7 +85,20 @@ export const ProfileNotificationsTab: React.FC = () => {
             return (
               <div
                 key={n._id}
-                onClick={() => !n.isRead && markAsRead(n._id)}
+                onClick={() => {
+                  if (!n.isRead) markAsRead(n._id);
+                  const bookingId = n.metadata?.bookingId ? String(n.metadata.bookingId) : '';
+                  const rawUrl = typeof n.metadata?.url === 'string' ? n.metadata.url : '';
+                  if (bookingId && onOpenBooking && (!rawUrl || rawUrl.includes('tab=rentals'))) {
+                    onOpenBooking(bookingId);
+                  } else if (rawUrl && onNavigateUrl) {
+                    onNavigateUrl(
+                      rawUrl.includes('tab=rentals')
+                        ? '/dashboard/profile?tab=schedule&category=rental'
+                        : rawUrl,
+                    );
+                  }
+                }}
                 style={{
                   display: 'flex',
                   alignItems: 'flex-start',

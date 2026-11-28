@@ -228,8 +228,24 @@ export const payoutsApi = {
   getWallet<T = unknown>(...args: Tail<Parameters<typeof httpClient.get<T>>>) {
     return httpClient.get<T>(`/providers/me/wallet`, ...args);
   },
-  listSettlements<T = unknown>(...args: Tail<Parameters<typeof httpClient.get<T>>>) {
-    return httpClient.get<T>(`/provider/settlements`, ...args);
+  listSettlements<T = unknown>(
+    params?: {
+      status?: string;
+      fromDate?: string;
+      toDate?: string;
+      page?: number;
+      limit?: number;
+    },
+    ...args: Tail<Parameters<typeof httpClient.get<T>>>
+  ) {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.fromDate) query.set('fromDate', `${params.fromDate}T00:00:00.000+07:00`);
+    if (params?.toDate) query.set('toDate', `${params.toDate}T23:59:59.999+07:00`);
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.limit) query.set('limit', String(params.limit));
+    const qs = query.toString();
+    return httpClient.get<T>(`/provider/settlements${qs ? `?${qs}` : ''}`, ...args);
   },
   listLegacyTransfers<T = unknown>(...args: Tail<Parameters<typeof httpClient.get<T>>>) {
     return httpClient.get<T>(`/payments/settlement-transfers/provider`, ...args);

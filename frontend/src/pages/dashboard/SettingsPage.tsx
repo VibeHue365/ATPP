@@ -37,6 +37,7 @@ export const SettingsPage: React.FC = () => {
 
   // Avatar states
   const [isUploading, setIsUploading] = useState(false);
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
 
   // Notifications Mock States
   const [emailNotif, setEmailNotif] = useState(true);
@@ -121,7 +122,7 @@ export const SettingsPage: React.FC = () => {
         : user.avatar;
       return `${API_BASE_URL}/uploads/avatars/${filename}`;
     }
-    return '/avatar_hanna.webp';
+    return '';
   };
 
   const handleAvatarClick = () => {
@@ -271,7 +272,20 @@ export const SettingsPage: React.FC = () => {
                 {/* Avatar block */}
                 <div className="vh-settings-avatar-edit-block">
                   <div className="vh-settings-avatar-preview-wrapper" onClick={handleAvatarClick} style={{ cursor: isUploading ? 'not-allowed' : 'pointer' }}>
-                    <img src={getAvatarUrl()} alt={user?.fullName} className="vh-settings-avatar-img-square" />
+                    {getAvatarUrl() && failedAvatarUrl !== getAvatarUrl() ? (
+                      <img
+                        src={getAvatarUrl()}
+                        alt={user?.fullName}
+                        className="vh-settings-avatar-img-square"
+                        onError={() => setFailedAvatarUrl(getAvatarUrl())}
+                      />
+                    ) : (
+                      <div
+                        className="vh-settings-avatar-img-square"
+                        style={{ backgroundColor: '#F3F4F6' }}
+                        aria-hidden="true"
+                      />
+                    )}
                     {isUploading && (
                       <div className="vh-settings-avatar-uploading-spinner">
                         <span className="spinner"></span>

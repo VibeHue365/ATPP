@@ -947,6 +947,19 @@ export class AdminStatsService {
     };
   }
 
+  private sanitizeImageUrl(url?: string | null): string {
+    if (!url || typeof url !== 'string') return '';
+    const trimmed = url.trim();
+    if (
+      !trimmed ||
+      trimmed.includes('unsplash.com') ||
+      trimmed.includes('example.com')
+    ) {
+      return '';
+    }
+    return trimmed;
+  }
+
   private async getTopPartners(): Promise<
     Array<{ rank: number; name: string; bookings: number; avatar: string }>
   > {
@@ -954,10 +967,17 @@ export class AdminStatsService {
       _id: Types.ObjectId;
       count: number;
     }>([
-      { $match: { providerId: { $ne: null }, status: { $ne: 'CANCELLED' } } },
-      { $group: { _id: '$providerId', count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 5 },
+      {
+        $match: {
+          providerIds: { $exists: true, $ne: [] },
+          status: { $ne: BookingStatus.Cancelled },
+        },
+      },
+      { $unwind: '$providerIds' },
+      { $match: { providerIds: { $ne: null } } },
+      { $group: { _id: '$providerIds', count: { $sum: 1 } } },
+      { $sort: { count: -1, _id: 1 } },
+      { $limit: 10 },
     ]);
 
     const providerIds = topAgg.map((item) => item._id);
@@ -965,20 +985,29 @@ export class AdminStatsService {
     if (providerIds.length > 0) {
       providers = await this.providerModel
         .find({ _id: { $in: providerIds } })
-        .select('businessName media avatarUrl')
+        .select('businessName media userId')
+        .populate('userId', 'profile.avatarUrl')
         .lean();
     }
 
     const providerMap = new Map(providers.map((p) => [p._id.toString(), p]));
+    const matchedTopAgg = topAgg.filter((item) =>
+      providerMap.has(item._id.toString()),
+    );
+    const rankedTopAgg = (
+      matchedTopAgg.length > 0 ? matchedTopAgg : topAgg
+    ).slice(0, 5);
 
-    if (topAgg.length > 0) {
-      return topAgg.map((item, idx) => {
+    if (rankedTopAgg.length > 0) {
+      return rankedTopAgg.map((item, idx) => {
         const p = providerMap.get(item._id.toString());
         return {
           rank: idx + 1,
           name: p?.businessName || `Đối tác #${idx + 1}`,
           bookings: item.count,
-          avatar: p?.media?.avatarUrl || p?.avatarUrl || '/avatar_hanna.webp',
+          avatar: this.sanitizeImageUrl(
+            p?.media?.logoUrl || p?.userId?.profile?.avatarUrl,
+          ),
         };
       });
     }
@@ -986,17 +1015,17 @@ export class AdminStatsService {
     const fallbackProviders = await this.providerModel
       .find({ status: ProviderStatus.Active })
       .limit(5)
-      .select('businessName media avatarUrl')
+      .select('businessName media userId')
+      .populate('userId', 'profile.avatarUrl')
       .lean();
 
-    return fallbackProviders.map((p, idx) => ({
+    return fallbackProviders.map((p: any, idx) => ({
       rank: idx + 1,
       name: p.businessName || `Đối tác #${idx + 1}`,
       bookings: 0,
-      avatar:
-        (p as any)?.media?.avatarUrl ||
-        (p as any)?.avatarUrl ||
-        '/avatar_hanna.webp',
+      avatar: this.sanitizeImageUrl(
+        p?.media?.logoUrl || p?.userId?.profile?.avatarUrl,
+      ),
     }));
   }
 
@@ -1465,7 +1494,12 @@ export class AdminStatsService {
     };
   }
 
-  async getAllProviders(page = 1, limit = 10, search?: string) {
+  async getAllProviders(
+    page = 1,
+    limit = 10,
+    search?: string,
+    sortBy?: string,
+  ) {
     const filter: any = {};
     if (search && search.trim()) {
       const pattern = buildVietnameseRegexPattern(search.trim());
@@ -1478,21 +1512,38 @@ export class AdminStatsService {
         { 'address.district': regex },
       ];
     }
+
+    const computedSortKeys = new Set([
+      'bookings_desc',
+      'bookings_asc',
+      'revenue_desc',
+      'revenue_asc',
+      'rating_desc',
+      'rating_asc',
+      'products_desc',
+      'products_asc',
+    ]);
+    const useComputedSort = Boolean(sortBy && computedSortKeys.has(sortBy));
+    const createdAtSortOrder = sortBy === 'oldest' ? 1 : -1;
+
+    const providerQuery = this.providerModel
+      .find(filter)
+      .select(
+        'userId businessName contact capabilities status rating wallet createdAt media address paymentAccounts taxCode',
+      )
+      .populate(
+        'userId',
+        'profile.fullName profile.avatarUrl auth.email auth.phone',
+      )
+      .sort({ createdAt: createdAtSortOrder });
+
+    if (!useComputedSort) {
+      providerQuery.skip((page - 1) * limit).limit(limit);
+    }
+
     const [total, providers] = await Promise.all([
       this.providerModel.countDocuments(filter),
-      this.providerModel
-        .find(filter)
-        .select(
-          'userId businessName contact capabilities status rating wallet createdAt media address paymentAccounts taxCode',
-        )
-        .populate(
-          'userId',
-          'profile.fullName profile.avatarUrl auth.email auth.phone',
-        )
-        .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit)
-        .lean(),
+      providerQuery.lean(),
     ]);
 
     const providerIds = providers.map((provider: any) => provider._id);
@@ -1599,30 +1650,16 @@ export class AdminStatsService {
       }
     }
 
-    const fallbackAvatars = [
-      '/hoang_minh.webp',
-      '/avatar_hanna.webp',
-      '/lam_ngoc.webp',
-      '/avatar_mai_anh.webp',
-      '/tran_bao.webp',
-      '/avatar_minh_tam.webp',
-      '/le_thao.webp',
-    ];
-
-    const items = providers.map((provider: any, idx: number) => {
+    const allItems = providers.map((provider: any) => {
       const user = provider.userId;
       const providerKey = provider._id.toString();
       const userKey = user?._id?.toString();
       const storedEarnings =
         provider.wallet?.totalEarned || provider.wallet?.availableBalance || 0;
-      let avatarUrl = provider.media?.logoUrl || user?.profile?.avatarUrl;
-      if (
-        !avatarUrl ||
-        avatarUrl.includes('unsplash.com') ||
-        avatarUrl.includes('example.com')
-      ) {
-        avatarUrl = fallbackAvatars[idx % fallbackAvatars.length];
-      }
+      const avatarUrl = this.sanitizeImageUrl(
+        provider.media?.logoUrl || user?.profile?.avatarUrl,
+      );
+      const coverUrl = this.sanitizeImageUrl(provider.media?.coverUrl);
 
       const bStat = bookingStatsMap.get(providerKey) || {
         totalRevenue: 0,
@@ -1663,11 +1700,24 @@ export class AdminStatsService {
         verif?.identityCard?.cardNumber ||
         '';
 
+      const hasExplicitZeroReviews =
+        provider.rating?.totalReviews === 0 && revList.length === 0;
+      const rating = hasExplicitZeroReviews
+        ? 0
+        : provider.rating?.averageRating
+          ? Number(provider.rating.averageRating.toFixed(1))
+          : 0;
+      const totalReviews =
+        typeof provider.rating?.totalReviews === 'number'
+          ? Math.max(provider.rating.totalReviews, revList.length)
+          : revList.length;
+
       return {
         id: providerKey,
         businessName: provider.businessName,
         ownerName: user?.profile?.fullName || 'Chưa cập nhật',
         avatar: avatarUrl,
+        coverUrl,
         email: provider.contact?.email || user?.auth?.email || '',
         phone: provider.contact?.phone || user?.auth?.phone || '',
         website: provider.contact?.website || '',
@@ -1680,6 +1730,9 @@ export class AdminStatsService {
         createdAt: provider.createdAt
           ? new Date(provider.createdAt).toLocaleDateString('vi-VN')
           : '',
+        createdAtIso: provider.createdAt
+          ? new Date(provider.createdAt).toISOString()
+          : null,
         totalProducts: prodList.length,
         completedBookings: bStat.completedCount,
         totalBookings: bStat.totalCount,
@@ -1687,9 +1740,8 @@ export class AdminStatsService {
           bStat.totalCount > 0
             ? Math.round((bStat.completedCount / bStat.totalCount) * 100)
             : 100,
-        rating: provider.rating?.averageRating
-          ? Number(provider.rating.averageRating.toFixed(1))
-          : 0,
+        rating,
+        totalReviews,
         totalEarnings: storedEarnings || bStat.totalRevenue || 0,
         isVerified,
         hasIdCard: Boolean(verif?.identityCard?.cardNumber || isVerified),
@@ -1705,13 +1757,13 @@ export class AdminStatsService {
           id: p._id.toString(),
           name: p.name,
           price: p.basePrice,
-          image: p.images?.[0] || '',
+          image: this.sanitizeImageUrl(p.images?.[0]),
           status: p.status || 'ACTIVE',
         })),
         reviews: revList.map((r: any) => ({
           id: r._id.toString(),
           customerName: r.customerId?.profile?.fullName || 'Khách hàng',
-          avatar: r.customerId?.profile?.avatarUrl || '',
+          avatar: this.sanitizeImageUrl(r.customerId?.profile?.avatarUrl),
           rating: r.rating,
           comment: r.comment,
           date: r.createdAt
@@ -1720,6 +1772,74 @@ export class AdminStatsService {
         })),
       };
     });
+
+    if (useComputedSort && sortBy) {
+      const getTime = (iso: string | null) => (iso ? new Date(iso).getTime() : 0);
+      allItems.sort((a, b) => {
+        switch (sortBy) {
+          case 'bookings_desc':
+            return (
+              b.completedBookings - a.completedBookings ||
+              b.totalBookings - a.totalBookings ||
+              b.totalProducts - a.totalProducts ||
+              getTime(b.createdAtIso) - getTime(a.createdAtIso)
+            );
+          case 'bookings_asc':
+            return (
+              a.completedBookings - b.completedBookings ||
+              a.totalBookings - b.totalBookings ||
+              getTime(b.createdAtIso) - getTime(a.createdAtIso)
+            );
+          case 'revenue_desc':
+            return (
+              b.totalEarnings - a.totalEarnings ||
+              b.completedBookings - a.completedBookings ||
+              getTime(b.createdAtIso) - getTime(a.createdAtIso)
+            );
+          case 'revenue_asc':
+            return (
+              a.totalEarnings - b.totalEarnings ||
+              a.completedBookings - b.completedBookings
+            );
+          case 'rating_desc': {
+            const aRated = a.rating > 0 ? 1 : 0;
+            const bRated = b.rating > 0 ? 1 : 0;
+            return (
+              bRated - aRated ||
+              b.rating - a.rating ||
+              b.totalReviews - a.totalReviews ||
+              b.completedBookings - a.completedBookings
+            );
+          }
+          case 'rating_asc': {
+            const aRated = a.rating > 0 ? 1 : 0;
+            const bRated = b.rating > 0 ? 1 : 0;
+            return (
+              bRated - aRated ||
+              a.rating - b.rating ||
+              a.totalReviews - b.totalReviews
+            );
+          }
+          case 'products_desc':
+            return (
+              b.totalProducts - a.totalProducts ||
+              b.completedBookings - a.completedBookings ||
+              getTime(b.createdAtIso) - getTime(a.createdAtIso)
+            );
+          case 'products_asc':
+            return (
+              a.totalProducts - b.totalProducts ||
+              getTime(b.createdAtIso) - getTime(a.createdAtIso)
+            );
+          default:
+            return getTime(b.createdAtIso) - getTime(a.createdAtIso);
+        }
+      });
+    }
+
+    const items = useComputedSort
+      ? allItems.slice((page - 1) * limit, page * limit)
+      : allItems;
 
     return {
       items,

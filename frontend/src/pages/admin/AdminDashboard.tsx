@@ -376,7 +376,9 @@ export default function AdminDashboard() {
   );
   const activeDefinition =
     tabs.find((tab) => tab.id === activeTab) || standaloneTab;
-  const avatar = user?.avatar || user?.avatarUrl || "/avatar_hanna.webp";
+  const avatar = user?.avatar || user?.avatarUrl || "";
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
+  const showAvatar = Boolean(avatar && failedAvatarUrl !== avatar);
   const isAdmin =
     user?.roles?.some((role) => role.toUpperCase() === "ADMIN") ?? false;
 
@@ -589,13 +591,24 @@ export default function AdminDashboard() {
             className="admin-refactor-profile--sidebar"
             title="System Admin - Quản trị viên hệ thống"
           >
-            <img
-              src={avatar}
-              alt="Admin"
-              onError={(e) => {
-                e.currentTarget.src = "/avatar_hanna.webp";
-              }}
-            />
+            {showAvatar ? (
+              <img
+                src={avatar}
+                alt="Admin"
+                onError={() => setFailedAvatarUrl(avatar)}
+              />
+            ) : (
+              <div
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "50%",
+                  backgroundColor: "rgba(255, 255, 255, 0.14)",
+                  flexShrink: 0,
+                }}
+                aria-hidden="true"
+              />
+            )}
             <div className="admin-profile-info">
               <strong>{user?.fullName || "System Admin"}</strong>
               <span>Quản trị viên hệ thống</span>
@@ -741,31 +754,32 @@ export default function AdminDashboard() {
           </div>
 
           <div className="admin-refactor-header__actions">
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "8px",
-                height: "34px",
-                padding: "0 12px",
-                background: "#FFFFFF",
-                border: "1px solid #E5E7EB",
-                borderRadius: "8px",
-                fontSize: "12px",
-                color: "#374151",
-                fontWeight: 500,
-                cursor: "pointer",
-              }}
-            >
-              <Calendar size={13} color="#881337" />
-              <span>{(() => {
-                const now = new Date();
-                const m = String(now.getMonth() + 1).padStart(2, '0');
-                const y = now.getFullYear();
-                const last = new Date(y, now.getMonth() + 1, 0).getDate();
-                return `01/${m}/${y} - ${last}/${m}/${y}`;
-              })()}</span>
-            </div>
+            {activeTab === "overview" && (
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  height: "34px",
+                  padding: "0 12px",
+                  background: "#FFFFFF",
+                  border: "1px solid #E5E7EB",
+                  borderRadius: "8px",
+                  fontSize: "12px",
+                  color: "#374151",
+                  fontWeight: 500,
+                }}
+              >
+                <Calendar size={13} color="#881337" />
+                <span>{(() => {
+                  const now = new Date();
+                  const m = String(now.getMonth() + 1).padStart(2, '0');
+                  const y = now.getFullYear();
+                  const last = new Date(y, now.getMonth() + 1, 0).getDate();
+                  return `01/${m}/${y} - ${last}/${m}/${y}`;
+                })()}</span>
+              </div>
+            )}
 
             <div className="admin-refactor-notification">
               <button
@@ -872,11 +886,25 @@ export default function AdminDashboard() {
               className="admin-refactor-profile admin-refactor-profile--header"
               style={{ display: "flex", alignItems: "center", gap: "9px" }}
             >
-              <img
-                src={avatar}
-                alt="Admin"
-                style={{ width: "34px", height: "34px", borderRadius: "50%" }}
-              />
+              {showAvatar ? (
+                <img
+                  src={avatar}
+                  alt="Admin"
+                  style={{ width: "34px", height: "34px", borderRadius: "50%" }}
+                  onError={() => setFailedAvatarUrl(avatar)}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: "34px",
+                    height: "34px",
+                    borderRadius: "50%",
+                    backgroundColor: "#F3F4F6",
+                    flexShrink: 0,
+                  }}
+                  aria-hidden="true"
+                />
+              )}
               <div
                 style={{
                   display: "flex",

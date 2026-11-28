@@ -9,11 +9,13 @@ import {
   TrendingDown,
 } from 'lucide-react';
 import type { ProviderOverviewKpis } from '../types';
+import type { OverviewNavigateOptions } from '../ProviderOverviewPanel';
+import { getRentalOrderTabId } from '../../orders/rentalOrderFilters';
 
 interface MetricCardsProps {
   kpis?: ProviderOverviewKpis;
   isLoading?: boolean;
-  onNavigate?: (view: any) => void;
+  onNavigate?: (view: string, options?: OverviewNavigateOptions) => void;
 }
 
 export const OverviewMetricCards: React.FC<MetricCardsProps> = ({
@@ -41,8 +43,9 @@ export const OverviewMetricCards: React.FC<MetricCardsProps> = ({
     );
   }
 
-  // Card 1: Revenue this month
+  // Card 1: Revenue this month & cumulative settled earnings
   const revenueDisplay = formatVnd(kpis?.revenueThisMonth);
+  const lifetimeEarnings = kpis?.lifetimeNetEarnings;
   const revChangePct = kpis?.revenueChangePct;
   const isPositiveTrend = revChangePct != null && revChangePct > 0;
   const isNegativeTrend = revChangePct != null && revChangePct < 0;
@@ -103,6 +106,11 @@ export const OverviewMetricCards: React.FC<MetricCardsProps> = ({
         </div>
         <div className="po-metric-card-bottom">
           <div className="po-metric-value">{revenueDisplay}</div>
+          {lifetimeEarnings != null && (
+            <div className="po-metric-lifetime">
+              Tích lũy thực nhận: <strong>{formatVnd(lifetimeEarnings)}</strong>
+            </div>
+          )}
           <div className="po-metric-footer">
             {isPositiveTrend ? (
               <span className="po-trend-badge-green">
@@ -127,7 +135,12 @@ export const OverviewMetricCards: React.FC<MetricCardsProps> = ({
       {/* 2. Booking mới cần xác nhận */}
       <div
         className="po-metric-card"
-        onClick={() => onNavigate?.('orders')}
+        onClick={() =>
+          onNavigate?.('orders', {
+            orderTab: pendingCount > 0 ? 'Chờ xử lý' : 'Tất cả',
+            clearMonthFilter: pendingCount > 0,
+          })
+        }
         role="button"
         tabIndex={0}
         id="card-new-bookings"
@@ -197,7 +210,21 @@ export const OverviewMetricCards: React.FC<MetricCardsProps> = ({
       {/* 4. Đang thuê áo dài */}
       <div
         className="po-metric-card"
-        onClick={() => onNavigate?.('orders')}
+        onClick={() => {
+          if (overdueCount > 0) {
+            onNavigate?.('orders', { taskType: 'RETURN_OVERDUE' });
+          } else if (returnsDueTodayCount > 0) {
+            onNavigate?.('orders', { taskType: 'RETURN_DUE' });
+          } else if (rentedCount > 0) {
+            onNavigate?.('orders', {
+              orderTab: getRentalOrderTabId('RENTING'),
+              bookingTypeFilter: 'HAS_RENTAL',
+              clearMonthFilter: true,
+            });
+          } else {
+            onNavigate?.('orders');
+          }
+        }}
         role="button"
         tabIndex={0}
         id="card-rented-items"

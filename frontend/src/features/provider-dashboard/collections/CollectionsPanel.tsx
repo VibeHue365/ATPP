@@ -26,18 +26,7 @@ import type { useProviderNavigationState } from '../hooks/useProviderNavigationS
 import { getImageUrl } from '../shared/mediaHelpers';
 import type { Product } from '../types';
 import type { useProviderProductsState } from './useProviderProductsState';
-import traditionalAoDaiImg from '../../../assets/images/onboarding_traditional.webp';
 import './productsServicesFigma.css';
-
-const FALLBACK_AODAI_IMAGE = 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=400&q=80';
-
-// Curated high quality gallery images for preview carousel
-const MOCK_GALLERY = [
-  'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=800&q=80',
-  'https://images.unsplash.com/photo-1617627143750-d86bc21e42bb?auto=format&fit=crop&w=800&q=80',
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80',
-  'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=800&q=80',
-];
 
 type CollectionsPanelProps = Pick<ReturnType<typeof useProviderNavigationState>,
   'collectionTab' | 'setCollectionTab'
@@ -104,7 +93,7 @@ export function CollectionsPanel({
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, []);
 
-  // Safe image resolver with solid fallback
+  // Safe image resolver (returns empty string when missing — no stock image fallback)
   const resolveProductImg = (p: Product, index = 0): string => {
     if (p.images && p.images.length > index && p.images[index]) {
       return getImageUrl(p.images[index]);
@@ -112,7 +101,7 @@ export function CollectionsPanel({
     if (p.images && p.images.length > 0 && p.images[0]) {
       return getImageUrl(p.images[0]);
     }
-    return traditionalAoDaiImg || FALLBACK_AODAI_IMAGE;
+    return '';
   };
 
   // Status badge renderer respecting moderation and lifecycle status
@@ -230,20 +219,14 @@ export function CollectionsPanel({
     return displayProducts.find((p) => p._id === selectedProductId) || displayProducts[0] || null;
   }, [selectedProductId, displayProducts]);
 
-  // Build gallery array for selected product
+  // Build gallery array for selected product (real uploaded images only)
   const productGallery = useMemo(() => {
-    if (!selectedProduct) return MOCK_GALLERY;
+    if (!selectedProduct) return [];
     const imgs: string[] = [];
     if (selectedProduct.images && selectedProduct.images.length > 0) {
       selectedProduct.images.forEach((img) => {
         if (img) imgs.push(getImageUrl(img));
       });
-    }
-    // Pad with fallbacks if fewer than 4 images for rich layout
-    let mockIdx = 0;
-    while (imgs.length < 4) {
-      imgs.push(MOCK_GALLERY[mockIdx % MOCK_GALLERY.length]);
-      mockIdx++;
     }
     return imgs;
   }, [selectedProduct]);
@@ -383,8 +366,8 @@ export function CollectionsPanel({
                 <div>
                   <div className="ps-metric-num">{metrics.totalProd}</div>
                   <div className="ps-metric-title">Tổng sản phẩm</div>
-                  <div className="ps-metric-sub" style={{ color: '#059669', fontWeight: 650 }}>
-                    ↑ 12% so với tháng trước
+                  <div className="ps-metric-sub" style={{ color: '#64748B', fontWeight: 600 }}>
+                    {metrics.activeProd} đang bán · {metrics.hiddenProd} đang ẩn
                   </div>
                 </div>
               </div>
@@ -397,8 +380,10 @@ export function CollectionsPanel({
                 <div>
                   <div className="ps-metric-num">{metrics.totalStock}</div>
                   <div className="ps-metric-title">Tổng hiện vật</div>
-                  <div className="ps-metric-sub" style={{ color: '#059669', fontWeight: 650 }}>
-                    ↑ 8% so với tháng trước
+                  <div className="ps-metric-sub" style={{ color: '#64748B', fontWeight: 600 }}>
+                    {metrics.totalProd > 0
+                      ? `TB ${(metrics.totalStock / metrics.totalProd).toFixed(1)} chiếc/mẫu`
+                      : 'Chưa có hiện vật trong kho'}
                   </div>
                 </div>
               </div>
@@ -572,18 +557,17 @@ export function CollectionsPanel({
                       className={`ps-card ${isSelected ? 'selected' : ''}`}
                     >
                       {/* Thumbnail with Badge & Fav */}
-                      <div className="ps-card-img-wrap">
-                        <img
-                          src={primaryImg}
-                          alt={p.name}
-                          className="ps-card-img"
-                          onError={(e) => {
-                            const el = e.target as HTMLImageElement;
-                            if (el.src !== FALLBACK_AODAI_IMAGE) {
-                              el.src = FALLBACK_AODAI_IMAGE;
-                            }
-                          }}
-                        />
+                      <div className="ps-card-img-wrap" style={{ backgroundColor: '#F3EFE8' }}>
+                        {primaryImg && (
+                          <img
+                            src={primaryImg}
+                            alt={p.name}
+                            className="ps-card-img"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        )}
 
                         {/* Status Badge */}
                         {renderProductStatusBadge(p)}
@@ -715,17 +699,21 @@ export function CollectionsPanel({
                         >
                           <td className="ps-td">
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                              <img
-                                src={primaryImg}
-                                alt={p.name}
-                                style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'cover' }}
-                                onError={(e) => {
-                                  const el = e.target as HTMLImageElement;
-                                  if (el.src !== FALLBACK_AODAI_IMAGE) {
-                                    el.src = FALLBACK_AODAI_IMAGE;
-                                  }
-                                }}
-                              />
+                              {primaryImg ? (
+                                <img
+                                  src={primaryImg}
+                                  alt={p.name}
+                                  style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'cover', backgroundColor: '#F3EFE8' }}
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                  }}
+                                />
+                              ) : (
+                                <div
+                                  style={{ width: 44, height: 44, borderRadius: 8, backgroundColor: '#F3EFE8', flexShrink: 0 }}
+                                  aria-hidden="true"
+                                />
+                              )}
                               <div>
                                 <strong style={{ fontSize: '13.5px', color: '#111827', display: 'block' }}>
                                   {p.name}
@@ -883,18 +871,17 @@ export function CollectionsPanel({
             <div className="ps-drawer-scrollable">
               {/* Gallery Carousel */}
               <div className="ps-carousel-wrap">
-                <div className="ps-carousel-main">
-                  <img
-                    src={productGallery[carouselIdx] || resolveProductImg(selectedProduct)}
-                    alt={selectedProduct.name}
-                    className="ps-carousel-main-img"
-                    onError={(e) => {
-                      const el = e.target as HTMLImageElement;
-                      if (el.src !== FALLBACK_AODAI_IMAGE) {
-                        el.src = FALLBACK_AODAI_IMAGE;
-                      }
-                    }}
-                  />
+                <div className="ps-carousel-main" style={{ backgroundColor: '#F3EFE8' }}>
+                  {(productGallery[carouselIdx] || resolveProductImg(selectedProduct)) && (
+                    <img
+                      src={productGallery[carouselIdx] || resolveProductImg(selectedProduct)}
+                      alt={selectedProduct.name}
+                      className="ps-carousel-main-img"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  )}
 
                   {productGallery.length > 1 && (
                     <>
@@ -918,29 +905,28 @@ export function CollectionsPanel({
                   )}
                 </div>
 
-                {/* 4 Thumbnails Row */}
-                <div className="ps-thumbnails-row">
-                  {productGallery.slice(0, 4).map((imgUrl, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setCarouselIdx(idx)}
-                      className={`ps-thumb-btn ${carouselIdx === idx ? 'active' : ''}`}
-                    >
-                      <img
-                        src={imgUrl}
-                        alt={`Thumb ${idx + 1}`}
-                        className="ps-thumb-img"
-                        onError={(e) => {
-                          const el = e.target as HTMLImageElement;
-                          if (el.src !== FALLBACK_AODAI_IMAGE) {
-                            el.src = FALLBACK_AODAI_IMAGE;
-                          }
-                        }}
-                      />
-                    </button>
-                  ))}
-                </div>
+                {/* Thumbnails Row (only when multiple images exist) */}
+                {productGallery.length > 1 && (
+                  <div className="ps-thumbnails-row">
+                    {productGallery.slice(0, 4).map((imgUrl, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setCarouselIdx(idx)}
+                        className={`ps-thumb-btn ${carouselIdx === idx ? 'active' : ''}`}
+                      >
+                        <img
+                          src={imgUrl}
+                          alt={`Thumb ${idx + 1}`}
+                          className="ps-thumb-img"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Product Meta & Quick Action Buttons */}

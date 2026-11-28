@@ -569,8 +569,8 @@ export const CategoryManagement: React.FC = () => {
             <span className="lume-category-kpi-label">Tổng danh mục</span>
           </div>
           <div className="lume-category-kpi-value">{kpis.total}</div>
-          <div className="lume-category-kpi-trend green">
-            ↑ +12% so với tháng trước
+          <div className="lume-category-kpi-trend gray">
+            {kpis.rootCount} gốc · {kpis.subCount} mục con
           </div>
         </div>
 
@@ -584,7 +584,7 @@ export const CategoryManagement: React.FC = () => {
           </div>
           <div className="lume-category-kpi-value">{kpis.active}</div>
           <div className="lume-category-kpi-trend green">
-            ↑ +6%
+            {kpis.total > 0 ? `${Math.round((kpis.active / kpis.total) * 100)}% tổng danh mục` : 'Chưa có danh mục'}
           </div>
         </div>
 
@@ -598,7 +598,7 @@ export const CategoryManagement: React.FC = () => {
           </div>
           <div className="lume-category-kpi-value">{kpis.rootCount}</div>
           <div className="lume-category-kpi-trend gray">
-            → Không đổi
+            {kpis.total > 0 ? `${Math.round((kpis.rootCount / kpis.total) * 100)}% tổng danh mục` : 'Nhóm gốc'}
           </div>
         </div>
 
@@ -611,8 +611,8 @@ export const CategoryManagement: React.FC = () => {
             <span className="lume-category-kpi-label">Danh mục cần rà soát</span>
           </div>
           <div className="lume-category-kpi-value">{kpis.reviewCount}</div>
-          <div className="lume-category-kpi-trend red">
-            ↑ +33%
+          <div className={`lume-category-kpi-trend ${kpis.reviewCount > 0 ? 'red' : 'gray'}`}>
+            {kpis.reviewCount > 0 ? 'Cần kiểm tra nội dung' : 'Không có mục cảnh báo'}
           </div>
         </div>
 
@@ -625,8 +625,8 @@ export const CategoryManagement: React.FC = () => {
             <span className="lume-category-kpi-label">Tổng mục con</span>
           </div>
           <div className="lume-category-kpi-value">{kpis.subCount}</div>
-          <div className="lume-category-kpi-trend green">
-            ↑ +8%
+          <div className="lume-category-kpi-trend gray">
+            {kpis.rootCount > 0 ? `TB ${(kpis.subCount / kpis.rootCount).toFixed(1)} mục con / gốc` : 'Chưa có mục con'}
           </div>
         </div>
       </div>

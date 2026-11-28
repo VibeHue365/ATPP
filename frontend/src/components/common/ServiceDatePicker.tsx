@@ -26,6 +26,7 @@ export interface ServiceDatePickerProps {
   onChange: (val: ServiceDateValue) => void;
   id?: string;
   className?: string;
+  displayMode?: 'stacked' | 'inline';
 }
 
 const VIETNAMESE_WEEKDAYS = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'CN'];
@@ -83,6 +84,7 @@ export const ServiceDatePicker: React.FC<ServiceDatePickerProps> = ({
   onChange,
   id,
   className = '',
+  displayMode = 'stacked',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -303,13 +305,23 @@ export const ServiceDatePicker: React.FC<ServiceDatePickerProps> = ({
 
   // Render Label on trigger button
   const renderTriggerContent = () => {
+    const isInline = displayMode === 'inline';
+
     if (serviceType === 'photographer') {
       if (value.singleDate || value.startDate) {
         const d = value.singleDate || value.startDate;
         const slot = value.timeSlot || `${value.startTime || '08:00'} - ${value.endTime || '10:30'}`;
+        if (isInline) {
+          const text = `${formatDateShort(d)} · ${slot}`;
+          return (
+            <div className="sdp-trigger-content sdp-trigger-content--inline">
+              <span className="sdp-trigger-main" title={text}>{text}</span>
+            </div>
+          );
+        }
         return (
           <div className="sdp-trigger-content">
-            <span className="sdp-trigger-main">{formatDateShort(d)}</span>
+            <span className="sdp-trigger-main" title={formatDateShort(d)}>{formatDateShort(d)}</span>
             <span className="sdp-trigger-sub">Ca chụp: {slot}</span>
           </div>
         );
@@ -321,9 +333,17 @@ export const ServiceDatePicker: React.FC<ServiceDatePickerProps> = ({
       if (value.singleDate || value.startDate) {
         const d = value.singleDate || value.startDate;
         const slot = value.timeSlot || `${value.startTime || '08:00'} - ${value.endTime || '11:00'}`;
+        if (isInline) {
+          const text = `${formatDateShort(d)} · ${slot}`;
+          return (
+            <div className="sdp-trigger-content sdp-trigger-content--inline">
+              <span className="sdp-trigger-main" title={text}>{text}</span>
+            </div>
+          );
+        }
         return (
           <div className="sdp-trigger-content">
-            <span className="sdp-trigger-main">{formatDateShort(d)}</span>
+            <span className="sdp-trigger-main" title={formatDateShort(d)}>{formatDateShort(d)}</span>
             <span className="sdp-trigger-sub">Lịch combo: {slot}</span>
           </div>
         );
@@ -335,10 +355,19 @@ export const ServiceDatePicker: React.FC<ServiceDatePickerProps> = ({
     if (value.rentalType === 'HOURLY') {
       if (value.singleDate || value.startDate) {
         const d = value.singleDate || value.startDate;
+        const slot = `${value.startTime || '08:00'} - ${value.endTime || '11:00'}`;
+        if (isInline) {
+          const text = `${formatDateShort(d)} · ${slot}`;
+          return (
+            <div className="sdp-trigger-content sdp-trigger-content--inline">
+              <span className="sdp-trigger-main" title={text}>{text}</span>
+            </div>
+          );
+        }
         return (
           <div className="sdp-trigger-content">
-            <span className="sdp-trigger-main">{formatDateShort(d)}</span>
-            <span className="sdp-trigger-sub">{value.startTime || '08:00'} - {value.endTime || '11:00'} (Theo giờ)</span>
+            <span className="sdp-trigger-main" title={formatDateShort(d)}>{formatDateShort(d)}</span>
+            <span className="sdp-trigger-sub">{slot} (Theo giờ)</span>
           </div>
         );
       }
@@ -348,18 +377,34 @@ export const ServiceDatePicker: React.FC<ServiceDatePickerProps> = ({
     // Ao Dai DAILY
     if (value.startDate) {
       if (value.endDate && value.endDate !== value.startDate) {
+        const rangeText = `${formatDateShort(value.startDate)} - ${formatDateShort(value.endDate)}`;
+        if (isInline) {
+          return (
+            <div className="sdp-trigger-content sdp-trigger-content--inline">
+              <span className="sdp-trigger-main" title={rangeText}>{rangeText}</span>
+            </div>
+          );
+        }
         return (
           <div className="sdp-trigger-content">
-            <span className="sdp-trigger-main">
-              {formatDateShort(value.startDate)} - {formatDateShort(value.endDate)}
+            <span className="sdp-trigger-main" title={rangeText}>
+              {rangeText}
             </span>
             <span className="sdp-trigger-sub">Thuê theo ngày</span>
           </div>
         );
       }
+      const singleText = formatDateShort(value.startDate);
+      if (isInline) {
+        return (
+          <div className="sdp-trigger-content sdp-trigger-content--inline">
+            <span className="sdp-trigger-main" title={singleText}>{singleText}</span>
+          </div>
+        );
+      }
       return (
         <div className="sdp-trigger-content">
-          <span className="sdp-trigger-main">{formatDateShort(value.startDate)}</span>
+          <span className="sdp-trigger-main" title={singleText}>{singleText}</span>
           <span className="sdp-trigger-sub">Nhận trong ngày</span>
         </div>
       );

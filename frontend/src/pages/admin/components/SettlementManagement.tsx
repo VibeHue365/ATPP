@@ -63,6 +63,7 @@ interface Settlement {
   netAmount: number;
   refundAmount: number;
   penaltyAmount: number;
+  compensationAmount?: number;
   payableAmount: number;
   status: 'READY_TO_SETTLE' | 'ON_HOLD' | 'SETTLED' | 'CANCELLED';
   holdReason?: string;
@@ -73,6 +74,27 @@ interface Settlement {
   settledAt?: string;
   createdAt: string;
 }
+
+interface SettlementSummaryBucket {
+  amount: number;
+  count: number;
+}
+
+interface SettlementSummary {
+  pending: SettlementSummaryBucket;
+  settled: SettlementSummaryBucket;
+  held: SettlementSummaryBucket;
+  cancelled: SettlementSummaryBucket;
+  totalCount: number;
+}
+
+const EMPTY_SUMMARY: SettlementSummary = {
+  pending: { amount: 0, count: 0 },
+  settled: { amount: 0, count: 0 },
+  held: { amount: 0, count: 0 },
+  cancelled: { amount: 0, count: 0 },
+  totalCount: 0,
+};
 
 export const SettlementManagement: React.FC = () => {
   const toast = useToast();
@@ -92,13 +114,8 @@ export const SettlementManagement: React.FC = () => {
   const [appliedFilters, setAppliedFilters] = useState({ bookingId: '', providerId: '', fromDate: '', toDate: '' });
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
 
-  // Stats
-  const [stats, setStats] = useState({
-    pending: 0,
-    settled: 0,
-    held: 0,
-    cancelled: 0
-  });
+  // Stats (global summary from backend across all pages & statuses)
+  const [stats, setStats] = useState<SettlementSummary>(EMPTY_SUMMARY);
 
   const fetchSettlements = useCallback(async () => {
     setLoading(true);
@@ -112,23 +129,44 @@ export const SettlementManagement: React.FC = () => {
       Object.entries(appliedFilters).forEach(([key, value]) => {
         if (value) params.set(key, value);
       });
-      const res = await httpClient.get<{ items: Settlement[]; pagination: typeof pagination }>(`/admin/settlements?${params.toString()}`);
+      const res = await httpClient.get<{
+        items: Settlement[];
+        pagination: typeof pagination;
+        summary?: SettlementSummary;
+      }>(`/admin/settlements?${params.toString()}`);
       const items = res.items || [];
       setSettlements(items);
       setPagination(res.pagination);
 
-      // Calculate stats based on fetched items
-      const pendingSum = items.filter((s: any) => s.status === 'READY_TO_SETTLE').reduce((sum: number, s: any) => sum + (s.payableAmount ?? 0), 0);
-      const settledSum = items.filter((s: any) => s.status === 'SETTLED').reduce((sum: number, s: any) => sum + (s.payableAmount ?? 0), 0);
-      const heldSum = items.filter((s: any) => s.status === 'ON_HOLD').reduce((sum: number, s: any) => sum + (s.payableAmount ?? 0), 0);
-      const cancelledSum = items.filter((s: any) => s.status === 'CANCELLED').reduce((sum: number, s: any) => sum + (s.payableAmount ?? 0), 0);
-
-      setStats({
-        pending: pendingSum,
-        settled: settledSum,
-        held: heldSum,
-        cancelled: cancelledSum,
-      });
+      if (res.summary) {
+        setStats(res.summary);
+      } else {
+        const sumByStatus = (target: Settlement['status']) => {
+          const matched = items.filter((s) => s.status === target);
+          return {
+            amount: matched.reduce(
+              (sum, s) =>
+                sum +
+                (target === 'CANCELLED'
+                  ? (s.netAmount ?? s.payableAmount ?? 0)
+                  : (s.payableAmount ?? 0)),
+              0,
+            ),
+            count: matched.length,
+          };
+        };
+        const pending = sumByStatus('READY_TO_SETTLE');
+        const settled = sumByStatus('SETTLED');
+        const held = sumByStatus('ON_HOLD');
+        const cancelled = sumByStatus('CANCELLED');
+        setStats({
+          pending,
+          settled,
+          held,
+          cancelled,
+          totalCount: pending.count + settled.count + held.count + cancelled.count,
+        });
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Không thể tải danh sách quyết toán';
       setError(message);
@@ -299,12 +337,21 @@ export const SettlementManagement: React.FC = () => {
       const q = searchQuery.toLowerCase();
       list = list.filter(s =>
         s.settlementCode.toLowerCase().includes(q) ||
-        bookingLabel(s.bookingId).toLowerCase().includes(q)
+        bookingLabel(s.bookingId).toLowerCase().includes(q) ||
+        providerLabel(s.providerId).toLowerCase().includes(q)
       );
     }
 
     return list;
   };
+
+  const hasContextFilters = Boolean(
+    appliedFilters.bookingId ||
+      appliedFilters.providerId ||
+      appliedFilters.fromDate ||
+      appliedFilters.toDate,
+  );
+  const summaryScopeLabel = hasContextFilters ? 'Theo bộ lọc hiện tại' : 'Toàn bộ hệ thống';
 
   const applyFilters = () => {
     setPagination((current) => ({ ...current, page: 1 }));
@@ -314,6 +361,20 @@ export const SettlementManagement: React.FC = () => {
       fromDate: fromDateDraft ? `${fromDateDraft}T00:00:00.000Z` : '',
       toDate: toDateDraft ? `${toDateDraft}T23:59:59.999Z` : '',
     });
+  };
+
+  const clearFilters = () => {
+    setBookingIdDraft('');
+    setProviderIdDraft('');
+    setFromDateDraft('');
+    setToDateDraft('');
+    setPagination((current) => ({ ...current, page: 1 }));
+    setAppliedFilters({ bookingId: '', providerId: '', fromDate: '', toDate: '' });
+  };
+
+  const selectStatusTab = (status: string) => {
+    setStatusFilter(status);
+    setPagination((current) => ({ ...current, page: 1 }));
   };
 
   const formatMoney = (value: number) => `${(value || 0).toLocaleString('vi-VN')}đ`;
@@ -327,28 +388,100 @@ export const SettlementManagement: React.FC = () => {
 
       {/* Metric Cards Row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
-        <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E8E2D5', padding: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.01)' }}>
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => selectStatusTab(statusFilter === 'READY_TO_SETTLE' ? 'ALL' : 'READY_TO_SETTLE')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              selectStatusTab(statusFilter === 'READY_TO_SETTLE' ? 'ALL' : 'READY_TO_SETTLE');
+            }
+          }}
+          style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            border: statusFilter === 'READY_TO_SETTLE' ? '1.5px solid #B89047' : '1px solid #E8E2D5',
+            padding: '20px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.01)',
+            cursor: 'pointer',
+          }}
+        >
           <div style={{ fontSize: '11px', fontWeight: 700, color: '#7A7A7A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Chờ quyết toán</div>
-          <div style={{ fontSize: '22px', fontWeight: 800, marginTop: '6px', color: '#B89047' }}>{stats.pending.toLocaleString()}đ</div>
-          <div style={{ fontSize: '11px', color: '#7A7A7A', marginTop: '4px' }}>Tổng trên trang hiện tại</div>
+          <div style={{ fontSize: '22px', fontWeight: 800, marginTop: '6px', color: '#B89047' }}>{stats.pending.amount.toLocaleString('vi-VN')}đ</div>
+          <div style={{ fontSize: '11px', color: '#7A7A7A', marginTop: '4px' }}>{stats.pending.count.toLocaleString('vi-VN')} phiếu · {summaryScopeLabel}</div>
         </div>
 
-        <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E8E2D5', padding: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.01)' }}>
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => selectStatusTab(statusFilter === 'SETTLED' ? 'ALL' : 'SETTLED')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              selectStatusTab(statusFilter === 'SETTLED' ? 'ALL' : 'SETTLED');
+            }
+          }}
+          style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            border: statusFilter === 'SETTLED' ? '1.5px solid #166534' : '1px solid #E8E2D5',
+            padding: '20px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.01)',
+            cursor: 'pointer',
+          }}
+        >
           <div style={{ fontSize: '11px', fontWeight: 700, color: '#7A7A7A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Đã giải ngân</div>
-          <div style={{ fontSize: '22px', fontWeight: 800, marginTop: '6px', color: '#166534' }}>{stats.settled.toLocaleString()}đ</div>
-          <div style={{ fontSize: '11px', color: '#706E3B', marginTop: '4px', fontWeight: 600 }}>Tổng trên trang hiện tại</div>
+          <div style={{ fontSize: '22px', fontWeight: 800, marginTop: '6px', color: '#166534' }}>{stats.settled.amount.toLocaleString('vi-VN')}đ</div>
+          <div style={{ fontSize: '11px', color: '#706E3B', marginTop: '4px', fontWeight: 600 }}>{stats.settled.count.toLocaleString('vi-VN')} phiếu · {summaryScopeLabel}</div>
         </div>
 
-        <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E8E2D5', padding: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.01)' }}>
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => selectStatusTab(statusFilter === 'ON_HOLD' ? 'ALL' : 'ON_HOLD')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              selectStatusTab(statusFilter === 'ON_HOLD' ? 'ALL' : 'ON_HOLD');
+            }
+          }}
+          style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            border: statusFilter === 'ON_HOLD' ? '1.5px solid #4A0E17' : '1px solid #E8E2D5',
+            padding: '20px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.01)',
+            cursor: 'pointer',
+          }}
+        >
           <div style={{ fontSize: '11px', fontWeight: 700, color: '#7A7A7A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Đang tạm giữ</div>
-          <div style={{ fontSize: '22px', fontWeight: 800, marginTop: '6px', color: '#4A0E17' }}>{stats.held.toLocaleString()}đ</div>
-          <div style={{ fontSize: '11px', color: '#991B1B', marginTop: '4px', fontWeight: 600 }}>Tổng trên trang hiện tại</div>
+          <div style={{ fontSize: '22px', fontWeight: 800, marginTop: '6px', color: '#4A0E17' }}>{stats.held.amount.toLocaleString('vi-VN')}đ</div>
+          <div style={{ fontSize: '11px', color: '#991B1B', marginTop: '4px', fontWeight: 600 }}>{stats.held.count.toLocaleString('vi-VN')} phiếu · {summaryScopeLabel}</div>
         </div>
 
-        <div style={{ backgroundColor: 'white', borderRadius: '12px', border: '1px solid #E8E2D5', padding: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.01)' }}>
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => selectStatusTab(statusFilter === 'CANCELLED' ? 'ALL' : 'CANCELLED')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              selectStatusTab(statusFilter === 'CANCELLED' ? 'ALL' : 'CANCELLED');
+            }
+          }}
+          style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            border: statusFilter === 'CANCELLED' ? '1.5px solid #2B6CB0' : '1px solid #E8E2D5',
+            padding: '20px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.01)',
+            cursor: 'pointer',
+          }}
+        >
           <div style={{ fontSize: '11px', fontWeight: 700, color: '#7A7A7A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Đã hủy quyết toán</div>
-          <div style={{ fontSize: '22px', fontWeight: 800, marginTop: '6px', color: '#2B6CB0' }}>{stats.cancelled.toLocaleString()}đ</div>
-          <div style={{ fontSize: '11px', color: '#7A7A7A', marginTop: '4px' }}>Tổng trên trang hiện tại</div>
+          <div style={{ fontSize: '22px', fontWeight: 800, marginTop: '6px', color: '#2B6CB0' }}>{stats.cancelled.amount.toLocaleString('vi-VN')}đ</div>
+          <div style={{ fontSize: '11px', color: '#7A7A7A', marginTop: '4px' }}>{stats.cancelled.count.toLocaleString('vi-VN')} phiếu · {summaryScopeLabel}</div>
         </div>
       </div>
 
@@ -376,7 +509,7 @@ export const SettlementManagement: React.FC = () => {
           <Search size={16} color="#7A7A7A" />
           <input
             type="text"
-            placeholder="Tìm trong trang theo mã quyết toán, mã booking..."
+            placeholder="Tìm trong trang theo mã quyết toán, booking, nhà cung cấp..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{ border: 'none', background: 'none', padding: '8px 12px', fontSize: '13px', width: '100%', outline: 'none' }}
@@ -384,13 +517,16 @@ export const SettlementManagement: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            {['ALL', 'READY_TO_SETTLE', 'ON_HOLD', 'SETTLED', 'CANCELLED'].map(status => (
+            {[
+              { id: 'ALL', label: 'TẤT CẢ', count: stats.totalCount },
+              { id: 'READY_TO_SETTLE', label: 'CHỜ PAYOUT', count: stats.pending.count },
+              { id: 'ON_HOLD', label: 'TẠM GIỮ', count: stats.held.count },
+              { id: 'SETTLED', label: 'ĐÃ TRẢ TIỀN', count: stats.settled.count },
+              { id: 'CANCELLED', label: 'ĐÃ HỦY', count: stats.cancelled.count },
+            ].map((tab) => (
               <button
-                key={status}
-                onClick={() => {
-                  setStatusFilter(status);
-                  setPagination((current) => ({ ...current, page: 1 }));
-                }}
+                key={tab.id}
+                onClick={() => selectStatusTab(tab.id)}
                 style={{
                   padding: '6px 12px',
                   border: '1px solid #E8E2D5',
@@ -398,12 +534,12 @@ export const SettlementManagement: React.FC = () => {
                   fontSize: '11px',
                   fontWeight: 700,
                   cursor: 'pointer',
-                  backgroundColor: statusFilter === status ? '#4A0E17' : 'white',
-                  color: statusFilter === status ? 'white' : '#2A2A2A',
+                  backgroundColor: statusFilter === tab.id ? '#4A0E17' : 'white',
+                  color: statusFilter === tab.id ? 'white' : '#2A2A2A',
                   transition: 'all 0.15s'
                 }}
               >
-                {status === 'ALL' ? 'TẤT CẢ' : status === 'READY_TO_SETTLE' ? 'CHỜ PAYOUT' : status === 'ON_HOLD' ? 'TẠM GIỮ' : status === 'SETTLED' ? 'ĐÃ TRẢ TIỀN' : 'ĐÃ HỦY'}
+                {tab.label} ({tab.count})
               </button>
             ))}
         </div>
@@ -427,7 +563,10 @@ export const SettlementManagement: React.FC = () => {
           <input type="date" value={toDateDraft} onChange={(event) => setToDateDraft(event.target.value)} style={{ padding: '8px 10px', border: '1px solid #D9D1C4', borderRadius: '6px' }} />
         </label>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={applyFilters} style={{ padding: '9px 18px', border: 'none', borderRadius: '6px', backgroundColor: '#4A0E17', color: 'white', fontWeight: 700, cursor: 'pointer' }}>Lọc dữ liệu</button>
+          <button onClick={applyFilters} style={{ padding: '9px 18px', border: 'none', borderRadius: '6px', backgroundColor: '#4A0E17', color: 'white', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>Lọc dữ liệu</button>
+          {(hasContextFilters || bookingIdDraft || providerIdDraft || fromDateDraft || toDateDraft) && (
+            <button onClick={clearFilters} style={{ padding: '9px 12px', border: '1px solid #D9D1C4', borderRadius: '6px', backgroundColor: '#FAF6F0', color: '#5F5A52', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>Xóa lọc</button>
+          )}
           <button disabled={actionId === 'regenerate'} onClick={() => void handleRegenerateByBooking()} style={{ padding: '9px 14px', border: '1px solid #706E3B', borderRadius: '6px', backgroundColor: 'white', color: '#706E3B', fontWeight: 700, cursor: actionId === 'regenerate' ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}>Tạo lại</button>
         </div>
       </div>
@@ -483,7 +622,27 @@ export const SettlementManagement: React.FC = () => {
                         -{(s.commissionAmount ?? 0).toLocaleString()}đ
                         <span style={{ display: 'block', fontSize: '10px', color: '#7A7A7A' }}>{((s.commissionRate ?? 0) * 100).toLocaleString('vi-VN')}%</span>
                       </td>
-                      <td style={{ padding: '16px 20px', textAlign: 'right', color: '#166534', fontWeight: 800 }}>{(s.payableAmount ?? 0).toLocaleString()}đ</td>
+                      <td
+                        style={{
+                          padding: '16px 20px',
+                          textAlign: 'right',
+                          color: s.status === 'CANCELLED' ? '#6B7280' : '#166534',
+                          fontWeight: 800,
+                        }}
+                      >
+                        <div>{(s.payableAmount ?? 0).toLocaleString('vi-VN')}đ</div>
+                        {s.status === 'CANCELLED' && (s.payableAmount ?? 0) === 0 && (s.netAmount ?? 0) > 0 && (
+                          <span style={{ display: 'block', fontSize: '10px', color: '#7A7A7A', fontWeight: 600 }}>
+                            Gốc: {(s.netAmount ?? 0).toLocaleString('vi-VN')}đ
+                            {(s.refundAmount ?? 0) > 0 ? ' (đã hoàn)' : ' (đã hủy)'}
+                          </span>
+                        )}
+                        {(s.compensationAmount ?? 0) > 0 && (
+                          <span style={{ display: 'block', fontSize: '10px', color: '#706E3B', fontWeight: 600 }}>
+                            +{(s.compensationAmount ?? 0).toLocaleString('vi-VN')}đ bồi thường
+                          </span>
+                        )}
+                      </td>
 
                       <td style={{ padding: '16px 20px', textAlign: 'center' }}>
                         {(() => {
@@ -580,6 +739,9 @@ export const SettlementManagement: React.FC = () => {
                 ['Phí nền tảng', formatMoney(selectedSettlement.allocatedPlatformFee)],
                 ['Hoàn tiền điều chỉnh', formatMoney(selectedSettlement.refundAmount)],
                 ['Phạt vi phạm', formatMoney(selectedSettlement.penaltyAmount)],
+                ...((selectedSettlement.compensationAmount ?? 0) > 0
+                  ? [['Bồi thường quá hạn', `+${formatMoney(selectedSettlement.compensationAmount ?? 0)}`]]
+                  : []),
                 ['Số tiền quyết toán', formatMoney(selectedSettlement.payableAmount)],
               ].map(([label, value]) => (
                 <div key={label} style={{ border: '1px solid #E8E2D5', borderRadius: '7px', padding: '12px', background: '#FCFAF7' }}>

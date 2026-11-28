@@ -152,14 +152,12 @@ export const ScheduleBookingCard: React.FC<ScheduleBookingCardProps> = ({
       <div className="lume-schedule-card-body">
         <div className="lume-schedule-thumbnail-wrapper" style={{ width: '90px', height: '110px', minWidth: '90px', maxWidth: '90px', flexShrink: 0, borderRadius: '10px', overflow: 'hidden', border: '1px solid #ECE5DB', backgroundColor: '#F8F5F1' }}>
           <ImageWithFallback
-            src={itemImage || (isPhoto ? 'https://images.unsplash.com/photo-1537633552985-df8429e8048b' : undefined)}
+            src={itemImage || undefined}
             alt={itemName}
             className="lume-schedule-thumbnail"
             style={{ width: '100%', height: '100%', maxWidth: '90px', maxHeight: '110px', objectFit: 'cover', display: 'block' }}
             fallback={
-              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8F5F1', color: '#8C827A', fontSize: '11px' }}>
-                Ảnh
-              </div>
+              <div style={{ width: '100%', height: '100%', background: '#F8F5F1' }} aria-hidden="true" />
             }
           />
         </div>

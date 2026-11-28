@@ -139,7 +139,8 @@ export const ProfilePage: React.FC = () => {
   }, [user?.id]);
 
   // Active Tab state (synced with URL query param if present)
-  const initialTab = (searchParams.get('tab') as ProfileTab) || 'overview';
+  const rawInitialTab = searchParams.get('tab');
+  const initialTab = (rawInitialTab === 'rentals' ? 'schedule' : rawInitialTab) as ProfileTab || 'overview';
   const rawCategory = searchParams.get('category')?.toUpperCase();
   const initialCategory: 'RENTAL' | 'PHOTOSHOOT' | 'COMBO' =
     rawCategory === 'PHOTOSHOOT' || rawCategory === 'COMBO' ? rawCategory : 'RENTAL';
@@ -154,7 +155,8 @@ export const ProfilePage: React.FC = () => {
   const [scheduleCategory, setScheduleCategory] = useState<'RENTAL' | 'PHOTOSHOOT' | 'COMBO'>(initialCategory);
 
   useEffect(() => {
-    const tabParam = searchParams.get('tab') as ProfileTab;
+    const rawTabParam = searchParams.get('tab');
+    const tabParam = (rawTabParam === 'rentals' ? 'schedule' : rawTabParam) as ProfileTab | null;
     if (
       tabParam &&
       tabParam !== activeTab &&
@@ -165,15 +167,45 @@ export const ProfilePage: React.FC = () => {
     const catParam = searchParams.get('category')?.toUpperCase();
     if (catParam === 'RENTAL' || catParam === 'PHOTOSHOOT' || catParam === 'COMBO') {
       setScheduleCategory(catParam);
+    } else if (rawTabParam === 'rentals') {
+      setScheduleCategory('RENTAL');
     }
   }, [searchParams]);
 
   const [viewingRentalBooking, setViewingRentalBooking] = useState<any | null>(null);
   const notificationBookingId = searchParams.get('bookingId');
+  const handledBookingParamRef = useRef<string | null>(null);
+
+  const resolveScheduleCategory = React.useCallback((booking: any): 'RENTAL' | 'PHOTOSHOOT' | 'COMBO' => {
+    if (
+      booking?.bookingType === 'COMBO' ||
+      (Array.isArray(booking?.items) &&
+        booking.items.length > 1 &&
+        booking.items.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE'))
+    ) {
+      return 'COMBO';
+    }
+    if (
+      booking?.bookingType === 'PHOTOGRAPHY' ||
+      booking?.items?.[0]?.itemType === 'PHOTOGRAPHY_PACKAGE'
+    ) {
+      return 'PHOTOSHOOT';
+    }
+    return 'RENTAL';
+  }, []);
+
+  const clearBookingIdParam = React.useCallback(() => {
+    if (!searchParams.has('bookingId')) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('bookingId');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const handleSelectTab = (tab: ProfileTab, category?: 'RENTAL' | 'PHOTOSHOOT' | 'COMBO') => {
     setActiveTab(tab);
     setViewingRentalBooking(null);
+    setActiveDetailBooking(null);
+    handledBookingParamRef.current = null;
     if (tab === 'schedule') {
       const nextCategory = category || scheduleCategory || 'RENTAL';
       setScheduleCategory(nextCategory);
@@ -265,16 +297,74 @@ export const ProfilePage: React.FC = () => {
     }
   }, [bookings, viewingRentalBooking?._id]);
 
-  // Notifications link directly to a booking. Resolve that id after the
-  // bookings list has loaded so a pending-payment notification immediately
-  // opens the existing detail modal with its payment action.
+  const handleCloseDetailModal = React.useCallback(() => {
+    setActiveDetailBooking(null);
+    clearBookingIdParam();
+  }, [clearBookingIdParam]);
+
+  const handleBackFromBookingDetail = React.useCallback(() => {
+    setViewingRentalBooking(null);
+    clearBookingIdParam();
+  }, [clearBookingIdParam]);
+
+  // Deep-link handling for ?bookingId=... (from CheckoutResultPage and notifications).
+  // Uses handledBookingParamRef so closing the modal or going back never re-opens it.
   useEffect(() => {
-    if (!notificationBookingId || !bookings.length) return;
-    const target = bookings.find((booking) => String(booking._id) === String(notificationBookingId));
-    if (target && activeDetailBooking?._id !== target._id) {
-      setActiveDetailBooking(target);
+    if (!notificationBookingId) {
+      handledBookingParamRef.current = null;
+      return;
     }
-  }, [notificationBookingId, bookings, activeDetailBooking?._id]);
+    if (handledBookingParamRef.current === notificationBookingId) return;
+
+    const urlTab = searchParams.get('tab');
+    const openResolvedBooking = (target: any) => {
+      handledBookingParamRef.current = notificationBookingId;
+      const targetCategory = resolveScheduleCategory(target);
+      const isPendingPayment =
+        target?.status === 'PENDING_PAYMENT' || target?.status === 'WAITING_PAYMENT';
+
+      // Keep modal for explicit overview links or pending-payment non-rental bookings
+      // so users always retain the "Tiếp tục thanh toán" CTA.
+      if (urlTab === 'overview' || (isPendingPayment && targetCategory !== 'RENTAL')) {
+        setActiveDetailBooking(target);
+        return;
+      }
+
+      // Open the dedicated full detail view for schedule / post-payment / notification links
+      setActiveDetailBooking(null);
+      setActiveTab('schedule');
+      setScheduleCategory(targetCategory);
+      setViewingRentalBooking(target);
+    };
+
+    const existing = bookings.find(
+      (booking) => String(booking._id) === String(notificationBookingId),
+    );
+    if (existing) {
+      openResolvedBooking(existing);
+      return;
+    }
+
+    if (isLoadingBookings) return;
+
+    let cancelled = false;
+    httpClient
+      .get<any>(`/api/bookings/${encodeURIComponent(notificationBookingId)}`)
+      .then((fresh) => {
+        if (!cancelled && fresh?._id) {
+          openResolvedBooking(fresh);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          handledBookingParamRef.current = notificationBookingId;
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [notificationBookingId, bookings, isLoadingBookings, searchParams, resolveScheduleCategory]);
 
   // Auto-refresh when tab becomes active (e.g. switching between Provider and Customer tabs)
   useEffect(() => {
@@ -746,7 +836,7 @@ export const ProfilePage: React.FC = () => {
 
           {/* Right Column: Main Content View */}
           <main className="lume-profile-main-content">
-            <ProfileTabErrorBoundary onReset={() => setViewingRentalBooking(null)}>
+            <ProfileTabErrorBoundary onReset={handleBackFromBookingDetail}>
               <React.Suspense fallback={<ProfileTabLoader />}>
               {activeTab === 'overview' && (
               <ProfileOverviewTab
@@ -781,7 +871,7 @@ export const ProfilePage: React.FC = () => {
                 (viewingRentalBooking.items && viewingRentalBooking.items.length > 1 && viewingRentalBooking.items.some((i: any) => i.itemType === 'PHOTOGRAPHY_PACKAGE')) ? (
                   <ProfileComboDetailPage
                     booking={viewingRentalBooking}
-                    onBack={() => setViewingRentalBooking(null)}
+                    onBack={handleBackFromBookingDetail}
                     onOpenReschedule={(item) => {
                       const targetBooking = bookings.find((b) => b.items?.some((i: any) => i._id === item?._id)) || viewingRentalBooking || bookings[0];
                       setRescheduleBooking(targetBooking);
@@ -806,7 +896,7 @@ export const ProfilePage: React.FC = () => {
                   viewingRentalBooking.items?.[0]?.itemType === 'PHOTOGRAPHY_PACKAGE' ? (
                   <ProfilePhotoshootDetailPage
                     booking={viewingRentalBooking}
-                    onBack={() => setViewingRentalBooking(null)}
+                    onBack={handleBackFromBookingDetail}
                     onOpenReschedule={(item) => {
                       const targetBooking = bookings.find((b) => b.items?.some((i: any) => i._id === item?._id)) || viewingRentalBooking || bookings[0];
                       setRescheduleBooking(targetBooking);
@@ -830,7 +920,7 @@ export const ProfilePage: React.FC = () => {
                 ) : (
                   <ProfileRentalDetailPage
                     booking={viewingRentalBooking}
-                    onBack={() => setViewingRentalBooking(null)}
+                    onBack={handleBackFromBookingDetail}
                     onOpenReschedule={(item) => {
                       const targetBooking = bookings.find((b) => b.items?.some((i: any) => i._id === item?._id)) || viewingRentalBooking || bookings[0];
                       setRescheduleBooking(targetBooking);
@@ -884,7 +974,15 @@ export const ProfilePage: React.FC = () => {
 
             {activeTab === 'security' && <ProfileSecurityTab />}
 
-            {activeTab === 'notifications' && <ProfileNotificationsTab />}
+            {activeTab === 'notifications' && (
+              <ProfileNotificationsTab
+                onOpenBooking={(bookingId) => {
+                  handledBookingParamRef.current = null;
+                  setSearchParams({ tab: 'schedule', bookingId });
+                }}
+                onNavigateUrl={(url) => navigate(url)}
+              />
+            )}
               </React.Suspense>
             </ProfileTabErrorBoundary>
           </main>
@@ -901,7 +999,7 @@ export const ProfilePage: React.FC = () => {
           booking={activeDetailBooking}
           user={user}
           bookingIncident={bookingIncident}
-          onClose={() => setActiveDetailBooking(null)}
+          onClose={handleCloseDetailModal}
           onOpenReschedule={(item) => {
             setRescheduleBooking(activeDetailBooking);
             setRescheduleItem(item || activeDetailBooking.items?.[0]);
@@ -925,7 +1023,7 @@ export const ProfilePage: React.FC = () => {
           }}
           onSuccess={() => {
             fetchBookings();
-            setActiveDetailBooking(null);
+            handleCloseDetailModal();
           }}
         />
       )}
@@ -954,7 +1052,7 @@ export const ProfilePage: React.FC = () => {
           onClose={() => setBookingToCancel(null)}
           onSuccess={() => {
             fetchBookings();
-            setActiveDetailBooking(null);
+            handleCloseDetailModal();
           }}
         />
       )}

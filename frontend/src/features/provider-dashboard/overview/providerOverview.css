@@ -194,6 +194,17 @@
   line-height: 28px;
 }
 
+.po-metric-lifetime {
+  font-size: 11.5px;
+  color: var(--po-text-muted);
+  line-height: 1.35;
+}
+
+.po-metric-lifetime strong {
+  color: var(--po-burgundy-700);
+  font-weight: 700;
+}
+
 .po-metric-footer {
   display: flex;
   justify-content: space-between;
@@ -707,11 +718,14 @@
 }
 
 .po-task-badge {
-  padding: 2px 6px;
+  padding: 2px 7px;
   border-radius: 4px;
   font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1.4;
 }
 
 .po-task-badge.urgent {

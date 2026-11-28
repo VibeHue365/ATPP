@@ -5,9 +5,16 @@ type RawProvider = Partial<Provider> & {
   capabilities?: unknown;
 };
 
-const list = <T>(kind: string, page: number, limit = 10, search?: string) => {
+const list = <T>(
+  kind: string,
+  page: number,
+  limit = 10,
+  search?: string,
+  sortBy?: string,
+) => {
   const params = new URLSearchParams({ page: String(page), limit: String(limit) });
   if (search && search.trim()) params.set('search', search.trim());
+  if (sortBy && sortBy.trim()) params.set('sortBy', sortBy.trim());
   return httpClient.get<Page<T>>(`/admin/stats/${kind}?${params.toString()}`);
 };
 
@@ -18,7 +25,8 @@ const normalizeProvider = (provider: RawProvider): Provider => ({
   id: provider.id || '',
   businessName: provider.businessName || 'Chưa cập nhật',
   ownerName: provider.ownerName || 'Chưa cập nhật',
-  avatar: (provider as any).avatar || '',
+  avatar: provider.avatar || '',
+  coverUrl: provider.coverUrl || '',
   email: provider.email || '',
   phone: provider.phone || '',
   website: provider.website || '',
@@ -29,7 +37,14 @@ const normalizeProvider = (provider: RawProvider): Provider => ({
   bankAccount: provider.bankAccount || '',
   bankName: provider.bankName || '',
   createdAt: provider.createdAt || '',
+  createdAtIso: provider.createdAtIso || null,
   rating: typeof provider.rating === 'number' ? provider.rating : 0,
+  totalReviews:
+    typeof provider.totalReviews === 'number'
+      ? provider.totalReviews
+      : Array.isArray(provider.reviews)
+        ? provider.reviews.length
+        : 0,
   totalProducts: typeof provider.totalProducts === 'number' ? provider.totalProducts : 0,
   completedBookings: typeof provider.completedBookings === 'number' ? provider.completedBookings : 0,
   totalBookings: typeof provider.totalBookings === 'number' ? provider.totalBookings : 0,
@@ -45,8 +60,8 @@ const normalizeProvider = (provider: RawProvider): Provider => ({
 
 export const adminDirectoryApi = {
   customers: (page = 1, limit = 50, search?: string) => list<Customer>('customers', page, limit, search),
-  async providers(page = 1, limit = 50, search?: string): Promise<Page<Provider>> {
-    const response = await list<RawProvider>('providers', page, limit, search);
+  async providers(page = 1, limit = 50, search?: string, sortBy?: string): Promise<Page<Provider>> {
+    const response = await list<RawProvider>('providers', page, limit, search, sortBy);
     return { ...response, items: response.items.map(normalizeProvider) };
   },
   bookings: (page: number) => list<Booking>('bookings', page),

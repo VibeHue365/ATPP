@@ -28,8 +28,9 @@ export const ProfileUserCardHeader: React.FC<ProfileUserCardHeaderProps> = ({
           : user.avatar;
       return `${API_BASE_URL}/uploads/avatars/${filename}`;
     }
-    return '/avatar_hanna.webp';
+    return '';
   };
+  const avatarUrl = getAvatarUrl();
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -73,11 +74,22 @@ export const ProfileUserCardHeader: React.FC<ProfileUserCardHeaderProps> = ({
       <div className="lume-personal-user-top-row">
         <div className="lume-personal-user-meta">
           <div className="lume-personal-avatar-wrapper">
-            <img
-              src={getAvatarUrl()}
-              alt={user?.fullName || 'Avatar'}
-              className="lume-personal-avatar-img"
-            />
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={user?.fullName || 'Avatar'}
+                className="lume-personal-avatar-img"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            ) : (
+              <div
+                className="lume-personal-avatar-img"
+                style={{ backgroundColor: '#EAE4DA' }}
+                aria-hidden="true"
+              />
+            )}
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}

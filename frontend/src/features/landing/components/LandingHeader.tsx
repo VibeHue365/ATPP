@@ -130,14 +130,16 @@ export const LandingHeader: React.FC = () => {
       markAsRead(n._id);
     }
     setIsNotiOpen(false);
-    if (n.metadata?.url) {
-      navigate(n.metadata.url);
-    } else if (n.metadata?.bookingId) {
-      // Open the profile overview so the booking detail modal (and its
-      // "Tiếp tục thanh toán" action) can be opened from the notification.
-      // `rentals` is not a valid ProfilePage tab and previously left users on
-      // the overview without any way to resume payment.
-      navigate(`${ROUTES.PROFILE}?tab=overview&bookingId=${encodeURIComponent(String(n.metadata.bookingId))}`);
+    const bookingId = n.metadata?.bookingId ? String(n.metadata.bookingId) : '';
+    const rawUrl = typeof n.metadata?.url === 'string' ? n.metadata.url : '';
+    if (bookingId && (!rawUrl || rawUrl.includes('tab=rentals'))) {
+      navigate(`${ROUTES.PROFILE}?tab=schedule&bookingId=${encodeURIComponent(bookingId)}`);
+    } else if (rawUrl) {
+      navigate(
+        rawUrl.includes('tab=rentals')
+          ? `${ROUTES.PROFILE}?tab=schedule&category=rental`
+          : rawUrl,
+      );
     } else if (n.type === 'BOOKING' || n.type === 'HANDOVER') {
       navigate(`${ROUTES.PROFILE}?tab=schedule&category=rental`);
     }
@@ -178,8 +180,9 @@ export const LandingHeader: React.FC = () => {
         : user.avatar;
       return `${API_BASE_URL}/uploads/avatars/${filename}`;
     }
-    return '/avatar_hanna.webp';
+    return '';
   };
+  const avatarUrl = getAvatarUrl();
 
   useEffect(() => {
     const sectionId = location.hash.replace('#', '');
@@ -478,13 +481,53 @@ export const LandingHeader: React.FC = () => {
                   aria-expanded={isDropdownOpen}
                   className={`lume-account__trigger ${isDropdownOpen ? "is-open" : ""}`}
                 >
-                  <img src={getAvatarUrl()} alt={user?.fullName || "Avatar"} />
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt={user?.fullName || "Avatar"}
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        height: '100%',
+                        borderRadius: '50%',
+                        backgroundColor: '#EAE4DA',
+                      }}
+                    />
+                  )}
                 </button>
 
                 {isDropdownOpen && (
                   <div className="lume-account__menu" role="menu" aria-label="Tài khoản">
                     <div className="lume-account__profile">
-                      <img src={getAvatarUrl()} alt="" aria-hidden="true" />
+                      {avatarUrl ? (
+                        <img
+                          src={avatarUrl}
+                          alt=""
+                          aria-hidden="true"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            display: 'block',
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '50%',
+                            backgroundColor: '#EAE4DA',
+                            flexShrink: 0,
+                          }}
+                        />
+                      )}
                       <div>
                         <strong>{user?.fullName || "Người dùng"}</strong>
                         <span>{user?.email || "Chưa cập nhật email"}</span>
@@ -519,7 +562,7 @@ export const LandingHeader: React.FC = () => {
                       <Link to={ROUTES.SETTINGS} onClick={() => setIsDropdownOpen(false)} className="lume-account__item">
                         <Settings size={16} /><span>Cài đặt</span>
                       </Link>
-                      <Link to="/dashboard/profile?tab=rentals" onClick={() => setIsDropdownOpen(false)} className="lume-account__item">
+                      <Link to="/dashboard/profile?tab=schedule&category=rental" onClick={() => setIsDropdownOpen(false)} className="lume-account__item">
                         <ShoppingBag size={16} /><span>Đơn hàng của tôi</span>
                       </Link>
                       <Link to={ROUTES.NOTIFICATIONS} onClick={() => setIsDropdownOpen(false)} className="lume-account__item">

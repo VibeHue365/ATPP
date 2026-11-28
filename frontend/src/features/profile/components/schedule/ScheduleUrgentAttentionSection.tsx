@@ -21,30 +21,7 @@ interface ScheduleUrgentAttentionSectionProps {
 }
 
 export const ScheduleUrgentAttentionSection: React.FC<ScheduleUrgentAttentionSectionProps> = ({
-  urgentItems = [
-    {
-      id: 'urgent-1',
-      type: 'DUE_SOON',
-      title: 'Áo dài Nhật Bình đỏ',
-      code: 'RT-1024',
-      size: 'M',
-      dueDate: 'Hôm nay, 12/08/2026 trước 18:00',
-      countdownLabel: 'Còn',
-      countdownValue: '6 giờ',
-      image: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=300'
-    },
-    {
-      id: 'urgent-2',
-      type: 'OVERDUE',
-      title: 'Áo dài gấm xanh ngọc',
-      code: 'RT-0998',
-      size: 'S',
-      dueDate: '09/08/2026 • 18:00',
-      countdownLabel: 'Quá hạn',
-      countdownValue: '1 ngày',
-      image: 'https://images.unsplash.com/photo-1537633552985-df8429e8048b?w=300'
-    }
-  ],
+  urgentItems = [],
   onViewDetail
 }) => {
   if (!urgentItems || urgentItems.length === 0) return null;

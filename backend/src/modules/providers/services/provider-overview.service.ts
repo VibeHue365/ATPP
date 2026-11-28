@@ -265,6 +265,37 @@ export class ProviderOverviewService {
           )
         : null;
 
+    // 1b. Lifetime earnings from completed settlements (source of truth matching Doanh thu & Thanh toán)
+    let lifetimeNetEarnings = 0;
+    let lifetimeGrossRevenue = 0;
+    try {
+      const SettlementModel = this.bookingModel.db.model('Settlement');
+      const [lifetimeRow] = await SettlementModel.aggregate<{
+        net: number;
+        gross: number;
+      }>([
+        {
+          $match: {
+            providerId,
+            status: { $ne: 'CANCELLED' },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            net: { $sum: { $ifNull: ['$payableAmount', 0] } },
+            gross: { $sum: { $ifNull: ['$grossAmount', 0] } },
+          },
+        },
+      ]);
+      if (lifetimeRow) {
+        lifetimeNetEarnings = Number(lifetimeRow.net || 0);
+        lifetimeGrossRevenue = Number(lifetimeRow.gross || 0);
+      }
+    } catch {
+      // Ignore if Settlement model is not registered in isolated unit tests
+    }
+
     // 2. Pending bookings count & oldest pending
     const pendingBookings = await this.bookingModel
       .find({
@@ -301,10 +332,18 @@ export class ProviderOverviewService {
       ],
     } as any);
 
-    // 4. Active rentals count (items currently picked up or pending return)
+    // 4. Active rentals count (distinct bookings currently picked up, pending return, or overdue)
     const activeRentalsCount = await this.bookingItemModel
       .aggregate([
-        { $match: { providerId, itemType: 'PRODUCT' } },
+        {
+          $match: {
+            providerId,
+            itemType: 'PRODUCT',
+            'rentalFulfillment.status': {
+              $nin: ['RETURNED', 'COMPLETED', 'CANCELLED'],
+            },
+          },
+        },
         {
           $lookup: {
             from: 'bookings',
@@ -316,9 +355,12 @@ export class ProviderOverviewService {
         { $unwind: '$booking' },
         {
           $match: {
-            'booking.status': { $in: ['PICKED_UP', 'RETURN_PENDING'] },
+            'booking.status': {
+              $in: ['PICKED_UP', 'RETURN_PENDING', 'OVERDUE'],
+            },
           },
         },
+        { $group: { _id: '$booking._id' } },
         { $count: 'total' },
       ])
       .then((res) => res[0]?.total || 0);
@@ -368,6 +410,8 @@ export class ProviderOverviewService {
       revenueThisMonth,
       revenueLastMonth,
       revenueChangePct,
+      lifetimeNetEarnings,
+      lifetimeGrossRevenue,
       selectedMonth,
       selectedMonthLabel,
       isCurrentMonth,
@@ -727,7 +771,7 @@ export class ProviderOverviewService {
         title: `${overdueReturnsCount} đơn thuê áo dài quá hạn trả`,
         description: 'Liên hệ khách hàng để cập nhật tình trạng hoàn trả',
         urgency: 'urgent',
-        targetView: 'rental-operations',
+        targetView: 'orders',
       });
     }
 
@@ -769,7 +813,7 @@ export class ProviderOverviewService {
         title: `${returnsDueTodayCount} đơn thuê áo dài đến hạn trả hôm nay`,
         description: 'Kiểm tra trang phục và ghi nhận tình trạng trả',
         urgency: 'today',
-        targetView: 'rental-operations',
+        targetView: 'orders',
       });
     }
 

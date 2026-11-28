@@ -9,6 +9,7 @@ interface ScheduleHeaderSummaryProps {
   urgentCount?: number;
   stats?: {
     activeRentals: number;
+    upcomingRentals?: number;
     upcomingShoots: number;
     upcomingCombos: number;
     favoritesCount: number;
@@ -152,7 +153,13 @@ export const ScheduleHeaderSummary: React.FC<ScheduleHeaderSummaryProps> = ({
               </span>
             </div>
             <p style={{ margin: '4px 0 0 0', fontSize: '11.5px', color: '#8C827A', whiteSpace: 'nowrap' }}>
-              {urgentCount > 0 ? `${urgentCount} đơn cần chú ý` : stats.activeRentals > 0 ? 'Đang hoạt động' : 'Chưa có đơn thuê'}
+              {urgentCount > 0
+                ? `${urgentCount} đơn cần chú ý`
+                : stats.activeRentals > 0
+                  ? 'Đang hoạt động'
+                  : (stats.upcomingRentals ?? 0) > 0
+                    ? `${stats.upcomingRentals} đơn sắp nhận`
+                    : 'Chưa có đơn thuê'}
             </p>
           </div>
         </div>
